@@ -114,6 +114,45 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         Assert.Equal("/usercamera/Streaming", exception.EndpointPath);
     }
 
+    [Fact]
+    public async Task InternalDeadlineReturnsExplicitTimeoutFailure()
+    {
+        var advertisement = Advertisement("timeout", httpPort: 19005);
+        var browser = new StubOscQueryServiceBrowser([advertisement]);
+        using var invoker = new HttpMessageInvoker(
+            new NeverCompletingHttpHandler());
+        var expectedTimeout = TimeSpan.FromMilliseconds(25);
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            expectedTimeout);
+
+        var exception = await Assert.ThrowsAsync<OscQueryTimeoutException>(() =>
+            discovery.DiscoverAsync(CancellationToken.None));
+
+        Assert.Equal(expectedTimeout, exception.Timeout);
+    }
+
+    [Fact]
+    public async Task CallerCancellationIsNotRemappedToTimeout()
+    {
+        var advertisement = Advertisement("cancel", httpPort: 19006);
+        var browser = new StubOscQueryServiceBrowser([advertisement]);
+        using var invoker = new HttpMessageInvoker(
+            new NeverCompletingHttpHandler());
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => discovery.DiscoverAsync(cancellation.Token));
+
+        Assert.IsNotType<OscQueryTimeoutException>(exception);
+    }
+
     private static OscQueryServiceAdvertisement Advertisement(
         string suffix,
         int httpPort)
@@ -240,6 +279,18 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
               "ACCESS": 3
             }
             """;
+    }
+
+    private sealed class NeverCompletingHttpHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException(
+                "An infinite OSCQuery request unexpectedly completed.");
+        }
     }
 
     private sealed record Fixture(

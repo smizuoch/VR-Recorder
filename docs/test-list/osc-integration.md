@@ -5,6 +5,7 @@
 - [x] loopback OSCQuery advertisementのHTTP capabilityを検証しtyped candidateへ変換する
 - [x] OSCQuery JSONの重複security propertyを拒否する
 - [x] VRChat camera endpointの404をexplicit capability failureとして返す
+- [ ] OSCQuery deadlineとcaller cancellationを区別する
 - [x] 実loopback UDPでAcquireをMode=2→Streaming=true、Restoreを逆順に送る
 - [x] 初回echo欠落時だけ200 ms後に1回再送する
 - [x] 2回とも未確認なら明示的confirmation failureにする
@@ -18,6 +19,7 @@
 - [x] Validate HTTP capabilities for loopback OSCQuery advertisements and produce typed candidates
 - [x] Reject duplicate security properties in OSCQuery JSON
 - [x] Return an explicit capability failure for a missing VRChat camera endpoint
+- [ ] Distinguish the OSCQuery deadline from caller cancellation
 - [x] Send Acquire as Mode=2→Streaming=true and Restore in reverse over real loopback UDP
 - [x] Retry exactly once after 200 ms only when the first echo is missing
 - [x] Return an explicit confirmation failure after two unconfirmed attempts
