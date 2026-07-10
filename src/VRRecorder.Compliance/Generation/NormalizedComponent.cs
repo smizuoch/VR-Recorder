@@ -12,5 +12,5 @@ public sealed record NormalizedComponent(
     string SourceInformation,
     string LicenseText,
     NoticeScope Scope,
-    LegalApprovalStatus ApprovalStatus,
+    LegalApproval Approval,
     IReadOnlyList<NoticePackage> Packages);

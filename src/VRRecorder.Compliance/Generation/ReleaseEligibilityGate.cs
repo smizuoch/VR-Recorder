@@ -8,22 +8,43 @@ public static class ReleaseEligibilityGate
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(graph.Components);
 
-        var issues = graph.Components
-            .Where(component =>
-                component.ApprovalStatus != LegalApprovalStatus.Approved)
-            .Select(component => new ComplianceIssue(
-                component.ApprovalStatus == LegalApprovalStatus.Pending
-                    ? "pending-independent-review"
-                    : "component-not-approved",
-                component.Id))
+        var issues = new List<ComplianceIssue>();
+        foreach (var component in graph.Components)
+        {
+            ArgumentNullException.ThrowIfNull(component.Approval);
+            if (component.Approval.Status == LegalApprovalStatus.Pending)
+            {
+                issues.Add(new ComplianceIssue(
+                    "pending-independent-review",
+                    component.Id));
+                continue;
+            }
+
+            if (component.Approval.Status != LegalApprovalStatus.Approved)
+            {
+                issues.Add(new ComplianceIssue(
+                    "component-not-approved",
+                    component.Id));
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(component.Approval.TicketId))
+            {
+                issues.Add(new ComplianceIssue(
+                    "missing-approval-ticket",
+                    component.Id));
+            }
+        }
+
+        var orderedIssues = issues
             .OrderBy(issue => issue.Code, StringComparer.Ordinal)
             .ThenBy(issue => issue.Subject, StringComparer.Ordinal)
             .ToArray();
 
-        return issues.Length == 0
+        return orderedIssues.Length == 0
             ? new ReleaseEligibilityResult(
                 new ApprovedReleaseGraph(graph),
                 [])
-            : new ReleaseEligibilityResult(null, issues);
+            : new ReleaseEligibilityResult(null, orderedIssues);
     }
 }

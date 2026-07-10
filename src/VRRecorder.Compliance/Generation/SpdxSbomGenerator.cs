@@ -119,7 +119,7 @@ public static class SpdxSbomGenerator
             }
 
             var component = matches[0];
-            if (component.ApprovalStatus != LegalApprovalStatus.Approved)
+            if (component.Approval.Status != LegalApprovalStatus.Approved)
             {
                 throw new InvalidOperationException(
                     $"Component {component.Id} is not approved for release SBOM generation.");
@@ -143,6 +143,7 @@ public static class SpdxSbomGenerator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(component.Id);
         ArgumentNullException.ThrowIfNull(component.License);
+        ArgumentNullException.ThrowIfNull(component.Approval);
         ArgumentException.ThrowIfNullOrWhiteSpace(
             component.License.DeclaredExpression);
         ArgumentException.ThrowIfNullOrWhiteSpace(
@@ -167,7 +168,11 @@ public static class SpdxSbomGenerator
             component.SourceInformation,
             component.LicenseText,
             component.Scope,
-            component.ApprovalStatus,
+            new LegalApproval(
+                component.ApprovalStatus,
+                TicketId: null,
+                RequestedBy: "legacy-notice-component",
+                Reviewer: null),
             component.Packages);
 
     private static string CreatePackageSpdxId(NuGetPackage dependency)
