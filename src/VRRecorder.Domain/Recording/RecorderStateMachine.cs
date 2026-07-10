@@ -5,6 +5,10 @@ public static class RecorderStateMachine
     public static RecorderState Transition(RecorderState state, RecorderTrigger trigger) =>
         (state, trigger) switch
         {
+            (RecorderState.Booting, RecorderTrigger.LegalVerificationSucceeded) =>
+                RecorderState.Ready,
+            (RecorderState.Booting, RecorderTrigger.LegalVerificationFailed) =>
+                RecorderState.ComplianceFault,
             (RecorderState.Ready, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.SignalTimeout) => RecorderState.NoSignal,
