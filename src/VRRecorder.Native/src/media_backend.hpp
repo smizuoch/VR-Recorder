@@ -26,6 +26,10 @@ public:
     virtual ~MediaBackend() = default;
 
     virtual vrrec_status_t Start() noexcept = 0;
+    virtual vrrec_status_t UpdateVideoLayout(
+        const vrrec_video_layout_v1 &layout) noexcept = 0;
+    virtual vrrec_status_t GetStatistics(
+        vrrec_session_statistics_v1 &statistics) noexcept = 0;
     virtual vrrec_status_t RequestStop() noexcept = 0;
     virtual void Abort() noexcept = 0;
 };

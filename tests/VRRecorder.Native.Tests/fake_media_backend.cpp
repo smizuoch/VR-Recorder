@@ -37,6 +37,32 @@ public:
               config.spout_adapter_luid,
               config.encoder_adapter_luid,
               config.gpu_identity_utf8,
+          },
+          video_layout_ {
+              sizeof(vrrec_video_layout_v1),
+              VRREC_ABI_V1,
+              config.source_width,
+              config.source_height,
+              config.width,
+              config.height,
+              config.destination_x,
+              config.destination_y,
+              config.destination_width,
+              config.destination_height,
+              config.canvas_background,
+              config.rotation,
+          },
+          statistics_ {
+              sizeof(vrrec_session_statistics_v1),
+              VRREC_ABI_V1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
           }
     {
         active_ = this;
@@ -56,6 +82,21 @@ public:
 
     vrrec_status_t RequestStop() noexcept override
     {
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t UpdateVideoLayout(
+        const vrrec_video_layout_v1 &layout) noexcept override
+    {
+        video_layout_ = layout;
+        ++video_layout_update_count_;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetStatistics(
+        vrrec_session_statistics_v1 &statistics) noexcept override
+    {
+        statistics = statistics_;
         return VRREC_STATUS_OK;
     }
 
@@ -96,10 +137,29 @@ public:
         return config_;
     }
 
+    const vrrec_video_layout_v1 &VideoLayout() const noexcept
+    {
+        return video_layout_;
+    }
+
+    std::uint32_t VideoLayoutUpdateCount() const noexcept
+    {
+        return video_layout_update_count_;
+    }
+
+    void SetStatistics(
+        const vrrec_session_statistics_v1 &statistics) noexcept
+    {
+        statistics_ = statistics;
+    }
+
 private:
     MediaEventSink &events_;
     std::uint32_t encoder_kind_;
     testing::ObservedMediaSessionConfig config_;
+    vrrec_video_layout_v1 video_layout_;
+    vrrec_session_statistics_v1 statistics_;
+    std::uint32_t video_layout_update_count_ = 0;
     bool aborted_ = false;
     static FakeMediaBackend *active_;
 };
@@ -228,6 +288,21 @@ std::uint32_t EncoderKind()
 const ObservedMediaSessionConfig &SessionConfig()
 {
     return FakeMediaBackend::Active()->SessionConfig();
+}
+
+const vrrec_video_layout_v1 &VideoLayout()
+{
+    return FakeMediaBackend::Active()->VideoLayout();
+}
+
+std::uint32_t VideoLayoutUpdateCount()
+{
+    return FakeMediaBackend::Active()->VideoLayoutUpdateCount();
+}
+
+void SetStatistics(const vrrec_session_statistics_v1 &statistics)
+{
+    FakeMediaBackend::Active()->SetStatistics(statistics);
 }
 
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed)

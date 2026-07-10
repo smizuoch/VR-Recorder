@@ -112,6 +112,33 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         return status;
     }
 
+    vrrec_status_t UpdateVideoLayout(
+        const vrrec_video_layout_v1 &layout) noexcept
+    {
+        const std::lock_guard lock(state_mutex_);
+        if (state_ != SessionState::Started || stop_requested_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+
+        if (layout.canvas_width != config_.width ||
+            layout.canvas_height != config_.height) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+
+        return backend_->UpdateVideoLayout(layout);
+    }
+
+    vrrec_status_t GetStatistics(
+        vrrec_session_statistics_v1 &statistics) noexcept
+    {
+        const std::lock_guard lock(state_mutex_);
+        if (state_ == SessionState::Aborted) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+
+        return backend_->GetStatistics(statistics);
+    }
+
     vrrec_status_t Abort() noexcept
     {
         {
@@ -446,6 +473,28 @@ bool IsValidExtendedGeometry(const vrrec_session_config_v1 &config) noexcept
         config.destination_height <= config.height - config.destination_y;
 }
 
+bool IsValidVideoLayout(const vrrec_video_layout_v1 &layout) noexcept
+{
+    return layout.source_width != 0 &&
+        layout.source_height != 0 &&
+        layout.canvas_width != 0 &&
+        layout.canvas_height != 0 &&
+        layout.canvas_width % 2 == 0 &&
+        layout.canvas_height % 2 == 0 &&
+        layout.destination_width != 0 &&
+        layout.destination_height != 0 &&
+        layout.destination_width % 2 == 0 &&
+        layout.destination_height % 2 == 0 &&
+        layout.destination_x <= layout.canvas_width &&
+        layout.destination_y <= layout.canvas_height &&
+        layout.destination_width <=
+            layout.canvas_width - layout.destination_x &&
+        layout.destination_height <=
+            layout.canvas_height - layout.destination_y &&
+        layout.canvas_background == VRREC_CANVAS_BACKGROUND_BLACK &&
+        layout.rotation == VRREC_VIDEO_ROTATION_NONE;
+}
+
 constexpr std::size_t SessionConfigBaseSize =
     offsetof(vrrec_session_config_v1, encoder_kind);
 constexpr std::size_t SessionConfigEncoderSize =
@@ -662,6 +711,80 @@ extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_session_start_v1(
 
     try {
         return session->Start();
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_session_update_video_layout_v1(
+    vrrec_session_t *session,
+    const vrrec_video_layout_v1 *layout)
+{
+    if (session == nullptr || layout == nullptr ||
+        layout->struct_size < sizeof(vrrec_video_layout_v1) ||
+        !IsValidVideoLayout(*layout)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (layout->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    try {
+        const auto normalized_layout = vrrec_video_layout_v1 {
+            sizeof(vrrec_video_layout_v1),
+            VRREC_ABI_V1,
+            layout->source_width,
+            layout->source_height,
+            layout->canvas_width,
+            layout->canvas_height,
+            layout->destination_x,
+            layout->destination_y,
+            layout->destination_width,
+            layout->destination_height,
+            layout->canvas_background,
+            layout->rotation,
+        };
+        return session->UpdateVideoLayout(normalized_layout);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_session_get_statistics_v1(
+    vrrec_session_t *session,
+    vrrec_session_statistics_v1 *out_statistics)
+{
+    if (session == nullptr || out_statistics == nullptr ||
+        out_statistics->struct_size < sizeof(vrrec_session_statistics_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (out_statistics->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    try {
+        auto statistics = vrrec_session_statistics_v1 {
+            sizeof(vrrec_session_statistics_v1),
+            VRREC_ABI_V1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        };
+        const auto status = session->GetStatistics(statistics);
+        if (status == VRREC_STATUS_OK) {
+            *out_statistics = statistics;
+        }
+
+        return status;
     } catch (...) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }

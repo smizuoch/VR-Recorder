@@ -92,6 +92,34 @@ typedef struct vrrec_session_config_v1 {
     uint64_t reserved_v1;
 } vrrec_session_config_v1;
 
+typedef struct vrrec_video_layout_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t source_width;
+    uint32_t source_height;
+    uint32_t canvas_width;
+    uint32_t canvas_height;
+    uint32_t destination_x;
+    uint32_t destination_y;
+    uint32_t destination_width;
+    uint32_t destination_height;
+    vrrec_canvas_background_t canvas_background;
+    vrrec_video_rotation_t rotation;
+} vrrec_video_layout_v1;
+
+typedef struct vrrec_session_statistics_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint64_t source_video_frame_count;
+    uint64_t muxed_video_packet_count;
+    uint64_t muxed_audio_packet_count;
+    uint64_t dropped_source_video_frame_count;
+    uint64_t duplicated_output_video_frame_count;
+    uint64_t latest_encode_latency_microseconds;
+    uint64_t maximum_encode_latency_microseconds;
+    int64_t audio_video_offset_microseconds;
+} vrrec_session_statistics_v1;
+
 typedef struct vrrec_event_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -140,6 +168,14 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_start_v1(
     vrrec_session_t *session);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_session_update_video_layout_v1(
+    vrrec_session_t *session,
+    const vrrec_video_layout_v1 *layout);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_session_get_statistics_v1(
+    vrrec_session_t *session,
+    vrrec_session_statistics_v1 *out_statistics);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_request_stop_v1(
     vrrec_session_t *session);
