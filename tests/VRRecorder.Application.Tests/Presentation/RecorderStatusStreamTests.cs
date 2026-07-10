@@ -97,4 +97,179 @@ public sealed class RecorderStatusStreamTests
         Assert.Throws<ObjectDisposedException>(() =>
             stream.Subscribe(_ => { }));
     }
+
+    [Fact]
+    public async Task ConcurrentInitialReplayAndPublishAreQueuedInRevisionOrder()
+    {
+        using var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        var initialEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitial = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        List<long> revisions = [];
+        var activeCallbacks = 0;
+        var maximumActiveCallbacks = 0;
+
+        var subscribing = Task.Run(() => stream.Subscribe(status =>
+        {
+            var active = Interlocked.Increment(ref activeCallbacks);
+            InterlockedExtensions.Max(ref maximumActiveCallbacks, active);
+            lock (revisions)
+            {
+                revisions.Add(status.Revision);
+            }
+
+            try
+            {
+                if (status.Revision == 0)
+                {
+                    initialEntered.TrySetResult();
+                    releaseInitial.Task.GetAwaiter().GetResult();
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref activeCallbacks);
+            }
+        }));
+        await initialEntered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+        await publishing.WaitAsync(TimeSpan.FromSeconds(1));
+        releaseInitial.TrySetResult();
+        using var subscription = await subscribing.WaitAsync(
+            TimeSpan.FromSeconds(1));
+
+        Assert.True(await publishing);
+        Assert.Equal([0, 1], revisions);
+        Assert.Equal(1, maximumActiveCallbacks);
+    }
+
+    [Fact]
+    public async Task UnsubscribeWaitsForInflightCallbackAndBarsLaterDelivery()
+    {
+        using var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        var callbackEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCallback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var callCount = 0;
+        var subscription = stream.Subscribe(status =>
+        {
+            Interlocked.Increment(ref callCount);
+            if (status.Revision == 1)
+            {
+                callbackEntered.TrySetResult();
+                releaseCallback.Task.GetAwaiter().GetResult();
+            }
+        });
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+        await callbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var unsubscribeAttempted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var unsubscribing = Task.Run(() =>
+        {
+            unsubscribeAttempted.TrySetResult();
+            subscription.Dispose();
+        });
+        await unsubscribeAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(unsubscribing.IsCompleted);
+        releaseCallback.TrySetResult();
+        await Task.WhenAll(publishing, unsubscribing).WaitAsync(
+            TimeSpan.FromSeconds(1));
+        Assert.True(stream.TryPublish(
+            RecorderStatusSnapshot.Create(2, RecorderState.Countdown)));
+        Assert.Equal(2, callCount);
+    }
+
+    [Fact]
+    public async Task HubDisposeWaitsForInflightCallbackAndBarsLaterDelivery()
+    {
+        var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        var callbackEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCallback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = stream.Subscribe(status =>
+        {
+            if (status.Revision == 1)
+            {
+                callbackEntered.TrySetResult();
+                releaseCallback.Task.GetAwaiter().GetResult();
+            }
+        });
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+        await callbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var disposeAttempted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposing = Task.Run(() =>
+        {
+            disposeAttempted.TrySetResult();
+            stream.Dispose();
+        });
+        await disposeAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(disposing.IsCompleted);
+        releaseCallback.TrySetResult();
+        await Task.WhenAll(publishing, disposing).WaitAsync(
+            TimeSpan.FromSeconds(1));
+        Assert.False(stream.TryPublish(
+            RecorderStatusSnapshot.Create(2, RecorderState.Countdown)));
+    }
+
+    [Fact]
+    public async Task SubscriberCanReenterPublishAndUnsubscribeWithoutDeadlock()
+    {
+        using var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        List<long> revisions = [];
+        IDisposable? subscription = null;
+        subscription = stream.Subscribe(status =>
+        {
+            revisions.Add(status.Revision);
+            if (status.Revision == 1)
+            {
+                Assert.True(stream.TryPublish(
+                    RecorderStatusSnapshot.Create(2, RecorderState.Countdown)));
+                subscription!.Dispose();
+            }
+        });
+
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+
+        Assert.True(await publishing.WaitAsync(TimeSpan.FromSeconds(1)));
+        Assert.Equal([0, 1], revisions);
+        Assert.Equal(2, stream.Current.Revision);
+    }
+
+    private static class InterlockedExtensions
+    {
+        public static void Max(ref int target, int candidate)
+        {
+            var current = Volatile.Read(ref target);
+            while (candidate > current)
+            {
+                var observed = Interlocked.CompareExchange(
+                    ref target,
+                    candidate,
+                    current);
+                if (observed == current)
+                {
+                    return;
+                }
+
+                current = observed;
+            }
+        }
+    }
 }
