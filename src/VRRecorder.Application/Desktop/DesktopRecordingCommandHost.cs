@@ -89,11 +89,7 @@ public sealed class DesktopRecordingCommandHost
                     _failure);
             }
 
-            if (_toggleTask is null || _toggleTask.IsCompleted)
-            {
-                _toggleTask = _runtime.ToggleAsync(_lifetime.Token);
-            }
-
+            _toggleTask = _runtime.ToggleAsync(_lifetime.Token);
             toggleTask = _toggleTask;
         }
 

@@ -14,6 +14,16 @@ public static class RecorderStateMachine
             (RecorderState.Ready, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.SignalTimeout) => RecorderState.NoSignal,
+            (RecorderState.Arming, RecorderTrigger.CountdownStarted) =>
+                RecorderState.Countdown,
+            (RecorderState.Arming, RecorderTrigger.StartPreparationCompleted) =>
+                RecorderState.Starting,
+            (RecorderState.Countdown, RecorderTrigger.StartPreparationCompleted) =>
+                RecorderState.Starting,
+            (RecorderState.Arming, RecorderTrigger.CancelRequested) =>
+                RecorderState.Ready,
+            (RecorderState.Countdown, RecorderTrigger.CancelRequested) =>
+                RecorderState.Ready,
             (RecorderState.NoSignal, RecorderTrigger.StartRequested) =>
                 RecorderState.Arming,
             (RecorderState.Starting, RecorderTrigger.FirstPacketCommitted) =>

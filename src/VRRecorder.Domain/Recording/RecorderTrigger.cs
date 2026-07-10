@@ -14,4 +14,7 @@ public enum RecorderTrigger
     SignalRecovered,
     GraceExpired,
     StopCompleted,
+    CountdownStarted,
+    StartPreparationCompleted,
+    CancelRequested,
 }

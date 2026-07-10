@@ -14,6 +14,8 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private RecordingHandle? _activeHandle;
     private Task? _sessionStopTask;
     private Task? _transportToggleTask;
+    private CancellationTokenSource? _startCancellation;
+    private bool _semanticStartCancellationRequested;
     private Task? _disposeTask;
     private bool _disposed;
 
@@ -33,20 +35,42 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     public Task ToggleAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        CancellationTokenSource? cancelStart = null;
         Task operation;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            // Coalesce duplicate delivery of one in-flight transport command.
-            // Arming cancellation remains a separate future semantic command.
             if (_transportToggleTask is null || _transportToggleTask.IsCompleted)
             {
-                _transportToggleTask = RunTransportToggleAsync(cancellationToken);
+                var lifecycleState = _lifecycle.State;
+                var isStart = lifecycleState is
+                    RecorderState.Ready or RecorderState.NoSignal;
+                var operationCancellation =
+                    CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken,
+                        _lifetime.Token);
+                if (isStart)
+                {
+                    _startCancellation = operationCancellation;
+                    _semanticStartCancellationRequested = false;
+                }
+
+                _transportToggleTask = RunTransportToggleAsync(
+                    operationCancellation,
+                    isStart,
+                    cancellationToken);
+            }
+            else if (IsCancelableStartPhase(_lifecycle.State) &&
+                     _startCancellation is not null)
+            {
+                _semanticStartCancellationRequested = true;
+                cancelStart = _startCancellation;
             }
 
             operation = _transportToggleTask;
         }
 
+        cancelStart?.Cancel();
         return WaitForCallerAsync(operation, cancellationToken);
     }
 
@@ -75,12 +99,34 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     }
 
     private async Task RunTransportToggleAsync(
-        CancellationToken cancellationToken)
+        CancellationTokenSource operationCancellation,
+        bool isStart,
+        CancellationToken initiatingCallerToken)
     {
-        using var operation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            _lifetime.Token);
-        await ToggleCoreAsync(operation.Token).ConfigureAwait(false);
+        await Task.Yield();
+        try
+        {
+            await ToggleCoreAsync(operationCancellation.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            isStart &&
+            IsSemanticStartCancellation(
+                operationCancellation,
+                initiatingCallerToken))
+        {
+            // A second REC activation during Arming or Countdown is a normal
+            // convergence to Ready, not an exceptional caller cancellation.
+        }
+        finally
+        {
+            if (isStart)
+            {
+                ClearStartCancellation(operationCancellation);
+            }
+
+            operationCancellation.Dispose();
+        }
     }
 
     private async Task ToggleCoreAsync(CancellationToken cancellationToken)
@@ -235,6 +281,41 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         state is RecorderState.Recording or
             RecorderState.SignalLost or
             RecorderState.Stopping;
+
+    private static bool IsCancelableStartPhase(RecorderState state) =>
+        state is RecorderState.Arming or RecorderState.Countdown;
+
+    private bool IsSemanticStartCancellation(
+        CancellationTokenSource operationCancellation,
+        CancellationToken initiatingCallerToken)
+    {
+        lock (_gate)
+        {
+            return ReferenceEquals(
+                       _startCancellation,
+                       operationCancellation) &&
+                   _semanticStartCancellationRequested &&
+                   !initiatingCallerToken.IsCancellationRequested &&
+                   !_lifetime.IsCancellationRequested;
+        }
+    }
+
+    private void ClearStartCancellation(
+        CancellationTokenSource operationCancellation)
+    {
+        lock (_gate)
+        {
+            if (!ReferenceEquals(
+                    _startCancellation,
+                    operationCancellation))
+            {
+                return;
+            }
+
+            _startCancellation = null;
+            _semanticStartCancellationRequested = false;
+        }
+    }
 
     private static InvalidOperationException InconsistentStartResult(
         RecordingLifecycleStartResult result,

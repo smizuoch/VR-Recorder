@@ -72,13 +72,27 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                     $"Recording cannot start while the lifecycle is {startState}.");
             }
 
-            var connection = await _cameraConnections
-                .ResolveAsync(selectedServiceId, cancellationToken)
-                .ConfigureAwait(false);
+            SetState(RecorderStateMachine.Transition(
+                startState,
+                RecorderTrigger.StartRequested));
+            VrChatCameraConnectionResolution connection;
+            try
+            {
+                connection = await _cameraConnections
+                    .ResolveAsync(selectedServiceId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                SetState(startState);
+                throw;
+            }
+
             if (connection is not VrChatCameraConnectionResolution.Connected connected)
             {
+                SetState(startState);
                 return new RecordingLifecycleStartResult(
-                    State,
+                    startState,
                     connection,
                     Recording: null);
             }
@@ -100,12 +114,14 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             catch (OperationCanceledException) when (
                 cancellationToken.IsCancellationRequested)
             {
+                SetState(startState);
                 throw;
             }
             catch (Exception exception)
             {
+                SetState(startState);
                 return new RecordingLifecycleStartResult(
-                    State,
+                    startState,
                     connection,
                     Recording: null,
                     new CameraSnapshotStartFailure(
@@ -114,9 +130,6 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                         exception));
             }
 
-            SetState(RecorderStateMachine.Transition(
-                startState,
-                RecorderTrigger.StartRequested));
             var camera = _cameraLeaseIdentities is null
                 ? new CameraSessionController(
                     connected.Gateway,
@@ -151,7 +164,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                             warningReason,
                             exception.RestorationFailure))
                     .ConfigureAwait(false);
-                SetState(RecorderState.Ready);
+                SetState(startState);
                 ExceptionDispatchInfo.Capture(exception.AcquisitionFailure)
                     .Throw();
                 throw new InvalidOperationException(
@@ -159,7 +172,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             }
             catch
             {
-                SetState(RecorderState.Ready);
+                SetState(startState);
                 throw;
             }
 
@@ -167,13 +180,15 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                 this,
                 camera,
                 lease);
+            var phaseSink = new RecordingStartPhaseSink(this);
             try
             {
                 var recording = await _startRecording
                     .ExecuteAsync(
                         command,
                         cancellationToken,
-                        completionSink)
+                        completionSink,
+                        phaseSink)
                     .ConfigureAwait(false);
                 var state = recording switch
                 {
@@ -239,7 +254,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                 }
                 finally
                 {
-                    SetState(RecorderState.Ready);
+                    CompleteCanceledStart();
                 }
 
                 throw;
@@ -328,6 +343,26 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
         lock (_stateGate)
         {
             _state = state;
+        }
+    }
+
+    private void TransitionStartPhase(RecorderTrigger trigger)
+    {
+        lock (_stateGate)
+        {
+            _state = RecorderStateMachine.Transition(_state, trigger);
+        }
+    }
+
+    private void CompleteCanceledStart()
+    {
+        lock (_stateGate)
+        {
+            _state = _state is RecorderState.Arming or RecorderState.Countdown
+                ? RecorderStateMachine.Transition(
+                    _state,
+                    RecorderTrigger.CancelRequested)
+                : RecorderState.Ready;
         }
     }
 
@@ -433,5 +468,16 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                 _completed = true;
             }
         }
+    }
+
+    private sealed class RecordingStartPhaseSink(
+        RecordingLifecycleController owner) : IRecordingStartPhaseSink
+    {
+        public void CountdownStarted() =>
+            owner.TransitionStartPhase(RecorderTrigger.CountdownStarted);
+
+        public void StartPreparationCompleted() =>
+            owner.TransitionStartPhase(
+                RecorderTrigger.StartPreparationCompleted);
     }
 }

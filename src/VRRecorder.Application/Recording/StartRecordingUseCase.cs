@@ -56,7 +56,8 @@ public sealed class StartRecordingUseCase
     public async Task<StartRecordingResult> ExecuteAsync(
         StartRecordingCommand command,
         CancellationToken cancellationToken,
-        IRecordingSessionCompletionSink? completionSink = null)
+        IRecordingSessionCompletionSink? completionSink = null,
+        IRecordingStartPhaseSink? phaseSink = null)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -78,10 +79,14 @@ public sealed class StartRecordingUseCase
 
         if (command.SelfTimer.IsEnabled)
         {
+            phaseSink?.CountdownStarted();
             await _countdownTimer
                 .WaitAsync(command.SelfTimer, cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        phaseSink?.StartPreparationCompleted();
 
         var availableSpace = await _storageSpaceProbe
             .MeasureAsync(command.OutputPath, cancellationToken)
