@@ -16,23 +16,23 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
-    public void ComponentCatalogV2TemplateIsCycleFreeAndDocumented()
+    public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
         var schemaPath = Path.Combine(
             repositoryRoot,
             "legal-template",
             "schemas",
-            "third-party-components-v2.schema.json");
+            "third-party-components-v3.schema.json");
         var examplePath = Path.Combine(
             repositoryRoot,
             "legal-template",
-            "THIRD-PARTY-COMPONENTS.v2.example.json");
+            "THIRD-PARTY-COMPONENTS.v3.example.json");
         var decisionPath = Path.Combine(
             repositoryRoot,
             "docs",
             "adr",
-            "0001-legal-bundle-integrity-v2.md");
+            "0002-legal-catalog-v3.md");
 
         Assert.True(File.Exists(schemaPath), schemaPath);
         Assert.True(File.Exists(examplePath), examplePath);
@@ -41,10 +41,10 @@ public sealed class RepositoryComplianceTests
         using var example = JsonDocument.Parse(File.ReadAllBytes(examplePath));
 
         Assert.Equal(
-            "urn:vr-recorder:third-party-components:2",
+            "urn:vr-recorder:third-party-components:3",
             schema.RootElement.GetProperty("$id").GetString());
         Assert.Equal(
-            2,
+            3,
             schema.RootElement
                 .GetProperty("properties")
                 .GetProperty("schemaVersion")
@@ -58,7 +58,7 @@ public sealed class RepositoryComplianceTests
             item => item.GetString() == "manifestSha256");
 
         var root = example.RootElement;
-        Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(3, root.GetProperty("schemaVersion").GetInt32());
         Assert.False(root.TryGetProperty("manifestSha256", out _));
         Assert.Equal(
             "LEGAL-MANIFEST.sha256",
@@ -70,13 +70,27 @@ public sealed class RepositoryComplianceTests
             root.GetProperty("integrityManifest")
                 .GetProperty("algorithm")
                 .GetString());
+        var component = Assert.Single(root.GetProperty("components")
+            .EnumerateArray());
+        Assert.False(component.TryGetProperty("licenseText", out _));
+        Assert.False(string.IsNullOrWhiteSpace(
+            component.GetProperty("copyrightNotice").GetString()));
+        var legalDocuments = component.GetProperty("legalDocuments")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Contains(legalDocuments, document =>
+            document.GetProperty("kind").GetString() == "license");
         var decision = File.ReadAllText(decisionPath);
         Assert.Contains(
             "out-of-band",
             decision,
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
-            "fixed point",
+            "schema v2",
+            decision,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "fail closed",
             decision,
             StringComparison.OrdinalIgnoreCase);
     }

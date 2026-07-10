@@ -206,9 +206,9 @@ public sealed class LegalArtifactSetGeneratorTests
     }
 
     [Fact]
-    public void ArtifactSetIncludesV2ComponentCatalogCoveredByManifest()
+    public void ArtifactSetIncludesV3ComponentCatalogCoveredByManifest()
     {
-        var context = Context("component-catalog-v2");
+        var context = Context("component-catalog-v3");
         var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: true));
 
         var generated = LegalArtifactSetGenerator.Generate(
@@ -221,7 +221,7 @@ public sealed class LegalArtifactSetGeneratorTests
                         "THIRD-PARTY-COMPONENTS.json");
         using var catalogDocument = JsonDocument.Parse(catalog.Content);
         var root = catalogDocument.RootElement;
-        Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(3, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(
             context.DocumentNamespace,
             root.GetProperty("bundleId").GetString());
@@ -249,11 +249,29 @@ public sealed class LegalArtifactSetGeneratorTests
             component => AssertCatalogComponent(
                 component,
                 "a",
-                "LICENSES/a/LICENSE.txt"),
+                "LICENSES/a/LICENSE.txt",
+                expectedDocumentCount: 4),
             component => AssertCatalogComponent(
                 component,
                 "b",
-                "LICENSES/b/LICENSE.txt"));
+                "LICENSES/b/LICENSE.txt",
+                expectedDocumentCount: 1));
+
+        var firstDocuments = components[0]
+            .GetProperty("legalDocuments")
+            .EnumerateArray()
+            .Select(document => (
+                Kind: document.GetProperty("kind").GetString(),
+                Path: document.GetProperty("path").GetString()))
+            .ToArray();
+        Assert.Equal(
+        [
+            ("license", "LICENSES/a/LICENSE.txt"),
+            ("notice", "NOTICES/a/NOTICE.txt"),
+            ("copyright", "COPYRIGHTS/a.txt"),
+            ("attribution", "RIGHTS/a-attribution.txt"),
+        ],
+            firstDocuments);
 
         var sbom = generated.Artifacts.Single(artifact =>
             artifact.RelativePath == "SBOM/manifest.spdx.json");
@@ -269,6 +287,69 @@ public sealed class LegalArtifactSetGeneratorTests
             $"{catalog.Sha256}  THIRD-PARTY-COMPONENTS.json\n",
             Encoding.UTF8.GetString(manifest.Content.Span),
             StringComparison.Ordinal);
+        var manifestText = Encoding.UTF8.GetString(manifest.Content.Span);
+        Assert.All(firstDocuments, document => Assert.Contains(
+            $"  {document.Path}\n",
+            manifestText,
+            StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ComponentCatalogRejectsMissingCopyrightNotice()
+    {
+        var graph = Graph(reverse: false);
+        graph = graph with
+        {
+            Components =
+            [
+                graph.Components[0] with { CopyrightNotice = " " },
+                .. graph.Components.Skip(1),
+            ],
+        };
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+        Assert.True(eligibility.IsApproved);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            LegalArtifactSetGenerator.Generate(
+                Context("missing-copyright"),
+                eligibility.ApprovedGraph!));
+    }
+
+    [Fact]
+    public void ComponentCatalogRejectsDuplicateDocumentKinds()
+    {
+        var graph = Graph(reverse: false);
+        var first = graph.Components[0];
+        var duplicateNotice = LegalFile(
+            LegalFileKind.Notice,
+            "NOTICES/a/SECOND-NOTICE.txt",
+            "second notice\n");
+        graph = graph with
+        {
+            Components =
+            [
+                first with
+                {
+                    LegalFiles = [.. first.LegalFiles, duplicateNotice],
+                },
+                .. graph.Components.Skip(1),
+            ],
+        };
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+        Assert.True(eligibility.IsApproved);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            LegalArtifactSetGenerator.Generate(
+                Context("duplicate-document-kind"),
+                eligibility.ApprovedGraph!));
+    }
+
+    [Fact]
+    public void LegalFileKindDefinesAssetManifest()
+    {
+        Assert.True(Enum.IsDefined(
+            typeof(LegalFileKind),
+            "AssetManifest"));
     }
 
     [Fact]
@@ -390,14 +471,33 @@ public sealed class LegalArtifactSetGeneratorTests
             Modified: false,
             SourceInformation: $"https://example.invalid/{id}@commit",
             LicenseText: legalText,
-            LegalFiles:
-            [
-                new VerifiedLegalFile(
-                    LegalFileKind.License,
-                    $"LICENSES/{id}/LICENSE.txt",
-                    Hash(Encoding.UTF8.GetBytes(legalText)),
-                    legalText),
-            ],
+            LegalFiles: id == "a"
+                ?
+                [
+                    LegalFile(
+                        LegalFileKind.License,
+                        $"LICENSES/{id}/LICENSE.txt",
+                        legalText),
+                    LegalFile(
+                        LegalFileKind.Notice,
+                        $"NOTICES/{id}/NOTICE.txt",
+                        $"{id} notice\n"),
+                    LegalFile(
+                        LegalFileKind.Copyright,
+                        $"COPYRIGHTS/{id}.txt",
+                        $"{id} copyright\n"),
+                    LegalFile(
+                        LegalFileKind.Attribution,
+                        $"RIGHTS/{id}-attribution.txt",
+                        $"{id} attribution\n"),
+                ]
+                :
+                [
+                    LegalFile(
+                        LegalFileKind.License,
+                        $"LICENSES/{id}/LICENSE.txt",
+                        legalText),
+                ],
             Scope: NoticeScope.RuntimeBundled,
             Approval: new LegalApproval(
                 LegalApprovalStatus.Approved,
@@ -410,7 +510,8 @@ public sealed class LegalArtifactSetGeneratorTests
     private static void AssertCatalogComponent(
         JsonElement component,
         string id,
-        string licensePath)
+        string licensePath,
+        int expectedDocumentCount)
     {
         Assert.Equal(id, component.GetProperty("id").GetString());
         Assert.Equal(
@@ -425,12 +526,26 @@ public sealed class LegalArtifactSetGeneratorTests
             component.GetProperty("linkage").GetString());
         Assert.False(component.GetProperty("modified").GetBoolean());
         Assert.Equal(
-            licensePath,
-            component.GetProperty("licenseText").GetString());
+            $"Copyright (c) Component {id}",
+            component.GetProperty("copyrightNotice").GetString());
+        Assert.False(component.TryGetProperty("licenseText", out _));
+        var documents = component.GetProperty("legalDocuments")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Equal(expectedDocumentCount, documents.Length);
+        var license = Assert.Single(documents, document =>
+            document.GetProperty("kind").GetString() == "license");
+        Assert.Equal(licensePath, license.GetProperty("path").GetString());
         Assert.Equal(
             $"https://example.invalid/{id}@commit",
             component.GetProperty("sourceInfo").GetString());
     }
+
+    private static VerifiedLegalFile LegalFile(
+        LegalFileKind kind,
+        string path,
+        string text) =>
+        new(kind, path, Hash(Encoding.UTF8.GetBytes(text)), text);
 
     private sealed class FixedAuthenticatedAnchorSource(
         AuthenticatedLegalBundleAnchor anchor)
