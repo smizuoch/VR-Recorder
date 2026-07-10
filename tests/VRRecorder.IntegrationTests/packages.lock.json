@@ -105,6 +105,12 @@
           "VRRecorder.Domain": "[1.0.0, )"
         }
       },
+      "vrrecorder.compliance": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
       "vrrecorder.designsystem": {
         "type": "Project"
       },
@@ -133,6 +139,14 @@
         "type": "Project",
         "dependencies": {
           "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.presentation.wrist": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )",
+          "VRRecorder.DesignSystem": "[1.0.0, )",
+          "VRRecorder.Domain": "[1.0.0, )"
         }
       }
     }
