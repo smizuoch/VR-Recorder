@@ -12,6 +12,7 @@ public sealed class ConfirmedUdpVrChatCameraGateway
         TimeSpan.FromMilliseconds(200);
     private readonly UdpClient _client;
     private readonly IPEndPoint _remoteEndpoint;
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     public ConfirmedUdpVrChatCameraGateway(IPEndPoint remoteEndpoint)
     {
@@ -71,19 +72,53 @@ public sealed class ConfirmedUdpVrChatCameraGateway
         byte[] packet,
         CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < 2; attempt++)
+        await _writeGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
         {
-            await _client
-                .SendAsync(packet, _remoteEndpoint, cancellationToken)
-                .ConfigureAwait(false);
-            if (await WaitForEchoAsync(packet, cancellationToken)
-                    .ConfigureAwait(false))
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                DiscardQueuedDatagrams();
+                await _client
+                    .SendAsync(packet, _remoteEndpoint, cancellationToken)
+                    .ConfigureAwait(false);
+                if (await WaitForEchoAsync(packet, cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    return;
+                }
+            }
+
+            throw new CameraWriteConfirmationException(attempts: 2);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    private void DiscardQueuedDatagrams()
+    {
+        var sender = new IPEndPoint(
+            _remoteEndpoint.AddressFamily == AddressFamily.InterNetwork
+                ? IPAddress.Any
+                : IPAddress.IPv6Any,
+            0);
+        while (_client.Available > 0)
+        {
+            try
+            {
+                _client.Receive(ref sender);
+            }
+            catch (SocketException exception) when (
+                exception.SocketErrorCode is SocketError.WouldBlock or
+                    SocketError.IOPending or
+                    SocketError.NoBufferSpaceAvailable)
             {
                 return;
             }
         }
-
-        throw new CameraWriteConfirmationException(attempts: 2);
     }
 
     private async Task<bool> WaitForEchoAsync(
