@@ -5,13 +5,16 @@ namespace VRRecorder.Application.Tests.TestDoubles;
 
 internal sealed class FakeRecordingRecoveryStore : IRecordingRecoveryStore
 {
-    public List<FinalizedRecording> Recordings { get; } = [];
+    public List<RecoverableRecording> Recordings { get; } = [];
 
-    public Task QuarantineAsync(
-        FinalizedRecording recording,
+    public QuarantinedRecording QuarantinedRecording { get; } =
+        new("recovery/recording.mp4");
+
+    public Task<QuarantinedRecording> QuarantineAsync(
+        RecoverableRecording recording,
         CancellationToken cancellationToken)
     {
         Recordings.Add(recording);
-        return Task.CompletedTask;
+        return Task.FromResult(QuarantinedRecording);
     }
 }

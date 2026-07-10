@@ -7,6 +7,42 @@ namespace VRRecorder.IntegrationTests.Storage;
 public sealed class RecordingFileFinalizationIntegrationTests
 {
     [Fact]
+    [Trait("Scenario", "IT-018")]
+    public async Task InvalidFinalIsMovedToRecoveryAndNeverPublished()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var temporaryPath = Path.Combine(directory.Path, "take.recording.mp4");
+        var finalPath = Path.Combine(directory.Path, "take.mp4");
+        var recoveryPath = Path.Combine(
+            directory.Path,
+            "VR-Recorder-Recovery",
+            "take.mp4");
+        byte[] invalidContent = [0x00, 0x01, 0x02, 0x03];
+        await File.WriteAllBytesAsync(temporaryPath, invalidContent);
+        var useCase = new RecordingFileFinalizationUseCase(
+            new SameDirectoryAtomicRecordingFileFinalizer(),
+            new AlwaysInvalidValidator(),
+            new FileSystemRecordingRecoveryStore(),
+            new UnexpectedSavedSink());
+
+        var result = await useCase.ExecuteAsync(
+            new PendingRecording(temporaryPath, finalPath),
+            CancellationToken.None);
+
+        var recovery =
+            Assert.IsType<RecordingFinalizationResult.RecoveryRequired>(result);
+        Assert.Equal(RecordingRecoveryReason.ValidationFailed, recovery.Reason);
+        Assert.Equal(
+            Path.GetFullPath(recoveryPath),
+            recovery.Quarantine.QuarantinePath);
+        Assert.False(File.Exists(temporaryPath));
+        Assert.False(File.Exists(finalPath));
+        Assert.Equal(
+            invalidContent,
+            await File.ReadAllBytesAsync(recoveryPath));
+    }
+
+    [Fact]
     [Trait("Scenario", "IT-022")]
     public async Task ExistingFinalIsPreservedAndNumberedFinalIsPublished()
     {
@@ -86,6 +122,14 @@ public sealed class RecordingFileFinalizationIntegrationTests
         }
     }
 
+    private sealed class AlwaysInvalidValidator : IRecordingFileValidator
+    {
+        public Task<RecordingFileValidation> ValidateAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(RecordingFileValidation.Invalid);
+    }
+
     private sealed class ReopeningSavedSink : ISavedRecordingSink
     {
         private readonly byte[] _expectedContent;
@@ -111,10 +155,18 @@ public sealed class RecordingFileFinalizationIntegrationTests
 
     private sealed class UnexpectedRecoveryStore : IRecordingRecoveryStore
     {
-        public Task QuarantineAsync(
-            FinalizedRecording recording,
+        public Task<QuarantinedRecording> QuarantineAsync(
+            RecoverableRecording recording,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Recovery was not expected.");
+    }
+
+    private sealed class UnexpectedSavedSink : ISavedRecordingSink
+    {
+        public Task PublishAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Saved was not expected.");
     }
 
     private sealed class TemporaryDirectory : IDisposable

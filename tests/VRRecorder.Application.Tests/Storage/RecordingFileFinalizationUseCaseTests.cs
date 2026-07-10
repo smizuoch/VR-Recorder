@@ -63,8 +63,15 @@ public sealed class RecordingFileFinalizationUseCaseTests
 
         var recoveryRequired =
             Assert.IsType<RecordingFinalizationResult.RecoveryRequired>(result);
-        Assert.Equal(finalized, recoveryRequired.Recording);
-        Assert.Equal(finalized, Assert.Single(recovery.Recordings));
+        Assert.Equal(
+            RecordingRecoveryReason.ValidationFailed,
+            recoveryRequired.Reason);
+        Assert.Equal(
+            recovery.QuarantinedRecording,
+            recoveryRequired.Quarantine);
+        Assert.Equal(
+            new RecoverableRecording(finalized.FinalPath),
+            Assert.Single(recovery.Recordings));
         Assert.Empty(savedRecordings.Recordings);
     }
 }
