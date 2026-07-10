@@ -11,6 +11,9 @@
 - [x] wrist rayのenabled actionを共通dispatcherへ送る
 - [x] desktop click・keyboard・wrist ray・SteamVR actionが同じcommand IDになる
 - [x] x64 WPF hostをLinuxからcross-buildする
+- [x] 認証済みLegal Bundleを手首UIの一覧・詳細・全文pageとしてoffline表示する
+- [x] Legal全文のpage移動ごとに再検証し、改ざん時は表示済みtextを消去する
+- [x] Legalの全viewでcanonical 64 dp STOPを1操作に固定する
 - [ ] WindowsでWPF hostのUI Automationを実行する
 
 ## English
@@ -24,4 +27,7 @@
 - [x] Route enabled wrist-ray actions through the shared dispatcher
 - [x] Map desktop click, keyboard, wrist ray, and SteamVR action to one command ID
 - [x] Cross-build the x64 WPF host on Linux
+- [x] Show an authenticated Legal Bundle offline as wrist list, detail, and full-text pages
+- [x] Reverify each legal-text navigation and clear previously visible text after tampering
+- [x] Keep the canonical 64 dp one-operation STOP fixed on every Legal view
 - [ ] Run WPF host UI Automation on Windows

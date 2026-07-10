@@ -11,6 +11,7 @@
 - [x] 起動時にstaleな`.recording.mp4`を検出して回復する
 - [x] 選択したoutput filesystemの空き容量を実測する
 - [x] 既定保存先をWindows Downloads Known Folder IDで解決する
+- [x] CameraLeaseをatomicかつ所有者照合付きで永続化し、破損証拠を保持する
 
 ## English
 
@@ -23,3 +24,4 @@
 - [x] Discover and recover stale `.recording.mp4` files at startup
 - [x] Measure free space on the selected output filesystem
 - [x] Resolve the default output through the Windows Downloads Known Folder ID
+- [x] Persist CameraLease atomically with owner matching while retaining corrupt evidence
