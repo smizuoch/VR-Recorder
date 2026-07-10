@@ -26,7 +26,7 @@ public sealed class DesktopRecordingCommandHostTests
     }
 
     [Fact]
-    public async Task ConcurrentToggleActivationsJoinOneInFlightOperation()
+    public async Task ConcurrentToggleActivationsAreBothRoutedToRuntime()
     {
         var runtime = new ControllableDesktopRecordingRuntime(holdToggle: true);
         var factory = new StubDesktopRecordingRuntimeFactory(runtime);
@@ -37,14 +37,14 @@ public sealed class DesktopRecordingCommandHostTests
         await runtime.WaitUntilToggleRequestedAsync();
         var second = host.ToggleAsync(CancellationToken.None);
 
-        Assert.Equal(1, runtime.ToggleCallCount);
+        Assert.Equal(2, runtime.ToggleCallCount);
         Assert.False(first.IsCompleted);
         Assert.False(second.IsCompleted);
 
         runtime.CompleteToggle();
         await Task.WhenAll(first, second);
 
-        Assert.Equal(1, runtime.ToggleCallCount);
+        Assert.Equal(2, runtime.ToggleCallCount);
     }
 
     [Fact]

@@ -384,6 +384,7 @@ public sealed class RecordingLifecycleControllerTests
         await signal.WaitUntilRequestedAsync();
         signal.CompleteWithStableSignal(new StableVideoSignal(320, 180));
         await countdown.WaitUntilRequestedAsync();
+        var stateDuringCountdown = lifecycle.State;
 
         Assert.Equal(
             ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
@@ -403,6 +404,7 @@ public sealed class RecordingLifecycleControllerTests
         var warning = Assert.Single(restoreWarnings.Warnings);
         Assert.Equal(CameraRestoreWarningReason.StartCanceled, warning.Reason);
         Assert.IsType<TestCameraRestoreException>(warning.Failure);
+        Assert.Equal(RecorderState.Countdown, stateDuringCountdown);
         Assert.Equal(RecorderState.Ready, lifecycle.State);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);

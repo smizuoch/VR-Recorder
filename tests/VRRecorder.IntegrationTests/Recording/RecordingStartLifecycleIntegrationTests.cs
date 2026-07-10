@@ -139,7 +139,7 @@ public sealed class RecordingStartLifecycleIntegrationTests
         await backend.WaitUntilOpenedAsync();
 
         Assert.False(starting.IsCompleted);
-        Assert.Equal(RecorderState.Arming, lifecycle.State);
+        Assert.Equal(RecorderState.Starting, lifecycle.State);
         Assert.Equal(RecorderState.Ready, sessions.State);
         Assert.Equal(
             [EncoderKind.Nvenc, EncoderKind.MediaFoundationSoftware],

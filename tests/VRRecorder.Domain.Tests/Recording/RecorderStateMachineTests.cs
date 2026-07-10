@@ -72,6 +72,35 @@ public sealed class RecorderStateMachineTests
         Assert.Equal(RecorderState.Arming, next);
     }
 
+    [Theory]
+    [InlineData(RecorderState.Arming, "CountdownStarted", RecorderState.Countdown)]
+    [InlineData(RecorderState.Arming, "StartPreparationCompleted", RecorderState.Starting)]
+    [InlineData(RecorderState.Countdown, "StartPreparationCompleted", RecorderState.Starting)]
+    [InlineData(RecorderState.Arming, "CancelRequested", RecorderState.Ready)]
+    [InlineData(RecorderState.Countdown, "CancelRequested", RecorderState.Ready)]
+    public void StartPreparationHasExplicitLifecycleTransitions(
+        RecorderState current,
+        string triggerName,
+        RecorderState expected)
+    {
+        var trigger = Enum.Parse<RecorderTrigger>(triggerName);
+
+        var next = RecorderStateMachine.Transition(current, trigger);
+
+        Assert.Equal(expected, next);
+    }
+
+    [Fact]
+    public void CancelRequestedWhenStartingIsRejected()
+    {
+        var cancelRequested = Enum.Parse<RecorderTrigger>("CancelRequested");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            RecorderStateMachine.Transition(
+                RecorderState.Starting,
+                cancelRequested));
+    }
+
     [Fact]
     public void FirstPacketCommittedWhenStartingTransitionsToRecording()
     {

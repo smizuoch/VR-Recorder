@@ -173,6 +173,114 @@ public sealed class DesktopRecordingRuntimeTests
         Assert.Single(lifecycle.StartRequests);
     }
 
+    [Theory]
+    [InlineData(RecorderState.Arming)]
+    [InlineData(RecorderState.Countdown)]
+    public async Task SecondToggleDuringCancelableStartPhaseCancelsSharedOperation(
+        RecorderState cancelableState)
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-cancel"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueuePending();
+        var stops = new ControllableStopRequestSink(lifecycle);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops);
+
+        var first = runtime.ToggleAsync(CancellationToken.None);
+        await lifecycle.WaitUntilStartRequestedAsync();
+        lifecycle.SetState(cancelableState);
+
+        var second = runtime.ToggleAsync(CancellationToken.None);
+
+        Assert.Same(first, second);
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Single(lifecycle.StartRequests);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
+    public async Task CallerCancellationDuringArmingRemainsCanceled()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-external-cancel"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueuePending();
+        var stops = new ControllableStopRequestSink(lifecycle);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops);
+        using var callerCancellation = new CancellationTokenSource();
+        var starting = runtime.ToggleAsync(callerCancellation.Token);
+        await lifecycle.WaitUntilStartRequestedAsync();
+
+        await callerCancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starting);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
+    public async Task SecondToggleDuringStartingJoinsWithoutCanceling()
+    {
+        var handle = Handle("session-starting");
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-starting"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        var start = lifecycle.EnqueuePending();
+        var stops = new ControllableStopRequestSink(lifecycle)
+        {
+            CompleteImmediately = true,
+        };
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops);
+
+        var first = runtime.ToggleAsync(CancellationToken.None);
+        await lifecycle.WaitUntilStartRequestedAsync();
+        lifecycle.SetState(RecorderState.Starting);
+
+        var second = runtime.ToggleAsync(CancellationToken.None);
+
+        Assert.Same(first, second);
+        Assert.False(first.IsCompleted);
+        start.SetResult(Started(handle));
+        await Task.WhenAll(first, second);
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
+        Assert.Single(lifecycle.StartRequests);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
+    public async Task DisposeRacingArmingCancelConvergesWithoutStopRequest()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-cancel-dispose"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueuePending();
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var runtime = new DesktopRecordingRuntime(requests, lifecycle, stops);
+
+        var first = runtime.ToggleAsync(CancellationToken.None);
+        await lifecycle.WaitUntilStartRequestedAsync();
+        var second = runtime.ToggleAsync(CancellationToken.None);
+        var disposal = runtime.DisposeAsync().AsTask();
+
+        Assert.Same(first, second);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second);
+        await disposal;
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Empty(stops.Requests);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+    }
+
     [Fact]
     public async Task DisposeStopsActiveSessionExactlyOnceAndIsIdempotent()
     {
