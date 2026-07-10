@@ -1,3 +1,4 @@
+using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
@@ -12,6 +13,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private readonly IDesktopRecordingStartRequestSource _requests;
     private readonly IRecordingLifecycleController _lifecycle;
     private readonly IStopRequestSink _stopRequests;
+    private readonly IVrChatInstanceSelectionPrompt _vrChatSelection;
     private readonly IAsyncDisposable? _ownedLifetime;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly RecorderStatusHub _statuses;
@@ -31,13 +33,30 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         IRecordingLifecycleController lifecycle,
         IStopRequestSink stopRequests,
         IAsyncDisposable? ownedLifetime = null)
+        : this(
+            requests,
+            lifecycle,
+            stopRequests,
+            CancelingVrChatInstanceSelectionPrompt.Instance,
+            ownedLifetime)
+    {
+    }
+
+    public DesktopRecordingRuntime(
+        IDesktopRecordingStartRequestSource requests,
+        IRecordingLifecycleController lifecycle,
+        IStopRequestSink stopRequests,
+        IVrChatInstanceSelectionPrompt vrChatSelection,
+        IAsyncDisposable? ownedLifetime = null)
     {
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentNullException.ThrowIfNull(lifecycle);
         ArgumentNullException.ThrowIfNull(stopRequests);
+        ArgumentNullException.ThrowIfNull(vrChatSelection);
         _requests = requests;
         _lifecycle = lifecycle;
         _stopRequests = stopRequests;
+        _vrChatSelection = vrChatSelection;
         _ownedLifetime = ownedLifetime;
         _statuses = new RecorderStatusHub(
             RecorderStatusSnapshot.Create(0, lifecycle.State));
@@ -196,7 +215,59 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
                 cancellationToken)
             .ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(result);
+        if (result.Connection is
+            VrChatCameraConnectionResolution.SelectionRequired selection)
+        {
+            var selectedServiceId = await SelectVrChatInstanceAsync(
+                    selection,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (selectedServiceId is not null)
+            {
+                result = await _lifecycle
+                    .StartAsync(
+                        selectedServiceId,
+                        request.Command,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                ArgumentNullException.ThrowIfNull(result);
+            }
+        }
+
         await CaptureStartResultAsync(result).ConfigureAwait(false);
+    }
+
+    private async Task<string?> SelectVrChatInstanceAsync(
+        VrChatCameraConnectionResolution.SelectionRequired selection,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selection.Candidates);
+        var candidates = selection.Candidates.ToArray();
+        if (candidates.Length < 2 || candidates.Any(candidate => candidate is null))
+        {
+            throw new InvalidDataException(
+                "VRChat instance selection requires at least two valid candidates.");
+        }
+
+        var selectedServiceId = await _vrChatSelection
+            .SelectAsync(candidates, cancellationToken)
+            .ConfigureAwait(false);
+        if (selectedServiceId is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedServiceId) ||
+            !candidates.Any(candidate => string.Equals(
+                candidate.ServiceId,
+                selectedServiceId,
+                StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException(
+                "The selected VRChat service is not an offered candidate.");
+        }
+
+        return selectedServiceId;
     }
 
     private async Task CaptureStartResultAsync(
@@ -434,6 +505,22 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         catch (Exception)
         {
             // Shutdown must still safely stop any session activated by the operation.
+        }
+    }
+
+    private sealed class CancelingVrChatInstanceSelectionPrompt
+        : IVrChatInstanceSelectionPrompt
+    {
+        public static CancelingVrChatInstanceSelectionPrompt Instance { get; } =
+            new();
+
+        public Task<string?> SelectAsync(
+            IReadOnlyList<VrChatInstanceCandidate> candidates,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(candidates);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<string?>(null);
         }
     }
 }
