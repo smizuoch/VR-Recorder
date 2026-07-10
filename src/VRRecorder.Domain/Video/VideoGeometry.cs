@@ -18,4 +18,11 @@ public sealed record VideoGeometry
     public VideoOrientation Orientation => Height > Width
         ? VideoOrientation.Portrait
         : VideoOrientation.Landscape;
+
+    public VideoGeometry PadForChroma420()
+    {
+        var paddedWidth = Width % 2 == 0 ? Width : Width + 1;
+        var paddedHeight = Height % 2 == 0 ? Height : Height + 1;
+        return new VideoGeometry(paddedWidth, paddedHeight, PixelFormat);
+    }
 }
