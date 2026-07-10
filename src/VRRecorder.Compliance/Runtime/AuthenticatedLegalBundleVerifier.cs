@@ -169,6 +169,29 @@ public sealed class AuthenticatedLegalBundleVerifier
             }
         }
 
+        var pathComparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var expectedPaths = entries
+            .Select(entry => entry.RelativePath)
+            .Append(ManifestFileName)
+            .ToHashSet(pathComparer);
+        var unexpectedPath = Directory
+            .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(path => Path
+                .GetRelativePath(root, path)
+                .Replace(Path.DirectorySeparatorChar, '/')
+                .Replace(Path.AltDirectorySeparatorChar, '/'))
+            .Where(path => !expectedPaths.Contains(path))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (unexpectedPath is not null)
+        {
+            return new ComplianceIssue(
+                "legal-bundle-payload-unexpected",
+                unexpectedPath);
+        }
+
         return null;
     }
 
