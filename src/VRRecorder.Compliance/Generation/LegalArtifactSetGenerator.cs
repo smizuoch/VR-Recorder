@@ -32,6 +32,12 @@ public static class LegalArtifactSetGenerator
             Encoding.UTF8.GetBytes(SpdxSbomGenerator.Generate(
                 context,
                 approvedGraph)));
+        AddArtifact(
+            artifacts,
+            "THIRD-PARTY-COMPONENTS.json",
+            Encoding.UTF8.GetBytes(ThirdPartyComponentsGenerator.Generate(
+                context,
+                approvedGraph)));
 
         foreach (var legalFile in approvedGraph.Graph.Components
                      .SelectMany(component => component.LegalFiles)
