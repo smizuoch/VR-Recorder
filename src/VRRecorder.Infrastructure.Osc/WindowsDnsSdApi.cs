@@ -115,8 +115,18 @@ public sealed class WindowsDnsSdApi : IWindowsDnsSdApi
                     completion.TrySetException(CreateFailure("resolve", status));
                 }
             });
-        using var cancellationRegistration = cancellationToken.Register(
-            operation.Cancel);
+        using var cancellationRegistration = cancellationToken.Register(() =>
+        {
+            try
+            {
+                operation.Cancel();
+                completion.TrySetCanceled(cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                completion.TrySetException(exception);
+            }
+        });
         return await completion.Task.ConfigureAwait(false);
     }
 
