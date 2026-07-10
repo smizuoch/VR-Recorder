@@ -46,6 +46,17 @@ typedef struct vrrec_test_video_layout_v1 {
     std::uint32_t rotation;
 } vrrec_test_video_layout_v1;
 
+typedef struct vrrec_test_encoder_probe_config_v1 {
+    std::uint32_t encoder_kind;
+    std::uint32_t synthetic_frame_count;
+    std::uint64_t adapter_luid;
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t fps_numerator;
+    std::uint32_t fps_denominator;
+    const char *gpu_identity_utf8;
+} vrrec_test_encoder_probe_config_v1;
+
 extern "C" VRREC_TEST_API void vrrec_test_commit_muxed_video_packet(void)
 {
     vrrecorder::native::testing::CommitMuxedVideoPacket();
@@ -127,6 +138,49 @@ extern "C" VRREC_TEST_API void vrrec_test_copy_video_layout_v1(
         layout.destination_height,
         layout.canvas_background,
         layout.rotation,
+    };
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_encoder_probe_reset(void)
+{
+    vrrecorder::native::testing::ResetEncoderProbe();
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_encoder_probe_set_result(
+    std::int32_t status,
+    std::uint8_t packet_produced)
+{
+    vrrecorder::native::testing::SetEncoderProbeResult(
+        status,
+        packet_produced != 0);
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_encoder_probe_call_count(void)
+{
+    return vrrecorder::native::testing::EncoderProbeCallCount();
+}
+
+extern "C" VRREC_TEST_API void
+vrrec_test_encoder_probe_copy_config_v1(
+    vrrec_test_encoder_probe_config_v1 *out_config)
+{
+    if (out_config == nullptr) {
+        return;
+    }
+
+    static thread_local std::string gpu_identity;
+    const auto config = vrrecorder::native::testing::EncoderProbeConfig();
+    gpu_identity = config.gpu_identity;
+    *out_config = vrrec_test_encoder_probe_config_v1 {
+        config.encoder_kind,
+        config.synthetic_frame_count,
+        config.adapter_luid,
+        config.width,
+        config.height,
+        config.fps_numerator,
+        config.fps_denominator,
+        gpu_identity.c_str(),
     };
 }
 
