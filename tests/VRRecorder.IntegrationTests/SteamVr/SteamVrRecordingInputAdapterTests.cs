@@ -37,7 +37,9 @@ public sealed class SteamVrRecordingInputAdapterTests
                 Changed: true),
         ]);
         var commands = new CapturingUiCommandDispatcher();
-        var adapter = new SteamVrRecordingInputAdapter(runtime, commands);
+        var adapter = new SteamVrRecordingInputAdapter(
+            runtime,
+            new RecordingInputDispatcher(commands));
 
         await adapter.RunAsync(CancellationToken.None);
 

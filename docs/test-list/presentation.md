@@ -7,7 +7,7 @@
 - [x] NoSignal/Faulted/ComplianceFaultはStartを許可しない
 - [x] 全RecorderStateを非色覚cue付きsemantic roleへ投影する
 - [x] 日本語・英語resource key/placeholderが一致する
-- [ ] desktop click・keyboardを共通のcancellation-aware dispatcherへ送る
+- [x] desktop click・keyboardを共通のcancellation-aware dispatcherへ送る
 - [ ] desktop click・keyboard・wrist ray・SteamVR actionが同じcommand IDになる
 - [x] x64 WPF hostをLinuxからcross-buildする
 - [ ] WindowsでWPF hostのUI Automationを実行する
@@ -19,7 +19,7 @@
 - [x] Disallow Start in NoSignal, Faulted, and ComplianceFault
 - [x] Project every RecorderState to semantic roles with non-color cues
 - [x] Keep Japanese/English resource keys and placeholders in parity
-- [ ] Route desktop click and keyboard through one cancellation-aware dispatcher
+- [x] Route desktop click and keyboard through one cancellation-aware dispatcher
 - [ ] Map desktop click, keyboard, wrist ray, and SteamVR action to one command ID
 - [x] Cross-build the x64 WPF host on Linux
 - [ ] Run WPF host UI Automation on Windows

@@ -5,16 +5,16 @@ namespace VRRecorder.Infrastructure.SteamVr;
 public sealed class SteamVrRecordingInputAdapter
 {
     private readonly ISteamVrInputRuntime _runtime;
-    private readonly IUiCommandDispatcher _commands;
+    private readonly RecordingInputDispatcher _inputs;
 
     public SteamVrRecordingInputAdapter(
         ISteamVrInputRuntime runtime,
-        IUiCommandDispatcher commands)
+        RecordingInputDispatcher inputs)
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        ArgumentNullException.ThrowIfNull(commands);
+        ArgumentNullException.ThrowIfNull(inputs);
         _runtime = runtime;
-        _commands = commands;
+        _inputs = inputs;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -31,9 +31,8 @@ public sealed class SteamVrRecordingInputAdapter
                 continue;
             }
 
-            await _commands
+            await _inputs
                 .DispatchAsync(
-                    UiCommandId.ToggleRecording,
                     UiActivationKind.SteamVrAction,
                     cancellationToken)
                 .ConfigureAwait(false);

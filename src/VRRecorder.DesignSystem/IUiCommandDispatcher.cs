@@ -1,6 +1,4 @@
-using VRRecorder.DesignSystem;
-
-namespace VRRecorder.Infrastructure.SteamVr;
+namespace VRRecorder.DesignSystem;
 
 public interface IUiCommandDispatcher
 {
