@@ -103,4 +103,16 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Stopping, next);
     }
+
+    [Fact]
+    public void CompletedStopReturnsRecorderToReady()
+    {
+        var completed = Enum.Parse<RecorderTrigger>("StopCompleted");
+
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Stopping,
+            completed);
+
+        Assert.Equal(RecorderState.Ready, next);
+    }
 }
