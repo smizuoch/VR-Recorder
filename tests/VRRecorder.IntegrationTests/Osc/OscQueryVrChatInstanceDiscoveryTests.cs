@@ -88,6 +88,32 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             discovery.DiscoverAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task MissingCameraEndpointReturnsExplicitCapabilityFailure()
+    {
+        var advertisement = Advertisement("missing", httpPort: 19004);
+        var browser = new StubOscQueryServiceBrowser([advertisement]);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = new Fixture(
+                    advertisement.InstanceName,
+                    OscPort: 9030,
+                    MissingPath: "/usercamera/Streaming"),
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        var exception = await Assert.ThrowsAsync<
+            VrChatCameraEndpointMissingException>(() =>
+            discovery.DiscoverAsync(CancellationToken.None));
+
+        Assert.Equal(advertisement.ServiceId, exception.ServiceId);
+        Assert.Equal("/usercamera/Streaming", exception.EndpointPath);
+    }
+
     private static OscQueryServiceAdvertisement Advertisement(
         string suffix,
         int httpPort)
@@ -156,6 +182,22 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                           "The OSCQuery request URI is missing.");
             Requests.Add((uri.Port, uri.PathAndQuery));
             var fixture = _fixtures[uri.Port];
+            if (string.Equals(
+                    uri.AbsolutePath,
+                    fixture.MissingPath,
+                    StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(
+                    HttpStatusCode.NotFound)
+                {
+                    RequestMessage = request,
+                    Content = new StringContent(
+                        "{}",
+                        Encoding.UTF8,
+                        "application/json"),
+                });
+            }
+
             var json = uri.PathAndQuery switch
             {
                 "/?HOST_INFO" => fixture.HostInfoJson ?? $$"""
@@ -203,5 +245,6 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
     private sealed record Fixture(
         string Name,
         int OscPort,
-        string? HostInfoJson = null);
+        string? HostInfoJson = null,
+        string? MissingPath = null);
 }
