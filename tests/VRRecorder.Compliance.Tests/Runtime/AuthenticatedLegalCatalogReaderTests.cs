@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Compliance.Dependencies;
 using VRRecorder.Compliance.Generation;
@@ -21,6 +23,7 @@ public sealed class AuthenticatedLegalCatalogReaderTests
             catalogResult).Catalog;
 
         Assert.Equal(fixture.BundleId, catalog.BundleId);
+        Assert.Equal(fixture.Anchor.ManifestSha256, catalog.ManifestSha256);
         Assert.Equal("0.1.0", catalog.ProductVersion);
         Assert.Equal(["a", "b"], catalog.Components.Select(item => item.Id));
         var first = catalog.Components[0];
@@ -31,7 +34,21 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         Assert.Equal("managed-library", first.Linkage);
         Assert.False(first.Modified);
         Assert.Equal("offline source a@commit", first.SourceInformation);
+        Assert.Equal("Copyright Component a", first.CopyrightNotice);
         Assert.Equal("LICENSES/a/LICENSE.txt", first.LicenseTextPath);
+        Assert.Equal(
+        [
+            new LegalDocumentReference(
+                LegalDocumentKind.License,
+                "LICENSES/a/LICENSE.txt"),
+            new LegalDocumentReference(
+                LegalDocumentKind.Notice,
+                "NOTICES/a/NOTICE.txt"),
+            new LegalDocumentReference(
+                LegalDocumentKind.Copyright,
+                "COPYRIGHTS/a.txt"),
+        ],
+            first.LegalDocuments);
 
         var textResult = await reader.ReadLicenseTextAsync(
             "a",
@@ -44,11 +61,114 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         Assert.Equal("a LICENSE\nline two\nline three\n", document.Text);
     }
 
+    [Fact]
+    public async Task ReadsExactAuthenticatedGenericDocumentReference()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var fixture = await WriteGeneratedBundleAsync(directory.Path);
+        var reader = CreateReader(directory.Path, fixture.Anchor);
+        var reference = new LegalDocumentReference(
+            LegalDocumentKind.Notice,
+            "NOTICES/a/NOTICE.txt");
+
+        var result = await reader.ReadDocumentAsync(
+            "a",
+            reference,
+            CancellationToken.None);
+
+        var available = Assert.IsType<LegalTextReadResult.Available>(result);
+        Assert.Equal("a", available.Document.ComponentId);
+        Assert.Equal(reference, available.Document.Reference);
+        Assert.Equal("a notice\n", available.Document.Text);
+    }
+
+    [Theory]
+    [MemberData(nameof(ForgedReferences))]
+    public async Task RejectsReferenceNotExactlyBoundToRequestedComponent(
+        LegalDocumentReference forgedReference)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var fixture = await WriteGeneratedBundleAsync(directory.Path);
+        var reader = CreateReader(directory.Path, fixture.Anchor);
+
+        var result = await reader.ReadDocumentAsync(
+            "a",
+            forgedReference,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalTextReadResult.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-catalog-document-reference-mismatch", issue.Code);
+    }
+
+    public static TheoryData<LegalDocumentReference> ForgedReferences =>
+        new()
+        {
+            new LegalDocumentReference(
+                LegalDocumentKind.License,
+                "LICENSES/b/LICENSE.txt"),
+            new LegalDocumentReference(
+                LegalDocumentKind.Notice,
+                "LICENSES/a/LICENSE.txt"),
+            new LegalDocumentReference(
+                LegalDocumentKind.Attribution,
+                "RIGHTS/a.txt"),
+        };
+
+    [Fact]
+    public async Task GenericReadReauthenticatesCatalogAndRejectsStaleReference()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var fixture = await WriteGeneratedBundleAsync(directory.Path);
+        var source = new MutableAuthenticatedAnchorSource(fixture.Anchor);
+        var reader = new AuthenticatedLegalCatalogReader(
+            directory.Path,
+            new AuthenticatedLegalBundleVerifier(source));
+        var first = Assert.IsType<LegalCatalogReadResult.Available>(
+            await reader.ReadAsync(CancellationToken.None));
+        var staleReference = first.Catalog.Components[0].LegalDocuments
+            .Single(reference =>
+                reference.Kind == LegalDocumentKind.Notice);
+
+        var catalogPath = Path.Combine(
+            directory.Path,
+            "THIRD-PARTY-COMPONENTS.json");
+        var catalog = JsonNode.Parse(
+            await File.ReadAllTextAsync(catalogPath))!;
+        var documents = catalog["components"]![0]!["legalDocuments"]!
+            .AsArray();
+        var noticeIndex = documents
+            .Select((document, index) => (document, index))
+            .Single(item =>
+                item.document!["kind"]!.GetValue<string>() == "notice")
+            .index;
+        documents.RemoveAt(noticeIndex);
+        await File.WriteAllTextAsync(
+            catalogPath,
+            catalog.ToJsonString(new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }) + '\n',
+            new UTF8Encoding(false, true));
+        source.Anchor = await RewriteManifestAsync(
+            directory.Path,
+            fixture.BundleId);
+
+        var result = await reader.ReadDocumentAsync(
+            "a",
+            staleReference,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalTextReadResult.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-catalog-document-reference-mismatch", issue.Code);
+    }
+
     [Theory]
     [InlineData("../outside.txt")]
     [InlineData("/absolute.txt")]
     [InlineData("LICENSES\\a\\LICENSE.txt")]
-    [InlineData("THIRD-PARTY-NOTICES.txt")]
+    [InlineData("LICENSES/a/MISSING.txt")]
     public async Task RejectsLicenseReferenceThatIsNotAListedLicenseArtifact(
         string licenseTextPath)
     {
@@ -72,7 +192,7 @@ public sealed class AuthenticatedLegalCatalogReaderTests
 
         var rejected = Assert.IsType<LegalCatalogReadResult.Rejected>(result);
         Assert.Contains(rejected.Issues, issue =>
-            issue.Code == "legal-catalog-license-reference-invalid");
+            issue.Code == "legal-bundle-catalog-invalid");
     }
 
     [Fact]
@@ -125,6 +245,35 @@ public sealed class AuthenticatedLegalCatalogReaderTests
     }
 
     [Fact]
+    public async Task AuthenticatedInvalidUtf8DocumentReturnsNoText()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var fixture = await WriteGeneratedBundleAsync(directory.Path);
+        var licensePath = Path.Combine(
+            directory.Path,
+            "LICENSES",
+            "a",
+            "LICENSE.txt");
+        await File.WriteAllBytesAsync(licensePath, [0xc3, 0x28]);
+        var anchor = await RewriteManifestAsync(
+            directory.Path,
+            fixture.BundleId);
+        var reader = CreateReader(directory.Path, anchor);
+
+        var result = await reader.ReadDocumentAsync(
+            "a",
+            new LegalDocumentReference(
+                LegalDocumentKind.License,
+                "LICENSES/a/LICENSE.txt"),
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalTextReadResult.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-catalog-document-text-invalid", issue.Code);
+        Assert.Equal("LICENSES/a/LICENSE.txt", issue.Subject);
+    }
+
+    [Fact]
     public async Task RejectsManifestCoveredLicenseThatTraversesASymbolicLink()
     {
         if (OperatingSystem.IsWindows())
@@ -143,8 +292,11 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         Directory.CreateSymbolicLink(licenseDirectory, outside.Path);
         var reader = CreateReader(directory.Path, fixture.Anchor);
 
-        var result = await reader.ReadLicenseTextAsync(
+        var result = await reader.ReadDocumentAsync(
             "a",
+            new LegalDocumentReference(
+                LegalDocumentKind.License,
+                "LICENSES/a/LICENSE.txt"),
             CancellationToken.None);
 
         var rejected = Assert.IsType<LegalTextReadResult.Rejected>(result);
@@ -219,6 +371,25 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         bool modified)
     {
         var legalText = $"{id} LICENSE\nline two\nline three\n";
+        var legalFiles = new List<VerifiedLegalFile>
+        {
+            LegalFile(
+                LegalFileKind.License,
+                $"LICENSES/{id}/LICENSE.txt",
+                legalText),
+        };
+        if (id == "a")
+        {
+            legalFiles.Add(LegalFile(
+                LegalFileKind.Notice,
+                "NOTICES/a/NOTICE.txt",
+                "a notice\n"));
+            legalFiles.Add(LegalFile(
+                LegalFileKind.Copyright,
+                "COPYRIGHTS/a.txt",
+                "a copyright document\n"));
+        }
+
         return new NormalizedComponent(
             Id: id,
             DisplayName: $"Component {id}",
@@ -230,14 +401,7 @@ public sealed class AuthenticatedLegalCatalogReaderTests
             Modified: modified,
             SourceInformation: $"offline source {id}@commit",
             LicenseText: legalText,
-            LegalFiles:
-            [
-                new VerifiedLegalFile(
-                    LegalFileKind.License,
-                    $"LICENSES/{id}/LICENSE.txt",
-                    Hash(Encoding.UTF8.GetBytes(legalText)),
-                    legalText),
-            ],
+            LegalFiles: legalFiles,
             Scope: NoticeScope.RuntimeBundled,
             Approval: new LegalApproval(
                 LegalApprovalStatus.Approved,
@@ -257,6 +421,14 @@ public sealed class AuthenticatedLegalCatalogReaderTests
             Path.Combine(directory, "THIRD-PARTY-COMPONENTS.json"),
             catalog,
             new UTF8Encoding(false, true));
+        return await RewriteManifestAsync(directory, bundleId);
+    }
+
+    private static async Task<AuthenticatedLegalBundleAnchor>
+        RewriteManifestAsync(
+            string directory,
+            string bundleId)
+    {
         var payloads = Directory
             .EnumerateFiles(directory, "*", SearchOption.AllDirectories)
             .Where(path => Path.GetFileName(path) != "LEGAL-MANIFEST.sha256")
@@ -277,6 +449,12 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         return new AuthenticatedLegalBundleAnchor(bundleId, Hash(manifest));
     }
 
+    private static VerifiedLegalFile LegalFile(
+        LegalFileKind kind,
+        string path,
+        string text) =>
+        new(kind, path, Hash(Encoding.UTF8.GetBytes(text)), text);
+
     private static string Hash(ReadOnlySpan<byte> content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
@@ -293,6 +471,20 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(anchor);
+        }
+    }
+
+    private sealed class MutableAuthenticatedAnchorSource(
+        AuthenticatedLegalBundleAnchor anchor)
+        : IAuthenticatedLegalBundleAnchorSource
+    {
+        public AuthenticatedLegalBundleAnchor Anchor { get; set; } = anchor;
+
+        public ValueTask<AuthenticatedLegalBundleAnchor> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(Anchor);
         }
     }
 
