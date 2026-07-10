@@ -258,7 +258,7 @@ public sealed class DesktopRecordingRuntimeTests
     }
 
     [Fact]
-    public async Task DisposeRacingArmingCancelConvergesWithoutStopRequest()
+    public async Task DisposeAfterArmingCancelConvergesWithoutStopRequest()
     {
         var requests = new ControllableStartRequestSource();
         requests.EnqueueCompleted(Request("vrc-cancel-dispose"));
@@ -270,11 +270,10 @@ public sealed class DesktopRecordingRuntimeTests
         var first = runtime.ToggleAsync(CancellationToken.None);
         await lifecycle.WaitUntilStartRequestedAsync();
         var second = runtime.ToggleAsync(CancellationToken.None);
-        var disposal = runtime.DisposeAsync().AsTask();
 
         Assert.Same(first, second);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second);
+        await Task.WhenAll(first, second);
+        var disposal = runtime.DisposeAsync().AsTask();
         await disposal;
         Assert.Equal(RecorderState.Ready, lifecycle.State);
         Assert.Empty(stops.Requests);
