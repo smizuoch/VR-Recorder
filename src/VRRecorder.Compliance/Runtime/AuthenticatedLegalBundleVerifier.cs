@@ -1,10 +1,15 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using VRRecorder.Compliance.Generation;
 
 namespace VRRecorder.Compliance.Runtime;
 
 public sealed class AuthenticatedLegalBundleVerifier
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
     private const string ManifestFileName = "LEGAL-MANIFEST.sha256";
     private const string CatalogFileName = "THIRD-PARTY-COMPONENTS.json";
     private readonly IAuthenticatedLegalBundleAnchorSource _anchors;
@@ -32,25 +37,26 @@ public sealed class AuthenticatedLegalBundleVerifier
             return Reject("legal-bundle-missing", root);
         }
 
-        byte[] manifestDigest;
-        await using (var manifest = new FileStream(
-                         manifestPath,
-                         FileMode.Open,
-                         FileAccess.Read,
-                         FileShare.Read,
-                         bufferSize: 81920,
-                         FileOptions.Asynchronous | FileOptions.SequentialScan))
-        {
-            manifestDigest = await SHA256
-                .HashDataAsync(manifest, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        var manifestBytes = await File
+            .ReadAllBytesAsync(manifestPath, cancellationToken)
+            .ConfigureAwait(false);
+        var manifestDigest = SHA256.HashData(manifestBytes);
 
         if (!CryptographicOperations.FixedTimeEquals(
                 manifestDigest,
                 Convert.FromHexString(anchor.ManifestSha256)))
         {
             return Reject("legal-bundle-manifest-digest-mismatch", ManifestFileName);
+        }
+
+        var payloadIssue = await VerifyPayloadsAsync(
+                root,
+                manifestBytes,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (payloadIssue is not null)
+        {
+            return new LegalBundleVerification.Rejected([payloadIssue]);
         }
 
         try
@@ -112,4 +118,114 @@ public sealed class AuthenticatedLegalBundleVerifier
         string code,
         string subject) =>
         new([new ComplianceIssue(code, subject)]);
+
+    private static async Task<ComplianceIssue?> VerifyPayloadsAsync(
+        string root,
+        byte[] manifestBytes,
+        CancellationToken cancellationToken)
+    {
+        List<ManifestEntry> entries;
+        try
+        {
+            entries = ParseManifest(manifestBytes, root);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+                DecoderFallbackException or
+                FormatException)
+        {
+            return new ComplianceIssue(
+                "legal-bundle-manifest-invalid",
+                ManifestFileName);
+        }
+
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(entry.FullPath))
+            {
+                return new ComplianceIssue(
+                    "legal-bundle-payload-missing",
+                    entry.RelativePath);
+            }
+
+            await using var payload = new FileStream(
+                entry.FullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var actualHash = await SHA256
+                .HashDataAsync(payload, cancellationToken)
+                .ConfigureAwait(false);
+            if (!CryptographicOperations.FixedTimeEquals(
+                    actualHash,
+                    entry.ExpectedHash))
+            {
+                return new ComplianceIssue(
+                    "legal-bundle-payload-hash-mismatch",
+                    entry.RelativePath);
+            }
+        }
+
+        return null;
+    }
+
+    private static List<ManifestEntry> ParseManifest(
+        byte[] manifestBytes,
+        string root)
+    {
+        var manifest = StrictUtf8.GetString(manifestBytes);
+        if (manifest.Length == 0 ||
+            !manifest.EndsWith('\n') ||
+            manifest.Contains('\r'))
+        {
+            throw new FormatException(
+                "The legal manifest must use canonical LF-terminated lines.");
+        }
+
+        var pathComparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var paths = new HashSet<string>(pathComparer);
+        var entries = new List<ManifestEntry>();
+        foreach (var line in manifest.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length < 67 || line[64] != ' ' || line[65] != ' ')
+            {
+                throw new FormatException("A legal manifest line is malformed.");
+            }
+
+            var hashText = line[..64];
+            if (hashText.Any(character =>
+                    character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+            {
+                throw new FormatException("A legal manifest hash is malformed.");
+            }
+
+            var relativePath = line[66..];
+            if (string.Equals(
+                    relativePath,
+                    ManifestFileName,
+                    StringComparison.Ordinal) ||
+                !paths.Add(relativePath))
+            {
+                throw new FormatException(
+                    "A legal manifest path is duplicated or self-referential.");
+            }
+
+            entries.Add(new ManifestEntry(
+                relativePath,
+                LegalArtifactPath.Resolve(root, relativePath),
+                Convert.FromHexString(hashText)));
+        }
+
+        return entries;
+    }
+
+    private sealed record ManifestEntry(
+        string RelativePath,
+        string FullPath,
+        byte[] ExpectedHash);
 }
