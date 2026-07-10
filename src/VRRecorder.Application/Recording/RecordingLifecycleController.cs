@@ -51,10 +51,16 @@ public sealed class RecordingLifecycleController : IDisposable
             .ConfigureAwait(false);
         try
         {
+            if (State != RecorderState.Ready)
+            {
+                throw new InvalidOperationException(
+                    $"Recording cannot start while the lifecycle is {State}.");
+            }
+
             var connection = await _cameraConnections
                 .ResolveAsync(selectedServiceId, cancellationToken)
                 .ConfigureAwait(false);
-            if (connection is not VrChatCameraConnectionResolution.Connected)
+            if (connection is not VrChatCameraConnectionResolution.Connected connected)
             {
                 return new RecordingLifecycleStartResult(
                     State,
@@ -62,8 +68,35 @@ public sealed class RecordingLifecycleController : IDisposable
                     Recording: null);
             }
 
-            throw new NotSupportedException(
-                "Starting a selected VRChat recording is not implemented.");
+            SetState(RecorderStateMachine.Transition(
+                RecorderState.Ready,
+                RecorderTrigger.StartRequested));
+            var camera = new CameraSessionController(
+                connected.Gateway,
+                _cameraLeases);
+            await camera
+                .AcquireAsync(cameraSnapshot, cancellationToken)
+                .ConfigureAwait(false);
+            var recording = await _startRecording
+                .ExecuteAsync(command, cancellationToken)
+                .ConfigureAwait(false);
+            var state = recording switch
+            {
+                StartRecordingResult.Started => RecorderStateMachine.Transition(
+                    RecorderState.Starting,
+                    RecorderTrigger.FirstPacketCommitted),
+                StartRecordingResult.NoSignal => RecorderStateMachine.Transition(
+                    RecorderState.Arming,
+                    RecorderTrigger.SignalTimeout),
+                StartRecordingResult.InsufficientStorage => RecorderState.Ready,
+                _ => throw new InvalidOperationException(
+                    $"Unknown recording start result {recording.GetType().Name}."),
+            };
+            SetState(state);
+            return new RecordingLifecycleStartResult(
+                state,
+                connection,
+                recording);
         }
         finally
         {
@@ -72,4 +105,12 @@ public sealed class RecordingLifecycleController : IDisposable
     }
 
     public void Dispose() => _operationGate.Dispose();
+
+    private void SetState(RecorderState state)
+    {
+        lock (_stateGate)
+        {
+            _state = state;
+        }
+    }
 }
