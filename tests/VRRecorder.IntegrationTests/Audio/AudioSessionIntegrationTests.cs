@@ -50,6 +50,24 @@ public sealed class AudioSessionIntegrationTests
     }
 
     [Fact]
+    public void MicOnlyRoutingKeepsOnlyMicrophoneInBothStereoChannels()
+    {
+        const int frameCount = 480;
+        var session = CreateSession(AudioRouting.MicOnly);
+
+        var mixed = ProcessSines(session, startFrame: 0, frameCount);
+
+        AssertSamples(
+            GenerateStereoSine(
+                880,
+                startFrame: 0,
+                frameCount,
+                amplitude: 0.25),
+            mixed.InterleavedSamples);
+        AssertInterleavedStereoPairs(mixed.InterleavedSamples);
+    }
+
+    [Fact]
     public void MicOffAndOnRampBothChannelsOverTenMilliseconds()
     {
         const int blockFrames = 480;
@@ -129,6 +147,42 @@ public sealed class AudioSessionIntegrationTests
                     (left, right) => left + right)
                 .ToArray(),
             mixed.InterleavedSamples);
+    }
+
+    [Fact]
+    public void RoutingChangeDuringRampRestartsFromCurrentAudibleGain()
+    {
+        const int halfRampFrames = 240;
+        const int fullRampFrames = 480;
+        var session = CreateSession(AudioRouting.Mixed);
+        session.SetRouting(AudioRouting.DesktopOnly);
+        ProcessSines(session, startFrame: 0, halfRampFrames);
+
+        session.SetRouting(AudioRouting.Mixed);
+        var startFrame = halfRampFrames;
+        var desktop = GenerateStereoSine(
+            440,
+            startFrame,
+            fullRampFrames,
+            amplitude: 0.25);
+        var microphone = GenerateStereoSine(
+            880,
+            startFrame,
+            fullRampFrames,
+            amplitude: 0.25);
+        var recovered = session.Process(new ScheduledStereoAudioBuffer(
+            startFrame,
+            SampleRate,
+            fullRampFrames,
+            desktop,
+            microphone,
+            AudioInputAvailability.All));
+
+        AssertRamp(
+            recovered.InterleavedSamples,
+            desktop,
+            microphone,
+            gainAtFrame: frame => 0.5 + (0.5 * frame / fullRampFrames));
     }
 
     [Fact]
@@ -350,6 +404,50 @@ public sealed class AudioSessionIntegrationTests
     }
 
     [Fact]
+    public void EventSinkFailureCannotInterruptTheAudioTimeline()
+    {
+        const int blockFrames = 480;
+        var session = new AudioSessionService(
+            AudioRouting.Mixed,
+            new RecordingRediscoveryScheduler(),
+            new ThrowingAudioSessionEventSink());
+        var desktop = GenerateStereoSine(
+            440,
+            startFrame: 0,
+            blockFrames,
+            amplitude: 0.25);
+
+        var first = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: 0,
+            SampleRate,
+            blockFrames,
+            desktop,
+            MicrophoneInterleavedSamples: [],
+            AudioInputAvailability.Desktop));
+        var second = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: blockFrames,
+            SampleRate,
+            blockFrames,
+            GenerateStereoSine(
+                440,
+                blockFrames,
+                blockFrames,
+                amplitude: 0.25),
+            GenerateStereoSine(
+                880,
+                blockFrames,
+                blockFrames,
+                amplitude: 0.25),
+            AudioInputAvailability.All));
+
+        AssertSamples(desktop, first.InterleavedSamples);
+        Assert.Equal(blockFrames, second.StartFrame);
+        Assert.Equal(
+            blockFrames * ChannelCount,
+            second.InterleavedSamples.Length);
+    }
+
+    [Fact]
     public void InvalidBufferDoesNotAdvanceTheSessionFrameTimeline()
     {
         const int blockFrames = 480;
@@ -372,6 +470,35 @@ public sealed class AudioSessionIntegrationTests
             startFrame: blockFrames,
             blockFrames);
         Assert.Equal(blockFrames, valid.StartFrame);
+    }
+
+    [Fact]
+    public void DiscontinuousFramePositionFailsClosed()
+    {
+        const int blockFrames = 480;
+        var session = CreateSession(AudioRouting.Mixed);
+        ProcessSines(session, startFrame: 0, blockFrames);
+
+        var discontinuous = new ScheduledStereoAudioBuffer(
+            StartFrame: blockFrames + 1,
+            SampleRate,
+            blockFrames,
+            GenerateStereoSine(
+                440,
+                blockFrames + 1,
+                blockFrames,
+                amplitude: 0.25),
+            GenerateStereoSine(
+                880,
+                blockFrames + 1,
+                blockFrames,
+                amplitude: 0.25),
+            AudioInputAvailability.All);
+
+        Assert.Throws<ArgumentException>(() => session.Process(discontinuous));
+        Assert.Equal(
+            blockFrames,
+            ProcessSines(session, blockFrames, blockFrames).StartFrame);
     }
 
     [Theory]
@@ -538,5 +665,14 @@ public sealed class AudioSessionIntegrationTests
         public void Publish(AudioSessionWarning warning) => Warnings.Add(warning);
 
         public void Publish(AudioSessionStatus status) => Statuses.Add(status);
+    }
+
+    private sealed class ThrowingAudioSessionEventSink : IAudioSessionEventSink
+    {
+        public void Publish(AudioSessionWarning warning) =>
+            throw new InvalidOperationException("warning UI unavailable");
+
+        public void Publish(AudioSessionStatus status) =>
+            throw new InvalidOperationException("status UI unavailable");
     }
 }
