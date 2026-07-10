@@ -36,6 +36,17 @@ struct ObservedMediaSessionConfig {
     double estimated_source_fps;
 };
 
+struct ObservedEncoderProbeConfig {
+    std::uint32_t encoder_kind;
+    std::uint32_t synthetic_frame_count;
+    std::uint64_t adapter_luid;
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t fps_numerator;
+    std::uint32_t fps_denominator;
+    std::string gpu_identity;
+};
+
 void CommitMuxedVideoPacket();
 void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
@@ -83,6 +94,10 @@ bool WaitUntilSpoutPollEntered(std::chrono::milliseconds timeout);
 void ReleaseSpoutPoll();
 std::uint32_t ActiveSpoutSourceCount();
 std::uint32_t SpoutSourceDestroyCount();
+void ResetEncoderProbe();
+void SetEncoderProbeResult(std::int32_t status, bool packet_produced);
+std::uint32_t EncoderProbeCallCount();
+ObservedEncoderProbeConfig EncoderProbeConfig();
 
 }
 

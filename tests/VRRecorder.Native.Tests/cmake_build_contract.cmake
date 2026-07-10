@@ -78,8 +78,8 @@ if(NOT definition_exports STREQUAL expected_exports)
 endif()
 
 list(LENGTH definition_exports export_count)
-if(NOT export_count EQUAL 15)
-    message(FATAL_ERROR "Expected exactly 15 production exports, found ${export_count}")
+if(NOT export_count EQUAL 16)
+    message(FATAL_ERROR "Expected exactly 16 production exports, found ${export_count}")
 endif()
 
 message(STATUS "Native CMake/Windows build contract passed")

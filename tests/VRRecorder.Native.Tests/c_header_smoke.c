@@ -35,6 +35,9 @@ _Static_assert(
 _Static_assert(
     sizeof(vrrec_spout_frame_v1) == 80,
     "Spout frame ABI drift");
+_Static_assert(
+    sizeof(vrrec_encoder_probe_config_v1) == 56,
+    "encoder probe config ABI drift");
 #endif
 
 _Static_assert(

@@ -26,6 +26,7 @@ static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
 static_assert(sizeof(vrrec_spout_source_config_v1) == 16);
 static_assert(sizeof(vrrec_spout_sender_snapshot_v1) == 24);
 static_assert(sizeof(vrrec_spout_frame_v1) == 80);
+static_assert(sizeof(vrrec_encoder_probe_config_v1) == 56);
 
 namespace {
 
@@ -161,6 +162,23 @@ vrrec_spout_source_config_v1 ValidSpoutSourceConfig()
         sizeof(vrrec_spout_source_config_v1),
         VRREC_ABI_V1,
         0,
+        0,
+    };
+}
+
+vrrec_encoder_probe_config_v1 ValidEncoderProbeConfig()
+{
+    return vrrec_encoder_probe_config_v1 {
+        sizeof(vrrec_encoder_probe_config_v1),
+        VRREC_ABI_V1,
+        VRREC_ENCODER_NVENC,
+        16,
+        UINT64_C(0x00000001ABCDEF01),
+        1920,
+        1080,
+        60,
+        1,
+        "pci\\ven_10de&dev_2684|driver-32.0.15.6094",
         0,
     };
 }
@@ -1436,6 +1454,118 @@ bool DestroyWaitsForActiveSpoutPollAndIsIdempotent()
     return true;
 }
 
+bool ProbesSixteenFramesAndReportsOnlyProducedPacket()
+{
+    using vrrecorder::native::testing::EncoderProbeCallCount;
+    using vrrecorder::native::testing::EncoderProbeConfig;
+    using vrrecorder::native::testing::ResetEncoderProbe;
+    using vrrecorder::native::testing::SetEncoderProbeResult;
+
+    ResetEncoderProbe();
+    auto config = ValidEncoderProbeConfig();
+    std::uint8_t packet_produced = 0;
+    SetEncoderProbeResult(VRREC_STATUS_OK, true);
+    CHECK(vrrec_encoder_probe_v1(&config, &packet_produced) ==
+          VRREC_STATUS_OK);
+    CHECK(packet_produced == 1);
+    CHECK(EncoderProbeCallCount() == 1);
+    const auto observed = EncoderProbeConfig();
+    CHECK(observed.encoder_kind == VRREC_ENCODER_NVENC);
+    CHECK(observed.synthetic_frame_count == 16);
+    CHECK(observed.adapter_luid == config.adapter_luid);
+    CHECK(observed.width == 1920);
+    CHECK(observed.height == 1080);
+    CHECK(observed.fps_numerator == 60);
+    CHECK(observed.fps_denominator == 1);
+    CHECK(observed.gpu_identity == config.gpu_identity_utf8);
+
+    SetEncoderProbeResult(VRREC_STATUS_OK, false);
+    packet_produced = UINT8_MAX;
+    CHECK(vrrec_encoder_probe_v1(&config, &packet_produced) ==
+          VRREC_STATUS_OK);
+    CHECK(packet_produced == 0);
+
+    SetEncoderProbeResult(VRREC_STATUS_BACKEND_UNAVAILABLE, true);
+    packet_produced = UINT8_MAX;
+    CHECK(vrrec_encoder_probe_v1(&config, &packet_produced) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(packet_produced == 0);
+    return true;
+}
+
+bool RejectsInvalidEncoderProbeAbiInputs()
+{
+    using vrrecorder::native::testing::EncoderProbeCallCount;
+    using vrrecorder::native::testing::ResetEncoderProbe;
+
+    ResetEncoderProbe();
+    auto config = ValidEncoderProbeConfig();
+    std::uint8_t packet_produced = UINT8_MAX;
+    CHECK(vrrec_encoder_probe_v1(nullptr, &packet_produced) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(packet_produced == 0);
+    CHECK(vrrec_encoder_probe_v1(&config, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    const auto rejects = [&](vrrec_encoder_probe_config_v1 invalid,
+                             vrrec_status_t expected =
+                                 VRREC_STATUS_INVALID_ARGUMENT) {
+        packet_produced = UINT8_MAX;
+        const auto status = vrrec_encoder_probe_v1(
+            &invalid,
+            &packet_produced);
+        return status == expected && packet_produced == 0;
+    };
+    config.struct_size = sizeof(config) - 1;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(rejects(config, VRREC_STATUS_UNSUPPORTED_ABI));
+    config = ValidEncoderProbeConfig();
+    config.encoder_kind = UINT32_MAX;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.synthetic_frame_count = 15;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.adapter_luid = 0;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.width = 0;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.width = 1919;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.height = UINT32_MAX;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.fps_numerator = 29;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.fps_numerator = 121;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.fps_denominator = 0;
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.gpu_identity_utf8 = " ";
+    CHECK(rejects(config));
+    const std::string malformed_utf8("\xC3\x28", 2);
+    config = ValidEncoderProbeConfig();
+    config.gpu_identity_utf8 = malformed_utf8.c_str();
+    CHECK(rejects(config));
+    const std::string oversized_identity(4097, 'g');
+    config = ValidEncoderProbeConfig();
+    config.gpu_identity_utf8 = oversized_identity.c_str();
+    CHECK(rejects(config));
+    config = ValidEncoderProbeConfig();
+    config.reserved = 1;
+    CHECK(rejects(config));
+    CHECK(EncoderProbeCallCount() == 0);
+    return true;
+}
+
 }
 
 int main()
@@ -1460,7 +1590,9 @@ int main()
         !SnapshotsPackedUtf8WithRequiredSizing() ||
         !PollsFrameWithoutConsumingOnBufferRetry() ||
         !RejectsMalformedOrOversizeSpoutBackendData() ||
-        !DestroyWaitsForActiveSpoutPollAndIsIdempotent()) {
+        !DestroyWaitsForActiveSpoutPollAndIsIdempotent() ||
+        !ProbesSixteenFramesAndReportsOnlyProducedPacket() ||
+        !RejectsInvalidEncoderProbeAbiInputs()) {
         return 1;
     }
 

@@ -145,6 +145,25 @@ int main(void)
     vrrec_spout_source_destroy_v1(&spout_source);
     vrrec_spout_source_destroy_v1(&spout_source);
 
+    vrrec_encoder_probe_config_v1 encoder_probe = {
+        sizeof(vrrec_encoder_probe_config_v1),
+        VRREC_ABI_V1,
+        VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE,
+        16,
+        UINT64_C(1),
+        1920,
+        1080,
+        30,
+        1,
+        "software-encoder-probe",
+        0,
+    };
+    uint8_t packet_produced = UINT8_MAX;
+    CHECK(vrrec_encoder_probe_v1(
+              &encoder_probe,
+              &packet_produced) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(packet_produced == 0);
+
     puts("native C header/runtime smoke tests passed");
     return 0;
 }
