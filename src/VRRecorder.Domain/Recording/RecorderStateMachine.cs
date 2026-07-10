@@ -32,6 +32,8 @@ public static class RecorderStateMachine
                 RecorderState.Stopping,
             (RecorderState.Recording, RecorderTrigger.StopRequested) =>
                 RecorderState.Stopping,
+            (RecorderState.SignalLost, RecorderTrigger.StopRequested) =>
+                RecorderState.Stopping,
             (RecorderState.Stopping, RecorderTrigger.StopRequested) =>
                 RecorderState.Stopping,
             (RecorderState.Recording, RecorderTrigger.FreshFrameTimeout) =>
