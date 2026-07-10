@@ -76,8 +76,8 @@ internal sealed class NativeCallbackState
 
         if (fault is not null)
         {
-            _callbacks.Faulted(fault);
             Stopped.TrySetException(new NativeRecordingException(fault));
+            _callbacks.Faulted(fault);
         }
     }
 }
