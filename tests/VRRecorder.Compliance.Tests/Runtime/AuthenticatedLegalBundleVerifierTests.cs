@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
+using VRRecorder.Application.Compliance;
 using VRRecorder.Compliance.Runtime;
+using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Compliance.Tests.Runtime;
 
@@ -98,6 +100,39 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         var issue = Assert.Single(rejected.Issues);
         Assert.Equal("legal-bundle-payload-unexpected", issue.Code);
         Assert.Equal("UNREGISTERED.txt", issue.Subject);
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-031")]
+    public async Task TamperedRuntimeBundleLocksRecorderInComplianceFault()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalogPath = Path.Combine(
+            directory.Path,
+            "THIRD-PARTY-COMPONENTS.json");
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(catalogPath, catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        await File.AppendAllTextAsync(catalogPath, "\n");
+        var gateway = new RuntimeLegalBundleVerificationGateway(
+            directory.Path,
+            new AuthenticatedLegalBundleVerifier(
+                new StubAuthenticatedAnchorSource(
+                    new AuthenticatedLegalBundleAnchor(
+                        BundleId,
+                        Hash(manifest)))));
+
+        var result = await new RecorderStartupUseCase(gateway)
+            .ExecuteAsync(CancellationToken.None);
+
+        Assert.Equal(RecorderState.ComplianceFault, result.State);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("LEGAL_BUNDLE_HASH_MISMATCH", issue.Code);
+        Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
     }
 
     private static string CatalogJson() => $$"""
