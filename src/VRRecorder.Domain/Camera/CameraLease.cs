@@ -13,7 +13,9 @@ public sealed class CameraLease
         _changedStreamingByRecorder = changedStreamingByRecorder;
     }
 
-    public CameraRestorePlan CreateRestorePlan()
+    public CameraRestorePlan CreateRestorePlan(
+        UnknownCameraStatePolicy unknownStatePolicy =
+            UnknownCameraStatePolicy.DisableStreaming)
     {
         if (!_changedStreamingByRecorder)
         {
@@ -22,7 +24,17 @@ public sealed class CameraLease
 
         if (!_previousStreaming.IsKnown)
         {
-            return new CameraRestorePlan(false);
+            return unknownStatePolicy switch
+            {
+                UnknownCameraStatePolicy.DisableStreaming =>
+                    new CameraRestorePlan(false),
+                UnknownCameraStatePolicy.LeaveUnchanged =>
+                    new CameraRestorePlan(null),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(unknownStatePolicy),
+                    unknownStatePolicy,
+                    "Unknown camera-state policy."),
+            };
         }
 
         return new CameraRestorePlan(_previousStreaming.Value);
