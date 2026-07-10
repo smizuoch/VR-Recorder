@@ -173,6 +173,64 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("Strings.ja-JP.xaml", appCode);
     }
 
+    [Fact]
+    public void DesktopShellFailsClosedUntilAuthenticatedLegalVerification()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appDirectory = Path.Combine(
+            repositoryRoot,
+            "src",
+            "VRRecorder.App");
+        var project = XDocument.Load(Path.Combine(
+            appDirectory,
+            "VRRecorder.App.csproj"));
+        Assert.Contains(
+            "../VRRecorder.Compliance/VRRecorder.Compliance.csproj",
+            project.Descendants("ProjectReference")
+                .Select(reference => reference.Attribute("Include")?.Value));
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var recordingButton = Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "RecordingToggleButton");
+        Assert.Equal("False", recordingButton.Attribute("IsEnabled")?.Value);
+        var status = Assert.Single(
+            window.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "RecordingStatusText");
+        Assert.Equal(
+            "{DynamicResource Recording_State_Booting}",
+            status.Attribute("Text")?.Value);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            Assert.Contains("Recording_State_Booting", resources.Keys);
+            Assert.Contains("Recording_State_ComplianceFault", resources.Keys);
+            Assert.Contains(
+                "Status_ComplianceFault_AccessibleDescription",
+                resources.Keys);
+        }
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("RecorderStartupUseCase", appCode);
+        Assert.Contains(
+            "AssemblyMetadataAuthenticatedLegalBundleAnchorSource",
+            appCode);
+        Assert.Contains("RuntimeLegalBundleVerificationGateway", appCode);
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("ApplyStartupResult", windowCode);
+        Assert.Contains("RecorderState.ComplianceFault", windowCode);
+    }
+
     private static XDocument LoadRequiredXaml(
         string appDirectory,
         string relativePath)
