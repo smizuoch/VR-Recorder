@@ -14,6 +14,9 @@
 - [x] malformed packet、wrong source、stale echoを確認扱いしない
 - [x] 複数候補またはstaleな選択IDでは明示的target選択を要求する
 - [x] OSCQueryで複数VRChat候補を発見し、選択前は送信しない
+- [x] Windows DNS-SD seamで`_oscjson._tcp.local`の完全一致filter、重複排除、決定的順序、host/port/TXT mappingを検証する
+- [x] Windows DNS-SD Version 1 ABI seamでPTR/instance mapping、cancel完了callbackまでのlifetime、deep free、非Windows fail-closedを検証する
+- [ ] 実Windows 10/11環境で`DnsServiceBrowse`/`DnsServiceResolve`によるlive VRChat OSCQuery discoveryを検証する
 
 ## English
 
@@ -29,3 +32,6 @@
 - [x] Reject malformed packets, wrong sources, and stale echoes as confirmations
 - [x] Require explicit target selection for multiple candidates or a stale selected service ID
 - [x] Discover multiple VRChat targets with OSCQuery and send nothing before selection
+- [x] Verify exact `_oscjson._tcp.local` filtering, deduplication, deterministic ordering, and host/port/TXT mapping through the Windows DNS-SD seam
+- [x] Verify PTR/instance mapping, callback lifetime through cancellation completion, deep frees, and non-Windows fail-closed behavior through the Windows DNS-SD Version 1 ABI seam
+- [ ] Validate live VRChat OSCQuery discovery with `DnsServiceBrowse`/`DnsServiceResolve` on real Windows 10/11
