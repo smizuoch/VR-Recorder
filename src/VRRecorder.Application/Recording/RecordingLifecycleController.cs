@@ -16,6 +16,7 @@ public sealed class RecordingLifecycleController : IDisposable
     private readonly StartRecordingUseCase _startRecording;
     private readonly IStopRequestSink _stopRequests;
     private readonly ICameraRestoreWarningSink _cameraRestoreWarnings;
+    private readonly ICameraLeaseIdentitySource? _cameraLeaseIdentities;
     private VideoSignalSupervisor? _videoSignal;
     private RecorderState _state = RecorderState.Ready;
 
@@ -24,7 +25,8 @@ public sealed class RecordingLifecycleController : IDisposable
         ICameraLeaseStore cameraLeases,
         StartRecordingUseCase startRecording,
         IStopRequestSink stopRequests,
-        ICameraRestoreWarningSink cameraRestoreWarnings)
+        ICameraRestoreWarningSink cameraRestoreWarnings,
+        ICameraLeaseIdentitySource? cameraLeaseIdentities = null)
     {
         ArgumentNullException.ThrowIfNull(cameraConnections);
         ArgumentNullException.ThrowIfNull(cameraLeases);
@@ -36,6 +38,7 @@ public sealed class RecordingLifecycleController : IDisposable
         _startRecording = startRecording;
         _stopRequests = stopRequests;
         _cameraRestoreWarnings = cameraRestoreWarnings;
+        _cameraLeaseIdentities = cameraLeaseIdentities;
     }
 
     public RecorderState State
@@ -82,12 +85,24 @@ public sealed class RecordingLifecycleController : IDisposable
             SetState(RecorderStateMachine.Transition(
                 RecorderState.Ready,
                 RecorderTrigger.StartRequested));
-            var camera = new CameraSessionController(
-                connected.Gateway,
-                _cameraLeases);
-            var lease = await camera
-                .AcquireAsync(cameraSnapshot, cancellationToken)
-                .ConfigureAwait(false);
+            var camera = _cameraLeaseIdentities is null
+                ? new CameraSessionController(
+                    connected.Gateway,
+                    _cameraLeases)
+                : new CameraSessionController(
+                    connected.Gateway,
+                    _cameraLeases,
+                    _cameraLeaseIdentities);
+            var lease = _cameraLeaseIdentities is null
+                ? await camera
+                    .AcquireAsync(cameraSnapshot, cancellationToken)
+                    .ConfigureAwait(false)
+                : await camera
+                    .AcquireAsync(
+                        cameraSnapshot,
+                        connected.Candidate.ServiceId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             var completionSink = new CameraSessionCompletionSink(
                 this,
                 camera,
