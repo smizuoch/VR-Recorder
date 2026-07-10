@@ -7,4 +7,5 @@ public enum CameraRestoreWarningReason
     NoSignal,
     InsufficientStorage,
     StartFailed,
+    StaleLeaseRecovery,
 }
