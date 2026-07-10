@@ -1,7 +1,9 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
+using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Media;
 
 namespace VRRecorder.IntegrationTests.Media;
@@ -18,7 +20,7 @@ public sealed class NativeRecordingEngineTests
         using var cancellation = new CancellationTokenSource();
 
         var start = engine.StartAsync(
-            new RecordingPlan(new StableVideoSignal(320, 180)),
+            CreatePlan(),
             cancellation.Token);
         await backend.WaitUntilOpenedAsync();
         await cancellation.CancelAsync();
@@ -36,7 +38,7 @@ public sealed class NativeRecordingEngineTests
         var engine = new NativeRecordingEngine(backend, clock);
 
         var start = engine.StartAsync(
-            new RecordingPlan(new StableVideoSignal(320, 180)),
+            CreatePlan(),
             CancellationToken.None);
         await backend.WaitUntilOpenedAsync();
 
@@ -48,6 +50,22 @@ public sealed class NativeRecordingEngineTests
         Assert.Equal("native-session-001", handle.Id);
         Assert.Equal(clock.Now, handle.FirstPacketCommittedAt);
     }
+
+    private static RecordingPlan CreatePlan() =>
+        new(
+            new StableVideoSignal(320, 180),
+            new PendingRecording(
+                Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "take.mp4")),
+            new RecordingSessionTimestamp(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new FrameRate(30));
 
     private sealed class ControllableNativeRecordingBackend
         : INativeRecordingBackend
