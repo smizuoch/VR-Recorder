@@ -1,6 +1,7 @@
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Recording;
 
@@ -8,6 +9,43 @@ namespace VRRecorder.Application.Tests.Desktop;
 
 public sealed class DesktopRecordingCommandHostTests
 {
+    [Fact]
+    public async Task RelaysRuntimeStatusWithHostOwnedMonotonicRevisions()
+    {
+        var runtime = new ControllableDesktopRecordingRuntime();
+        await using var host = new DesktopRecordingCommandHost(
+            new StubDesktopRecordingRuntimeFactory(runtime));
+        List<RecorderStatusSnapshot> statuses = [];
+        using var subscription = host.Subscribe(statuses.Add);
+
+        await host.ActivateAsync(ReadyStartup(), CancellationToken.None);
+        runtime.Publish(RecorderState.Arming);
+        runtime.Publish(RecorderState.Countdown);
+        runtime.Publish(RecorderState.Starting);
+        runtime.Publish(RecorderState.Recording);
+        runtime.Publish(RecorderState.SignalLost);
+        runtime.Publish(RecorderState.Stopping);
+        runtime.Publish(RecorderState.Ready);
+
+        Assert.Equal(RecorderState.Ready, host.Current.State);
+        Assert.Equal(
+            [
+                RecorderState.Booting,
+                RecorderState.Ready,
+                RecorderState.Arming,
+                RecorderState.Countdown,
+                RecorderState.Starting,
+                RecorderState.Recording,
+                RecorderState.SignalLost,
+                RecorderState.Stopping,
+                RecorderState.Ready,
+            ],
+            statuses.Select(status => status.State));
+        Assert.Equal(
+            Enumerable.Range(0, statuses.Count).Select(value => (long)value),
+            statuses.Select(status => status.Revision));
+    }
+
     [Fact]
     public async Task ReadyStartupInitializesRuntimeAndRoutesToggleOnce()
     {
@@ -81,6 +119,8 @@ public sealed class DesktopRecordingCommandHostTests
             "The native recording service is unavailable.");
         var factory = new StubDesktopRecordingRuntimeFactory(failure);
         await using var host = new DesktopRecordingCommandHost(factory);
+        List<RecorderStatusSnapshot> statuses = [];
+        using var subscription = host.Subscribe(statuses.Add);
 
         var activation = await host.ActivateAsync(
             ReadyStartup(),
@@ -96,6 +136,9 @@ public sealed class DesktopRecordingCommandHostTests
         Assert.Equal(failure.Message, activation.Failure?.Message);
         Assert.Equal(activation.State, exception.State);
         Assert.Equal(1, factory.InitializeCallCount);
+        Assert.Equal(
+            [RecorderState.Booting, RecorderState.Faulted],
+            statuses.Select(status => status.State));
     }
 
     [Fact]
@@ -129,6 +172,8 @@ public sealed class DesktopRecordingCommandHostTests
         var factory = new ControllableDesktopRecordingRuntimeFactory();
         var runtime = new DisposalTrackingDesktopRecordingRuntime();
         await using var host = new DesktopRecordingCommandHost(factory);
+        List<RecorderStatusSnapshot> statuses = [];
+        using var subscription = host.Subscribe(statuses.Add);
         var activation = host.ActivateAsync(
             ReadyStartup(),
             CancellationToken.None);
@@ -162,6 +207,12 @@ public sealed class DesktopRecordingCommandHostTests
         Assert.Equal(
             [RecordingStopReason.ComplianceFault],
             runtime.ShutdownReasons);
+        runtime.Publish(RecorderState.Ready);
+        runtime.Publish(RecorderState.Faulted);
+        Assert.Equal(
+            [RecorderState.Booting, RecorderState.ComplianceFault],
+            statuses.Select(status => status.State));
+        Assert.Equal(RecorderState.ComplianceFault, host.Current.State);
     }
 
     [Fact]
@@ -257,7 +308,8 @@ public sealed class DesktopRecordingCommandHostTests
     }
 
     private sealed class ControllableDesktopRecordingRuntime
-        : IDesktopRecordingRuntime
+        : IDesktopRecordingRuntime,
+          IRecorderStatusSource
     {
         private readonly TaskCompletionSource _toggleRequested = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -265,6 +317,9 @@ public sealed class DesktopRecordingCommandHostTests
         private readonly TaskCompletionSource _shutdownRequested = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _shutdownCompletion;
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        private long _statusRevision;
 
         public ControllableDesktopRecordingRuntime(
             bool holdToggle = false,
@@ -290,6 +345,17 @@ public sealed class DesktopRecordingCommandHostTests
         public int DisposeCallCount { get; private set; }
 
         public List<RecordingStopReason> ShutdownReasons { get; } = [];
+
+        public RecorderStatusSnapshot Current => _statuses.Current;
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
+
+        public void Publish(RecorderState state) =>
+            _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                ++_statusRevision,
+                state));
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
@@ -346,11 +412,27 @@ public sealed class DesktopRecordingCommandHostTests
     }
 
     private sealed class DisposalTrackingDesktopRecordingRuntime
-        : IDesktopRecordingRuntime
+        : IDesktopRecordingRuntime,
+          IRecorderStatusSource
     {
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        private long _statusRevision;
+
         public int DisposeCallCount { get; private set; }
 
         public List<RecordingStopReason> ShutdownReasons { get; } = [];
+
+        public RecorderStatusSnapshot Current => _statuses.Current;
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
+
+        public void Publish(RecorderState state) =>
+            _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                ++_statusRevision,
+                state));
 
         public Task ToggleAsync(CancellationToken cancellationToken) =>
             Task.CompletedTask;
