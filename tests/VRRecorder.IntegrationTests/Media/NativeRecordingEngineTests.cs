@@ -65,6 +65,62 @@ public sealed class NativeRecordingEngineTests
     }
 
     [Fact]
+    public async Task FailedNativeStopAbortsAndRemovesTerminalSession()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var stopFailure = new IOException("encoder stopped unexpectedly");
+        backend.Session.StopFailure = stopFailure;
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink());
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+
+        var observed = await Assert.ThrowsAsync<IOException>(() =>
+            engine.StopAsync(handle, CancellationToken.None));
+
+        Assert.Same(stopFailure, observed);
+        Assert.Equal(1, backend.Session.StopCallCount);
+        Assert.Equal(1, backend.Session.AbortCallCount);
+        var inactive = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            engine.StopAsync(handle, CancellationToken.None));
+        Assert.Equal(
+            "Native recording session native-session-001 is not active.",
+            inactive.Message);
+    }
+
+    [Fact]
+    public async Task AbortCleanupFailureDoesNotReplaceNativeStopFailure()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var stopFailure = new IOException("muxer stop failed");
+        backend.Session.StopFailure = stopFailure;
+        backend.Session.AbortFailure = new InvalidOperationException(
+            "native abort failed");
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink());
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+
+        var observed = await Assert.ThrowsAsync<IOException>(() =>
+            engine.StopAsync(handle, CancellationToken.None));
+
+        Assert.Same(stopFailure, observed);
+        Assert.Equal(1, backend.Session.AbortCallCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            engine.StopAsync(handle, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task CancellationBeforeFirstPacketAbortsOpenedNativeSession()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -263,18 +319,29 @@ public sealed class NativeRecordingEngineTests
 
         public int StopCallCount { get; private set; }
 
+        public Exception? AbortFailure { get; set; }
+
+        public Exception? StopFailure { get; set; }
+
         public string Id => "native-session-001";
 
         public Task AbortAsync(CancellationToken cancellationToken)
         {
             AbortCallCount++;
-            return Task.CompletedTask;
+            return AbortFailure is null
+                ? Task.CompletedTask
+                : Task.FromException(AbortFailure);
         }
 
         public async Task<RecordingStopResult> StopAsync(
             CancellationToken cancellationToken)
         {
             StopCallCount++;
+            if (StopFailure is not null)
+            {
+                throw StopFailure;
+            }
+
             if (StopCallCount == 1)
             {
                 _firstStopStarted.TrySetResult();
