@@ -80,6 +80,11 @@ public sealed class AuthenticatedLegalBundleVerifier
                     cancellationToken)
                 .ConfigureAwait(false);
             var catalogRoot = document.RootElement;
+            if (HasDuplicateProperties(catalogRoot))
+            {
+                return Reject("legal-bundle-catalog-invalid", CatalogFileName);
+            }
+
             var schemaVersion = catalogRoot
                 .GetProperty("schemaVersion")
                 .GetInt32();
@@ -245,6 +250,34 @@ public sealed class AuthenticatedLegalBundleVerifier
         }
 
         return entries;
+    }
+
+    private static bool HasDuplicateProperties(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!propertyNames.Add(property.Name) ||
+                    HasDuplicateProperties(property.Value))
+                {
+                    return true;
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                if (HasDuplicateProperties(item))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private sealed record ManifestEntry(
