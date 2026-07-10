@@ -29,4 +29,20 @@ public sealed class AutoStopSchedulerTests
         var requestedHandle = Assert.Single(stopRequests.RequestedHandles);
         Assert.Equal(handle, requestedHandle);
     }
+
+    [Fact]
+    public async Task InfiniteDurationDoesNotScheduleOrRequestStop()
+    {
+        var clock = new ControllableMonotonicClock();
+        var stopRequests = new FakeStopRequestSink();
+        var scheduler = new AutoStopScheduler(clock, stopRequests);
+
+        await scheduler.OnFirstPacketCommittedAsync(
+            new RecordingHandle("session-001"),
+            RecordingDuration.Infinite,
+            CancellationToken.None);
+
+        Assert.Equal(0, clock.DelayCallCount);
+        Assert.Empty(stopRequests.RequestedHandles);
+    }
 }

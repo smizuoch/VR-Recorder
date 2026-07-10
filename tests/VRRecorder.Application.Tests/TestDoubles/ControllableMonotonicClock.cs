@@ -9,10 +9,13 @@ internal sealed class ControllableMonotonicClock : IMonotonicClock
     private readonly TaskCompletionSource _delayCompleted = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public int DelayCallCount { get; private set; }
+
     public Task DelayAsync(
         TimeSpan duration,
         CancellationToken cancellationToken)
     {
+        DelayCallCount++;
         _delayRequested.TrySetResult(duration);
         return _delayCompleted.Task.WaitAsync(cancellationToken);
     }
