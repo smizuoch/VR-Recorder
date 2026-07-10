@@ -1,4 +1,5 @@
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
 using VRRecorder.Domain.Timing;
 
@@ -21,7 +22,12 @@ public sealed class RecordingStopCoordinatorTests
         Assert.Same(first, second);
         Assert.Equal(1, engine.StopCallCount);
 
-        var expected = new RecordingResult("recording.mp4");
+        var expected = new RecordingStopResult(
+            new PendingRecording(
+                "recording.recording.mp4",
+                "recording.mp4"),
+            VideoPacketCount: 90,
+            AudioPacketCount: 142);
         engine.CompleteStop(expected);
 
         Assert.Equal(expected, await first);

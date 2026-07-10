@@ -9,7 +9,7 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
         TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<RecordingHandle> _firstPacketCommitted = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource<RecordingResult> _stopCompletion = new(
+    private readonly TaskCompletionSource<RecordingStopResult> _stopCompletion = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int StartCallCount { get; private set; }
@@ -28,7 +28,7 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
         return _firstPacketCommitted.Task.WaitAsync(cancellationToken);
     }
 
-    public Task<RecordingResult> StopAsync(
+    public Task<RecordingStopResult> StopAsync(
         RecordingHandle handle,
         CancellationToken cancellationToken)
     {
@@ -36,7 +36,7 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
         return _stopCompletion.Task.WaitAsync(cancellationToken);
     }
 
-    public void CompleteStop(RecordingResult result) =>
+    public void CompleteStop(RecordingStopResult result) =>
         _stopCompletion.TrySetResult(result);
 
     public Task WaitUntilStartRequestedAsync() => _startRequested.Task;

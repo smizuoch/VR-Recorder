@@ -1,5 +1,6 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Storage;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Infrastructure.Media;
 
@@ -58,9 +59,14 @@ public sealed class NativeRecordingEngineTests
     {
         public string Id => "native-session-001";
 
-        public Task<RecordingResult> StopAsync(
+        public Task<RecordingStopResult> StopAsync(
             CancellationToken cancellationToken) =>
-            Task.FromResult(new RecordingResult("take.recording.mp4"));
+            Task.FromResult(new RecordingStopResult(
+                new PendingRecording(
+                    "take.recording.mp4",
+                    "take.mp4"),
+                VideoPacketCount: 90,
+                AudioPacketCount: 142));
     }
 
     private sealed class ControllableClock : IMonotonicClock
