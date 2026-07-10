@@ -64,6 +64,9 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         {
             var settingsPath = new WindowsSettingsPathProvider().GetPath();
             var cameraLeasePath = CameraLeasePath(settingsPath);
+            var diagnosticLog = new RotatingJsonLinesDiagnosticLog(
+                LogDirectory(settingsPath));
+            resources.Add(diagnosticLog);
             var http = CreateLoopbackHttpInvoker();
             resources.Add(http);
             var cameraLeases = new FileSystemCameraLeaseStore(cameraLeasePath);
@@ -85,7 +88,9 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 nativeBackend,
                 clock,
                 faultStops);
-            var events = new ProductionRecordingEventSink();
+            var events = new StructuredRecordingEventSink(
+                diagnosticLog,
+                wallClock);
             var finalization = new RecordingFileFinalizationUseCase(
                 new SameDirectoryAtomicRecordingFileFinalizer(),
                 new FfprobeRecordingFileValidator(ffprobePath),
@@ -186,6 +191,14 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             .Version?
             .ToString() ?? "0.0.0.0";
 
+    private static string LogDirectory(string settingsPath)
+    {
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(applicationDataDirectory, "logs");
+    }
+
     private static void DisposeResourcesBestEffort(
         List<IDisposable> resources)
     {
@@ -264,48 +277,4 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         }
     }
 
-    private sealed class ProductionRecordingEventSink
-        : IRecordingStorageStatusSink,
-          ISavedRecordingSink,
-          ICameraRestoreWarningSink
-    {
-        public Task PublishAsync(
-            RecordingStorageSnapshot snapshot,
-            CancellationToken cancellationToken)
-        {
-            ArgumentNullException.ThrowIfNull(snapshot);
-            cancellationToken.ThrowIfCancellationRequested();
-            System.Diagnostics.Trace.TraceInformation(
-                "Recording storage: {0} bytes, {1}, remaining {2}.",
-                snapshot.AvailableSpace.AvailableBytes,
-                snapshot.State,
-                snapshot.EstimatedRemaining);
-            return Task.CompletedTask;
-        }
-
-        public Task PublishAsync(
-            FinalizedRecording recording,
-            CancellationToken cancellationToken)
-        {
-            ArgumentNullException.ThrowIfNull(recording);
-            cancellationToken.ThrowIfCancellationRequested();
-            System.Diagnostics.Trace.TraceInformation(
-                "Recording saved: {0}",
-                recording.FinalPath);
-            return Task.CompletedTask;
-        }
-
-        public Task PublishAsync(
-            CameraRestoreWarning warning,
-            CancellationToken cancellationToken)
-        {
-            ArgumentNullException.ThrowIfNull(warning);
-            cancellationToken.ThrowIfCancellationRequested();
-            System.Diagnostics.Trace.TraceWarning(
-                "Camera restoration warning {0}: {1}",
-                warning.Reason,
-                warning.Failure.Message);
-            return Task.CompletedTask;
-        }
-    }
 }
