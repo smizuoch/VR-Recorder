@@ -25,9 +25,18 @@ public sealed class StartRecordingUseCase
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var signal = await _videoSignalGateway
-            .WaitForStableSignalAsync(SignalTimeout, cancellationToken)
-            .ConfigureAwait(false);
+        StableVideoSignal signal;
+        try
+        {
+            signal = await _videoSignalGateway
+                .WaitForStableSignalAsync(SignalTimeout, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return new StartRecordingResult.NoSignal();
+        }
+
         var handle = await _recordingEngine
             .StartAsync(new RecordingPlan(signal), cancellationToken)
             .ConfigureAwait(false);

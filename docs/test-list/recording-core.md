@@ -7,7 +7,7 @@
 - [x] ReadyでStartRequestedを受けるとArmingになる
 - [x] Arming中の2回目StartRequestedは無視される
 - [x] StableSignal前にはRecordingEngine.Startを呼ばない
-- [ ] SignalTimeoutではファイルを作らない
+- [x] SignalTimeoutではファイルを作らない
 - [ ] Countdown中のCancelでencoderを開始しない
 - [ ] Recording中のStopRequestedを2回受けてもStopAsyncは1回だけ
 
@@ -18,6 +18,6 @@ This is the first vertical-slice test list for Recording Core, derived from Basi
 - [x] StartRequested transitions Ready to Arming
 - [x] A second StartRequested while Arming is ignored
 - [x] RecordingEngine.Start is not called before StableSignal
-- [ ] SignalTimeout creates no file
+- [x] SignalTimeout creates no file
 - [ ] Cancel during Countdown does not start the encoder
 - [ ] Two StopRequested events while Recording call StopAsync only once
