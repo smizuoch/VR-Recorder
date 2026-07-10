@@ -16,7 +16,10 @@ public sealed class NativeRecordingEngineTests
         var backend = new ControllableNativeRecordingBackend();
         var clock = new ControllableClock(
             MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
-        var engine = new NativeRecordingEngine(backend, clock);
+        var engine = new NativeRecordingEngine(
+            backend,
+            clock,
+            new CapturingRuntimeFaultSink());
         using var cancellation = new CancellationTokenSource();
 
         var start = engine.StartAsync(
@@ -35,7 +38,10 @@ public sealed class NativeRecordingEngineTests
         var backend = new ControllableNativeRecordingBackend();
         var clock = new ControllableClock(
             MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(10)));
-        var engine = new NativeRecordingEngine(backend, clock);
+        var engine = new NativeRecordingEngine(
+            backend,
+            clock,
+            new CapturingRuntimeFaultSink());
 
         var start = engine.StartAsync(
             CreatePlan(),
@@ -57,7 +63,10 @@ public sealed class NativeRecordingEngineTests
         var backend = new ControllableNativeRecordingBackend();
         var clock = new ControllableClock(
             MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
-        var engine = new NativeRecordingEngine(backend, clock);
+        var engine = new NativeRecordingEngine(
+            backend,
+            clock,
+            new CapturingRuntimeFaultSink());
 
         var start = engine.StartAsync(CreatePlan(), CancellationToken.None);
         await backend.WaitUntilOpenedAsync();
@@ -71,6 +80,27 @@ public sealed class NativeRecordingEngineTests
         Assert.Equal(6, exception.Fault.Status);
         Assert.Equal("encoder initialization failed", exception.Fault.Message);
         Assert.Equal(1, backend.Session.AbortCallCount);
+    }
+
+    [Fact]
+    public async Task FaultAfterFirstPacketIsReportedToRuntimeFaultSink()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var clock = new ControllableClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var engine = new NativeRecordingEngine(backend, clock, runtimeFaults);
+        var start = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        await start;
+        var fault = new NativeRecordingFault(
+            Status: 6,
+            Message: "encoder failed while recording");
+
+        backend.SignalFault(fault);
+
+        Assert.Equal(fault, Assert.Single(runtimeFaults.Faults));
     }
 
     private static RecordingPlan CreatePlan() =>
@@ -141,6 +171,14 @@ public sealed class NativeRecordingEngineTests
                     Path.Combine(Path.GetTempPath(), "take.mp4")),
                 VideoPacketCount: 90,
                 AudioPacketCount: 142));
+    }
+
+    private sealed class CapturingRuntimeFaultSink
+        : INativeRecordingRuntimeFaultSink
+    {
+        public List<NativeRecordingFault> Faults { get; } = [];
+
+        public void Report(NativeRecordingFault fault) => Faults.Add(fault);
     }
 
     private sealed class ControllableClock : IMonotonicClock
