@@ -174,6 +174,70 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopShellSubscribesToRevisionedRuntimeStateOnDispatcher()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+
+        Assert.Contains("IRecorderStatusSource", windowCode);
+        Assert.Contains("DesktopRecordingUiController", windowCode);
+        Assert.Contains(".Subscribe(", windowCode);
+        Assert.Contains("Dispatcher.CheckAccess()", windowCode);
+        Assert.Contains("Dispatcher.InvokeAsync", windowCode);
+        Assert.Contains("ApplyRecordingStatus", windowCode);
+        Assert.Contains("ContentControl.ContentProperty", windowCode);
+        Assert.Contains("AutomationProperties.NameProperty", windowCode);
+        Assert.Contains("AutomationProperties.HelpTextProperty", windowCode);
+        Assert.Contains("FrameworkElement.ToolTipProperty", windowCode);
+        Assert.Contains("RecordingStatuses", appCode);
+
+        var requiredKeys = new[]
+        {
+            "Recording_Action_Cancel_Short",
+            "Recording_Action_Cancel_AccessibleName",
+            "Recording_Action_Cancel_Tooltip",
+            "Recording_Action_Retry_Short",
+            "Recording_Action_Retry_AccessibleName",
+            "Recording_Action_Retry_Tooltip",
+            "Recording_State_Arming",
+            "Recording_State_Countdown",
+            "Recording_State_Starting",
+            "Recording_State_Recording",
+            "Recording_State_SignalLost",
+            "Recording_State_Stopping",
+            "Recording_State_NoSignal",
+            "Recording_State_Faulted",
+            "Status_Arming_AccessibleDescription",
+            "Status_Countdown_AccessibleDescription",
+            "Status_Starting_AccessibleDescription",
+            "Status_Recording_AccessibleDescription",
+            "Status_SignalLost_AccessibleDescription",
+            "Status_Stopping_AccessibleDescription",
+            "Status_NoSignal_AccessibleDescription",
+            "Status_Faulted_AccessibleDescription",
+        };
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            Assert.All(requiredKeys, key => Assert.Contains(key, resources.Keys));
+        }
+    }
+
+    [Fact]
     public void DesktopPseudoLocaleAndRtlModesAreDeterministicAndOffline()
     {
         var appDirectory = Path.Combine(
