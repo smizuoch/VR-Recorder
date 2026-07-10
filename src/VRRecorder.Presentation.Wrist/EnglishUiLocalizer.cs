@@ -9,6 +9,8 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
         {
             ["recording.start.short"] = "REC",
             ["recording.start.accessible"] = "Start recording",
+            ["recording.stop.short"] = "STOP",
+            ["recording.stop.accessible"] = "Stop recording",
         };
 
     private EnglishUiLocalizer()

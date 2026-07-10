@@ -6,4 +6,5 @@ namespace VRRecorder.Presentation.Wrist;
 public sealed record WristUiSnapshot(
     long Revision,
     RecorderState State,
+    WristPage Page,
     IReadOnlyList<UiActionSnapshot> Actions);

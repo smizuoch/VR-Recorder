@@ -14,15 +14,35 @@ public sealed class WristUiProjector
         _localizer = localizer;
     }
 
-    public WristUiSnapshot Project(RecorderStatusSnapshot status)
+    public WristUiSnapshot Project(RecorderStatusSnapshot status) =>
+        Project(status, WristPage.Main);
+
+    public WristUiSnapshot Project(
+        RecorderStatusSnapshot status,
+        WristPage page)
     {
         ArgumentNullException.ThrowIfNull(status);
-        UiActionSnapshot[] actions = status.State == RecorderState.Ready &&
-                                     status.AvailableActions.HasFlag(
-                                         RecorderAvailableActions.Start)
-            ? [CreateStartAction()]
-            : [];
-        return new WristUiSnapshot(status.Revision, status.State, actions);
+        UiActionSnapshot[] actions;
+        if (status.State == RecorderState.Recording &&
+            status.AvailableActions.HasFlag(RecorderAvailableActions.Stop))
+        {
+            actions = [CreateStopAction()];
+        }
+        else if (status.State == RecorderState.Ready &&
+                 status.AvailableActions.HasFlag(RecorderAvailableActions.Start))
+        {
+            actions = [CreateStartAction()];
+        }
+        else
+        {
+            actions = [];
+        }
+
+        return new WristUiSnapshot(
+            status.Revision,
+            status.State,
+            page,
+            actions);
     }
 
     private UiActionSnapshot CreateStartAction()
@@ -39,5 +59,21 @@ public sealed class WristUiProjector
             AccessibleName: accessibleName,
             Tooltip: accessibleName,
             MinimumTargetDp: 56);
+    }
+
+    private UiActionSnapshot CreateStopAction()
+    {
+        var accessibleName = _localizer.Resolve("recording.stop.accessible");
+        return new UiActionSnapshot(
+            SemanticId: "recording.stop",
+            Command: UiCommandId.StopRecording,
+            IconSemanticId: "recording.stop",
+            ComponentRole: UiComponentRole.LargeFilledIconButton,
+            ColorRole: UiColorRole.Recording,
+            IsEnabled: true,
+            VisibleLabel: _localizer.Resolve("recording.stop.short"),
+            AccessibleName: accessibleName,
+            Tooltip: accessibleName,
+            MinimumTargetDp: 64);
     }
 }
