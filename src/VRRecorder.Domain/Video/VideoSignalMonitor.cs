@@ -6,6 +6,7 @@ public sealed class VideoSignalMonitor
 {
     private static readonly TimeSpan FreshFrameTimeout =
         TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan SignalRecoveryGrace = TimeSpan.FromSeconds(5);
     private MonotonicTimestamp? _lastFreshFrameAt;
     private MonotonicTimestamp? _signalLostAt;
 
@@ -39,6 +40,9 @@ public sealed class VideoSignalMonitor
         }
 
         _signalLostAt ??= now;
-        return VideoSignalStatus.SignalLost;
+        var lossDuration = now.Elapsed - _signalLostAt.Value.Elapsed;
+        return lossDuration >= SignalRecoveryGrace
+            ? VideoSignalStatus.SafeStop
+            : VideoSignalStatus.SignalLost;
     }
 }
