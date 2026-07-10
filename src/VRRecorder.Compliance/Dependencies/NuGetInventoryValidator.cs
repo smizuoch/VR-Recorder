@@ -2,6 +2,10 @@ namespace VRRecorder.Compliance.Dependencies;
 
 public static class NuGetInventoryValidator
 {
+    private static readonly HashSet<string> UnacceptableLicenses = new(
+        ["UNKNOWN", "NOASSERTION", "NONE"],
+        StringComparer.OrdinalIgnoreCase);
+
     public static IReadOnlyList<ComplianceIssue> Validate(
         IEnumerable<NuGetPackage> packages,
         IEnumerable<RegisteredNuGetPackage> registry)
@@ -29,6 +33,12 @@ public static class NuGetInventoryValidator
             {
                 issues.Add(new ComplianceIssue(
                     "registry-version-mismatch",
+                    package.Identity));
+            }
+            else if (UnacceptableLicenses.Contains(registeredPackage.LicenseConcluded))
+            {
+                issues.Add(new ComplianceIssue(
+                    "unacceptable-license-conclusion",
                     package.Identity));
             }
         }

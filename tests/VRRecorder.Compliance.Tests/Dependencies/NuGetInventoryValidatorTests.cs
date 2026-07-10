@@ -14,7 +14,7 @@ public sealed class NuGetInventoryValidatorTests
         ];
         RegisteredNuGetPackage[] registry =
         [
-            new("Direct.Package", "1.0.0"),
+            new("Direct.Package", "1.0.0", "MIT"),
         ];
 
         var issues = NuGetInventoryValidator.Validate(packages, registry);
@@ -33,7 +33,7 @@ public sealed class NuGetInventoryValidatorTests
         ];
         RegisteredNuGetPackage[] registry =
         [
-            new("Versioned.Package", "1.0.0"),
+            new("Versioned.Package", "1.0.0", "MIT"),
         ];
 
         var issues = NuGetInventoryValidator.Validate(packages, registry);
