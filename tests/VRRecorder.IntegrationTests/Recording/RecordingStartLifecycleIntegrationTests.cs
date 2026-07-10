@@ -162,6 +162,36 @@ public sealed class RecordingStartLifecycleIntegrationTests
         Assert.Equal(1, leaseStore.SaveCallCount);
         Assert.Equal(1, backend.OpenCallCount);
         Assert.Equal(0, firstOsc.Available);
+
+        var firstFrameAt = started.Handle.FirstPacketCommittedAt;
+        await lifecycle.ObserveFreshVideoFrameAsync(
+            new VideoFrameObservation(firstFrameAt, isBlack: true),
+            timeout.Token);
+        Assert.Equal(
+            VideoSignalStatus.Available,
+            await lifecycle.EvaluateVideoSignalAsync(
+                firstFrameAt.Add(TimeSpan.FromMilliseconds(1499)),
+                timeout.Token));
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
+
+        Assert.Equal(
+            VideoSignalStatus.SignalLost,
+            await lifecycle.EvaluateVideoSignalAsync(
+                firstFrameAt.Add(TimeSpan.FromMilliseconds(1500)),
+                timeout.Token));
+        Assert.Equal(RecorderState.SignalLost, lifecycle.State);
+
+        var recoveredAt = firstFrameAt.Add(TimeSpan.FromSeconds(2));
+        await lifecycle.ObserveFreshVideoFrameAsync(
+            new VideoFrameObservation(recoveredAt, isBlack: true),
+            timeout.Token);
+
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
+        Assert.Equal(
+            VideoSignalStatus.Available,
+            await lifecycle.EvaluateVideoSignalAsync(
+                recoveredAt,
+                timeout.Token));
     }
 
     private static OscQueryServiceAdvertisement Advertisement(
