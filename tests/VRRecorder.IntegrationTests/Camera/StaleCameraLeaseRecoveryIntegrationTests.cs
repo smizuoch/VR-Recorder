@@ -12,7 +12,7 @@ public sealed class StaleCameraLeaseRecoveryIntegrationTests
 {
     [Fact]
     [Trait("Scenario", "IT-020")]
-    public async Task StaleLeaseRestoresExactLoopbackTargetThenDeletesEvidence()
+    public async Task StaleLeaseRestoresOnlyOwnedStreamingOnExactLoopbackTargetThenDeletesEvidence()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var directory = TemporaryDirectory.Create();
@@ -42,21 +42,50 @@ public sealed class StaleCameraLeaseRecoveryIntegrationTests
             streaming.Buffer,
             streaming.RemoteEndPoint,
             timeout.Token);
-        var mode = await selectedOsc.ReceiveAsync(timeout.Token);
-        Assert.Equal(OscPacketCodec.EncodeMode(CameraMode.Photo), mode.Buffer);
-        await selectedOsc.SendAsync(
-            mode.Buffer,
-            mode.RemoteEndPoint,
-            timeout.Token);
 
         var result = await recovering;
 
+        Assert.Equal(0, selectedOsc.Available);
         var restored = Assert.IsType<StaleCameraLeaseRecoveryResult.Restored>(
             result);
         Assert.Equal("session-stale", restored.SessionId);
         Assert.Null(await store.LoadAsync(timeout.Token));
         Assert.Empty(warnings.Warnings);
         Assert.Equal(0, otherOsc.Available);
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-020")]
+    public async Task StaleLeaseWithoutOwnedStreamingDeletesEvidenceWithoutCameraWrites()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var directory = TemporaryDirectory.Create();
+        using var selectedOsc = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        using var store = new FileSystemCameraLeaseStore(
+            Path.Combine(directory.Path, "camera-lease.json"));
+        var selected = Candidate("selected", selectedOsc);
+        var lease = Lease(
+            "session-unowned",
+            selected.ServiceId,
+            processId: 4321,
+            changedStreamingByRecorder: false);
+        await store.SaveAsync(lease, timeout.Token);
+        var warnings = new RecordingWarningSink();
+        var recovery = new StaleCameraLeaseRecoveryUseCase(
+            store,
+            new InactiveLeaseOwnerProbe(),
+            Connections([selected]),
+            warnings);
+
+        var result = await recovery.ExecuteAsync(timeout.Token);
+
+        Assert.Equal(0, selectedOsc.Available);
+        var restored = Assert.IsType<StaleCameraLeaseRecoveryResult.Restored>(
+            result);
+        Assert.Equal("session-unowned", restored.SessionId);
+        Assert.Null(await store.LoadAsync(timeout.Token));
+        Assert.Empty(warnings.Warnings);
     }
 
     [Fact]
@@ -148,6 +177,40 @@ public sealed class StaleCameraLeaseRecoveryIntegrationTests
         Assert.Single(warnings.Warnings);
     }
 
+    [Fact]
+    public async Task CancelledStreamingRestoreLeavesLeaseForNextRepairAttempt()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cancellation = new CancellationTokenSource();
+        using var directory = TemporaryDirectory.Create();
+        using var osc = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var store = new FileSystemCameraLeaseStore(
+            Path.Combine(directory.Path, "camera-lease.json"));
+        var candidate = Candidate("selected", osc);
+        var lease = Lease("session-cancelled", candidate.ServiceId, processId: 4321);
+        await store.SaveAsync(lease, timeout.Token);
+        var warnings = new RecordingWarningSink();
+        var recovery = new StaleCameraLeaseRecoveryUseCase(
+            store,
+            new InactiveLeaseOwnerProbe(),
+            Connections([candidate]),
+            warnings);
+
+        var recovering = recovery.ExecuteAsync(cancellation.Token);
+        var streaming = await osc.ReceiveAsync(timeout.Token);
+        Assert.Equal(
+            OscPacketCodec.EncodeStreaming(enabled: false),
+            streaming.Buffer);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await recovering);
+        Assert.Equal(
+            "session-cancelled",
+            (await store.LoadAsync(timeout.Token))?.SessionId);
+        Assert.Empty(warnings.Warnings);
+    }
+
     private static VrChatCameraConnectionUseCase Connections(
         IReadOnlyList<VrChatInstanceCandidate> candidates) =>
         new(
@@ -170,7 +233,8 @@ public sealed class StaleCameraLeaseRecoveryIntegrationTests
     private static CameraLease Lease(
         string sessionId,
         string serviceId,
-        int processId) =>
+        int processId,
+        bool changedStreamingByRecorder = true) =>
         new(
             sessionId,
             serviceId,
@@ -179,7 +243,7 @@ public sealed class StaleCameraLeaseRecoveryIntegrationTests
             ObservedCameraValue.Known(CameraMode.Photo),
             ObservedCameraValue.Known(false),
             changedModeByRecorder: true,
-            changedStreamingByRecorder: true);
+            changedStreamingByRecorder);
 
     private sealed class FixedDiscovery(
         IReadOnlyList<VrChatInstanceCandidate> candidates)
