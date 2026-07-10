@@ -130,6 +130,8 @@ public sealed class WindowsDnsSdApi : IWindowsDnsSdApi
         return await completion.Task.ConfigureAwait(false);
     }
 
-    private static IOException CreateFailure(string operation, uint status) =>
-        new($"Windows DNS-SD {operation} failed with status {status}.");
+    private static WindowsDnsSdException CreateFailure(
+        string operation,
+        uint status) =>
+        new(operation, status);
 }

@@ -8,6 +8,12 @@ public sealed class WindowsDnsSdOscQueryServiceBrowser
 {
     private const string QueryName = "_oscjson._tcp.local";
     private const string ServiceSuffix = "._oscjson._tcp.local.";
+    private const uint ErrorTimeout = 1460;
+    private const uint DnsErrorRcodeNameError = 9003;
+    private const uint DnsInfoNoRecords = 9501;
+    private const uint DnsErrorTryAgainLater = 9554;
+    private const uint DnsErrorRecordDoesNotExist = 9701;
+    private const uint DnsErrorNameDoesNotExist = 9714;
     private readonly IWindowsDnsSdApi _api;
 
     public WindowsDnsSdOscQueryServiceBrowser()
@@ -47,9 +53,24 @@ public sealed class WindowsDnsSdOscQueryServiceBrowser
         foreach (var serviceId in serviceIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var resolved = await _api
-                .ResolveAsync(serviceId, cancellationToken)
-                .ConfigureAwait(false);
+            WindowsDnsSdResolvedService? resolved;
+            try
+            {
+                resolved = await _api
+                    .ResolveAsync(serviceId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception) when (cancellationToken.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw;
+            }
+            catch (WindowsDnsSdException exception) when (
+                IsIsolatedResolveFailure(exception))
+            {
+                continue;
+            }
+
             var advertisement = TryMap(serviceId, resolved);
             if (advertisement is not null)
             {
@@ -106,4 +127,18 @@ public sealed class WindowsDnsSdOscQueryServiceBrowser
     private static bool IsOscJsonService(string serviceId) =>
         serviceId.Length > ServiceSuffix.Length &&
         serviceId.EndsWith(ServiceSuffix, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsIsolatedResolveFailure(
+        WindowsDnsSdException exception) =>
+        string.Equals(
+            exception.Operation,
+            "resolve",
+            StringComparison.Ordinal) &&
+        exception.Status is
+            ErrorTimeout or
+            DnsErrorRcodeNameError or
+            DnsInfoNoRecords or
+            DnsErrorTryAgainLater or
+            DnsErrorRecordDoesNotExist or
+            DnsErrorNameDoesNotExist;
 }
