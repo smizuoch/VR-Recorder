@@ -408,10 +408,10 @@ public sealed class AudioSessionIntegrationTests
     }
 
     private static double LeftChannelProjectionMagnitude(
-        IReadOnlyList<float> interleavedSamples,
+        float[] interleavedSamples,
         double frequency)
     {
-        var frameCount = interleavedSamples.Count / ChannelCount;
+        var frameCount = interleavedSamples.Length / ChannelCount;
         var sine = 0d;
         var cosine = 0d;
         for (var frame = 0; frame < frameCount; frame++)
@@ -427,40 +427,43 @@ public sealed class AudioSessionIntegrationTests
     }
 
     private static void AssertRamp(
-        IReadOnlyList<float> actual,
-        IReadOnlyList<float> constantContribution,
-        IReadOnlyList<float> rampedContribution,
+        float[] actual,
+        float[] constantContribution,
+        float[] rampedContribution,
         Func<int, double> gainAtFrame)
     {
-        Assert.Equal(constantContribution.Count, actual.Count);
-        Assert.Equal(rampedContribution.Count, actual.Count);
-        for (var index = 0; index < actual.Count; index++)
+        Assert.Equal(constantContribution.Length, actual.Length);
+        Assert.Equal(rampedContribution.Length, actual.Length);
+        for (var index = 0; index < actual.Length; index++)
         {
             var expected = constantContribution[index] +
                            (rampedContribution[index] *
                             gainAtFrame(index / ChannelCount));
-            Assert.Equal(expected, actual[index], precision: 6);
+            Assert.InRange(Math.Abs(expected - actual[index]), 0, 0.000001);
         }
     }
 
     private static void AssertInterleavedStereoPairs(
-        IReadOnlyList<float> samples)
+        float[] samples)
     {
-        Assert.Equal(0, samples.Count % ChannelCount);
-        for (var index = 0; index < samples.Count; index += ChannelCount)
+        Assert.Equal(0, samples.Length % ChannelCount);
+        for (var index = 0; index < samples.Length; index += ChannelCount)
         {
             Assert.Equal(samples[index], samples[index + 1]);
         }
     }
 
     private static void AssertSamples(
-        IReadOnlyList<float> expected,
-        IReadOnlyList<float> actual)
+        float[] expected,
+        float[] actual)
     {
-        Assert.Equal(expected.Count, actual.Count);
-        for (var index = 0; index < expected.Count; index++)
+        Assert.Equal(expected.Length, actual.Length);
+        for (var index = 0; index < expected.Length; index++)
         {
-            Assert.Equal(expected[index], actual[index], precision: 6);
+            Assert.InRange(
+                Math.Abs(expected[index] - actual[index]),
+                0,
+                0.000001);
         }
     }
 
