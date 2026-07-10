@@ -10,4 +10,5 @@ public enum RecorderTrigger
     FreshFrameTimeout,
     SignalRecovered,
     GraceExpired,
+    StopCompleted,
 }
