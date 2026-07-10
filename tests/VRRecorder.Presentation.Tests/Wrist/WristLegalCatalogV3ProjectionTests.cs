@@ -9,6 +9,19 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 public sealed class WristLegalCatalogV3ProjectionTests
 {
     [Fact]
+    public void EveryPublicControllerConstructorRequiresGlobalFaultSink()
+    {
+        var constructors = typeof(WristLegalController).GetConstructors();
+
+        Assert.NotEmpty(constructors);
+        Assert.All(constructors, constructor =>
+            Assert.Contains(
+                constructor.GetParameters(),
+                parameter =>
+                    parameter.ParameterType == typeof(IComplianceFaultSink)));
+    }
+
+    [Fact]
     public async Task ProjectsV3IdentityCopyrightAndEverySelectableDocument()
     {
         var catalog = Catalog();
@@ -100,6 +113,35 @@ public sealed class WristLegalCatalogV3ProjectionTests
         Assert.True(stop.IsEnabled);
     }
 
+    [Fact]
+    public async Task SinkFailureCannotPreserveAuthenticatedV3Content()
+    {
+        var reader = new TypedDocumentReader(Catalog());
+        var sink = new CapturingComplianceFaultSink(reject: true);
+        var controller = new WristLegalController(
+            reader,
+            sink,
+            linesPerPage: 2);
+        await controller.OpenAsync(CancellationToken.None);
+        await controller.ShowDetailAsync("example", CancellationToken.None);
+        var notice = controller.State.SelectedComponent!.LegalDocuments.Single(
+            reference => reference.Kind == LegalDocumentKind.Notice);
+        await controller.ShowDocumentAsync(notice, CancellationToken.None);
+        reader.RejectDocumentReads = true;
+
+        await controller.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(1, sink.CallCount);
+        Assert.Equal(WristLegalView.Unavailable, controller.State.View);
+        Assert.Null(controller.State.BundleId);
+        Assert.Null(controller.State.ProductVersion);
+        Assert.Null(controller.State.ManifestSha256);
+        Assert.Null(controller.State.SelectedComponent);
+        Assert.Null(controller.State.SelectedDocument);
+        Assert.Null(controller.State.FullDocumentText);
+        Assert.Empty(controller.State.Components);
+    }
+
     private static LegalCatalogSnapshot Catalog() =>
         new(
             "https://example.invalid/spdx/wrist-v3",
@@ -181,14 +223,18 @@ public sealed class WristLegalCatalogV3ProjectionTests
         }
     }
 
-    private sealed class CapturingComplianceFaultSink : IComplianceFaultSink
+    private sealed class CapturingComplianceFaultSink(bool reject = false)
+        : IComplianceFaultSink
     {
         public int CallCount { get; private set; }
 
         public ValueTask EnterComplianceFaultAsync()
         {
             CallCount++;
-            return ValueTask.CompletedTask;
+            return reject
+                ? ValueTask.FromException(
+                    new InvalidOperationException("sink unavailable"))
+                : ValueTask.CompletedTask;
         }
     }
 }
