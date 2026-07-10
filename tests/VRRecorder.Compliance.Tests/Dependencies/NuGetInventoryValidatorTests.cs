@@ -1,0 +1,26 @@
+using VRRecorder.Compliance.Dependencies;
+
+namespace VRRecorder.Compliance.Tests.Dependencies;
+
+public sealed class NuGetInventoryValidatorTests
+{
+    [Fact]
+    public void UnregisteredTransitivePackageProducesFailClosedIssue()
+    {
+        NuGetPackage[] packages =
+        [
+            new("Direct.Package", "1.0.0", NuGetDependencyKind.Direct),
+            new("Transitive.Package", "2.0.0", NuGetDependencyKind.Transitive),
+        ];
+        RegisteredNuGetPackage[] registry =
+        [
+            new("Direct.Package", "1.0.0"),
+        ];
+
+        var issues = NuGetInventoryValidator.Validate(packages, registry);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("missing-component-registration", issue.Code);
+        Assert.Equal("Transitive.Package@2.0.0", issue.Subject);
+    }
+}
