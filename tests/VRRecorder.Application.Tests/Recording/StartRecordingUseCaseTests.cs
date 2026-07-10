@@ -105,6 +105,7 @@ public sealed class StartRecordingUseCaseTests
             countdown,
             reservation,
             new FixedWallClock(TestLocalNow),
+            SufficientStorage(),
             engine,
             CreateAutoStopScheduler());
         var pending = new PendingRecording(
@@ -144,6 +145,45 @@ public sealed class StartRecordingUseCaseTests
     }
 
     [Fact]
+    public async Task InsufficientStorageDoesNotReserveOrStartMedia()
+    {
+        var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
+        var reservation = new FakeRecordingFileReservation();
+        var storage = new StubStorageSpaceProbe(new StorageSpace(
+            StorageCapacityPolicy.MinimumStartBytes - 1));
+        var engine = new FakeRecordingEngine();
+        var useCase = new StartRecordingUseCase(
+            signal,
+            countdown,
+            reservation,
+            new FixedWallClock(TestLocalNow),
+            storage,
+            engine,
+            CreateAutoStopScheduler());
+
+        var execution = useCase.ExecuteAsync(
+            Command(
+                SelfTimer.FromSeconds(3),
+                RecordingDuration.Infinite),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await countdown.WaitUntilRequestedAsync();
+        countdown.Complete();
+
+        var result = Assert.IsType<StartRecordingResult.InsufficientStorage>(
+            await execution);
+
+        Assert.Equal(
+            StorageCapacityPolicy.MinimumStartBytes - 1,
+            result.AvailableSpace.AvailableBytes);
+        Assert.Equal(TestOutputPath, storage.RequestedOutputPath);
+        Assert.Null(reservation.RequestedDescriptor);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
+    [Fact]
     public async Task AutoStopDeadlineStartsAtEngineFirstPacketCommit()
     {
         var initialNow = MonotonicTimestamp.FromElapsed(TimeSpan.Zero);
@@ -158,6 +198,7 @@ public sealed class StartRecordingUseCaseTests
             countdown,
             CompletedReservation(),
             new FixedWallClock(TestLocalNow),
+            SufficientStorage(),
             engine,
             autoStop);
 
@@ -208,6 +249,7 @@ public sealed class StartRecordingUseCaseTests
             countdown,
             CompletedReservation(),
             new FixedWallClock(TestLocalNow),
+            SufficientStorage(),
             engine,
             new AutoStopScheduler(clock, new FakeStopRequestSink()));
     }
@@ -231,4 +273,7 @@ public sealed class StartRecordingUseCaseTests
             new ControllableMonotonicClock(
                 MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
             new FakeStopRequestSink());
+
+    private static StubStorageSpaceProbe SufficientStorage() =>
+        new(new StorageSpace(StorageCapacityPolicy.MinimumStartBytes));
 }
