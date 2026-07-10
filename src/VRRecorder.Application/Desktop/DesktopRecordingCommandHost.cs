@@ -110,8 +110,8 @@ public sealed class DesktopRecordingCommandHost
             {
                 _disposed = true;
                 _state = DesktopRecordingHostState.Disposed;
-                _shutdownReason ??=
-                    RecordingStopReason.ApplicationShutdown;
+                SelectFirstShutdownReason(
+                    RecordingStopReason.ApplicationShutdown);
                 cancelLifetime = true;
                 _disposeTask = DisposeCoreAsync();
             }
@@ -144,7 +144,8 @@ public sealed class DesktopRecordingCommandHost
                 _complianceFaulted = true;
                 _failure = null;
                 _state = DesktopRecordingHostState.ComplianceFault;
-                _shutdownReason = RecordingStopReason.ComplianceFault;
+                SelectFirstShutdownReason(
+                    RecordingStopReason.ComplianceFault);
                 cancelLifetime = true;
             }
         }
@@ -252,6 +253,11 @@ public sealed class DesktopRecordingCommandHost
                 "Desktop recording shutdown has no terminal reason.");
             return _shutdownTask ??= ShutdownCoreAsync(reason);
         }
+    }
+
+    private void SelectFirstShutdownReason(RecordingStopReason reason)
+    {
+        _shutdownReason ??= reason;
     }
 
     private async Task ShutdownCoreAsync(RecordingStopReason reason)

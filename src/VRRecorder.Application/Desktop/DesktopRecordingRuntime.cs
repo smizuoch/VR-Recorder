@@ -74,24 +74,14 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         return WaitForCallerAsync(operation, cancellationToken);
     }
 
-    public ValueTask DisposeAsync()
-    {
-        return new ValueTask(ShutdownAsync(
-            RecordingStopReason.ApplicationShutdown));
-    }
+    public ValueTask DisposeAsync() =>
+        new(ShutdownAsync(RecordingStopReason.ApplicationShutdown));
 
     public Task ShutdownAsync(RecordingStopReason reason)
     {
         bool cancelLifetime = false;
         Task shutdown;
-        if (reason is not RecordingStopReason.ApplicationShutdown and
-            not RecordingStopReason.ComplianceFault)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(reason),
-                reason,
-                "A desktop runtime shutdown requires a terminal application reason.");
-        }
+        EnsureTerminalShutdownReason(reason);
 
         lock (_gate)
         {
@@ -303,6 +293,21 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
 
     private static bool IsCancelableStartPhase(RecorderState state) =>
         state is RecorderState.Arming or RecorderState.Countdown;
+
+    private static void EnsureTerminalShutdownReason(
+        RecordingStopReason reason)
+    {
+        if (reason is RecordingStopReason.ApplicationShutdown or
+            RecordingStopReason.ComplianceFault)
+        {
+            return;
+        }
+
+        throw new ArgumentOutOfRangeException(
+            nameof(reason),
+            reason,
+            "A desktop runtime shutdown requires a terminal application reason.");
+    }
 
     private bool IsSemanticStartCancellation(
         CancellationTokenSource operationCancellation,
