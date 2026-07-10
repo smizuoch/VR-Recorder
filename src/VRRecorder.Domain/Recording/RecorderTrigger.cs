@@ -6,4 +6,5 @@ public enum RecorderTrigger
     SignalTimeout,
     FirstPacketCommitted,
     DurationElapsed,
+    StopRequested,
 }
