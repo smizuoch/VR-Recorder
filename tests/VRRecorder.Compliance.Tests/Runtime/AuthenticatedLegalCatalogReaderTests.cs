@@ -60,7 +60,7 @@ public sealed class AuthenticatedLegalCatalogReaderTests
         var catalog = await File.ReadAllTextAsync(catalogPath);
         catalog = catalog.Replace(
             "LICENSES/a/LICENSE.txt",
-            licenseTextPath,
+            licenseTextPath.Replace("\\", "\\\\", StringComparison.Ordinal),
             StringComparison.Ordinal);
         var anchor = await RewriteCatalogAndManifestAsync(
             directory.Path,
