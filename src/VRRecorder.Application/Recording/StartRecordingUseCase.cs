@@ -53,15 +53,24 @@ public sealed class StartRecordingUseCase
         _autoStopScheduler = autoStopScheduler;
     }
 
-    public Task<StartRecordingResult> ExecuteAsync(
+    public async Task<StartRecordingResult> ExecuteAsync(
         StartRecordingCommand command,
         CancellationToken cancellationToken,
-        IRecordingSessionCompletionSink? completionSink = null) =>
-        ExecuteAsync(
-            command,
-            completionSink,
-            phaseSink: null,
-            cancellationToken);
+        IRecordingSessionCompletionSink? completionSink = null)
+    {
+        await CaptureVideoSignalBaselineAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await ExecuteAsync(
+                command,
+                completionSink,
+                phaseSink: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    internal Task CaptureVideoSignalBaselineAsync(
+        CancellationToken cancellationToken) =>
+        _videoSignalGateway.CaptureBaselineAsync(cancellationToken);
 
     internal async Task<StartRecordingResult> ExecuteAsync(
         StartRecordingCommand command,
@@ -106,12 +115,19 @@ public sealed class StartRecordingUseCase
             return new StartRecordingResult.InsufficientStorage(availableSpace);
         }
 
-        var encoder = await _encoderSelector
-            .SelectAsync(
-                command.EncoderPreference,
-                command.GpuVendor,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var encoder = signal.HasDiscoveredSourceIdentity
+            ? await _encoderSelector
+                .SelectAsync(
+                    command.EncoderPreference,
+                    signal,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : await _encoderSelector
+                .SelectAsync(
+                    command.EncoderPreference,
+                    command.GpuVendor,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
         var startedAt = new RecordingSessionTimestamp(_wallClock.LocalNow);
         var descriptor = new RecordingFileDescriptor(
@@ -134,7 +150,8 @@ public sealed class StartRecordingUseCase
             encoder,
             videoLayout)
         {
-            Media = command.Media ?? RecordingMediaConfiguration.CreateDefault(),
+            Media = (command.Media ?? RecordingMediaConfiguration.CreateDefault())
+                .WithVideoSource(signal),
         };
         var handle = await _recordingEngine
             .StartAsync(plan, cancellationToken)

@@ -1,4 +1,5 @@
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Encoding;
 
 namespace VRRecorder.Application.Encoding;
@@ -18,10 +19,41 @@ public sealed class EncoderSelector
         GpuVendor vendor,
         CancellationToken cancellationToken)
     {
+        return await SelectAsync(
+                preference,
+                vendor,
+                encoder => new EncoderProbeRequest(
+                    encoder,
+                    adapterLuid: 0,
+                    "unidentified-gpu"),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<EncoderKind> SelectAsync(
+        EncoderPreference preference,
+        StableVideoSignal signal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(signal);
+        return await SelectAsync(
+                preference,
+                signal.GpuVendor,
+                encoder => EncoderProbeRequest.ForSignal(encoder, signal),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<EncoderKind> SelectAsync(
+        EncoderPreference preference,
+        GpuVendor vendor,
+        Func<EncoderKind, EncoderProbeRequest> createRequest,
+        CancellationToken cancellationToken)
+    {
         foreach (var candidate in Candidates(preference, vendor))
         {
             var result = await _probe
-                .ProbeAsync(candidate, cancellationToken)
+                .ProbeAsync(createRequest(candidate), cancellationToken)
                 .ConfigureAwait(false);
             if (result == EncoderProbeResult.PacketProduced)
             {

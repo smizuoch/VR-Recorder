@@ -31,6 +31,8 @@ struct ObservedMediaSessionConfig {
     std::uint64_t spout_adapter_luid;
     std::uint64_t encoder_adapter_luid;
     std::string gpu_identity;
+    std::uint32_t source_pixel_format;
+    double estimated_source_fps;
 };
 
 void CommitMuxedVideoPacket();

@@ -160,6 +160,12 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
     private sealed class StableSignalGateway(StableVideoSignal signal)
         : IVideoSignalGateway
     {
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task<StableVideoSignal> WaitForStableSignalAsync(
             TimeSpan timeout,
             CancellationToken cancellationToken)
@@ -228,11 +234,13 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
     private sealed class SoftwareEncoderProbe : IEncoderProbe
     {
         public Task<EncoderProbeResult> ProbeAsync(
-            EncoderKind encoder,
+            EncoderProbeRequest request,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Assert.Equal(EncoderKind.MediaFoundationSoftware, encoder);
+            Assert.Equal(
+                EncoderKind.MediaFoundationSoftware,
+                request.Encoder);
             return Task.FromResult(EncoderProbeResult.PacketProduced);
         }
     }

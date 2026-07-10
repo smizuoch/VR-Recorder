@@ -17,10 +17,10 @@ internal sealed class ScriptedEncoderProbe : IEncoderProbe
     public List<EncoderKind> ProbedEncoders { get; } = [];
 
     public Task<EncoderProbeResult> ProbeAsync(
-        EncoderKind encoder,
+        EncoderProbeRequest request,
         CancellationToken cancellationToken)
     {
-        ProbedEncoders.Add(encoder);
-        return Task.FromResult(_results[encoder]);
+        ProbedEncoders.Add(request.Encoder);
+        return Task.FromResult(_results[request.Encoder]);
     }
 }

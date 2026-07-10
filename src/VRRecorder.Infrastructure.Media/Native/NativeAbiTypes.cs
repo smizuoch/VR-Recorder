@@ -38,6 +38,13 @@ internal enum NativeVideoRotation : uint
     None = 1,
 }
 
+internal enum NativeSourcePixelFormat : uint
+{
+    Bgra8 = 1,
+    Rgba8 = 2,
+    Nv12 = 3,
+}
+
 internal enum NativeAudioRouting : uint
 {
     Mixed = 1,
@@ -84,6 +91,9 @@ internal struct NativeSessionConfigV1
     public ulong EncoderAdapterLuid;
     public nint GpuIdentityUtf8;
     public ulong ReservedV1;
+    public NativeSourcePixelFormat SourcePixelFormat;
+    public uint ReservedV2;
+    public double EstimatedSourceFramesPerSecond;
 }
 
 [StructLayout(LayoutKind.Sequential)]

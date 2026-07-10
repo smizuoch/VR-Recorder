@@ -75,6 +75,18 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             SetState(RecorderStateMachine.Transition(
                 startState,
                 RecorderTrigger.StartRequested));
+            try
+            {
+                await _startRecording
+                    .CaptureVideoSignalBaselineAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                SetState(startState);
+                throw;
+            }
+
             VrChatCameraConnectionResolution connection;
             try
             {

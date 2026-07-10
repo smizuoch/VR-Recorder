@@ -29,6 +29,8 @@ typedef struct vrrec_test_media_config_v1 {
     std::uint64_t spout_adapter_luid;
     std::uint64_t encoder_adapter_luid;
     const char *gpu_identity_utf8;
+    std::uint32_t source_pixel_format;
+    double estimated_source_fps;
 } vrrec_test_media_config_v1;
 
 typedef struct vrrec_test_video_layout_v1 {
@@ -101,6 +103,8 @@ extern "C" VRREC_TEST_API void vrrec_test_copy_media_config_v1(
         config.spout_adapter_luid,
         config.encoder_adapter_luid,
         config.gpu_identity.c_str(),
+        config.source_pixel_format,
+        config.estimated_source_fps,
     };
 }
 

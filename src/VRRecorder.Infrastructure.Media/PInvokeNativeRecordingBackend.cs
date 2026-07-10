@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Audio;
+using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.Infrastructure.Media;
@@ -72,6 +73,7 @@ public sealed class PInvokeNativeRecordingBackend
         {
             var media = plan.Media ?? throw new InvalidOperationException(
                 "The recording media configuration is required.");
+            var hasDiscoveredSource = plan.Signal.HasDiscoveredSourceIdentity;
             var layout = plan.VideoLayout.CurrentLayout;
             var config = new NativeSessionConfigV1
             {
@@ -107,14 +109,27 @@ public sealed class PInvokeNativeRecordingBackend
                 DesktopGainDb = media.DesktopGainDb,
                 MicrophoneGainDb = media.MicrophoneGainDb,
                 SpoutSenderIdentityUtf8 = AllocateUtf8(
-                    media.SpoutSenderIdentity,
+                    hasDiscoveredSource
+                        ? plan.Signal.SenderId
+                        : media.SpoutSenderIdentity,
                     nativeStrings),
-                SpoutAdapterLuid = media.SpoutAdapterLuid,
-                EncoderAdapterLuid = media.EncoderAdapterLuid,
+                SpoutAdapterLuid = hasDiscoveredSource
+                    ? plan.Signal.AdapterLuid
+                    : media.SpoutAdapterLuid,
+                EncoderAdapterLuid = hasDiscoveredSource
+                    ? plan.Signal.AdapterLuid
+                    : media.EncoderAdapterLuid,
                 GpuIdentityUtf8 = AllocateUtf8(
-                    media.GpuIdentity,
+                    hasDiscoveredSource
+                        ? plan.Signal.GpuIdentity
+                        : media.GpuIdentity,
                     nativeStrings),
                 ReservedV1 = 0,
+                SourcePixelFormat = ToNativeSourcePixelFormat(
+                    plan.Signal.PixelFormat),
+                ReservedV2 = 0,
+                EstimatedSourceFramesPerSecond =
+                    plan.Signal.EstimatedSourceFramesPerSecond,
             };
             var nativeCallbacks = new NativeCallbacksV1
             {
@@ -272,6 +287,18 @@ public sealed class PInvokeNativeRecordingBackend
                 nameof(routing),
                 routing,
                 "The audio routing is unsupported by the native ABI."),
+        };
+
+    private static NativeSourcePixelFormat ToNativeSourcePixelFormat(
+        VideoPixelFormat pixelFormat) => pixelFormat switch
+        {
+            VideoPixelFormat.Bgra8 => NativeSourcePixelFormat.Bgra8,
+            VideoPixelFormat.Rgba8 => NativeSourcePixelFormat.Rgba8,
+            VideoPixelFormat.Nv12 => NativeSourcePixelFormat.Nv12,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(pixelFormat),
+                pixelFormat,
+                "The source pixel format is unsupported by the native ABI."),
         };
 
     private static NativeQualityPreset ToNativeQualityPreset(

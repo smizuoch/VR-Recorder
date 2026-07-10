@@ -254,6 +254,12 @@ public sealed class RecordingLifecycleIntegrationTests
     private sealed class StableVideoSignalGateway(StableVideoSignal signal)
         : IVideoSignalGateway
     {
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task<StableVideoSignal> WaitForStableSignalAsync(
             TimeSpan timeout,
             CancellationToken cancellationToken)
@@ -277,11 +283,13 @@ public sealed class RecordingLifecycleIntegrationTests
     private sealed class MediaFoundationEncoderProbe : IEncoderProbe
     {
         public Task<EncoderProbeResult> ProbeAsync(
-            EncoderKind encoder,
+            EncoderProbeRequest request,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Assert.Equal(EncoderKind.MediaFoundationSoftware, encoder);
+            Assert.Equal(
+                EncoderKind.MediaFoundationSoftware,
+                request.Encoder);
             return Task.FromResult(EncoderProbeResult.PacketProduced);
         }
     }

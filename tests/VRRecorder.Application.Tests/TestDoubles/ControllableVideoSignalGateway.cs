@@ -10,6 +10,12 @@ internal sealed class ControllableVideoSignalGateway : IVideoSignalGateway
     private readonly TaskCompletionSource<StableVideoSignal> _signal = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
     public Task<StableVideoSignal> WaitForStableSignalAsync(
         TimeSpan timeout,
         CancellationToken cancellationToken)

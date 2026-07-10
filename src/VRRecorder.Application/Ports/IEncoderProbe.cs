@@ -6,6 +6,6 @@ namespace VRRecorder.Application.Ports;
 public interface IEncoderProbe
 {
     Task<EncoderProbeResult> ProbeAsync(
-        EncoderKind encoder,
+        EncoderProbeRequest request,
         CancellationToken cancellationToken);
 }

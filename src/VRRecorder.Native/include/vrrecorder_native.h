@@ -28,6 +28,7 @@ typedef uint32_t vrrec_event_kind_t;
 typedef uint32_t vrrec_encoder_kind_t;
 typedef uint32_t vrrec_canvas_background_t;
 typedef uint32_t vrrec_video_rotation_t;
+typedef uint32_t vrrec_source_pixel_format_t;
 typedef uint32_t vrrec_audio_routing_t;
 typedef uint32_t vrrec_quality_preset_t;
 
@@ -51,6 +52,10 @@ typedef uint32_t vrrec_quality_preset_t;
 #define VRREC_CANVAS_BACKGROUND_BLACK UINT32_C(1)
 
 #define VRREC_VIDEO_ROTATION_NONE UINT32_C(1)
+
+#define VRREC_SOURCE_PIXEL_FORMAT_BGRA8 UINT32_C(1)
+#define VRREC_SOURCE_PIXEL_FORMAT_RGBA8 UINT32_C(2)
+#define VRREC_SOURCE_PIXEL_FORMAT_NV12 UINT32_C(3)
 
 #define VRREC_AUDIO_ROUTING_MIXED UINT32_C(1)
 #define VRREC_AUDIO_ROUTING_DESKTOP_ONLY UINT32_C(2)
@@ -90,6 +95,9 @@ typedef struct vrrec_session_config_v1 {
     uint64_t encoder_adapter_luid;
     const char *gpu_identity_utf8;
     uint64_t reserved_v1;
+    vrrec_source_pixel_format_t source_pixel_format;
+    uint32_t reserved_v2;
+    double estimated_source_fps;
 } vrrec_session_config_v1;
 
 typedef struct vrrec_video_layout_v1 {

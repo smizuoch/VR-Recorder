@@ -87,5 +87,5 @@ public sealed class RecordingVideoLayoutSession
             VideoRotation.None);
 
     private static VideoGeometry SourceGeometry(StableVideoSignal signal) =>
-        new(signal.Width, signal.Height, VideoPixelFormat.Bgra8);
+        new(signal.Width, signal.Height, signal.PixelFormat);
 }

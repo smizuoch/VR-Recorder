@@ -69,6 +69,9 @@ int main(void)
         UINT64_C(0x00000001ABCDEF01),
         "pci\\ven_10de&dev_2684",
         0,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        0,
+        59.94,
     };
     vrrec_callbacks_v1 callbacks = {
         sizeof(vrrec_callbacks_v1),

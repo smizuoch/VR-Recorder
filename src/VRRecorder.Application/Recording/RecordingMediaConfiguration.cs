@@ -80,6 +80,28 @@ public sealed record RecordingMediaConfiguration
             0,
             "unidentified-gpu");
 
+    public RecordingMediaConfiguration WithVideoSource(
+        StableVideoSignal signal)
+    {
+        ArgumentNullException.ThrowIfNull(signal);
+        if (!signal.HasDiscoveredSourceIdentity)
+        {
+            return this;
+        }
+
+        return new RecordingMediaConfiguration(
+            AudioRouting,
+            DesktopEndpointId,
+            MicrophoneEndpointId,
+            DesktopGainDb,
+            MicrophoneGainDb,
+            QualityPreset,
+            signal.SenderId,
+            signal.AdapterLuid,
+            signal.AdapterLuid,
+            signal.GpuIdentity);
+    }
+
     private static void EnsureDefined<TEnum>(TEnum value, string parameterName)
         where TEnum : struct, Enum
     {

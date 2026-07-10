@@ -484,6 +484,14 @@ bool IsQualityPresetSupported(vrrec_quality_preset_t quality) noexcept
         quality == VRREC_QUALITY_PRESET_HIGH;
 }
 
+bool IsSourcePixelFormatSupported(
+    vrrec_source_pixel_format_t pixel_format) noexcept
+{
+    return pixel_format == VRREC_SOURCE_PIXEL_FORMAT_BGRA8 ||
+        pixel_format == VRREC_SOURCE_PIXEL_FORMAT_RGBA8 ||
+        pixel_format == VRREC_SOURCE_PIXEL_FORMAT_NV12;
+}
+
 bool IsValidGain(double gain_db) noexcept
 {
     return std::isfinite(gain_db) && gain_db >= -96.0 && gain_db <= 24.0;
@@ -533,8 +541,11 @@ constexpr std::size_t SessionConfigBaseSize =
     offsetof(vrrec_session_config_v1, encoder_kind);
 constexpr std::size_t SessionConfigEncoderSize =
     offsetof(vrrec_session_config_v1, source_width);
-constexpr std::size_t SessionConfigMediaSize =
+constexpr std::size_t SessionConfigLegacyMediaSize =
+    offsetof(vrrec_session_config_v1, source_pixel_format);
+constexpr std::size_t SessionConfigSourceFormatSize =
     sizeof(vrrec_session_config_v1);
+constexpr double MaximumEstimatedSourceFps = 1000.0;
 
 vrrec_session_config_v1 NormalizeSessionConfig(
     const vrrec_session_config_v1 &config) noexcept
@@ -543,7 +554,9 @@ vrrec_session_config_v1 NormalizeSessionConfig(
         ? config.encoder_kind
         : VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE;
     const auto has_media_config =
-        config.struct_size >= SessionConfigMediaSize;
+        config.struct_size >= SessionConfigLegacyMediaSize;
+    const auto has_source_format =
+        config.struct_size >= SessionConfigSourceFormatSize;
     return vrrec_session_config_v1 {
         sizeof(vrrec_session_config_v1),
         VRREC_ABI_V1,
@@ -584,6 +597,14 @@ vrrec_session_config_v1 NormalizeSessionConfig(
             ? config.gpu_identity_utf8
             : "legacy-unspecified",
         0,
+        has_source_format
+            ? config.source_pixel_format
+            : VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        0,
+        has_source_format
+            ? config.estimated_source_fps
+            : static_cast<double>(config.fps_numerator) /
+                static_cast<double>(config.fps_denominator),
     };
 }
 
@@ -603,7 +624,8 @@ vrrec_status_t ValidateCreateArguments(
 
     if ((config->struct_size != SessionConfigBaseSize &&
          config->struct_size != SessionConfigEncoderSize &&
-         config->struct_size < SessionConfigMediaSize) ||
+         config->struct_size != SessionConfigLegacyMediaSize &&
+         config->struct_size < SessionConfigSourceFormatSize) ||
         callbacks->struct_size < sizeof(vrrec_callbacks_v1)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
@@ -632,7 +654,7 @@ vrrec_status_t ValidateCreateArguments(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (config->struct_size >= SessionConfigMediaSize) {
+    if (config->struct_size >= SessionConfigLegacyMediaSize) {
         std::string_view desktop_endpoint;
         std::string_view microphone_endpoint;
         std::string_view sender_identity;
@@ -663,6 +685,15 @@ vrrec_status_t ValidateCreateArguments(
             config->reserved_v1 != 0) {
             return VRREC_STATUS_INVALID_ARGUMENT;
         }
+    }
+
+    if (config->struct_size >= SessionConfigSourceFormatSize &&
+        (!IsSourcePixelFormatSupported(config->source_pixel_format) ||
+         config->reserved_v2 != 0 ||
+         !std::isfinite(config->estimated_source_fps) ||
+         config->estimated_source_fps <= 0.0 ||
+         config->estimated_source_fps > MaximumEstimatedSourceFps)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
     return VRREC_STATUS_OK;

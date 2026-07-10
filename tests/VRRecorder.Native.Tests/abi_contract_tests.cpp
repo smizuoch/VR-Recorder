@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <future>
 #include <limits>
@@ -11,7 +12,10 @@
 #include "vrrecorder_native.h"
 
 static_assert(VRREC_ABI_V1 == 1);
-static_assert(sizeof(vrrec_session_config_v1) == 160);
+static_assert(sizeof(vrrec_session_config_v1) == 176);
+static_assert(offsetof(vrrec_session_config_v1, source_pixel_format) == 160);
+static_assert(offsetof(vrrec_session_config_v1, reserved_v2) == 164);
+static_assert(offsetof(vrrec_session_config_v1, estimated_source_fps) == 168);
 static_assert(sizeof(vrrec_video_layout_v1) == 48);
 static_assert(sizeof(vrrec_session_statistics_v1) == 72);
 static_assert(sizeof(vrrec_event_v1) == 48);
@@ -81,6 +85,9 @@ vrrec_session_config_v1 ValidConfig()
         UINT64_C(0x00000001ABCDEF01),
         "pci\\ven_10de&dev_2684|driver-32.0.15.6094",
         0,
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+        0,
+        59.94,
     };
 }
 
@@ -241,6 +248,8 @@ bool FullSessionConfigCrossesTheBackendBoundaryExactly()
     CHECK(observed.encoder_adapter_luid == UINT64_C(0x00000001ABCDEF01));
     CHECK(observed.gpu_identity ==
           "pci\\ven_10de&dev_2684|driver-32.0.15.6094");
+    CHECK(observed.source_pixel_format == VRREC_SOURCE_PIXEL_FORMAT_RGBA8);
+    CHECK(observed.estimated_source_fps == 59.94);
 
     vrrec_session_destroy_v1(session);
     return true;
@@ -305,6 +314,28 @@ bool LegacySessionConfigsReceiveDeterministicMediaDefaults()
     return true;
 }
 
+bool LegacyMediaSessionConfigDefaultsSourceFormat()
+{
+    EventLog log;
+    auto config = ValidConfig();
+    config.struct_size = 160;
+    config.source_pixel_format = UINT32_MAX;
+    config.reserved_v2 = UINT32_MAX;
+    config.estimated_source_fps =
+        std::numeric_limits<double>::quiet_NaN();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    const auto &observed = vrrecorder::native::testing::SessionConfig();
+    CHECK(observed.source_pixel_format == VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+    CHECK(observed.estimated_source_fps == 30.0);
+
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool RejectsTruncatedOrInvalidExtendedSessionConfig()
 {
     EventLog log;
@@ -320,9 +351,12 @@ bool RejectsTruncatedOrInvalidExtendedSessionConfig()
     auto config = ValidConfig();
     config.struct_size = 49;
     CHECK(rejected(config));
-    config = ValidConfig();
-    config.struct_size = sizeof(config) - 1;
-    CHECK(rejected(config));
+    for (std::uint32_t struct_size = 161; struct_size < sizeof(config);
+         ++struct_size) {
+        config = ValidConfig();
+        config.struct_size = struct_size;
+        CHECK(rejected(config));
+    }
 
     config = ValidConfig();
     config.width = 1919;
@@ -380,6 +414,32 @@ bool RejectsTruncatedOrInvalidExtendedSessionConfig()
     CHECK(rejected(config));
     config = ValidConfig();
     config.reserved_v1 = 1;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.source_pixel_format = 0;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.source_pixel_format = UINT32_MAX;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.reserved_v2 = 1;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.estimated_source_fps = 0.0;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.estimated_source_fps = -1.0;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.estimated_source_fps =
+        std::numeric_limits<double>::quiet_NaN();
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.estimated_source_fps =
+        std::numeric_limits<double>::infinity();
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.estimated_source_fps = 1000.1;
     CHECK(rejected(config));
     return true;
 }
@@ -773,6 +833,7 @@ int main()
         !LegacySessionConfigDefaultsToSoftwareEncoder() ||
         !FullSessionConfigCrossesTheBackendBoundaryExactly() ||
         !LegacySessionConfigsReceiveDeterministicMediaDefaults() ||
+        !LegacyMediaSessionConfigDefaultsSourceFormat() ||
         !RejectsTruncatedOrInvalidExtendedSessionConfig() ||
         !UpdatesStableLayoutWithoutChangingTheOutputCanvas() ||
         !RejectsInvalidRuntimeLayoutAbiInputs() ||

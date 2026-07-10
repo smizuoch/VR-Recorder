@@ -39,6 +39,8 @@ public:
               config.spout_adapter_luid,
               config.encoder_adapter_luid,
               config.gpu_identity_utf8,
+              config.source_pixel_format,
+              config.estimated_source_fps,
           },
           video_layout_ {
               sizeof(vrrec_video_layout_v1),

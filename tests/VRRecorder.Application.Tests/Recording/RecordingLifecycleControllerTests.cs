@@ -1157,6 +1157,12 @@ public sealed class RecordingLifecycleControllerTests
     {
         public int CallCount { get; private set; }
 
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task<StableVideoSignal> WaitForStableSignalAsync(
             TimeSpan timeout,
             CancellationToken cancellationToken)
@@ -1169,6 +1175,12 @@ public sealed class RecordingLifecycleControllerTests
     private sealed class RetryVideoSignalGateway : IVideoSignalGateway
     {
         public int CallCount { get; private set; }
+
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
 
         public Task<StableVideoSignal> WaitForStableSignalAsync(
             TimeSpan timeout,

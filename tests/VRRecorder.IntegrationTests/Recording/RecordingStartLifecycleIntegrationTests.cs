@@ -474,6 +474,12 @@ public sealed class RecordingStartLifecycleIntegrationTests
         private readonly TaskCompletionSource<StableVideoSignal> _signal = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task<StableVideoSignal> WaitForStableSignalAsync(
             TimeSpan timeout,
             CancellationToken cancellationToken)
@@ -521,12 +527,12 @@ public sealed class RecordingStartLifecycleIntegrationTests
         public List<EncoderKind> ProbedEncoders { get; } = [];
 
         public Task<EncoderProbeResult> ProbeAsync(
-            EncoderKind encoder,
+            EncoderProbeRequest request,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ProbedEncoders.Add(encoder);
-            return Task.FromResult(encoder == EncoderKind.Nvenc
+            ProbedEncoders.Add(request.Encoder);
+            return Task.FromResult(request.Encoder == EncoderKind.Nvenc
                 ? EncoderProbeResult.Failed
                 : EncoderProbeResult.PacketProduced);
         }
