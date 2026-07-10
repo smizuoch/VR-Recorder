@@ -29,6 +29,9 @@
     <system:String x:Key="Legal_BundleIdentity_Label">Legal Bundle identity</system:String>
     <system:String x:Key="Legal_BundleIdentity_AccessibleName">Authenticated Legal Bundle identity</system:String>
     <system:String x:Key="Legal_BundleIdentity_Format">Legal Bundle identity: {0}</system:String>
+    <system:String x:Key="Legal_ManifestSha256_Label">Manifest SHA-256</system:String>
+    <system:String x:Key="Legal_ManifestSha256_AccessibleName">Authenticated manifest SHA-256</system:String>
+    <system:String x:Key="Legal_ManifestSha256_Format">Manifest SHA-256: {0}</system:String>
     <system:String x:Key="Legal_NoAffiliation">This product is not official, affiliated with, sponsored by, or endorsed by Google, VRChat, Valve, or any other third party.</system:String>
     <system:String x:Key="Legal_State_Loading">Verifying the offline Legal Bundle</system:String>
     <system:String x:Key="Legal_State_ComplianceFault">Legal information is unavailable because the authenticated bundle is missing, invalid, or changed. Repair or reinstall VR-Recorder.</system:String>
@@ -54,10 +57,24 @@
     <system:String x:Key="Legal_Detail_Name_Format">Name: {0}</system:String>
     <system:String x:Key="Legal_Detail_Version_Format">Version: {0}</system:String>
     <system:String x:Key="Legal_Detail_License_Format">License: {0}</system:String>
+    <system:String x:Key="Legal_Detail_Copyright_Format">Copyright: {0}</system:String>
     <system:String x:Key="Legal_Detail_Usage_Format">Usage: {0}</system:String>
     <system:String x:Key="Legal_Detail_Linkage_Format">Linkage: {0}</system:String>
     <system:String x:Key="Legal_Detail_Modified_Format">Modified: {0}</system:String>
     <system:String x:Key="Legal_Detail_Source_Format">Source information: {0}</system:String>
     <system:String x:Key="Legal_Modified_Yes">Yes</system:String>
     <system:String x:Key="Legal_Modified_No">No</system:String>
+    <system:String x:Key="Legal_Documents_Header">Legal documents</system:String>
+    <system:String x:Key="Legal_DocumentList_AccessibleName">Authenticated legal document list</system:String>
+    <system:String x:Key="Legal_DocumentList_Tooltip">Choose a license, notice, copyright, attribution, or asset manifest to read offline</system:String>
+    <system:String x:Key="Legal_DocumentKind_License">License</system:String>
+    <system:String x:Key="Legal_DocumentKind_Notice">Notice</system:String>
+    <system:String x:Key="Legal_DocumentKind_Copyright">Copyright</system:String>
+    <system:String x:Key="Legal_DocumentKind_Attribution">Attribution</system:String>
+    <system:String x:Key="Legal_DocumentKind_AssetManifest">Asset manifest</system:String>
+    <system:String x:Key="Legal_DocumentText_Heading">Legal document</system:String>
+    <system:String x:Key="Legal_DocumentText_HeadingFormat">{0} document</system:String>
+    <system:String x:Key="Legal_DocumentText_AccessibleName">Authenticated legal document</system:String>
+    <system:String x:Key="Legal_DocumentText_AccessibleNameFormat">Authenticated {0} document</system:String>
+    <system:String x:Key="Legal_DocumentText_Tooltip">Read the complete authenticated legal document offline</system:String>
 </ResourceDictionary>

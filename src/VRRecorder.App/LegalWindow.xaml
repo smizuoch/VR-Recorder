@@ -40,6 +40,9 @@
                 <TextBlock x:Name="BundleIdentityText"
                            Text="{DynamicResource Legal_BundleIdentity_Label}"
                            TextWrapping="Wrap" />
+                <TextBlock x:Name="ManifestSha256Text"
+                           Text="{DynamicResource Legal_ManifestSha256_Label}"
+                           TextWrapping="Wrap" />
                 <TextBlock Text="{DynamicResource Legal_NoAffiliation}"
                            Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                            TextWrapping="Wrap" />
@@ -69,22 +72,23 @@
                         Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
                 <TextBlock x:Name="ComponentDetailText"
                            TextWrapping="Wrap" />
-                <Button x:Name="ShowLicenseButton"
-                        Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
-                        MinHeight="{StaticResource Interaction.MinimumTarget}"
-                        MinWidth="{StaticResource Interaction.MinimumTarget}"
-                        HorizontalAlignment="Left"
-                        Content="{DynamicResource Legal_ShowLicense_Label}"
-                        AutomationProperties.Name="{DynamicResource Legal_ShowLicense_AccessibleName}"
-                        AutomationProperties.HelpText="{DynamicResource Legal_ShowLicense_Tooltip}"
-                        ToolTip="{DynamicResource Legal_ShowLicense_Tooltip}"
-                        IsEnabled="False"
-                        Click="OnShowLicenseClick" />
-                <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                          Header="{DynamicResource Legal_Documents_Header}">
+                    <ListBox x:Name="LegalDocumentList"
+                             MinHeight="120"
+                             DisplayMemberPath="Label"
+                             SelectionChanged="OnDocumentSelectionChanged"
+                             AutomationProperties.Name="{DynamicResource Legal_DocumentList_AccessibleName}"
+                             AutomationProperties.HelpText="{DynamicResource Legal_DocumentList_Tooltip}"
+                             ToolTip="{DynamicResource Legal_DocumentList_Tooltip}"
+                             IsEnabled="False" />
+                </GroupBox>
+                <TextBlock x:Name="LegalDocumentHeadingText"
+                           Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                            FontWeight="SemiBold"
-                           Text="{DynamicResource Legal_FullLicense}"
+                           Text="{DynamicResource Legal_DocumentText_Heading}"
                            TextWrapping="Wrap" />
-                <TextBox x:Name="FullLicenseText"
+                <TextBox x:Name="FullDocumentText"
                          Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                          MinHeight="192"
                          IsReadOnly="True"
@@ -92,9 +96,9 @@
                          TextWrapping="NoWrap"
                          VerticalScrollBarVisibility="Auto"
                          HorizontalScrollBarVisibility="Auto"
-                         AutomationProperties.Name="{DynamicResource Legal_FullLicense_AccessibleName}"
-                         AutomationProperties.HelpText="{DynamicResource Legal_FullLicense_Tooltip}"
-                         ToolTip="{DynamicResource Legal_FullLicense_Tooltip}" />
+                         AutomationProperties.Name="{DynamicResource Legal_DocumentText_AccessibleName}"
+                         AutomationProperties.HelpText="{DynamicResource Legal_DocumentText_Tooltip}"
+                         ToolTip="{DynamicResource Legal_DocumentText_Tooltip}" />
             </StackPanel>
 
             <WrapPanel Grid.Row="5"

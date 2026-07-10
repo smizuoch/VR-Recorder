@@ -49,12 +49,20 @@ public partial class LegalWindow : Window
                 CancellationToken.None));
     }
 
-    private async void OnShowLicenseClick(
+    private async void OnDocumentSelectionChanged(
         object sender,
-        RoutedEventArgs e)
+        SelectionChangedEventArgs e)
     {
+        if (_applyingState ||
+            LegalDocumentList.SelectedItem is not LegalDocumentListItem selected)
+        {
+            return;
+        }
+
         await RunLegalOperationAsync(() =>
-            _controller.ShowLicenseAsync(CancellationToken.None));
+            _controller.ShowDocumentAsync(
+                selected.Reference,
+                CancellationToken.None));
     }
 
     private async void OnOpenLicenseFolderClick(
@@ -93,42 +101,68 @@ public partial class LegalWindow : Window
     private void ApplyState()
     {
         var state = _controller.State;
+        var available = state.View != DesktopLegalView.Unavailable;
         _applyingState = true;
         try
         {
-            ApplyAccessibleText(ProductVersionText, AccessibleText
-                .FromLocalizedFormat(
-                    CultureInfo.CurrentCulture,
-                    Resolve("Legal_ProductVersion_Format"),
-                    state.ProductVersion ?? string.Empty));
-            ApplyAccessibleText(BundleIdentityText, AccessibleText
-                .FromLocalizedFormat(
-                    CultureInfo.CurrentCulture,
-                    Resolve("Legal_BundleIdentity_Format"),
-                    state.BundleId ?? string.Empty));
-            var items = state.Components
+            ApplyAccessibleText(ProductVersionText, CreateIdentityText(
+                "Legal_ProductVersion_Format",
+                available ? state.ProductVersion : null));
+            ApplyAccessibleText(BundleIdentityText, CreateIdentityText(
+                "Legal_BundleIdentity_Format",
+                available ? state.BundleId : null));
+            ApplyAccessibleText(ManifestSha256Text, CreateIdentityText(
+                "Legal_ManifestSha256_Format",
+                available ? state.ManifestSha256 : null));
+            var components = available
+                ? state.Components
+                : Array.Empty<LegalCatalogComponent>();
+            var items = components
                 .OrderBy(item => item.Id, StringComparer.Ordinal)
                 .Select(item => new LegalListItem(
                     item,
                     $"{item.DisplayName} — {item.Version} — {item.LicenseExpression}"))
                 .ToArray();
             LegalComponentList.ItemsSource = items;
-            LegalComponentList.SelectedItem = state.SelectedComponent is null
+            var selectedComponent = available
+                ? state.SelectedComponent
+                : null;
+            LegalComponentList.SelectedItem = selectedComponent is null
                 ? null
                 : items.SingleOrDefault(item => string.Equals(
                     item.Component.Id,
-                    state.SelectedComponent.Id,
+                    selectedComponent.Id,
                     StringComparison.Ordinal));
             ApplyAccessibleText(ComponentDetailText,
                 AccessibleText.FromVisibleText(
-                    state.SelectedComponent is null
+                    selectedComponent is null
                         ? string.Empty
-                        : FormatDetail(state.SelectedComponent)));
-            FullLicenseText.Text = state.FullLicenseText ?? string.Empty;
-            var available = state.View != DesktopLegalView.Unavailable;
+                        : FormatDetail(selectedComponent)));
+
+            var documentItems = selectedComponent is null
+                ? Array.Empty<LegalDocumentListItem>()
+                : selectedComponent.LegalDocuments
+                    .OrderBy(reference => reference.Kind)
+                    .ThenBy(
+                        reference => reference.RelativePath,
+                        StringComparer.Ordinal)
+                    .Select(reference => new LegalDocumentListItem(
+                        reference,
+                        FormatDocumentLabel(reference)))
+                    .ToArray();
+            LegalDocumentList.ItemsSource = documentItems;
+            var selectedDocument = available ? state.SelectedDocument : null;
+            LegalDocumentList.SelectedItem = selectedDocument is null
+                ? null
+                : documentItems.SingleOrDefault(item =>
+                    item.Reference == selectedDocument);
+            ApplyDocumentHeading(selectedDocument);
+            var fullDocumentText = available ? state.FullDocumentText : null;
+            FullDocumentText.Text = fullDocumentText ?? string.Empty;
+
             LegalComponentList.IsEnabled = available;
-            ShowLicenseButton.IsEnabled =
-                available && state.SelectedComponent is not null;
+            LegalDocumentList.IsEnabled =
+                available && selectedComponent is not null;
             OpenLicenseFolderButton.IsEnabled = available;
             LegalUnavailableText.Visibility = available
                 ? Visibility.Collapsed
@@ -154,12 +188,46 @@ public partial class LegalWindow : Window
         AutomationProperties.SetName(target, semantic.AutomationName);
     }
 
+    private AccessibleText CreateIdentityText(
+        string formatResourceKey,
+        string? value)
+    {
+        return string.IsNullOrEmpty(value)
+            ? AccessibleText.FromVisibleText(string.Empty)
+            : AccessibleText.FromLocalizedFormat(
+                CultureInfo.CurrentCulture,
+                Resolve(formatResourceKey),
+                value);
+    }
+
+    private void ApplyDocumentHeading(LegalDocumentReference? reference)
+    {
+        var kind = reference is null
+            ? null
+            : Resolve(DocumentKindResourceKey(reference.Kind));
+        var heading = kind is null
+            ? AccessibleText.FromVisibleText(
+                Resolve("Legal_DocumentText_Heading"))
+            : AccessibleText.FromLocalizedFormat(
+                CultureInfo.CurrentCulture,
+                Resolve("Legal_DocumentText_HeadingFormat"),
+                kind);
+        ApplyAccessibleText(LegalDocumentHeadingText, heading);
+        var documentName = kind is null
+            ? Resolve("Legal_DocumentText_AccessibleName")
+            : Format("Legal_DocumentText_AccessibleNameFormat", kind);
+        AutomationProperties.SetName(FullDocumentText, documentName);
+    }
+
     private string FormatDetail(LegalCatalogComponent component) =>
         string.Join(
             Environment.NewLine,
             Format("Legal_Detail_Name_Format", component.DisplayName),
             Format("Legal_Detail_Version_Format", component.Version),
             Format("Legal_Detail_License_Format", component.LicenseExpression),
+            Format(
+                "Legal_Detail_Copyright_Format",
+                component.CopyrightNotice),
             Format("Legal_Detail_Usage_Format", component.Usage),
             Format("Legal_Detail_Linkage_Format", component.Linkage),
             Format(
@@ -168,6 +236,25 @@ public partial class LegalWindow : Window
                     ? "Legal_Modified_Yes"
                     : "Legal_Modified_No")),
             Format("Legal_Detail_Source_Format", component.SourceInformation));
+
+    private string FormatDocumentLabel(LegalDocumentReference reference) =>
+        $"{Resolve(DocumentKindResourceKey(reference.Kind))} — " +
+        reference.RelativePath;
+
+    private static string DocumentKindResourceKey(LegalDocumentKind kind) =>
+        kind switch
+        {
+            LegalDocumentKind.License => "Legal_DocumentKind_License",
+            LegalDocumentKind.Notice => "Legal_DocumentKind_Notice",
+            LegalDocumentKind.Copyright => "Legal_DocumentKind_Copyright",
+            LegalDocumentKind.Attribution => "Legal_DocumentKind_Attribution",
+            LegalDocumentKind.AssetManifest =>
+                "Legal_DocumentKind_AssetManifest",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(kind),
+                kind,
+                "Unsupported legal document kind."),
+        };
 
     private string Format(string resourceKey, object value) =>
         string.Format(
@@ -182,5 +269,9 @@ public partial class LegalWindow : Window
 
     private sealed record LegalListItem(
         LegalCatalogComponent Component,
+        string Label);
+
+    private sealed record LegalDocumentListItem(
+        LegalDocumentReference Reference,
         string Label);
 }

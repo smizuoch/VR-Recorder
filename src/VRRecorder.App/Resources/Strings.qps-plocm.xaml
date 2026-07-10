@@ -29,6 +29,9 @@
     <system:String x:Key="Legal_BundleIdentity_Label">⟦Lëgál Bündlë ïdëntïty · Lëgál Bündlë ïdëntïty⟧</system:String>
     <system:String x:Key="Legal_BundleIdentity_AccessibleName">⟦Áüthëntïcátëd Lëgál Bündlë ïdëntïty · Áüthëntïcátëd Lëgál Bündlë ïdëntïty⟧</system:String>
     <system:String x:Key="Legal_BundleIdentity_Format">⟦Lëgál Bündlë ïdëntïty: {0} · Lëgál Bündlë ïdëntïty: {0}⟧</system:String>
+    <system:String x:Key="Legal_ManifestSha256_Label">⟦Mánïfëst SHÁ-256 · Mánïfëst SHÁ-256⟧</system:String>
+    <system:String x:Key="Legal_ManifestSha256_AccessibleName">⟦Áüthëntïcátëd mánïfëst SHÁ-256 · Áüthëntïcátëd mánïfëst SHÁ-256⟧</system:String>
+    <system:String x:Key="Legal_ManifestSha256_Format">⟦Mánïfëst SHÁ-256: {0} · Mánïfëst SHÁ-256: {0}⟧</system:String>
     <system:String x:Key="Legal_NoAffiliation">⟦Thïs prödüct ïs nöt öffïcïál, áffïlïátëd wïth, spönsörëd by, ör ëndörsëd by Gööglë, VRChát, Válvë, ör ány öthër thïrd párty. · Thïs prödüct ïs nöt öffïcïál, áffïlïátëd wïth, spönsörëd by, ör ëndörsëd by Gööglë, VRChát, Válvë, ör ány öthër thïrd párty.⟧</system:String>
     <system:String x:Key="Legal_State_Loading">⟦Vërïfyïng thë öfflïnë Lëgál Bündlë · Vërïfyïng thë öfflïnë Lëgál Bündlë⟧</system:String>
     <system:String x:Key="Legal_State_ComplianceFault">⟦Lëgál ïnförmátïön ïs ünáváïláblë bëcáüsë thë áüthëntïcátëd bündlë ïs mïssïng, ïnválïd, ör chángëd. Rëpáïr ör rëïnstáll VR-Rëcördër. · Lëgál ïnförmátïön ïs ünáváïláblë bëcáüsë thë áüthëntïcátëd bündlë ïs mïssïng, ïnválïd, ör chángëd. Rëpáïr ör rëïnstáll VR-Rëcördër.⟧</system:String>
@@ -54,10 +57,24 @@
     <system:String x:Key="Legal_Detail_Name_Format">⟦Námë: {0} · Námë: {0}⟧</system:String>
     <system:String x:Key="Legal_Detail_Version_Format">⟦Vërsïön: {0} · Vërsïön: {0}⟧</system:String>
     <system:String x:Key="Legal_Detail_License_Format">⟦Lïcënsë: {0} · Lïcënsë: {0}⟧</system:String>
+    <system:String x:Key="Legal_Detail_Copyright_Format">⟦Cöpyrïght: {0} · Cöpyrïght: {0}⟧</system:String>
     <system:String x:Key="Legal_Detail_Usage_Format">⟦Üságë: {0} · Üságë: {0}⟧</system:String>
     <system:String x:Key="Legal_Detail_Linkage_Format">⟦Lïnkágë: {0} · Lïnkágë: {0}⟧</system:String>
     <system:String x:Key="Legal_Detail_Modified_Format">⟦Mödïfïëd: {0} · Mödïfïëd: {0}⟧</system:String>
     <system:String x:Key="Legal_Detail_Source_Format">⟦Söürcë ïnförmátïön: {0} · Söürcë ïnförmátïön: {0}⟧</system:String>
     <system:String x:Key="Legal_Modified_Yes">⟦Yës · Yës⟧</system:String>
     <system:String x:Key="Legal_Modified_No">⟦Nö · Nö⟧</system:String>
+    <system:String x:Key="Legal_Documents_Header">⟦Lëgál döcümënts · Lëgál döcümënts⟧</system:String>
+    <system:String x:Key="Legal_DocumentList_AccessibleName">⟦Áüthëntïcátëd lëgál döcümënt lïst · Áüthëntïcátëd lëgál döcümënt lïst⟧</system:String>
+    <system:String x:Key="Legal_DocumentList_Tooltip">⟦Chöösë á lïcënsë, nötïcë, cöpyrïght, áttrïbütïön, ör ássët mánïfëst tö rëád öfflïnë · Chöösë á lïcënsë, nötïcë, cöpyrïght, áttrïbütïön, ör ássët mánïfëst tö rëád öfflïnë⟧</system:String>
+    <system:String x:Key="Legal_DocumentKind_License">⟦Lïcënsë · Lïcënsë⟧</system:String>
+    <system:String x:Key="Legal_DocumentKind_Notice">⟦Nötïcë · Nötïcë⟧</system:String>
+    <system:String x:Key="Legal_DocumentKind_Copyright">⟦Cöpyrïght · Cöpyrïght⟧</system:String>
+    <system:String x:Key="Legal_DocumentKind_Attribution">⟦Áttrïbütïön · Áttrïbütïön⟧</system:String>
+    <system:String x:Key="Legal_DocumentKind_AssetManifest">⟦Ássët mánïfëst · Ássët mánïfëst⟧</system:String>
+    <system:String x:Key="Legal_DocumentText_Heading">⟦Lëgál döcümënt · Lëgál döcümënt⟧</system:String>
+    <system:String x:Key="Legal_DocumentText_HeadingFormat">⟦{0} döcümënt · {0} döcümënt⟧</system:String>
+    <system:String x:Key="Legal_DocumentText_AccessibleName">⟦Áüthëntïcátëd lëgál döcümënt · Áüthëntïcátëd lëgál döcümënt⟧</system:String>
+    <system:String x:Key="Legal_DocumentText_AccessibleNameFormat">⟦Áüthëntïcátëd {0} döcümënt · Áüthëntïcátëd {0} döcümënt⟧</system:String>
+    <system:String x:Key="Legal_DocumentText_Tooltip">⟦Rëád thë cömplëtë áüthëntïcátëd lëgál döcümënt öfflïnë · Rëád thë cömplëtë áüthëntïcátëd lëgál döcümënt öfflïnë⟧</system:String>
 </ResourceDictionary>

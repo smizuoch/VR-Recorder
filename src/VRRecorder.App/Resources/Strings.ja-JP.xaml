@@ -29,6 +29,9 @@
     <system:String x:Key="Legal_BundleIdentity_Label">Legal Bundle ID</system:String>
     <system:String x:Key="Legal_BundleIdentity_AccessibleName">認証済みLegal Bundle ID</system:String>
     <system:String x:Key="Legal_BundleIdentity_Format">Legal Bundle ID: {0}</system:String>
+    <system:String x:Key="Legal_ManifestSha256_Label">Manifest SHA-256</system:String>
+    <system:String x:Key="Legal_ManifestSha256_AccessibleName">認証済みマニフェスト SHA-256</system:String>
+    <system:String x:Key="Legal_ManifestSha256_Format">Manifest SHA-256: {0}</system:String>
     <system:String x:Key="Legal_NoAffiliation">本製品はGoogle、VRChat、Valveその他の第三者による公式・提携・承認製品ではありません。</system:String>
     <system:String x:Key="Legal_State_Loading">オフライン法的情報を検証中です</system:String>
     <system:String x:Key="Legal_State_ComplianceFault">認証済み法的情報がないか、無効または変更されたため表示できません。VR-Recorderを修復または再インストールしてください。</system:String>
@@ -54,10 +57,24 @@
     <system:String x:Key="Legal_Detail_Name_Format">名称: {0}</system:String>
     <system:String x:Key="Legal_Detail_Version_Format">バージョン: {0}</system:String>
     <system:String x:Key="Legal_Detail_License_Format">ライセンス: {0}</system:String>
+    <system:String x:Key="Legal_Detail_Copyright_Format">著作権: {0}</system:String>
     <system:String x:Key="Legal_Detail_Usage_Format">用途: {0}</system:String>
     <system:String x:Key="Legal_Detail_Linkage_Format">リンク形態: {0}</system:String>
     <system:String x:Key="Legal_Detail_Modified_Format">改変: {0}</system:String>
     <system:String x:Key="Legal_Detail_Source_Format">ソース情報: {0}</system:String>
     <system:String x:Key="Legal_Modified_Yes">あり</system:String>
     <system:String x:Key="Legal_Modified_No">なし</system:String>
+    <system:String x:Key="Legal_Documents_Header">法的文書</system:String>
+    <system:String x:Key="Legal_DocumentList_AccessibleName">認証済み法的文書一覧</system:String>
+    <system:String x:Key="Legal_DocumentList_Tooltip">ライセンス、通知、著作権、帰属表示、アセットマニフェストを選択してオフラインで読みます</system:String>
+    <system:String x:Key="Legal_DocumentKind_License">ライセンス</system:String>
+    <system:String x:Key="Legal_DocumentKind_Notice">通知</system:String>
+    <system:String x:Key="Legal_DocumentKind_Copyright">著作権</system:String>
+    <system:String x:Key="Legal_DocumentKind_Attribution">帰属表示</system:String>
+    <system:String x:Key="Legal_DocumentKind_AssetManifest">アセットマニフェスト</system:String>
+    <system:String x:Key="Legal_DocumentText_Heading">法的文書</system:String>
+    <system:String x:Key="Legal_DocumentText_HeadingFormat">{0}文書</system:String>
+    <system:String x:Key="Legal_DocumentText_AccessibleName">認証済み法的文書</system:String>
+    <system:String x:Key="Legal_DocumentText_AccessibleNameFormat">認証済み{0}文書</system:String>
+    <system:String x:Key="Legal_DocumentText_Tooltip">認証済み法的文書全文をオフラインで読みます</system:String>
 </ResourceDictionary>
