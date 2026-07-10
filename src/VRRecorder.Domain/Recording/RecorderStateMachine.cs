@@ -7,6 +7,7 @@ public static class RecorderStateMachine
         {
             (RecorderState.Ready, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.StartRequested) => RecorderState.Arming,
+            (RecorderState.Arming, RecorderTrigger.SignalTimeout) => RecorderState.NoSignal,
             _ => throw new InvalidOperationException(
                 $"Transition from {state} by {trigger} is not defined."),
         };
