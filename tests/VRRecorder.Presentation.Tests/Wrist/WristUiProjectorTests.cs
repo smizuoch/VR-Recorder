@@ -54,7 +54,7 @@ public sealed class WristUiProjectorTests
         var snapshot = projector.Project(status);
 
         Assert.DoesNotContain(snapshot.Actions, action =>
-            action.Command == UiCommandId.StartRecording);
+            action.Command == UiCommandId.ToggleRecording);
         var retry = Assert.Single(snapshot.Actions);
         Assert.Equal(UiCommandId.Retry, retry.Command);
         Assert.Equal(UiComponentRole.FilledTonalButton, retry.ComponentRole);
@@ -77,7 +77,7 @@ public sealed class WristUiProjectorTests
         var snapshot = projector.Project(status);
 
         Assert.DoesNotContain(snapshot.Actions, action =>
-            action.Command == UiCommandId.StartRecording);
+            action.Command == UiCommandId.ToggleRecording);
     }
 
     [Theory]
@@ -97,7 +97,7 @@ public sealed class WristUiProjectorTests
 
         var action = Assert.Single(snapshot.Actions, item =>
             item.SemanticId == "recording.stop");
-        Assert.Equal(UiCommandId.StopRecording, action.Command);
+        Assert.Equal(UiCommandId.ToggleRecording, action.Command);
         Assert.True(action.IsEnabled);
         Assert.Equal("STOP", action.VisibleLabel.Value);
         Assert.Equal("Stop recording", action.AccessibleName.Value);
@@ -119,7 +119,7 @@ public sealed class WristUiProjectorTests
 
         var action = Assert.Single(snapshot.Actions, item =>
             item.SemanticId == "recording.start");
-        Assert.Equal(UiCommandId.StartRecording, action.Command);
+        Assert.Equal(UiCommandId.ToggleRecording, action.Command);
         Assert.Equal("recording.start", action.IconSemanticId);
         Assert.Equal(
             UiComponentRole.LargeFilledIconButton,
