@@ -13,7 +13,7 @@
 - [ ] cancellationでreceive/retryを即時停止する
 - [ ] malformed packet、wrong source、stale echoを確認扱いしない
 - [x] 複数候補またはstaleな選択IDでは明示的target選択を要求する
-- [ ] OSCQueryで複数VRChat候補を発見し、選択前は送信しない
+- [x] OSCQueryで複数VRChat候補を発見し、選択前は送信しない
 
 ## English
 
@@ -28,4 +28,4 @@
 - [ ] Stop receive/retry promptly on cancellation
 - [ ] Reject malformed packets, wrong sources, and stale echoes as confirmations
 - [x] Require explicit target selection for multiple candidates or a stale selected service ID
-- [ ] Discover multiple VRChat targets with OSCQuery and send nothing before selection
+- [x] Discover multiple VRChat targets with OSCQuery and send nothing before selection

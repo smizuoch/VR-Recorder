@@ -11,7 +11,7 @@
 - [x] native ABIのdigital stateをmanaged async streamへ変換しcancellationでdestroyする
 - [ ] OpenVR `SetActionManifestPath`へinstall directory内のabsolute pathを登録する
 - [ ] 実SteamVR runtimeでbinding読込みとcontroller再割当を検証する
-- [ ] desktop click／keyboard／wrist rayと同じapplication dispatcherを実行する
+- [x] desktop click／keyboard／wrist rayと同じapplication dispatcherを実行する
 
 ## English
 
@@ -24,4 +24,4 @@
 - [x] Convert native digital state into a managed async stream and destroy it on cancellation
 - [ ] Register an install-directory absolute path through OpenVR `SetActionManifestPath`
 - [ ] Verify binding load and controller rebinding with a real SteamVR runtime
-- [ ] Execute the same application dispatcher used by desktop click, keyboard, and wrist ray
+- [x] Execute the same application dispatcher used by desktop click, keyboard, and wrist ray
