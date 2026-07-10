@@ -1,3 +1,5 @@
 namespace VRRecorder.Domain.Camera;
 
-public sealed record CameraRestorePlan(bool? Streaming);
+public sealed record CameraRestorePlan(
+    bool? Streaming,
+    CameraMode? Mode);
