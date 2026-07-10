@@ -259,6 +259,8 @@ public sealed class ReadmeBilingualParityValidatorTests
             ## 日本語
             <!-- readme-release: version=1 -->
 
+            `<inline-code>` is content, not a fenced-code opener.
+
             ```markdown
             ## English
             <!-- readme-parity: fake -->

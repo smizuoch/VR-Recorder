@@ -1,0 +1,51 @@
+name: Repository Compliance
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/repository-compliance.yml
+      - README.md
+      - ui-template/README.md
+      - legal-template/README.md
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - src/VRRecorder.Compliance/**
+      - tests/VRRecorder.Compliance.Tests/**
+  push:
+    paths:
+      - .github/workflows/repository-compliance.yml
+      - README.md
+      - ui-template/README.md
+      - legal-template/README.md
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - src/VRRecorder.Compliance/**
+      - tests/VRRecorder.Compliance.Tests/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readme-parity:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact revision
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          $server = $env:GITHUB_SERVER_URL -replace '^https://', "https://x-access-token:$env:GH_TOKEN@"
+          git remote add origin "$server/$env:GITHUB_REPOSITORY.git"
+          git -c protocol.version=2 fetch --no-tags --prune --depth=1 origin "$env:GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+
+      - name: Restore locked compliance graph
+        run: dotnet restore tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --locked-mode
+
+      - name: Verify repository and README parity
+        run: dotnet test tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --configuration Release --no-restore

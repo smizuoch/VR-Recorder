@@ -4,6 +4,9 @@
 
 このフォルダーは、基本設計書 v0.3 の第三者ライセンス・権利保護要件を実装へ移すための**設計時雛形**です。現時点のファイルはrelease通知ではありません。実際の配布物では、固定したversion/commit、最終publish output、完全なtransitive dependency、実link/load情報、Material Symbols allowlist、権利台帳から再生成してください。
 
+<!-- readme-release: design-version=0.3; readiness=design-template; distributable=false -->
+
+<!-- readme-parity: contents -->
 ### 同梱物
 
 - `third-party-registry.example.yml`: component単位の正規台帳
@@ -36,6 +39,9 @@ schema v3ではcomponent catalogがcomponent固有copyrightと`license`／`notic
 
 This folder is a **design-time template** for implementing the third-party licensing and rights-protection requirements in Basic Design v0.3. These files are not production release notices. A real release must regenerate them from pinned versions/commits, the final publish output, the complete transitive dependency graph, actual link/load data, the Material Symbols allowlist, and the approved rights ledger.
 
+<!-- readme-release: distributable=false; readiness=design-template; design-version=0.3 -->
+
+<!-- readme-parity: contents -->
 ### Contents
 
 - `third-party-registry.example.yml`: Canonical component registry

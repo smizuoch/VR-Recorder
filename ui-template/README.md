@@ -4,6 +4,8 @@
 
 このフォルダーには、Material Symbolsの固定取得、Material Design 3適合、localizationを実装するための設計時exampleがあります。`<...>` placeholderはrelease前に全て固定値へ置換し、残存時はCIを失敗させます。
 
+<!-- readme-release: design-version=0.3; readiness=design-template; distributable=false -->
+
 - `material-symbols-manifest.example.yml`: 使用icon、公式upstream commit/path/hash、改変、RTL、accessible labelのallowlist
 - `design-tokens.example.json`: desktop／wrist共通のM3 semantic token契約。具体theme値はrelease時に生成・固定
 - `m3-source-inventory.example.yml`: 公式M3 navigationの全項目を収集し、追加・削除・rename・未分類を検出する台帳
@@ -17,6 +19,8 @@
 ## English
 
 This folder contains design-time examples for pinned Material Symbols acquisition, Material Design 3 conformance, and localization. Every `<...>` placeholder must be replaced with a pinned release value; CI fails when any placeholder remains.
+
+<!-- readme-release: distributable=false; readiness=design-template; design-version=0.3 -->
 
 - `material-symbols-manifest.example.yml`: Allowlist for selected icons, official upstream commit/path/hash, modifications, RTL, and accessible labels
 - `design-tokens.example.json`: Shared M3 semantic-token contract for desktop and wrist surfaces; concrete theme values are generated and pinned at release time
