@@ -46,17 +46,29 @@ internal static class MaterialSymbolsAssetProvenanceValidator
             ];
         }
 
+        if (!TryGetCanonicalRepositoryRoot(
+                evidence.RepositoryRoot,
+                out var repositoryRoot))
+        {
+            return
+            [
+                Issue(
+                    "material-symbols-release-evidence-invalid",
+                    ComponentId),
+            ];
+        }
+
         var component = graph.Components.Single(component =>
             string.Equals(component.Id, ComponentId, StringComparison.Ordinal));
         var issues = new List<ComplianceIssue>();
         ValidateRightsLedger(
             component,
             manifest!,
-            evidence.RepositoryRoot,
+            repositoryRoot,
             evidence.RightsLedgerEntry,
             issues);
         await ValidateRepositoryAssetsAsync(
-                evidence.RepositoryRoot,
+                repositoryRoot,
                 manifest!.SelectedIcons,
                 issues,
                 cancellationToken)
@@ -115,7 +127,7 @@ internal static class MaterialSymbolsAssetProvenanceValidator
             entry.ProductLogoUse ||
             entry.RuntimeNetworkAllowed ||
             !entry.RedistributionApproved ||
-            string.IsNullOrWhiteSpace(entry.ApprovalId) ||
+            !IsSafeApprovalId(entry.ApprovalId) ||
             !string.Equals(
                 entry.ApprovalId,
                 component.Approval.TicketId,
@@ -267,12 +279,21 @@ internal static class MaterialSymbolsAssetProvenanceValidator
                        materialRegistrations.Length != icons.Length;
         foreach (var icon in icons)
         {
-            var mapping = mappings.SingleOrDefault(candidate =>
-                string.Equals(
-                    candidate.OutputPath,
-                    icon.OutputPath,
-                    StringComparison.Ordinal));
-            if (mapping is null ||
+            var iconMappings = mappings.Where(candidate =>
+                    string.Equals(
+                        candidate.OutputPath,
+                        icon.OutputPath,
+                        StringComparison.Ordinal))
+                .Take(2)
+                .ToArray();
+            if (iconMappings.Length != 1)
+            {
+                mismatch = true;
+                continue;
+            }
+
+            var mapping = iconMappings[0];
+            if (
                 !string.Equals(
                     mapping.RightsLedgerEntryId,
                     rightsLedger.Id,
@@ -325,6 +346,63 @@ internal static class MaterialSymbolsAssetProvenanceValidator
             issues.Add(Issue(
                 "material-symbols-staging-registration-mismatch",
                 ComponentId));
+        }
+    }
+
+    private static bool TryGetCanonicalRepositoryRoot(
+        string repositoryRoot,
+        out string canonicalRoot)
+    {
+        canonicalRoot = string.Empty;
+        if (string.IsNullOrWhiteSpace(repositoryRoot) ||
+            !Path.IsPathFullyQualified(repositoryRoot))
+        {
+            return false;
+        }
+
+        try
+        {
+            canonicalRoot = Path.TrimEndingDirectorySeparator(
+                Path.GetFullPath(repositoryRoot));
+            var suppliedRoot = Path.TrimEndingDirectorySeparator(
+                repositoryRoot);
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (!string.Equals(
+                    canonicalRoot,
+                    suppliedRoot,
+                    comparison) ||
+                !Directory.Exists(canonicalRoot))
+            {
+                return false;
+            }
+
+            for (var directory = new DirectoryInfo(canonicalRoot);
+                 directory is not null;
+                 directory = directory.Parent)
+            {
+                if (directory.LinkTarget is not null ||
+                    directory.Attributes.HasFlag(
+                        FileAttributes.ReparsePoint))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -423,6 +501,18 @@ internal static class MaterialSymbolsAssetProvenanceValidator
     private static bool ContainsPlaceholder(string value) =>
         value.Contains('<', StringComparison.Ordinal) ||
         value.Contains('>', StringComparison.Ordinal);
+
+    private static bool IsSafeApprovalId(string value) =>
+        value is { Length: > 0 and <= 128 } &&
+        IsAsciiLetterOrDigit(value[0]) &&
+        value.Skip(1).All(character =>
+            IsAsciiLetterOrDigit(character) ||
+            character is '-' or '_' or '.');
+
+    private static bool IsAsciiLetterOrDigit(char value) =>
+        value is >= 'a' and <= 'z' or
+            >= 'A' and <= 'Z' or
+            >= '0' and <= '9';
 
     private static ComplianceIssue Issue(string code, string subject) =>
         new(code, subject);
