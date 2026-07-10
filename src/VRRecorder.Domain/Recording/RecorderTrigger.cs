@@ -4,4 +4,5 @@ public enum RecorderTrigger
 {
     StartRequested,
     SignalTimeout,
+    FirstPacketCommitted,
 }
