@@ -239,12 +239,11 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                         _ => throw new InvalidOperationException(
                             $"Unknown non-start result {recording.GetType().Name}."),
                     };
-                    await RestoreCameraBestEffortAsync(
+                    await RestoreCameraAndReleaseGatewayBestEffortAsync(
                             camera,
                             lease,
-                            warningReason)
-                        .ConfigureAwait(false);
-                    await gatewayLifetime.DisposeBestEffortAsync()
+                            warningReason,
+                            gatewayLifetime)
                         .ConfigureAwait(false);
                     SetState(state);
                 }
@@ -258,16 +257,15 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             {
                 try
                 {
-                    await RestoreCameraBestEffortAsync(
+                    await RestoreCameraAndReleaseGatewayBestEffortAsync(
                             camera,
                             lease,
-                            CameraRestoreWarningReason.StartCanceled)
+                            CameraRestoreWarningReason.StartCanceled,
+                            gatewayLifetime)
                         .ConfigureAwait(false);
                 }
                 finally
                 {
-                    await gatewayLifetime.DisposeBestEffortAsync()
-                        .ConfigureAwait(false);
                     CompleteCanceledStart();
                 }
 
@@ -277,16 +275,15 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             {
                 try
                 {
-                    await RestoreCameraBestEffortAsync(
+                    await RestoreCameraAndReleaseGatewayBestEffortAsync(
                             camera,
                             lease,
-                            CameraRestoreWarningReason.StartFailed)
+                            CameraRestoreWarningReason.StartFailed,
+                            gatewayLifetime)
                         .ConfigureAwait(false);
                 }
                 finally
                 {
-                    await gatewayLifetime.DisposeBestEffortAsync()
-                        .ConfigureAwait(false);
                     SetState(RecorderState.Ready);
                 }
 
@@ -419,6 +416,17 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
         }
     }
 
+    private async Task RestoreCameraAndReleaseGatewayBestEffortAsync(
+        CameraSessionController camera,
+        CameraLease lease,
+        CameraRestoreWarningReason warningReason,
+        CameraGatewayLifetime gatewayLifetime)
+    {
+        await RestoreCameraBestEffortAsync(camera, lease, warningReason)
+            .ConfigureAwait(false);
+        await gatewayLifetime.DisposeBestEffortAsync().ConfigureAwait(false);
+    }
+
     private async Task PublishCameraRestoreWarningBestEffortAsync(
         CameraRestoreWarning warning)
     {
@@ -474,12 +482,11 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             }
 
             await owner
-                .RestoreCameraBestEffortAsync(
+                .RestoreCameraAndReleaseGatewayBestEffortAsync(
                     camera,
                     lease,
-                    CameraRestoreWarningReason.RecordingCompleted)
-                .ConfigureAwait(false);
-            await gatewayLifetime.DisposeBestEffortAsync()
+                    CameraRestoreWarningReason.RecordingCompleted,
+                    gatewayLifetime)
                 .ConfigureAwait(false);
             lock (_gate)
             {

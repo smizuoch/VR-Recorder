@@ -156,8 +156,8 @@ public sealed class RecordingStartLifecycleIntegrationTests
 
         var connected = Assert.IsType<
             VrChatCameraConnectionResolution.Connected>(result.Connection);
-        await using var gatewayLifetime = Assert.IsAssignableFrom<IAsyncDisposable>(
-            connected.Gateway);
+        Assert.Same(gatewayFactory.LastCreated, connected.Gateway);
+        Assert.Equal(0, gatewayFactory.LastCreated?.DisposeCallCount);
         var started = Assert.IsType<StartRecordingResult.Started>(result.Recording);
         Assert.Equal(backend.Session.Id, started.Handle.Id);
         Assert.Equal(RecorderState.Recording, result.State);
@@ -266,6 +266,7 @@ public sealed class RecordingStartLifecycleIntegrationTests
         Assert.Equal(1, backend.Session.StopCallCount);
         Assert.Equal(RecorderState.Ready, sessions.State);
         Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Equal(1, gatewayFactory.LastCreated?.DisposeCallCount);
         Assert.False(File.Exists(backend.Plan?.Output.TemporaryPath));
         Assert.True(File.Exists(backend.Plan?.Output.FinalPath));
         Assert.Equal(
@@ -383,10 +384,46 @@ public sealed class RecordingStartLifecycleIntegrationTests
     {
         public List<VrChatInstanceCandidate> CreatedFor { get; } = [];
 
+        public DisposalTrackingGateway? LastCreated { get; private set; }
+
         public IVrChatCameraGateway Create(VrChatInstanceCandidate candidate)
         {
             CreatedFor.Add(candidate);
-            return inner.Create(candidate);
+            LastCreated = new DisposalTrackingGateway(inner.Create(candidate));
+            return LastCreated;
+        }
+    }
+
+    private sealed class DisposalTrackingGateway(IVrChatCameraGateway inner)
+        : IVrChatCameraGateway, IAsyncDisposable
+    {
+        public int DisposeCallCount { get; private set; }
+
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            inner.ReadSnapshotAsync(cancellationToken);
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken) =>
+            inner.SetModeAsync(mode, cancellationToken);
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) =>
+            inner.SetStreamingAsync(enabled, cancellationToken);
+
+        public async ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            if (inner is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+            }
+            else if (inner is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 
