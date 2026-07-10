@@ -1,11 +1,14 @@
 #include "fake_media_backend.hpp"
 
 #include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 #include "media_backend.hpp"
+#include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
 namespace vrrecorder::native {
@@ -323,6 +326,95 @@ private:
 
 FakeSteamVrInputBackend *FakeSteamVrInputBackend::active_ = nullptr;
 
+struct FakeSpoutSourceState {
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::vector<testing::TestSpoutSenderSnapshot> snapshot;
+    std::deque<testing::TestSpoutFrame> frames;
+    bool block_next_poll = false;
+    bool poll_entered = false;
+    bool release_poll = false;
+    std::uint32_t active_source_count = 0;
+    std::uint32_t destroy_count = 0;
+};
+
+FakeSpoutSourceState fake_spout_source;
+
+class FakeSpoutSourceBackend final : public SpoutSourceBackend {
+public:
+    FakeSpoutSourceBackend()
+    {
+        const std::lock_guard lock(fake_spout_source.mutex);
+        ++fake_spout_source.active_source_count;
+    }
+
+    ~FakeSpoutSourceBackend() override
+    {
+        const std::lock_guard lock(fake_spout_source.mutex);
+        --fake_spout_source.active_source_count;
+        ++fake_spout_source.destroy_count;
+        fake_spout_source.condition.notify_all();
+    }
+
+    vrrec_status_t Snapshot(
+        std::vector<SpoutSenderSnapshot> &senders) override
+    {
+        const std::lock_guard lock(fake_spout_source.mutex);
+        senders.clear();
+        senders.reserve(fake_spout_source.snapshot.size());
+        for (const auto &sender : fake_spout_source.snapshot) {
+            senders.push_back(SpoutSenderSnapshot {
+                sender.sender_id,
+                sender.latest_frame_generation,
+            });
+        }
+
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t Poll(
+        std::chrono::milliseconds timeout,
+        SpoutFrame &frame) override
+    {
+        std::unique_lock lock(fake_spout_source.mutex);
+        fake_spout_source.poll_entered = true;
+        fake_spout_source.condition.notify_all();
+        if (fake_spout_source.block_next_poll) {
+            fake_spout_source.condition.wait(lock, [] {
+                return fake_spout_source.release_poll;
+            });
+            fake_spout_source.block_next_poll = false;
+            fake_spout_source.release_poll = false;
+        }
+
+        if (fake_spout_source.frames.empty() && timeout.count() > 0) {
+            (void)fake_spout_source.condition.wait_for(lock, timeout, [] {
+                return !fake_spout_source.frames.empty();
+            });
+        }
+
+        if (fake_spout_source.frames.empty()) {
+            return VRREC_STATUS_TIMEOUT;
+        }
+
+        auto observed = std::move(fake_spout_source.frames.front());
+        fake_spout_source.frames.pop_front();
+        frame = SpoutFrame {
+            std::move(observed.sender_id),
+            observed.adapter_luid,
+            std::move(observed.gpu_identity),
+            observed.gpu_vendor,
+            observed.width,
+            observed.height,
+            observed.pixel_format,
+            observed.estimated_source_fps,
+            observed.frame_sequence,
+            observed.monotonic_timestamp_microseconds,
+        };
+        return VRREC_STATUS_OK;
+    }
+};
+
 }
 
 std::unique_ptr<MediaBackend> CreateMediaBackend(
@@ -340,6 +432,15 @@ std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
 {
     status = VRREC_STATUS_OK;
     return std::make_unique<FakeSteamVrInputBackend>(config);
+}
+
+std::unique_ptr<SpoutSourceBackend> CreateSpoutSourceBackend(
+    const vrrec_spout_source_config_v1 &config,
+    vrrec_status_t &status)
+{
+    (void)config;
+    status = VRREC_STATUS_OK;
+    return std::make_unique<FakeSpoutSourceBackend>();
 }
 
 namespace testing {
@@ -450,6 +551,71 @@ std::uint32_t SteamVrPollCount()
 bool HasActiveSteamVrInput()
 {
     return FakeSteamVrInputBackend::Active() != nullptr;
+}
+
+void ResetSpoutSource()
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.snapshot.clear();
+    fake_spout_source.frames.clear();
+    fake_spout_source.block_next_poll = false;
+    fake_spout_source.poll_entered = false;
+    fake_spout_source.release_poll = false;
+    fake_spout_source.destroy_count = 0;
+}
+
+void SetSpoutSnapshot(std::vector<TestSpoutSenderSnapshot> senders)
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.snapshot = std::move(senders);
+}
+
+void AddSpoutSnapshotSender(TestSpoutSenderSnapshot sender)
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.snapshot.push_back(std::move(sender));
+}
+
+void PushSpoutFrame(TestSpoutFrame frame)
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.frames.push_back(std::move(frame));
+    fake_spout_source.condition.notify_all();
+}
+
+void BlockNextSpoutPoll()
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.block_next_poll = true;
+    fake_spout_source.poll_entered = false;
+    fake_spout_source.release_poll = false;
+}
+
+bool WaitUntilSpoutPollEntered(std::chrono::milliseconds timeout)
+{
+    std::unique_lock lock(fake_spout_source.mutex);
+    return fake_spout_source.condition.wait_for(lock, timeout, [] {
+        return fake_spout_source.poll_entered;
+    });
+}
+
+void ReleaseSpoutPoll()
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.release_poll = true;
+    fake_spout_source.condition.notify_all();
+}
+
+std::uint32_t ActiveSpoutSourceCount()
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    return fake_spout_source.active_source_count;
+}
+
+std::uint32_t SpoutSourceDestroyCount()
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    return fake_spout_source.destroy_count;
 }
 
 }

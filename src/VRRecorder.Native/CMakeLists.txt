@@ -1,6 +1,7 @@
 add_library(vrrecorder_native SHARED
     src/abi.cpp
     src/unavailable_media_backend.cpp
+    src/unavailable_spout_source_backend.cpp
     src/unavailable_steamvr_input_backend.cpp)
 
 add_library(VRRecorder::Native ALIAS vrrecorder_native)

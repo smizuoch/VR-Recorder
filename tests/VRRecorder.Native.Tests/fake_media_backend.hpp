@@ -76,6 +76,7 @@ struct TestSpoutFrame {
 };
 void ResetSpoutSource();
 void SetSpoutSnapshot(std::vector<TestSpoutSenderSnapshot> senders);
+void AddSpoutSnapshotSender(TestSpoutSenderSnapshot sender);
 void PushSpoutFrame(TestSpoutFrame frame);
 void BlockNextSpoutPoll();
 bool WaitUntilSpoutPollEntered(std::chrono::milliseconds timeout);

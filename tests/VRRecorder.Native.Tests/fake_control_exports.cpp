@@ -196,3 +196,74 @@ extern "C" VRREC_TEST_API std::uint32_t vrrec_test_steamvr_poll_count(void)
 {
     return vrrecorder::native::testing::SteamVrPollCount();
 }
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_reset(void)
+{
+    vrrecorder::native::testing::ResetSpoutSource();
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_add_snapshot_sender(
+    const char *sender_id_utf8,
+    std::uint64_t latest_frame_generation)
+{
+    vrrecorder::native::testing::AddSpoutSnapshotSender(
+        vrrecorder::native::testing::TestSpoutSenderSnapshot {
+            sender_id_utf8 == nullptr ? "" : sender_id_utf8,
+            latest_frame_generation,
+        });
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_push_frame(
+    const char *sender_id_utf8,
+    std::uint64_t adapter_luid,
+    const char *gpu_identity_utf8,
+    std::uint32_t gpu_vendor,
+    std::uint32_t width,
+    std::uint32_t height,
+    std::uint32_t pixel_format,
+    double estimated_source_fps,
+    std::uint64_t frame_sequence,
+    std::int64_t monotonic_timestamp_microseconds)
+{
+    vrrecorder::native::testing::PushSpoutFrame(
+        vrrecorder::native::testing::TestSpoutFrame {
+            sender_id_utf8 == nullptr ? "" : sender_id_utf8,
+            adapter_luid,
+            gpu_identity_utf8 == nullptr ? "" : gpu_identity_utf8,
+            gpu_vendor,
+            width,
+            height,
+            pixel_format,
+            estimated_source_fps,
+            frame_sequence,
+            monotonic_timestamp_microseconds,
+        });
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_block_next_poll(void)
+{
+    vrrecorder::native::testing::BlockNextSpoutPoll();
+}
+
+extern "C" VRREC_TEST_API int vrrec_test_spout_wait_until_poll_entered(
+    std::uint32_t milliseconds)
+{
+    return vrrecorder::native::testing::WaitUntilSpoutPollEntered(
+        std::chrono::milliseconds(milliseconds)) ? 1 : 0;
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_release_poll(void)
+{
+    vrrecorder::native::testing::ReleaseSpoutPoll();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_spout_active_source_count(void)
+{
+    return vrrecorder::native::testing::ActiveSpoutSourceCount();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t vrrec_test_spout_destroy_count(void)
+{
+    return vrrecorder::native::testing::SpoutSourceDestroyCount();
+}

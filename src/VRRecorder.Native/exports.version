@@ -8,6 +8,10 @@
         vrrec_session_request_stop_v1;
         vrrec_session_start_v1;
         vrrec_session_update_video_layout_v1;
+        vrrec_spout_source_create_v1;
+        vrrec_spout_source_destroy_v1;
+        vrrec_spout_source_poll_frame_v1;
+        vrrec_spout_source_snapshot_v1;
         vrrec_steamvr_input_create_v1;
         vrrec_steamvr_input_destroy_v1;
         vrrec_steamvr_input_poll_v1;

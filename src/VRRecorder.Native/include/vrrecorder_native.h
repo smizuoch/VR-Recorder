@@ -23,6 +23,7 @@ extern "C" {
 
 typedef struct vrrec_session vrrec_session_t;
 typedef struct vrrec_steamvr_input vrrec_steamvr_input_t;
+typedef struct vrrec_spout_source vrrec_spout_source_t;
 typedef int32_t vrrec_status_t;
 typedef uint32_t vrrec_event_kind_t;
 typedef uint32_t vrrec_encoder_kind_t;
@@ -31,6 +32,7 @@ typedef uint32_t vrrec_video_rotation_t;
 typedef uint32_t vrrec_source_pixel_format_t;
 typedef uint32_t vrrec_audio_routing_t;
 typedef uint32_t vrrec_quality_preset_t;
+typedef uint32_t vrrec_gpu_vendor_t;
 
 #define VRREC_STATUS_OK INT32_C(0)
 #define VRREC_STATUS_INVALID_ARGUMENT INT32_C(1)
@@ -39,6 +41,8 @@ typedef uint32_t vrrec_quality_preset_t;
 #define VRREC_STATUS_BACKEND_UNAVAILABLE INT32_C(4)
 #define VRREC_STATUS_OUT_OF_MEMORY INT32_C(5)
 #define VRREC_STATUS_INTERNAL_ERROR INT32_C(6)
+#define VRREC_STATUS_BUFFER_TOO_SMALL INT32_C(7)
+#define VRREC_STATUS_TIMEOUT INT32_C(8)
 
 #define VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED UINT32_C(1)
 #define VRREC_EVENT_STOPPED UINT32_C(2)
@@ -56,6 +60,16 @@ typedef uint32_t vrrec_quality_preset_t;
 #define VRREC_SOURCE_PIXEL_FORMAT_BGRA8 UINT32_C(1)
 #define VRREC_SOURCE_PIXEL_FORMAT_RGBA8 UINT32_C(2)
 #define VRREC_SOURCE_PIXEL_FORMAT_NV12 UINT32_C(3)
+
+#define VRREC_GPU_VENDOR_UNKNOWN UINT32_C(0)
+#define VRREC_GPU_VENDOR_NVIDIA UINT32_C(1)
+#define VRREC_GPU_VENDOR_AMD UINT32_C(2)
+#define VRREC_GPU_VENDOR_INTEL UINT32_C(3)
+
+#define VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE UINT32_C(4096)
+#define VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES UINT32_C(1024)
+#define VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE UINT32_C(1048576)
+#define VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS UINT32_C(1000)
 
 #define VRREC_AUDIO_ROUTING_MIXED UINT32_C(1)
 #define VRREC_AUDIO_ROUTING_DESKTOP_ONLY UINT32_C(2)
@@ -167,6 +181,39 @@ typedef struct vrrec_steamvr_digital_state_v1 {
     uint8_t reserved;
 } vrrec_steamvr_digital_state_v1;
 
+typedef struct vrrec_spout_source_config_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t reserved_v1;
+    uint32_t reserved_v2;
+} vrrec_spout_source_config_v1;
+
+typedef struct vrrec_spout_sender_snapshot_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t sender_id_offset;
+    uint32_t sender_id_size;
+    uint64_t latest_frame_generation;
+} vrrec_spout_sender_snapshot_v1;
+
+typedef struct vrrec_spout_frame_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t sender_id_offset;
+    uint32_t sender_id_size;
+    uint32_t gpu_identity_offset;
+    uint32_t gpu_identity_size;
+    uint64_t adapter_luid;
+    vrrec_gpu_vendor_t gpu_vendor;
+    uint32_t width;
+    uint32_t height;
+    vrrec_source_pixel_format_t pixel_format;
+    double estimated_source_fps;
+    uint64_t frame_sequence;
+    int64_t monotonic_timestamp_microseconds;
+    uint64_t reserved;
+} vrrec_spout_frame_v1;
+
 VRREC_API uint32_t VRREC_CALL vrrec_abi_version(void);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
@@ -204,6 +251,30 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_input_poll_v1(
 
 VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
     vrrec_steamvr_input_t *input);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_spout_source_create_v1(
+    const vrrec_spout_source_config_v1 *config,
+    vrrec_spout_source_t **out_source);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_spout_source_snapshot_v1(
+    vrrec_spout_source_t *source,
+    vrrec_spout_sender_snapshot_v1 *entries,
+    uint32_t entry_capacity,
+    char *utf8_buffer,
+    uint32_t utf8_capacity,
+    uint32_t *out_entry_count,
+    uint32_t *out_required_utf8_size);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_spout_source_poll_frame_v1(
+    vrrec_spout_source_t *source,
+    uint32_t timeout_milliseconds,
+    vrrec_spout_frame_v1 *out_frame,
+    char *utf8_buffer,
+    uint32_t utf8_capacity,
+    uint32_t *out_required_utf8_size);
+
+VRREC_API void VRREC_CALL vrrec_spout_source_destroy_v1(
+    vrrec_spout_source_t **source);
 
 #ifdef __cplusplus
 }

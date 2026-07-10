@@ -11,6 +11,8 @@ internal enum NativeStatus
     BackendUnavailable = 4,
     OutOfMemory = 5,
     InternalError = 6,
+    BufferTooSmall = 7,
+    Timeout = 8,
 }
 
 internal enum NativeEventKind : uint

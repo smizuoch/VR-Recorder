@@ -4,13 +4,18 @@
 #include <cstdint>
 #include <cmath>
 #include <condition_variable>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "media_backend.hpp"
+#include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
 namespace {
@@ -341,7 +346,92 @@ private:
     std::mutex poll_mutex_;
 };
 
+struct vrrec_spout_source final {
+    explicit vrrec_spout_source(
+        const vrrec_spout_source_config_v1 &config)
+        : config_(config)
+    {
+    }
+
+    vrrec_status_t InitializeBackend()
+    {
+        auto status = VRREC_STATUS_INTERNAL_ERROR;
+        backend_ = vrrecorder::native::CreateSpoutSourceBackend(
+            config_,
+            status);
+        if (backend_ == nullptr) {
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+
+        return status;
+    }
+
+    bool BeginOperation() noexcept
+    {
+        const std::lock_guard lock(lifecycle_mutex_);
+        if (destroying_) {
+            return false;
+        }
+
+        ++active_operations_;
+        return true;
+    }
+
+    void EndOperation() noexcept
+    {
+        const std::lock_guard lock(lifecycle_mutex_);
+        --active_operations_;
+        lifecycle_condition_.notify_all();
+    }
+
+    void JoinOperationsForDestroy() noexcept
+    {
+        std::unique_lock lock(lifecycle_mutex_);
+        destroying_ = true;
+        lifecycle_condition_.wait(lock, [this] {
+            return active_operations_ == 0;
+        });
+    }
+
+    vrrec_spout_source_config_v1 config_;
+    std::unique_ptr<vrrecorder::native::SpoutSourceBackend> backend_;
+    std::mutex operation_mutex_;
+    std::optional<vrrecorder::native::SpoutFrame> pending_frame_;
+
+private:
+    std::mutex lifecycle_mutex_;
+    std::condition_variable lifecycle_condition_;
+    std::size_t active_operations_ = 0;
+    bool destroying_ = false;
+};
+
 namespace {
+
+class SpoutOperationLease final {
+public:
+    explicit SpoutOperationLease(vrrec_spout_source_t &source) noexcept
+        : source_(source), acquired_(source_.BeginOperation())
+    {
+    }
+
+    ~SpoutOperationLease()
+    {
+        if (acquired_) {
+            source_.EndOperation();
+        }
+    }
+
+    explicit operator bool() const noexcept
+    {
+        return acquired_;
+    }
+
+private:
+    vrrec_spout_source_t &source_;
+    bool acquired_;
+};
 
 bool IsAbsoluteUtf8Path(std::string_view path) noexcept
 {
@@ -728,6 +818,155 @@ vrrec_status_t ValidateSteamVrCreateArguments(
     return VRREC_STATUS_OK;
 }
 
+bool IsValidSpoutBackendText(const std::string &text) noexcept
+{
+    std::string_view validated;
+    return TryValidateUtf8Text(
+               text.c_str(),
+               VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE,
+               validated) &&
+        validated.size() == text.size();
+}
+
+bool IsGpuVendorSupported(vrrec_gpu_vendor_t vendor) noexcept
+{
+    return vendor == VRREC_GPU_VENDOR_UNKNOWN ||
+        vendor == VRREC_GPU_VENDOR_NVIDIA ||
+        vendor == VRREC_GPU_VENDOR_AMD ||
+        vendor == VRREC_GPU_VENDOR_INTEL;
+}
+
+bool TryValidateSpoutSnapshot(
+    const std::vector<vrrecorder::native::SpoutSenderSnapshot> &senders,
+    std::uint32_t &required_utf8_size) noexcept
+{
+    required_utf8_size = 0;
+    if (senders.size() > VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES) {
+        return false;
+    }
+
+    std::size_t total_size = 0;
+    for (const auto &sender : senders) {
+        if (!IsValidSpoutBackendText(sender.sender_id)) {
+            return false;
+        }
+
+        total_size += sender.sender_id.size();
+        if (total_size > VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE) {
+            return false;
+        }
+    }
+
+    required_utf8_size = static_cast<std::uint32_t>(total_size);
+    return true;
+}
+
+bool TryValidateSpoutFrame(
+    const vrrecorder::native::SpoutFrame &frame,
+    std::uint32_t &required_utf8_size) noexcept
+{
+    required_utf8_size = 0;
+    if (!IsValidSpoutBackendText(frame.sender_id) ||
+        !IsValidSpoutBackendText(frame.gpu_identity) ||
+        frame.adapter_luid == 0 ||
+        !IsGpuVendorSupported(frame.gpu_vendor) ||
+        frame.width == 0 ||
+        frame.width > static_cast<std::uint32_t>(INT32_MAX) ||
+        frame.height == 0 ||
+        frame.height > static_cast<std::uint32_t>(INT32_MAX) ||
+        !IsSourcePixelFormatSupported(frame.pixel_format) ||
+        !std::isfinite(frame.estimated_source_fps) ||
+        frame.estimated_source_fps <= 0.0 ||
+        frame.estimated_source_fps > MaximumEstimatedSourceFps ||
+        frame.monotonic_timestamp_microseconds < 0 ||
+        frame.monotonic_timestamp_microseconds >
+            INT64_C(922337203685477580)) {
+        return false;
+    }
+
+    const auto total_size =
+        frame.sender_id.size() + frame.gpu_identity.size();
+    if (total_size > VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE) {
+        return false;
+    }
+
+    required_utf8_size = static_cast<std::uint32_t>(total_size);
+    return true;
+}
+
+vrrec_status_t ValidateSpoutCreateArguments(
+    const vrrec_spout_source_config_v1 *config,
+    vrrec_spout_source_t **out_source) noexcept
+{
+    if (out_source == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    *out_source = nullptr;
+    if (config == nullptr ||
+        config->struct_size < sizeof(vrrec_spout_source_config_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (config->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    if (config->reserved_v1 != 0 || config->reserved_v2 != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSpoutSnapshotArguments(
+    vrrec_spout_source_t *source,
+    vrrec_spout_sender_snapshot_v1 *entries,
+    std::uint32_t entry_capacity,
+    char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    std::uint32_t *out_entry_count,
+    std::uint32_t *out_required_utf8_size) noexcept
+{
+    if (source == nullptr ||
+        out_entry_count == nullptr ||
+        out_required_utf8_size == nullptr ||
+        (entry_capacity != 0 && entries == nullptr) ||
+        (utf8_capacity != 0 && utf8_buffer == nullptr) ||
+        entry_capacity > VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES ||
+        utf8_capacity > VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSpoutFrameArguments(
+    vrrec_spout_source_t *source,
+    std::uint32_t timeout_milliseconds,
+    vrrec_spout_frame_v1 *out_frame,
+    char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    std::uint32_t *out_required_utf8_size) noexcept
+{
+    if (source == nullptr ||
+        out_frame == nullptr ||
+        out_required_utf8_size == nullptr ||
+        (utf8_capacity != 0 && utf8_buffer == nullptr) ||
+        utf8_capacity > VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE ||
+        timeout_milliseconds >
+            VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS ||
+        out_frame->struct_size < sizeof(vrrec_spout_frame_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (out_frame->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    return VRREC_STATUS_OK;
+}
+
 }
 
 extern "C" VRREC_API std::uint32_t VRREC_CALL vrrec_abi_version(void)
@@ -952,6 +1191,238 @@ extern "C" VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
 {
     try {
         delete input;
+    } catch (...) {
+        // Destruction is the final fail-safe and cannot report across C ABI.
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_spout_source_create_v1(
+    const vrrec_spout_source_config_v1 *config,
+    vrrec_spout_source_t **out_source)
+{
+    const auto validation = ValidateSpoutCreateArguments(
+        config,
+        out_source);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+
+    try {
+        auto source = std::make_unique<vrrec_spout_source>(*config);
+        const auto status = source->InitializeBackend();
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+
+        *out_source = source.release();
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_spout_source_snapshot_v1(
+    vrrec_spout_source_t *source,
+    vrrec_spout_sender_snapshot_v1 *entries,
+    std::uint32_t entry_capacity,
+    char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    std::uint32_t *out_entry_count,
+    std::uint32_t *out_required_utf8_size)
+{
+    const auto validation = ValidateSpoutSnapshotArguments(
+        source,
+        entries,
+        entry_capacity,
+        utf8_buffer,
+        utf8_capacity,
+        out_entry_count,
+        out_required_utf8_size);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+
+    *out_entry_count = 0;
+    *out_required_utf8_size = 0;
+    SpoutOperationLease operation(*source);
+    if (!operation) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+
+    try {
+        const std::lock_guard lock(source->operation_mutex_);
+        std::vector<vrrecorder::native::SpoutSenderSnapshot> senders;
+        const auto status = source->backend_->Snapshot(senders);
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+
+        std::uint32_t required_utf8_size = 0;
+        if (!TryValidateSpoutSnapshot(senders, required_utf8_size)) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+
+        const auto required_entry_count =
+            static_cast<std::uint32_t>(senders.size());
+        *out_entry_count = required_entry_count;
+        *out_required_utf8_size = required_utf8_size;
+        const auto entries_to_validate =
+            entry_capacity < required_entry_count
+                ? entry_capacity
+                : required_entry_count;
+        for (std::uint32_t index = 0;
+             index < entries_to_validate;
+             ++index) {
+            if (entries[index].struct_size <
+                sizeof(vrrec_spout_sender_snapshot_v1)) {
+                return VRREC_STATUS_INVALID_ARGUMENT;
+            }
+
+            if (entries[index].abi_version != VRREC_ABI_V1) {
+                return VRREC_STATUS_UNSUPPORTED_ABI;
+            }
+        }
+
+        if (entry_capacity < required_entry_count ||
+            utf8_capacity < required_utf8_size) {
+            return VRREC_STATUS_BUFFER_TOO_SMALL;
+        }
+
+        std::uint32_t offset = 0;
+        for (std::uint32_t index = 0;
+             index < required_entry_count;
+             ++index) {
+            const auto &sender = senders[index];
+            const auto sender_size =
+                static_cast<std::uint32_t>(sender.sender_id.size());
+            sender.sender_id.copy(utf8_buffer + offset, sender_size);
+            entries[index] = vrrec_spout_sender_snapshot_v1 {
+                sizeof(vrrec_spout_sender_snapshot_v1),
+                VRREC_ABI_V1,
+                offset,
+                sender_size,
+                sender.latest_frame_generation,
+            };
+            offset += sender_size;
+        }
+
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_spout_source_poll_frame_v1(
+    vrrec_spout_source_t *source,
+    std::uint32_t timeout_milliseconds,
+    vrrec_spout_frame_v1 *out_frame,
+    char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    std::uint32_t *out_required_utf8_size)
+{
+    const auto validation = ValidateSpoutFrameArguments(
+        source,
+        timeout_milliseconds,
+        out_frame,
+        utf8_buffer,
+        utf8_capacity,
+        out_required_utf8_size);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+
+    *out_required_utf8_size = 0;
+    SpoutOperationLease operation(*source);
+    if (!operation) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+
+    try {
+        const std::lock_guard lock(source->operation_mutex_);
+        if (!source->pending_frame_.has_value()) {
+            vrrecorder::native::SpoutFrame polled_frame;
+            const auto status = source->backend_->Poll(
+                std::chrono::milliseconds(timeout_milliseconds),
+                polled_frame);
+            if (status != VRREC_STATUS_OK) {
+                return status;
+            }
+
+            std::uint32_t ignored_required_size = 0;
+            if (!TryValidateSpoutFrame(
+                    polled_frame,
+                    ignored_required_size)) {
+                return VRREC_STATUS_INTERNAL_ERROR;
+            }
+
+            source->pending_frame_ = std::move(polled_frame);
+        }
+
+        const auto &frame = *source->pending_frame_;
+        std::uint32_t required_utf8_size = 0;
+        if (!TryValidateSpoutFrame(frame, required_utf8_size)) {
+            source->pending_frame_.reset();
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+
+        *out_required_utf8_size = required_utf8_size;
+        if (utf8_capacity < required_utf8_size) {
+            return VRREC_STATUS_BUFFER_TOO_SMALL;
+        }
+
+        const auto sender_size =
+            static_cast<std::uint32_t>(frame.sender_id.size());
+        const auto gpu_identity_size =
+            static_cast<std::uint32_t>(frame.gpu_identity.size());
+        frame.sender_id.copy(utf8_buffer, sender_size);
+        frame.gpu_identity.copy(
+            utf8_buffer + sender_size,
+            gpu_identity_size);
+        *out_frame = vrrec_spout_frame_v1 {
+            sizeof(vrrec_spout_frame_v1),
+            VRREC_ABI_V1,
+            0,
+            sender_size,
+            sender_size,
+            gpu_identity_size,
+            frame.adapter_luid,
+            frame.gpu_vendor,
+            frame.width,
+            frame.height,
+            frame.pixel_format,
+            frame.estimated_source_fps,
+            frame.frame_sequence,
+            frame.monotonic_timestamp_microseconds,
+            0,
+        };
+        source->pending_frame_.reset();
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API void VRREC_CALL vrrec_spout_source_destroy_v1(
+    vrrec_spout_source_t **source)
+{
+    if (source == nullptr || *source == nullptr) {
+        return;
+    }
+
+    auto *owned_source = *source;
+    *source = nullptr;
+    try {
+        owned_source->JoinOperationsForDestroy();
+        delete owned_source;
     } catch (...) {
         // Destruction is the final fail-safe and cannot report across C ABI.
     }
