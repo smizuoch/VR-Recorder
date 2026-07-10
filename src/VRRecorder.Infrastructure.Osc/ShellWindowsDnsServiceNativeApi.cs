@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -396,7 +397,11 @@ public sealed class ShellWindowsDnsServiceNativeApi
             if (native.Ip4Address != 0)
             {
                 var bytes = new byte[4];
-                Marshal.Copy(native.Ip4Address, bytes, 0, bytes.Length);
+                var hostOrderAddress = unchecked(
+                    (uint)Marshal.ReadInt32(native.Ip4Address));
+                BinaryPrimitives.WriteUInt32BigEndian(
+                    bytes,
+                    hostOrderAddress);
                 addresses.Add(new IPAddress(bytes));
             }
 
