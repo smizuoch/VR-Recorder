@@ -10,6 +10,54 @@ namespace VRRecorder.IntegrationTests.Media;
 public sealed class PInvokeNativeRecordingBackendTests
 {
     [Fact]
+    public async Task DisposeIsRejectedWhileNativeSessionIsActive()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "take.recording.mp4"),
+            Path.Combine(directory.Path, "take.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new FrameRate(30));
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+
+        var activeDisposeFailure = Record.Exception(backend.Dispose);
+        var stopping = session.StopAsync(CancellationToken.None);
+        controls.CompleteTrailerFlushClose(
+            videoPacketCount: 90,
+            audioPacketCount: 142);
+        var stopped = await stopping;
+        var terminalDisposeFailure = Record.Exception(backend.Dispose);
+
+        var exception = Assert.IsType<InvalidOperationException>(
+            activeDisposeFailure);
+        Assert.Equal(
+            "The native recording backend has an active session.",
+            exception.Message);
+        Assert.Equal(pending, stopped.Recording);
+        Assert.Null(terminalDisposeFailure);
+    }
+
+    [Fact]
     public async Task ThrowingManagedFaultCallbackStillFaultsPendingStop()
     {
         if (!OperatingSystem.IsLinux())
