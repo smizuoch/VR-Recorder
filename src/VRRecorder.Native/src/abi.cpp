@@ -7,6 +7,7 @@
 #include <string>
 
 #include "media_backend.hpp"
+#include "steamvr_input_backend.hpp"
 
 namespace {
 
@@ -221,7 +222,72 @@ private:
     std::uint64_t sequence_ = 0;
 };
 
+struct vrrec_steamvr_input final {
+    explicit vrrec_steamvr_input(
+        const vrrec_steamvr_input_config_v1 &config)
+        : manifest_path_(config.action_manifest_path_utf8),
+          action_set_path_(config.action_set_path_utf8),
+          digital_action_path_(config.digital_action_path_utf8),
+          config_(config)
+    {
+        config_.action_manifest_path_utf8 = manifest_path_.c_str();
+        config_.action_set_path_utf8 = action_set_path_.c_str();
+        config_.digital_action_path_utf8 = digital_action_path_.c_str();
+    }
+
+    vrrec_status_t InitializeBackend()
+    {
+        auto status = VRREC_STATUS_INTERNAL_ERROR;
+        backend_ = vrrecorder::native::CreateSteamVrInputBackend(
+            config_,
+            status);
+        if (backend_ == nullptr) {
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+
+        return status;
+    }
+
+    vrrec_status_t Poll(vrrec_steamvr_digital_state_v1 &state) noexcept
+    {
+        const std::lock_guard lock(poll_mutex_);
+        return backend_->Poll(state);
+    }
+
+private:
+    std::string manifest_path_;
+    std::string action_set_path_;
+    std::string digital_action_path_;
+    vrrec_steamvr_input_config_v1 config_;
+    std::unique_ptr<vrrecorder::native::SteamVrInputBackend> backend_;
+    std::mutex poll_mutex_;
+};
+
 namespace {
+
+bool IsAbsoluteUtf8Path(const char *path) noexcept
+{
+#if defined(_WIN32)
+    const auto drive_path =
+        ((path[0] >= 'A' && path[0] <= 'Z') ||
+         (path[0] >= 'a' && path[0] <= 'z')) &&
+        path[1] == ':' &&
+        (path[2] == '\\' || path[2] == '/');
+    const auto unc_path =
+        (path[0] == '\\' && path[1] == '\\') ||
+        (path[0] == '/' && path[1] == '/');
+    return drive_path || unc_path;
+#else
+    return path[0] == '/';
+#endif
+}
+
+bool IsAbsoluteActionPath(const char *path) noexcept
+{
+    return path != nullptr && path[0] == '/' && path[1] != '\0';
+}
 
 vrrec_status_t ValidateCreateArguments(
     const vrrec_session_config_v1 *config,
@@ -254,6 +320,35 @@ vrrec_status_t ValidateCreateArguments(
         config->fps_numerator == 0 ||
         config->fps_denominator == 0 ||
         callbacks->on_event == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSteamVrCreateArguments(
+    const vrrec_steamvr_input_config_v1 *config,
+    vrrec_steamvr_input_t **out_input) noexcept
+{
+    if (out_input == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    *out_input = nullptr;
+    if (config == nullptr ||
+        config->struct_size < sizeof(vrrec_steamvr_input_config_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (config->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    if (config->action_manifest_path_utf8 == nullptr ||
+        config->action_manifest_path_utf8[0] == '\0' ||
+        !IsAbsoluteUtf8Path(config->action_manifest_path_utf8) ||
+        !IsAbsoluteActionPath(config->action_set_path_utf8) ||
+        !IsAbsoluteActionPath(config->digital_action_path_utf8)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -348,6 +443,65 @@ extern "C" VRREC_API void VRREC_CALL vrrec_session_destroy_v1(
     try {
         (void)session->Abort();
         delete session;
+    } catch (...) {
+        // Destruction is the final fail-safe and cannot report across C ABI.
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_input_create_v1(
+    const vrrec_steamvr_input_config_v1 *config,
+    vrrec_steamvr_input_t **out_input)
+{
+    const auto validation = ValidateSteamVrCreateArguments(
+        config,
+        out_input);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+
+    try {
+        auto input = std::make_unique<vrrec_steamvr_input>(*config);
+        const auto status = input->InitializeBackend();
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+
+        *out_input = input.release();
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_input_poll_v1(
+    vrrec_steamvr_input_t *input,
+    vrrec_steamvr_digital_state_v1 *out_state)
+{
+    if (input == nullptr || out_state == nullptr ||
+        out_state->struct_size < sizeof(vrrec_steamvr_digital_state_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (out_state->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    try {
+        out_state->reserved = 0;
+        return input->Poll(*out_state);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
+    vrrec_steamvr_input_t *input)
+{
+    try {
+        delete input;
     } catch (...) {
         // Destruction is the final fail-safe and cannot report across C ABI.
     }

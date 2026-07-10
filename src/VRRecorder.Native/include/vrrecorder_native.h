@@ -22,6 +22,7 @@ extern "C" {
 #define VRREC_ABI_V1 UINT32_C(1)
 
 typedef struct vrrec_session vrrec_session_t;
+typedef struct vrrec_steamvr_input vrrec_steamvr_input_t;
 typedef int32_t vrrec_status_t;
 typedef uint32_t vrrec_event_kind_t;
 
@@ -70,6 +71,23 @@ typedef struct vrrec_callbacks_v1 {
     void *user_data;
 } vrrec_callbacks_v1;
 
+typedef struct vrrec_steamvr_input_config_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    const char *action_manifest_path_utf8;
+    const char *action_set_path_utf8;
+    const char *digital_action_path_utf8;
+} vrrec_steamvr_input_config_v1;
+
+typedef struct vrrec_steamvr_digital_state_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint8_t is_active;
+    uint8_t state;
+    uint8_t changed;
+    uint8_t reserved;
+} vrrec_steamvr_digital_state_v1;
+
 VRREC_API uint32_t VRREC_CALL vrrec_abi_version(void);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
@@ -88,6 +106,17 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_session_abort_v1(
 
 VRREC_API void VRREC_CALL vrrec_session_destroy_v1(
     vrrec_session_t *session);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_input_create_v1(
+    const vrrec_steamvr_input_config_v1 *config,
+    vrrec_steamvr_input_t **out_input);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_input_poll_v1(
+    vrrec_steamvr_input_t *input,
+    vrrec_steamvr_digital_state_v1 *out_state);
+
+VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
+    vrrec_steamvr_input_t *input);
 
 #ifdef __cplusplus
 }
