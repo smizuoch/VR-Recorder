@@ -2,10 +2,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <string>
+#include <string_view>
 
 #include "media_backend.hpp"
 #include "steamvr_input_backend.hpp"
@@ -26,10 +28,18 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         const vrrec_session_config_v1 &config,
         const vrrec_callbacks_v1 &callbacks)
         : temporary_output_path_(config.temporary_output_path_utf8),
+          desktop_endpoint_id_(config.desktop_endpoint_id_utf8),
+          microphone_endpoint_id_(config.microphone_endpoint_id_utf8),
+          spout_sender_identity_(config.spout_sender_identity_utf8),
+          gpu_identity_(config.gpu_identity_utf8),
           config_(config),
           callbacks_(callbacks)
     {
         config_.temporary_output_path_utf8 = temporary_output_path_.c_str();
+        config_.desktop_endpoint_id_utf8 = desktop_endpoint_id_.c_str();
+        config_.microphone_endpoint_id_utf8 = microphone_endpoint_id_.c_str();
+        config_.spout_sender_identity_utf8 = spout_sender_identity_.c_str();
+        config_.gpu_identity_utf8 = gpu_identity_.c_str();
     }
 
     vrrec_status_t InitializeBackend()
@@ -212,6 +222,10 @@ private:
     }
 
     std::string temporary_output_path_;
+    std::string desktop_endpoint_id_;
+    std::string microphone_endpoint_id_;
+    std::string spout_sender_identity_;
+    std::string gpu_identity_;
     vrrec_session_config_v1 config_;
     vrrec_callbacks_v1 callbacks_;
     std::unique_ptr<vrrecorder::native::MediaBackend> backend_;
@@ -268,21 +282,118 @@ private:
 
 namespace {
 
-bool IsAbsoluteUtf8Path(const char *path) noexcept
+bool IsAbsoluteUtf8Path(std::string_view path) noexcept
 {
 #if defined(_WIN32)
     const auto drive_path =
+        path.size() >= 3 &&
         ((path[0] >= 'A' && path[0] <= 'Z') ||
          (path[0] >= 'a' && path[0] <= 'z')) &&
         path[1] == ':' &&
         (path[2] == '\\' || path[2] == '/');
     const auto unc_path =
+        path.size() >= 2 &&
         (path[0] == '\\' && path[1] == '\\') ||
-        (path[0] == '/' && path[1] == '/');
+        (path.size() >= 2 && path[0] == '/' && path[1] == '/');
     return drive_path || unc_path;
 #else
-    return path[0] == '/';
+    return !path.empty() && path[0] == '/';
 #endif
+}
+
+bool IsContinuationByte(unsigned char value) noexcept
+{
+    return value >= 0x80 && value <= 0xBF;
+}
+
+bool TryValidateUtf8Text(
+    const char *text,
+    std::size_t maximum_size,
+    std::string_view &validated) noexcept
+{
+    if (text == nullptr) {
+        return false;
+    }
+
+    std::size_t size = 0;
+    while (size <= maximum_size && text[size] != '\0') {
+        ++size;
+    }
+
+    if (size == 0 || size > maximum_size) {
+        return false;
+    }
+
+    validated = std::string_view(text, size);
+    auto has_non_whitespace = false;
+    for (std::size_t index = 0; index < size;) {
+        const auto first = static_cast<unsigned char>(text[index]);
+        if (first <= 0x7F) {
+            if (first < 0x20 || first == 0x7F) {
+                return false;
+            }
+
+            has_non_whitespace = has_non_whitespace || first != ' ';
+            ++index;
+            continue;
+        }
+
+        has_non_whitespace = true;
+        if (first >= 0xC2 && first <= 0xDF) {
+            if (index + 1 >= size ||
+                !IsContinuationByte(
+                    static_cast<unsigned char>(text[index + 1]))) {
+                return false;
+            }
+
+            index += 2;
+            continue;
+        }
+
+        if (first >= 0xE0 && first <= 0xEF) {
+            if (index + 2 >= size) {
+                return false;
+            }
+
+            const auto second = static_cast<unsigned char>(text[index + 1]);
+            const auto third = static_cast<unsigned char>(text[index + 2]);
+            if (!IsContinuationByte(third) ||
+                (first == 0xE0 && (second < 0xA0 || second > 0xBF)) ||
+                (first == 0xED && (second < 0x80 || second > 0x9F)) ||
+                ((first != 0xE0 && first != 0xED) &&
+                 !IsContinuationByte(second))) {
+                return false;
+            }
+
+            index += 3;
+            continue;
+        }
+
+        if (first >= 0xF0 && first <= 0xF4) {
+            if (index + 3 >= size) {
+                return false;
+            }
+
+            const auto second = static_cast<unsigned char>(text[index + 1]);
+            const auto third = static_cast<unsigned char>(text[index + 2]);
+            const auto fourth = static_cast<unsigned char>(text[index + 3]);
+            if (!IsContinuationByte(third) ||
+                !IsContinuationByte(fourth) ||
+                (first == 0xF0 && (second < 0x90 || second > 0xBF)) ||
+                (first == 0xF4 && (second < 0x80 || second > 0x8F)) ||
+                ((first != 0xF0 && first != 0xF4) &&
+                 !IsContinuationByte(second))) {
+                return false;
+            }
+
+            index += 4;
+            continue;
+        }
+
+        return false;
+    }
+
+    return has_non_whitespace;
 }
 
 bool IsAbsoluteActionPath(const char *path) noexcept
@@ -298,17 +409,58 @@ bool IsEncoderKindSupported(vrrec_encoder_kind_t encoder_kind) noexcept
         encoder_kind == VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE;
 }
 
+bool IsAudioRoutingSupported(vrrec_audio_routing_t routing) noexcept
+{
+    return routing == VRREC_AUDIO_ROUTING_MIXED ||
+        routing == VRREC_AUDIO_ROUTING_DESKTOP_ONLY ||
+        routing == VRREC_AUDIO_ROUTING_MIC_ONLY ||
+        routing == VRREC_AUDIO_ROUTING_MUTED;
+}
+
+bool IsQualityPresetSupported(vrrec_quality_preset_t quality) noexcept
+{
+    return quality == VRREC_QUALITY_PRESET_STANDARD ||
+        quality == VRREC_QUALITY_PRESET_HIGH;
+}
+
+bool IsValidGain(double gain_db) noexcept
+{
+    return std::isfinite(gain_db) && gain_db >= -96.0 && gain_db <= 24.0;
+}
+
+bool IsValidExtendedGeometry(const vrrec_session_config_v1 &config) noexcept
+{
+    return config.width != 0 &&
+        config.height != 0 &&
+        config.width % 2 == 0 &&
+        config.height % 2 == 0 &&
+        config.source_width != 0 &&
+        config.source_height != 0 &&
+        config.destination_width != 0 &&
+        config.destination_height != 0 &&
+        config.destination_width % 2 == 0 &&
+        config.destination_height % 2 == 0 &&
+        config.destination_x <= config.width &&
+        config.destination_y <= config.height &&
+        config.destination_width <= config.width - config.destination_x &&
+        config.destination_height <= config.height - config.destination_y;
+}
+
 constexpr std::size_t SessionConfigBaseSize =
     offsetof(vrrec_session_config_v1, encoder_kind);
-constexpr std::size_t SessionConfigExtendedSize =
+constexpr std::size_t SessionConfigEncoderSize =
+    offsetof(vrrec_session_config_v1, source_width);
+constexpr std::size_t SessionConfigMediaSize =
     sizeof(vrrec_session_config_v1);
 
 vrrec_session_config_v1 NormalizeSessionConfig(
     const vrrec_session_config_v1 &config) noexcept
 {
-    const auto encoder_kind = config.struct_size >= SessionConfigExtendedSize
+    const auto encoder_kind = config.struct_size >= SessionConfigEncoderSize
         ? config.encoder_kind
         : VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE;
+    const auto has_media_config =
+        config.struct_size >= SessionConfigMediaSize;
     return vrrec_session_config_v1 {
         sizeof(vrrec_session_config_v1),
         VRREC_ABI_V1,
@@ -319,6 +471,35 @@ vrrec_session_config_v1 NormalizeSessionConfig(
         config.fps_denominator,
         config.started_at_unix_milliseconds_utc,
         encoder_kind,
+        0,
+        has_media_config ? config.source_width : config.width,
+        has_media_config ? config.source_height : config.height,
+        has_media_config ? config.destination_x : 0,
+        has_media_config ? config.destination_y : 0,
+        has_media_config ? config.destination_width : config.width,
+        has_media_config ? config.destination_height : config.height,
+        has_media_config
+            ? config.canvas_background
+            : VRREC_CANVAS_BACKGROUND_BLACK,
+        has_media_config ? config.rotation : VRREC_VIDEO_ROTATION_NONE,
+        has_media_config ? config.audio_routing : VRREC_AUDIO_ROUTING_MIXED,
+        has_media_config ? config.quality_preset : VRREC_QUALITY_PRESET_HIGH,
+        has_media_config
+            ? config.desktop_endpoint_id_utf8
+            : "default-render",
+        has_media_config
+            ? config.microphone_endpoint_id_utf8
+            : "default-capture",
+        has_media_config ? config.desktop_gain_db : -6.0,
+        has_media_config ? config.microphone_gain_db : -6.0,
+        has_media_config
+            ? config.spout_sender_identity_utf8
+            : "legacy-unspecified",
+        has_media_config ? config.spout_adapter_luid : 0,
+        has_media_config ? config.encoder_adapter_luid : 0,
+        has_media_config
+            ? config.gpu_identity_utf8
+            : "legacy-unspecified",
         0,
     };
 }
@@ -337,9 +518,9 @@ vrrec_status_t ValidateCreateArguments(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (config->struct_size < SessionConfigBaseSize ||
-        (config->struct_size != SessionConfigBaseSize &&
-         config->struct_size < SessionConfigExtendedSize) ||
+    if ((config->struct_size != SessionConfigBaseSize &&
+         config->struct_size != SessionConfigEncoderSize &&
+         config->struct_size < SessionConfigMediaSize) ||
         callbacks->struct_size < sizeof(vrrec_callbacks_v1)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
@@ -349,8 +530,12 @@ vrrec_status_t ValidateCreateArguments(
         return VRREC_STATUS_UNSUPPORTED_ABI;
     }
 
-    if (config->temporary_output_path_utf8 == nullptr ||
-        config->temporary_output_path_utf8[0] == '\0' ||
+    std::string_view output_path;
+    if (!TryValidateUtf8Text(
+            config->temporary_output_path_utf8,
+            32767,
+            output_path) ||
+        !IsAbsoluteUtf8Path(output_path) ||
         config->width == 0 ||
         config->height == 0 ||
         config->fps_numerator == 0 ||
@@ -359,9 +544,42 @@ vrrec_status_t ValidateCreateArguments(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (config->struct_size >= SessionConfigExtendedSize &&
+    if (config->struct_size >= SessionConfigEncoderSize &&
         !IsEncoderKindSupported(config->encoder_kind)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (config->struct_size >= SessionConfigMediaSize) {
+        std::string_view desktop_endpoint;
+        std::string_view microphone_endpoint;
+        std::string_view sender_identity;
+        std::string_view gpu_identity;
+        if (!IsValidExtendedGeometry(*config) ||
+            config->canvas_background != VRREC_CANVAS_BACKGROUND_BLACK ||
+            config->rotation != VRREC_VIDEO_ROTATION_NONE ||
+            !IsAudioRoutingSupported(config->audio_routing) ||
+            !IsQualityPresetSupported(config->quality_preset) ||
+            !TryValidateUtf8Text(
+                config->desktop_endpoint_id_utf8,
+                4096,
+                desktop_endpoint) ||
+            !TryValidateUtf8Text(
+                config->microphone_endpoint_id_utf8,
+                4096,
+                microphone_endpoint) ||
+            !IsValidGain(config->desktop_gain_db) ||
+            !IsValidGain(config->microphone_gain_db) ||
+            !TryValidateUtf8Text(
+                config->spout_sender_identity_utf8,
+                4096,
+                sender_identity) ||
+            !TryValidateUtf8Text(
+                config->gpu_identity_utf8,
+                4096,
+                gpu_identity) ||
+            config->reserved_v1 != 0) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
     }
 
     return VRREC_STATUS_OK;

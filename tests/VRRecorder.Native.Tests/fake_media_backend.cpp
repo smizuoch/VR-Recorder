@@ -14,7 +14,30 @@ public:
     FakeMediaBackend(
         const vrrec_session_config_v1 &config,
         MediaEventSink &events) noexcept
-        : events_(events), encoder_kind_(config.encoder_kind)
+        : events_(events),
+          encoder_kind_(config.encoder_kind),
+          config_ {
+              config.width,
+              config.height,
+              config.source_width,
+              config.source_height,
+              config.destination_x,
+              config.destination_y,
+              config.destination_width,
+              config.destination_height,
+              config.canvas_background,
+              config.rotation,
+              config.audio_routing,
+              config.quality_preset,
+              config.desktop_endpoint_id_utf8,
+              config.microphone_endpoint_id_utf8,
+              config.desktop_gain_db,
+              config.microphone_gain_db,
+              config.spout_sender_identity_utf8,
+              config.spout_adapter_luid,
+              config.encoder_adapter_luid,
+              config.gpu_identity_utf8,
+          }
     {
         active_ = this;
     }
@@ -68,9 +91,15 @@ public:
         return encoder_kind_;
     }
 
+    const testing::ObservedMediaSessionConfig &SessionConfig() const noexcept
+    {
+        return config_;
+    }
+
 private:
     MediaEventSink &events_;
     std::uint32_t encoder_kind_;
+    testing::ObservedMediaSessionConfig config_;
     bool aborted_ = false;
     static FakeMediaBackend *active_;
 };
@@ -194,6 +223,11 @@ void Fail(std::int32_t status, std::string_view message)
 std::uint32_t EncoderKind()
 {
     return FakeMediaBackend::Active()->EncoderKind();
+}
+
+const ObservedMediaSessionConfig &SessionConfig()
+{
+    return FakeMediaBackend::Active()->SessionConfig();
 }
 
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed)

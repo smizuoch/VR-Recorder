@@ -26,6 +26,10 @@ typedef struct vrrec_steamvr_input vrrec_steamvr_input_t;
 typedef int32_t vrrec_status_t;
 typedef uint32_t vrrec_event_kind_t;
 typedef uint32_t vrrec_encoder_kind_t;
+typedef uint32_t vrrec_canvas_background_t;
+typedef uint32_t vrrec_video_rotation_t;
+typedef uint32_t vrrec_audio_routing_t;
+typedef uint32_t vrrec_quality_preset_t;
 
 #define VRREC_STATUS_OK INT32_C(0)
 #define VRREC_STATUS_INVALID_ARGUMENT INT32_C(1)
@@ -44,6 +48,18 @@ typedef uint32_t vrrec_encoder_kind_t;
 #define VRREC_ENCODER_QSV UINT32_C(3)
 #define VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE UINT32_C(4)
 
+#define VRREC_CANVAS_BACKGROUND_BLACK UINT32_C(1)
+
+#define VRREC_VIDEO_ROTATION_NONE UINT32_C(1)
+
+#define VRREC_AUDIO_ROUTING_MIXED UINT32_C(1)
+#define VRREC_AUDIO_ROUTING_DESKTOP_ONLY UINT32_C(2)
+#define VRREC_AUDIO_ROUTING_MIC_ONLY UINT32_C(3)
+#define VRREC_AUDIO_ROUTING_MUTED UINT32_C(4)
+
+#define VRREC_QUALITY_PRESET_STANDARD UINT32_C(1)
+#define VRREC_QUALITY_PRESET_HIGH UINT32_C(2)
+
 typedef struct vrrec_session_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -55,6 +71,25 @@ typedef struct vrrec_session_config_v1 {
     int64_t started_at_unix_milliseconds_utc;
     vrrec_encoder_kind_t encoder_kind;
     uint32_t reserved;
+    uint32_t source_width;
+    uint32_t source_height;
+    uint32_t destination_x;
+    uint32_t destination_y;
+    uint32_t destination_width;
+    uint32_t destination_height;
+    vrrec_canvas_background_t canvas_background;
+    vrrec_video_rotation_t rotation;
+    vrrec_audio_routing_t audio_routing;
+    vrrec_quality_preset_t quality_preset;
+    const char *desktop_endpoint_id_utf8;
+    const char *microphone_endpoint_id_utf8;
+    double desktop_gain_db;
+    double microphone_gain_db;
+    const char *spout_sender_identity_utf8;
+    uint64_t spout_adapter_luid;
+    uint64_t encoder_adapter_luid;
+    const char *gpu_identity_utf8;
+    uint64_t reserved_v1;
 } vrrec_session_config_v1;
 
 typedef struct vrrec_event_v1 {
