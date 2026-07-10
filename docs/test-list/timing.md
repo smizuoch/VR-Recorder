@@ -6,6 +6,7 @@
 
 - [x] SelfTimerはOff／3／5／10秒だけを受け入れる
 - [x] RecordingDurationは∞／3／5／10／30／60秒だけを受け入れる
+- [ ] FirstPacketCommittedの単調時刻へdurationを加えてdeadlineを作る
 - [x] Countdown中のCancelでengineを開始しない
 - [x] AutoStopはCountdown開始ではなくFirstPacketCommittedから計測する
 - [x] 3秒のAutoStopでStopRequestedを1回だけ発行する
@@ -16,6 +17,7 @@ The self-timer and auto-stop rules from Basic Design v0.3 §§7.1, 18, and 24 ar
 
 - [x] SelfTimer accepts only Off, 3, 5, and 10 seconds
 - [x] RecordingDuration accepts only infinite, 3, 5, 10, 30, and 60 seconds
+- [ ] Build the deadline by adding duration to the monotonic FirstPacketCommitted time
 - [x] Cancel during Countdown does not start the engine
 - [x] AutoStop starts at FirstPacketCommitted, not at Countdown
 - [x] A three-second AutoStop issues StopRequested exactly once
