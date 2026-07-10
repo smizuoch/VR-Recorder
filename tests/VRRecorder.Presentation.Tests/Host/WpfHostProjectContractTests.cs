@@ -515,6 +515,8 @@ public sealed class WpfHostProjectContractTests
                      "LegalBundleMirroringDesktopRecordingStartRequestSource",
                      "AuthenticatedLegalBundleOutputMirror",
                      "FfprobeRecordingFileValidator",
+                     "RotatingJsonLinesDiagnosticLog",
+                     "StructuredRecordingEventSink",
                  })
         {
             Assert.Contains(productionType, factory);
@@ -524,6 +526,7 @@ public sealed class WpfHostProjectContractTests
         Assert.DoesNotContain(
             "RECORDING_SERVICE_COMPOSITION_UNAVAILABLE",
             factory);
+        Assert.DoesNotContain("ProductionRecordingEventSink", factory);
     }
 
     [Fact]
