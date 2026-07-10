@@ -1,5 +1,6 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Timing;
 
 namespace VRRecorder.Application.Tests.TestDoubles;
 
@@ -20,7 +21,9 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
     {
         StartCallCount++;
         CreatedFiles.Add("recording.recording.mp4");
-        return Task.FromResult(new RecordingHandle("test-recording"));
+        return Task.FromResult(new RecordingHandle(
+            "test-recording",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
     }
 
     public Task<RecordingResult> StopAsync(

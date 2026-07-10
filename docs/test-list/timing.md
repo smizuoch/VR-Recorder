@@ -9,7 +9,7 @@
 - [x] FirstPacketCommittedの単調時刻へdurationを加えてdeadlineを作る
 - [x] Countdown中のCancelでengineを開始しない
 - [ ] AutoStopはCountdown開始ではなくFirstPacketCommittedから計測する
-- [ ] 3秒のAutoStopでStopRequestedを1回だけ発行する
+- [x] 3秒のAutoStopでStopRequestedを1回だけ発行する
 
 ## English
 
@@ -20,4 +20,4 @@ The self-timer and auto-stop rules from Basic Design v0.3 §§7.1, 18, and 24 ar
 - [x] Build the deadline by adding duration to the monotonic FirstPacketCommitted time
 - [x] Cancel during Countdown does not start the engine
 - [ ] AutoStop starts at FirstPacketCommitted, not at Countdown
-- [ ] A three-second AutoStop issues StopRequested exactly once
+- [x] A three-second AutoStop issues StopRequested exactly once

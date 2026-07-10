@@ -31,9 +31,11 @@ public sealed class AutoStopScheduler
             return;
         }
 
-        var delay = TimeSpan.FromSeconds(duration.Seconds.GetValueOrDefault());
+        var durationValue = TimeSpan.FromSeconds(
+            duration.Seconds.GetValueOrDefault());
+        var deadline = handle.FirstPacketCommittedAt.Add(durationValue);
         await _clock
-            .DelayAsync(delay, cancellationToken)
+            .DelayUntilAsync(deadline, cancellationToken)
             .ConfigureAwait(false);
         await _stopRequests
             .RequestStopAsync(handle, cancellationToken)
