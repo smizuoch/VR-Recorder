@@ -102,16 +102,29 @@ public sealed class DesktopRecordingCommandHost
             : toggleTask;
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
+        bool cancelLifetime = false;
         Task disposeTask;
         lock (_gate)
         {
-            _disposeTask ??= DisposeCoreAsync();
+            if (_disposeTask is null)
+            {
+                _disposed = true;
+                _state = DesktopRecordingHostState.Disposed;
+                cancelLifetime = true;
+                _disposeTask = DisposeCoreAsync();
+            }
+
             disposeTask = _disposeTask;
         }
 
-        await disposeTask.ConfigureAwait(false);
+        if (cancelLifetime)
+        {
+            CancelLifetime();
+        }
+
+        return new ValueTask(disposeTask);
     }
 
     public ValueTask EnterComplianceFaultAsync()
@@ -226,16 +239,6 @@ public sealed class DesktopRecordingCommandHost
     private async Task DisposeCoreAsync()
     {
         await Task.Yield();
-        lock (_gate)
-        {
-            if (!_disposed)
-            {
-                _disposed = true;
-                _state = DesktopRecordingHostState.Disposed;
-            }
-        }
-
-        CancelLifetime();
         await EnsureShutdownStarted().ConfigureAwait(false);
         _lifetime.Dispose();
     }
