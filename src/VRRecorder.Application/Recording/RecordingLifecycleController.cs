@@ -90,7 +90,6 @@ public sealed class RecordingLifecycleController : IDisposable
             var lease = await camera
                 .AcquireAsync(cameraSnapshot, cancellationToken)
                 .ConfigureAwait(false);
-            var restoreAttempted = false;
             try
             {
                 var recording = await _startRecording
@@ -118,9 +117,19 @@ public sealed class RecordingLifecycleController : IDisposable
                 }
                 else
                 {
-                    restoreAttempted = true;
-                    await camera
-                        .RestoreAsync(lease, CancellationToken.None)
+                    var warningReason = recording switch
+                    {
+                        StartRecordingResult.NoSignal =>
+                            CameraRestoreWarningReason.NoSignal,
+                        StartRecordingResult.InsufficientStorage =>
+                            CameraRestoreWarningReason.InsufficientStorage,
+                        _ => throw new InvalidOperationException(
+                            $"Unknown non-start result {recording.GetType().Name}."),
+                    };
+                    await RestoreCameraBestEffortAsync(
+                            camera,
+                            lease,
+                            warningReason)
                         .ConfigureAwait(false);
                 }
 
@@ -130,16 +139,32 @@ public sealed class RecordingLifecycleController : IDisposable
                     connection,
                     recording);
             }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    await RestoreCameraBestEffortAsync(
+                            camera,
+                            lease,
+                            CameraRestoreWarningReason.StartCanceled)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    SetState(RecorderState.Ready);
+                }
+
+                throw;
+            }
             catch
             {
                 try
                 {
-                    if (!restoreAttempted)
-                    {
-                        await camera
-                            .RestoreAsync(lease, CancellationToken.None)
-                            .ConfigureAwait(false);
-                    }
+                    await RestoreCameraBestEffortAsync(
+                            camera,
+                            lease,
+                            CameraRestoreWarningReason.StartFailed)
+                        .ConfigureAwait(false);
                 }
                 finally
                 {
@@ -246,6 +271,26 @@ public sealed class RecordingLifecycleController : IDisposable
             "Camera restoration requires an active camera lease.");
         try
         {
+            await RestoreCameraBestEffortAsync(
+                    camera,
+                    lease,
+                    warningReason)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _activeCamera = null;
+            _activeCameraLease = null;
+        }
+    }
+
+    private async Task RestoreCameraBestEffortAsync(
+        CameraSessionController camera,
+        CameraLease lease,
+        CameraRestoreWarningReason warningReason)
+    {
+        try
+        {
             await camera
                 .RestoreAsync(lease, CancellationToken.None)
                 .ConfigureAwait(false);
@@ -257,11 +302,6 @@ public sealed class RecordingLifecycleController : IDisposable
                     new CameraRestoreWarning(warningReason, exception),
                     CancellationToken.None)
                 .ConfigureAwait(false);
-        }
-        finally
-        {
-            _activeCamera = null;
-            _activeCameraLease = null;
         }
     }
 }

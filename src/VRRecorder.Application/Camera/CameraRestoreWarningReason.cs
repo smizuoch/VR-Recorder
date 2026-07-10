@@ -5,4 +5,6 @@ public enum CameraRestoreWarningReason
     RecordingCompleted,
     StartCanceled,
     NoSignal,
+    InsufficientStorage,
+    StartFailed,
 }
