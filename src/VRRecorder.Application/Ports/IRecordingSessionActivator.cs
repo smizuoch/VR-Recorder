@@ -6,5 +6,6 @@ public interface IRecordingSessionActivator
 {
     void Activate(
         RecordingHandle handle,
-        CancellationToken sessionLifetimeToken);
+        CancellationToken sessionLifetimeToken,
+        IRecordingSessionCompletionSink? completionSink = null);
 }

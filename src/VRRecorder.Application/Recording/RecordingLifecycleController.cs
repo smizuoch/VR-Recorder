@@ -16,8 +16,6 @@ public sealed class RecordingLifecycleController : IDisposable
     private readonly StartRecordingUseCase _startRecording;
     private readonly IStopRequestSink _stopRequests;
     private readonly ICameraRestoreWarningSink _cameraRestoreWarnings;
-    private CameraSessionController? _activeCamera;
-    private CameraLease? _activeCameraLease;
     private VideoSignalSupervisor? _videoSignal;
     private RecorderState _state = RecorderState.Ready;
 
@@ -90,10 +88,17 @@ public sealed class RecordingLifecycleController : IDisposable
             var lease = await camera
                 .AcquireAsync(cameraSnapshot, cancellationToken)
                 .ConfigureAwait(false);
+            var completionSink = new CameraSessionCompletionSink(
+                this,
+                camera,
+                lease);
             try
             {
                 var recording = await _startRecording
-                    .ExecuteAsync(command, cancellationToken)
+                    .ExecuteAsync(
+                        command,
+                        cancellationToken,
+                        completionSink)
                     .ConfigureAwait(false);
                 var state = recording switch
                 {
@@ -109,11 +114,19 @@ public sealed class RecordingLifecycleController : IDisposable
                 };
                 if (recording is StartRecordingResult.Started started)
                 {
-                    _activeCamera = camera;
-                    _activeCameraLease = lease;
-                    _videoSignal = new VideoSignalSupervisor(
-                        started.Handle,
-                        _stopRequests);
+                    if (!completionSink.TryCommitStarted(() =>
+                        {
+                            lock (_stateGate)
+                            {
+                                _videoSignal = new VideoSignalSupervisor(
+                                    started.Handle,
+                                    _stopRequests);
+                                _state = state;
+                            }
+                        }))
+                    {
+                        state = State;
+                    }
                 }
                 else
                 {
@@ -131,9 +144,9 @@ public sealed class RecordingLifecycleController : IDisposable
                             lease,
                             warningReason)
                         .ConfigureAwait(false);
+                    SetState(state);
                 }
 
-                SetState(state);
                 return new RecordingLifecycleStartResult(
                     state,
                     connection,
@@ -224,21 +237,6 @@ public sealed class RecordingLifecycleController : IDisposable
                     RecorderState.Recording,
                     RecorderTrigger.FreshFrameTimeout));
             }
-            else if (status == VideoSignalStatus.SafeStop &&
-                     State == RecorderState.SignalLost)
-            {
-                var stopping = RecorderStateMachine.Transition(
-                    RecorderState.SignalLost,
-                    RecorderTrigger.GraceExpired);
-                SetState(stopping);
-                await RestoreActiveCameraAsync(
-                        CameraRestoreWarningReason.RecordingCompleted)
-                    .ConfigureAwait(false);
-                SetState(RecorderStateMachine.Transition(
-                    stopping,
-                    RecorderTrigger.StopCompleted));
-                _videoSignal = null;
-            }
 
             return status;
         }
@@ -258,29 +256,21 @@ public sealed class RecordingLifecycleController : IDisposable
         }
     }
 
-    private VideoSignalSupervisor ActiveVideoSignalSupervisor() =>
-        _videoSignal ?? throw new InvalidOperationException(
-            "Video signal monitoring requires an active recording.");
-
-    private async Task RestoreActiveCameraAsync(
-        CameraRestoreWarningReason warningReason)
+    private VideoSignalSupervisor ActiveVideoSignalSupervisor()
     {
-        var camera = _activeCamera ?? throw new InvalidOperationException(
-            "Camera restoration requires an active camera session.");
-        var lease = _activeCameraLease ?? throw new InvalidOperationException(
-            "Camera restoration requires an active camera lease.");
-        try
+        lock (_stateGate)
         {
-            await RestoreCameraBestEffortAsync(
-                    camera,
-                    lease,
-                    warningReason)
-                .ConfigureAwait(false);
+            return _videoSignal ?? throw new InvalidOperationException(
+                "Video signal monitoring requires an active recording.");
         }
-        finally
+    }
+
+    private void CompleteRecordingSession(RecorderState finalState)
+    {
+        lock (_stateGate)
         {
-            _activeCamera = null;
-            _activeCameraLease = null;
+            _videoSignal = null;
+            _state = finalState;
         }
     }
 
@@ -302,6 +292,57 @@ public sealed class RecordingLifecycleController : IDisposable
                     new CameraRestoreWarning(warningReason, exception),
                     CancellationToken.None)
                 .ConfigureAwait(false);
+        }
+    }
+
+    private sealed class CameraSessionCompletionSink(
+        RecordingLifecycleController owner,
+        CameraSessionController camera,
+        CameraLease lease) : IRecordingSessionCompletionSink
+    {
+        private readonly object _gate = new();
+        private bool _completed;
+        private int _completionClaimed;
+
+        public bool TryCommitStarted(Action commit)
+        {
+            ArgumentNullException.ThrowIfNull(commit);
+            lock (_gate)
+            {
+                if (_completed)
+                {
+                    return false;
+                }
+
+                commit();
+                return true;
+            }
+        }
+
+        public async Task CompleteAsync(
+            RecordingSessionCompletion completion,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(completion);
+            if (Interlocked.CompareExchange(
+                    ref _completionClaimed,
+                    1,
+                    0) != 0)
+            {
+                return;
+            }
+
+            await owner
+                .RestoreCameraBestEffortAsync(
+                    camera,
+                    lease,
+                    CameraRestoreWarningReason.RecordingCompleted)
+                .ConfigureAwait(false);
+            lock (_gate)
+            {
+                owner.CompleteRecordingSession(completion.FinalState);
+                _completed = true;
+            }
         }
     }
 }

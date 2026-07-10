@@ -399,7 +399,8 @@ public sealed class StartRecordingUseCaseTests
 
         public void Activate(
             RecordingHandle handle,
-            CancellationToken sessionLifetimeToken)
+            CancellationToken sessionLifetimeToken,
+            IRecordingSessionCompletionSink? completionSink = null)
         {
             Handle = handle;
             events.Add("activate");

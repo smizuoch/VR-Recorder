@@ -48,7 +48,8 @@ public sealed class ActiveRecordingSessionCoordinator
 
     public void Activate(
         RecordingHandle handle,
-        CancellationToken sessionLifetimeToken = default)
+        CancellationToken sessionLifetimeToken = default,
+        IRecordingSessionCompletionSink? completionSink = null)
     {
         ArgumentNullException.ThrowIfNull(handle);
         lock (_gate)
@@ -65,7 +66,8 @@ public sealed class ActiveRecordingSessionCoordinator
                     _recordingEngine,
                     handle,
                     _finalization,
-                    sessionLifetimeToken));
+                    sessionLifetimeToken),
+                completionSink);
             _stopReason = null;
             _state = RecorderStateMachine.Transition(
                 RecorderState.Starting,
@@ -91,6 +93,7 @@ public sealed class ActiveRecordingSessionCoordinator
             if (session.StopTask is null)
             {
                 _stopReason = request.Reason;
+                session.StopReason = request.Reason;
                 _state = RecorderStateMachine.Transition(
                     _state,
                     RecorderTrigger.StopRequested);
@@ -112,51 +115,82 @@ public sealed class ActiveRecordingSessionCoordinator
         ActiveSession session,
         TaskCompletionSource completion)
     {
+        RecordingFinalizationResult? result = null;
+        Exception? primaryFailure = null;
         try
         {
-            var result = await session.Coordinator
+            result = await session.Coordinator
                 .StopAsync()
                 .ConfigureAwait(false);
-            lock (_gate)
-            {
-                if (!ReferenceEquals(_activeSession, session))
-                {
-                    completion.TrySetResult();
-                    return;
-                }
-
-                _state = result is RecordingFinalizationResult.Saved
-                    ? RecorderStateMachine.Transition(
-                        _state,
-                        RecorderTrigger.StopCompleted)
-                    : RecorderState.Faulted;
-                _activeSession = null;
-            }
-
-            completion.TrySetResult();
         }
         catch (Exception exception)
         {
-            lock (_gate)
-            {
-                if (ReferenceEquals(_activeSession, session))
-                {
-                    _state = RecorderState.Faulted;
-                    _activeSession = null;
-                }
-            }
+            primaryFailure = exception;
+        }
 
-            completion.TrySetException(exception);
+        var finalState = primaryFailure is null &&
+                         result is RecordingFinalizationResult.Saved
+            ? RecorderStateMachine.Transition(
+                RecorderState.Stopping,
+                RecorderTrigger.StopCompleted)
+            : RecorderState.Faulted;
+        Exception? completionFailure = null;
+        try
+        {
+            if (session.CompletionSink is not null)
+            {
+                await session.CompletionSink
+                    .CompleteAsync(
+                        new RecordingSessionCompletion(
+                            session.Handle,
+                            session.StopReason ?? throw new InvalidOperationException(
+                                "A terminal recording session has no stop reason."),
+                            finalState),
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception)
+        {
+            completionFailure = exception;
+        }
+
+        lock (_gate)
+        {
+            if (ReferenceEquals(_activeSession, session))
+            {
+                _state = finalState;
+                _activeSession = null;
+            }
+        }
+
+        if (primaryFailure is not null)
+        {
+            completion.TrySetException(primaryFailure);
+        }
+        else if (completionFailure is not null)
+        {
+            completion.TrySetException(completionFailure);
+        }
+        else
+        {
+            completion.TrySetResult();
         }
     }
 
     private sealed class ActiveSession(
         RecordingHandle handle,
-        RecordingSessionStopCoordinator coordinator)
+        RecordingSessionStopCoordinator coordinator,
+        IRecordingSessionCompletionSink? completionSink)
     {
         public RecordingHandle Handle { get; } = handle;
 
         public RecordingSessionStopCoordinator Coordinator { get; } = coordinator;
+
+        public IRecordingSessionCompletionSink? CompletionSink { get; } =
+            completionSink;
+
+        public RecordingStopReason? StopReason { get; set; }
 
         public Task? StopTask { get; set; }
     }

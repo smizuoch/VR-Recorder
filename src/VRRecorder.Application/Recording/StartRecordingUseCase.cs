@@ -55,7 +55,8 @@ public sealed class StartRecordingUseCase
 
     public async Task<StartRecordingResult> ExecuteAsync(
         StartRecordingCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IRecordingSessionCompletionSink? completionSink = null)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -115,7 +116,10 @@ public sealed class StartRecordingUseCase
         var handle = await _recordingEngine
             .StartAsync(plan, cancellationToken)
             .ConfigureAwait(false);
-        _sessionActivator.Activate(handle, cancellationToken);
+        _sessionActivator.Activate(
+            handle,
+            cancellationToken,
+            completionSink);
         var autoStopCompletion = _autoStopScheduler.OnFirstPacketCommittedAsync(
             handle,
             command.AutoStop,

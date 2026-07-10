@@ -10,6 +10,7 @@ internal sealed class FakeRecordingSessionActivator
 
     public void Activate(
         RecordingHandle handle,
-        CancellationToken sessionLifetimeToken) =>
+        CancellationToken sessionLifetimeToken,
+        IRecordingSessionCompletionSink? completionSink = null) =>
         Handles.Add(handle);
 }
