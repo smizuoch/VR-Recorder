@@ -8,6 +8,8 @@ internal sealed class NativeAbiLibrary : IDisposable
     private readonly nint _library;
     private readonly CreateSessionDelegate _createSession;
     private readonly SessionOperationDelegate _startSession;
+    private readonly UpdateVideoLayoutDelegate _updateVideoLayout;
+    private readonly GetStatisticsDelegate _getStatistics;
     private readonly SessionOperationDelegate _requestStop;
     private readonly SessionOperationDelegate _abortSession;
     private readonly DestroySessionDelegate _destroySession;
@@ -39,6 +41,10 @@ internal sealed class NativeAbiLibrary : IDisposable
                 "vrrec_session_create_v1");
             _startSession = Resolve<SessionOperationDelegate>(
                 "vrrec_session_start_v1");
+            _updateVideoLayout = Resolve<UpdateVideoLayoutDelegate>(
+                "vrrec_session_update_video_layout_v1");
+            _getStatistics = Resolve<GetStatisticsDelegate>(
+                "vrrec_session_get_statistics_v1");
             _requestStop = Resolve<SessionOperationDelegate>(
                 "vrrec_session_request_stop_v1");
             _abortSession = Resolve<SessionOperationDelegate>(
@@ -66,6 +72,16 @@ internal sealed class NativeAbiLibrary : IDisposable
         _createSession(ref config, ref callbacks, out session);
 
     public NativeStatus StartSession(nint session) => _startSession(session);
+
+    public NativeStatus UpdateVideoLayout(
+        nint session,
+        ref NativeVideoLayoutV1 layout) =>
+        _updateVideoLayout(session, ref layout);
+
+    public NativeStatus GetStatistics(
+        nint session,
+        ref NativeSessionStatisticsV1 statistics) =>
+        _getStatistics(session, ref statistics);
 
     public NativeStatus RequestStop(nint session) => _requestStop(session);
 
@@ -97,6 +113,16 @@ internal sealed class NativeAbiLibrary : IDisposable
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate NativeStatus SessionOperationDelegate(nint session);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeStatus UpdateVideoLayoutDelegate(
+        nint session,
+        ref NativeVideoLayoutV1 layout);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeStatus GetStatisticsDelegate(
+        nint session,
+        ref NativeSessionStatisticsV1 statistics);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void DestroySessionDelegate(nint session);

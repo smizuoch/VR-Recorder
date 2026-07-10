@@ -87,6 +87,38 @@ internal struct NativeSessionConfigV1
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct NativeVideoLayoutV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public uint SourceWidth;
+    public uint SourceHeight;
+    public uint CanvasWidth;
+    public uint CanvasHeight;
+    public uint DestinationX;
+    public uint DestinationY;
+    public uint DestinationWidth;
+    public uint DestinationHeight;
+    public NativeCanvasBackground CanvasBackground;
+    public NativeVideoRotation Rotation;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSessionStatisticsV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public ulong SourceVideoFrameCount;
+    public ulong MuxedVideoPacketCount;
+    public ulong MuxedAudioPacketCount;
+    public ulong DroppedSourceVideoFrameCount;
+    public ulong DuplicatedOutputVideoFrameCount;
+    public ulong LatestEncodeLatencyMicroseconds;
+    public ulong MaximumEncodeLatencyMicroseconds;
+    public long AudioVideoOffsetMicroseconds;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct NativeEventV1
 {
     public uint StructSize;
