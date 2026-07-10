@@ -22,7 +22,8 @@ public sealed class RecordingStartLifecycleIntegrationTests
 {
     [Fact]
     [Trait("Scenario", "IT-001")]
-    public async Task ExactTargetReportsRecordingOnlyAfterConfirmedCameraAndFirstPacket()
+    [Trait("Scenario", "IT-007")]
+    public async Task ExactTargetStartsAtFirstPacketAndSignalLossSafelyFinalizes()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var directory = TemporaryDirectory.Create();
@@ -59,9 +60,10 @@ public sealed class RecordingStartLifecycleIntegrationTests
             backend,
             clock,
             new UnexpectedRuntimeFaultSink());
+        var savedRecordings = new CapturingSavedRecordingSink();
         var sessions = new ActiveRecordingSessionCoordinator(
             engine,
-            CreateUnexpectedFinalization());
+            CreateFinalization(savedRecordings));
         var encoderProbe = new SameGpuEncoderProbe();
         var startRecording = new StartRecordingUseCase(
             signal,
@@ -193,6 +195,47 @@ public sealed class RecordingStartLifecycleIntegrationTests
             await lifecycle.EvaluateVideoSignalAsync(
                 recoveredAt,
                 timeout.Token));
+
+        var secondLossAt = recoveredAt.Add(TimeSpan.FromMilliseconds(1500));
+        Assert.Equal(
+            VideoSignalStatus.SignalLost,
+            await lifecycle.EvaluateVideoSignalAsync(
+                secondLossAt,
+                timeout.Token));
+        Assert.Equal(RecorderState.SignalLost, lifecycle.State);
+
+        var safeStop = lifecycle.EvaluateVideoSignalAsync(
+            secondLossAt.Add(TimeSpan.FromSeconds(5)),
+            timeout.Token);
+        await backend.Session.WaitUntilStopRequestedAsync();
+
+        Assert.Equal(1, backend.Session.StopCallCount);
+        Assert.Equal(RecordingStopReason.SignalLost, sessions.StopReason);
+        Assert.Equal(RecorderState.Stopping, sessions.State);
+        Assert.Equal(RecorderState.SignalLost, lifecycle.State);
+        Assert.True(File.Exists(backend.Plan?.Output.TemporaryPath));
+        Assert.Empty(savedRecordings.Recordings);
+
+        var userStop = sessions.RequestStopAsync(
+            new RecordingStopRequest(
+                started.Handle,
+                RecordingStopReason.UserRequested),
+            CancellationToken.None);
+        Assert.Equal(1, backend.Session.StopCallCount);
+        Assert.Equal(RecordingStopReason.SignalLost, sessions.StopReason);
+
+        backend.Session.CompleteStop();
+
+        Assert.Equal(VideoSignalStatus.SafeStop, await safeStop);
+        await userStop;
+        Assert.Equal(1, backend.Session.StopCallCount);
+        Assert.Equal(RecorderState.Ready, sessions.State);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.False(File.Exists(backend.Plan?.Output.TemporaryPath));
+        Assert.True(File.Exists(backend.Plan?.Output.FinalPath));
+        Assert.Equal(
+            Path.GetFullPath(backend.Plan!.Output.FinalPath),
+            Assert.Single(savedRecordings.Recordings).FinalPath);
     }
 
     private static OscQueryServiceAdvertisement Advertisement(
@@ -207,12 +250,13 @@ public sealed class RecordingStartLifecycleIntegrationTests
             httpPort);
     }
 
-    private static RecordingFileFinalizationUseCase CreateUnexpectedFinalization() =>
+    private static RecordingFileFinalizationUseCase CreateFinalization(
+        ISavedRecordingSink savedRecordings) =>
         new(
-            new UnexpectedRecordingFileFinalizer(),
-            new UnexpectedRecordingFileValidator(),
+            new SameDirectoryAtomicRecordingFileFinalizer(),
+            new AlwaysValidRecordingFileValidator(),
             new UnexpectedRecordingRecoveryStore(),
-            new UnexpectedSavedRecordingSink());
+            savedRecordings);
 
     private sealed class StubOscQueryServiceBrowser(
         IReadOnlyList<OscQueryServiceAdvertisement> advertisements)
@@ -423,6 +467,7 @@ public sealed class RecordingStartLifecycleIntegrationTests
             OpenCallCount++;
             Plan = plan;
             _callbacks = callbacks;
+            Session.Configure(plan.Output);
             _opened.TrySetResult();
             return Task.FromResult<INativeRecordingSession>(Session);
         }
@@ -438,14 +483,37 @@ public sealed class RecordingStartLifecycleIntegrationTests
     private sealed class ControllableNativeRecordingSession
         : INativeRecordingSession
     {
+        private readonly TaskCompletionSource _stopRequested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _stopAllowed = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private PendingRecording? _output;
+
         public string Id => "controlled-native-session-001";
 
-        public Task<RecordingStopResult> StopAsync(
-            CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Native stop was not expected.");
+        public int StopCallCount { get; private set; }
+
+        public async Task<RecordingStopResult> StopAsync(
+            CancellationToken cancellationToken)
+        {
+            StopCallCount++;
+            _stopRequested.TrySetResult();
+            await _stopAllowed.Task.WaitAsync(cancellationToken);
+            return new RecordingStopResult(
+                _output ?? throw new InvalidOperationException(
+                    "The native output was not configured."),
+                VideoPacketCount: 90,
+                AudioPacketCount: 142);
+        }
 
         public Task AbortAsync(CancellationToken cancellationToken) =>
             Task.CompletedTask;
+
+        public void Configure(PendingRecording output) => _output = output;
+
+        public Task WaitUntilStopRequestedAsync() => _stopRequested.Task;
+
+        public void CompleteStop() => _stopAllowed.TrySetResult();
     }
 
     private sealed class UnexpectedRuntimeFaultSink
@@ -455,22 +523,16 @@ public sealed class RecordingStartLifecycleIntegrationTests
             throw new InvalidOperationException("A native fault was not expected.");
     }
 
-    private sealed class UnexpectedRecordingFileFinalizer
-        : IRecordingFileFinalizer
-    {
-        public Task<FinalizedRecording> FinalizeAsync(
-            PendingRecording recording,
-            CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Finalization was not expected.");
-    }
-
-    private sealed class UnexpectedRecordingFileValidator
+    private sealed class AlwaysValidRecordingFileValidator
         : IRecordingFileValidator
     {
         public Task<RecordingFileValidation> ValidateAsync(
             FinalizedRecording recording,
-            CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Validation was not expected.");
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(RecordingFileValidation.Valid);
+        }
     }
 
     private sealed class UnexpectedRecordingRecoveryStore
@@ -482,12 +544,18 @@ public sealed class RecordingStartLifecycleIntegrationTests
             throw new InvalidOperationException("Recovery was not expected.");
     }
 
-    private sealed class UnexpectedSavedRecordingSink : ISavedRecordingSink
+    private sealed class CapturingSavedRecordingSink : ISavedRecordingSink
     {
+        public List<FinalizedRecording> Recordings { get; } = [];
+
         public Task PublishAsync(
             FinalizedRecording recording,
-            CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Saved was not expected.");
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Recordings.Add(recording);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed record OscQueryFixture(string Name, int OscPort);
