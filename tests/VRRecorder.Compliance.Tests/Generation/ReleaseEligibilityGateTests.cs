@@ -59,6 +59,24 @@ public sealed class ReleaseEligibilityGateTests
         Assert.Equal("pending-package", issue.Subject);
     }
 
+    [Fact]
+    public void ApprovedComponentWithoutRequesterDoesNotProduceApprovedReleaseGraph()
+    {
+        var graph = GraphWithApproval(new LegalApproval(
+            LegalApprovalStatus.Approved,
+            TicketId: "LEGAL-001",
+            RequestedBy: string.Empty,
+            Reviewer: "license-reviewer"));
+
+        var result = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.False(result.IsApproved);
+        Assert.Null(result.ApprovedGraph);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("missing-approval-requester", issue.Code);
+        Assert.Equal("pending-package", issue.Subject);
+    }
+
     private static NormalizedComponentGraph GraphWithApproval(
         LegalApproval approval) =>
         new(
