@@ -174,6 +174,81 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopPseudoLocaleAndRtlModesAreDeterministicAndOffline()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var english = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.en-US.xaml");
+        var japanese = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.ja-JP.xaml");
+        var pseudo = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.qps-ploc.xaml");
+        var mirroredPseudo = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.qps-plocm.xaml");
+
+        Assert.Equal(english.Keys, japanese.Keys);
+        Assert.Equal(english.Keys, pseudo.Keys);
+        Assert.Equal(english.Keys, mirroredPseudo.Keys);
+        foreach (var (key, source) in english)
+        {
+            var expected = PseudoLocalize(source);
+            Assert.Equal(expected, pseudo[key]);
+            Assert.Equal(expected, mirroredPseudo[key]);
+            Assert.True(
+                pseudo[key].Length >= source.Length * 2,
+                $"Pseudo-localized resource {key} is below 200% expansion.");
+        }
+
+        var app = LoadRequiredXaml(appDirectory, "App.xaml");
+        var mergedSources = app
+            .Descendants(Presentation + "ResourceDictionary")
+            .Select(dictionary => dictionary.Attribute("Source")?.Value)
+            .Where(source => source is not null)
+            .ToArray();
+        Assert.Contains("Resources/Layout.ltr.xaml", mergedSources);
+        Assert.All(mergedSources, source => Assert.False(
+            Uri.TryCreate(source, UriKind.Absolute, out _),
+            $"WPF UI resource must be packaged offline: {source}"));
+
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        Assert.Equal(
+            "{DynamicResource Layout.FlowDirection}",
+            window.Root?.Attribute("FlowDirection")?.Value);
+        Assert.Equal(
+            "systemWindows:FlowDirection.LeftToRight",
+            ReadStaticResourceMember(
+                appDirectory,
+                "Resources/Layout.ltr.xaml",
+                "Layout.FlowDirection"));
+        Assert.Equal(
+            "systemWindows:FlowDirection.RightToLeft",
+            ReadStaticResourceMember(
+                appDirectory,
+                "Resources/Layout.rtl.xaml",
+                "Layout.FlowDirection"));
+
+        var appCode = File.ReadAllText(Path.Combine(appDirectory, "App.xaml.cs"));
+        Assert.Contains("--ui-locale=", appCode);
+        Assert.Contains("qps-ploc", appCode);
+        Assert.Contains("qps-plocm", appCode);
+        Assert.Contains("Strings.qps-ploc.xaml", appCode);
+        Assert.Contains("Strings.qps-plocm.xaml", appCode);
+        Assert.Contains("Layout.ltr.xaml", appCode);
+        Assert.Contains("Layout.rtl.xaml", appCode);
+        Assert.False(File.Exists(Path.Combine(
+            appDirectory,
+            "Resources",
+            "Strings.ar.xaml")));
+    }
+
+    [Fact]
     public void DesktopShellFailsClosedUntilAuthenticatedLegalVerification()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -256,6 +331,39 @@ public sealed class WpfHostProjectContractTests
         }
 
         return resources;
+    }
+
+    private static string ReadStaticResourceMember(
+        string appDirectory,
+        string relativePath,
+        string resourceKey)
+    {
+        var document = LoadRequiredXaml(appDirectory, relativePath);
+        var resource = Assert.Single(document.Root!.Elements(), element =>
+            element.Attribute(Xaml + "Key")?.Value == resourceKey);
+        return resource.Attribute("Member")?.Value ??
+               throw new InvalidDataException(
+                   $"Resource {resourceKey} has no x:Static Member.");
+    }
+
+    private static string PseudoLocalize(string source)
+    {
+        var transformed = string.Concat(source.Select(character =>
+            character switch
+            {
+                'A' => 'Á',
+                'E' => 'Ë',
+                'I' => 'Ï',
+                'O' => 'Ö',
+                'U' => 'Ü',
+                'a' => 'á',
+                'e' => 'ë',
+                'i' => 'ï',
+                'o' => 'ö',
+                'u' => 'ü',
+                _ => character,
+            }));
+        return $"⟦{transformed} · {transformed}⟧";
     }
 
     private static void AssertResources(
