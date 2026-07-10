@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "encoder_probe_backend.hpp"
 #include "media_backend.hpp"
 #include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
@@ -415,6 +416,49 @@ public:
     }
 };
 
+struct FakeEncoderProbeState {
+    std::mutex mutex;
+    vrrec_status_t status = VRREC_STATUS_OK;
+    bool packet_produced = false;
+    std::uint32_t call_count = 0;
+    testing::ObservedEncoderProbeConfig observed {
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        "",
+    };
+};
+
+FakeEncoderProbeState fake_encoder_probe;
+
+class FakeEncoderProbeBackend final : public EncoderProbeBackend {
+public:
+    vrrec_status_t Probe(
+        const vrrec_encoder_probe_config_v1 &config,
+        bool &packet_produced) noexcept override
+    {
+        const std::lock_guard lock(fake_encoder_probe.mutex);
+        ++fake_encoder_probe.call_count;
+        fake_encoder_probe.observed =
+            testing::ObservedEncoderProbeConfig {
+                config.encoder_kind,
+                config.synthetic_frame_count,
+                config.adapter_luid,
+                config.width,
+                config.height,
+                config.fps_numerator,
+                config.fps_denominator,
+                config.gpu_identity_utf8,
+            };
+        packet_produced = fake_encoder_probe.packet_produced;
+        return fake_encoder_probe.status;
+    }
+};
+
 }
 
 std::unique_ptr<MediaBackend> CreateMediaBackend(
@@ -441,6 +485,13 @@ std::unique_ptr<SpoutSourceBackend> CreateSpoutSourceBackend(
     (void)config;
     status = VRREC_STATUS_OK;
     return std::make_unique<FakeSpoutSourceBackend>();
+}
+
+std::unique_ptr<EncoderProbeBackend> CreateEncoderProbeBackend(
+    vrrec_status_t &status)
+{
+    status = VRREC_STATUS_OK;
+    return std::make_unique<FakeEncoderProbeBackend>();
 }
 
 namespace testing {
@@ -616,6 +667,45 @@ std::uint32_t SpoutSourceDestroyCount()
 {
     const std::lock_guard lock(fake_spout_source.mutex);
     return fake_spout_source.destroy_count;
+}
+
+void ResetEncoderProbe()
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    fake_encoder_probe.status = VRREC_STATUS_OK;
+    fake_encoder_probe.packet_produced = false;
+    fake_encoder_probe.call_count = 0;
+    fake_encoder_probe.observed = ObservedEncoderProbeConfig {
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        "",
+    };
+}
+
+void SetEncoderProbeResult(
+    std::int32_t status,
+    bool packet_produced)
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    fake_encoder_probe.status = status;
+    fake_encoder_probe.packet_produced = packet_produced;
+}
+
+std::uint32_t EncoderProbeCallCount()
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    return fake_encoder_probe.call_count;
+}
+
+ObservedEncoderProbeConfig EncoderProbeConfig()
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    return fake_encoder_probe.observed;
 }
 
 }

@@ -214,7 +214,25 @@ typedef struct vrrec_spout_frame_v1 {
     uint64_t reserved;
 } vrrec_spout_frame_v1;
 
+typedef struct vrrec_encoder_probe_config_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    vrrec_encoder_kind_t encoder_kind;
+    uint32_t synthetic_frame_count;
+    uint64_t adapter_luid;
+    uint32_t width;
+    uint32_t height;
+    uint32_t fps_numerator;
+    uint32_t fps_denominator;
+    const char *gpu_identity_utf8;
+    uint64_t reserved;
+} vrrec_encoder_probe_config_v1;
+
 VRREC_API uint32_t VRREC_CALL vrrec_abi_version(void);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_encoder_probe_v1(
+    const vrrec_encoder_probe_config_v1 *config,
+    uint8_t *out_packet_produced);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
     const vrrec_session_config_v1 *config,

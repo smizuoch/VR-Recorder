@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "encoder_probe_backend.hpp"
 #include "media_backend.hpp"
 #include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
@@ -636,6 +637,7 @@ constexpr std::size_t SessionConfigLegacyMediaSize =
 constexpr std::size_t SessionConfigSourceFormatSize =
     sizeof(vrrec_session_config_v1);
 constexpr double MaximumEstimatedSourceFps = 1000.0;
+constexpr std::uint32_t EncoderProbeSyntheticFrameCount = 16;
 
 vrrec_session_config_v1 NormalizeSessionConfig(
     const vrrec_session_config_v1 &config) noexcept
@@ -894,6 +896,49 @@ bool TryValidateSpoutFrame(
     return true;
 }
 
+vrrec_status_t ValidateEncoderProbeArguments(
+    const vrrec_encoder_probe_config_v1 *config,
+    std::uint8_t *out_packet_produced) noexcept
+{
+    if (out_packet_produced == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    *out_packet_produced = 0;
+    if (config == nullptr ||
+        config->struct_size < sizeof(vrrec_encoder_probe_config_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (config->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    std::string_view gpu_identity;
+    if (!IsEncoderKindSupported(config->encoder_kind) ||
+        config->synthetic_frame_count !=
+            EncoderProbeSyntheticFrameCount ||
+        config->adapter_luid == 0 ||
+        config->width == 0 ||
+        config->width > static_cast<std::uint32_t>(INT32_MAX) ||
+        (config->width & 1U) != 0 ||
+        config->height == 0 ||
+        config->height > static_cast<std::uint32_t>(INT32_MAX) ||
+        (config->height & 1U) != 0 ||
+        config->fps_numerator < 30 ||
+        config->fps_numerator > 120 ||
+        config->fps_denominator != 1 ||
+        !TryValidateUtf8Text(
+            config->gpu_identity_utf8,
+            VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE,
+            gpu_identity) ||
+        config->reserved != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    return VRREC_STATUS_OK;
+}
+
 vrrec_status_t ValidateSpoutCreateArguments(
     const vrrec_spout_source_config_v1 *config,
     vrrec_spout_source_t **out_source) noexcept
@@ -972,6 +1017,41 @@ vrrec_status_t ValidateSpoutFrameArguments(
 extern "C" VRREC_API std::uint32_t VRREC_CALL vrrec_abi_version(void)
 {
     return VRREC_ABI_V1;
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_encoder_probe_v1(
+    const vrrec_encoder_probe_config_v1 *config,
+    std::uint8_t *out_packet_produced)
+{
+    const auto validation = ValidateEncoderProbeArguments(
+        config,
+        out_packet_produced);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+
+    try {
+        auto creation_status = VRREC_STATUS_INTERNAL_ERROR;
+        auto backend = vrrecorder::native::CreateEncoderProbeBackend(
+            creation_status);
+        if (backend == nullptr) {
+            return creation_status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : creation_status;
+        }
+
+        auto packet_produced = false;
+        const auto status = backend->Probe(*config, packet_produced);
+        if (status == VRREC_STATUS_OK && packet_produced) {
+            *out_packet_produced = 1;
+        }
+
+        return status;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
 }
 
 extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
