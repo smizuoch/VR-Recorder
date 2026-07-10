@@ -34,6 +34,22 @@
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(NativeMediaLibraryPath)' != '' and Exists('$(NativeMediaLibraryPath)')">
+    <Content Include="$(NativeMediaLibraryPath)">
+      <Link>vrrecorder_native.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(FfprobeExecutablePath)' != '' and Exists('$(FfprobeExecutablePath)')">
+    <Content Include="$(FfprobeExecutablePath)">
+      <Link>ffprobe.exe</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <Target Name="ValidateReleaseLegalBundle"
           BeforeTargets="PrepareForBuild"
           Condition="'$(Configuration)' == 'Release'">
@@ -55,5 +71,14 @@
     </PropertyGroup>
     <Error Condition="'$(_ComputedLegalManifestSha256)' != '$(LegalManifestSha256)'"
            Text="The LegalManifestSha256 digest does not match LEGAL-MANIFEST.sha256." />
+  </Target>
+
+  <Target Name="ValidateReleaseMediaRuntime"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'Release'">
+    <Error Condition="'$(NativeMediaLibraryPath)' == '' or !Exists('$(NativeMediaLibraryPath)')"
+           Text="Release requires NativeMediaLibraryPath pointing to the approved Windows x64 vrrecorder_native.dll." />
+    <Error Condition="'$(FfprobeExecutablePath)' == '' or !Exists('$(FfprobeExecutablePath)')"
+           Text="Release requires FfprobeExecutablePath pointing to the approved Windows x64 ffprobe.exe." />
   </Target>
 </Project>
