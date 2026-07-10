@@ -19,6 +19,17 @@
     <system:String x:Key="Rights_Decline_AccessibleName">了承せずVR-Recorderを終了</system:String>
     <system:String x:Key="Rights_Decline_Tooltip">録画を有効にせず終了します</system:String>
     <system:String x:Key="Rights_Persistence_Error">録画権利の了承を保存できなかったため、録画は無効のままです。</system:String>
+    <system:String x:Key="VrChat_Selection_Title">VRChatインスタンスを選択</system:String>
+    <system:String x:Key="VrChat_Selection_Body">複数のVRChat OSCインスタンスを検出しました。録画する対象を正確に選択してください。</system:String>
+    <system:String x:Key="VrChat_Selection_Item_Format">{0} — {1}</system:String>
+    <system:String x:Key="VrChat_Selection_List_AccessibleName">利用可能なVRChatインスタンス</system:String>
+    <system:String x:Key="VrChat_Selection_List_Tooltip">カメラを録画するVRChatインスタンスを選択します</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_Label">選択して続行</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_AccessibleName">選択したVRChatインスタンスを使用</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_Tooltip">選択したVRChatインスタンスで録画準備を続行します</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_Label">取消</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_AccessibleName">VRChatインスタンスの選択を取り消す</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_Tooltip">録画を開始せずに戻ります</system:String>
     <system:String x:Key="Recording_Start_Short">REC</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">録画を開始</system:String>
     <system:String x:Key="Recording_Start_Tooltip">録画を開始します</system:String>

@@ -19,6 +19,17 @@
     <system:String x:Key="Rights_Decline_AccessibleName">⟦Dëclïnë ánd ëxït VR-Rëcördër · Dëclïnë ánd ëxït VR-Rëcördër⟧</system:String>
     <system:String x:Key="Rights_Decline_Tooltip">⟦Ëxït wïthöüt ënáblïng rëcördïng · Ëxït wïthöüt ënáblïng rëcördïng⟧</system:String>
     <system:String x:Key="Rights_Persistence_Error">⟦Rëcördïng rëmáïns dïsáblëd bëcáüsë thë rïghts ácknöwlëdgëmënt cöüld nöt bë sávëd. · Rëcördïng rëmáïns dïsáblëd bëcáüsë thë rïghts ácknöwlëdgëmënt cöüld nöt bë sávëd.⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Title">⟦Chöösë VRChát ïnstáncë · Chöösë VRChát ïnstáncë⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Body">⟦Mörë thán önë VRChát ÖSC ïnstáncë ïs áváïláblë. Chöösë thë ëxáct ïnstáncë tö rëcörd. · Mörë thán önë VRChát ÖSC ïnstáncë ïs áváïláblë. Chöösë thë ëxáct ïnstáncë tö rëcörd.⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Item_Format">⟦{0} — {1} · {0} — {1}⟧</system:String>
+    <system:String x:Key="VrChat_Selection_List_AccessibleName">⟦Áváïláblë VRChát ïnstáncës · Áváïláblë VRChát ïnstáncës⟧</system:String>
+    <system:String x:Key="VrChat_Selection_List_Tooltip">⟦Chöösë thë VRChát ïnstáncë whösë cámërá shöüld bë rëcördëd · Chöösë thë VRChát ïnstáncë whösë cámërá shöüld bë rëcördëd⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_Label">⟦ÜSË SËLËCTËD · ÜSË SËLËCTËD⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_AccessibleName">⟦Üsë thë sëlëctëd VRChát ïnstáncë · Üsë thë sëlëctëd VRChát ïnstáncë⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_Tooltip">⟦Cöntïnüë rëcördïng sëtüp wïth thë sëlëctëd VRChát ïnstáncë · Cöntïnüë rëcördïng sëtüp wïth thë sëlëctëd VRChát ïnstáncë⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_Label">⟦CÁNCËL · CÁNCËL⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_AccessibleName">⟦Cáncël VRChát ïnstáncë sëlëctïön · Cáncël VRChát ïnstáncë sëlëctïön⟧</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_Tooltip">⟦Rëtürn wïthöüt stártïng á rëcördïng · Rëtürn wïthöüt stártïng á rëcördïng⟧</system:String>
     <system:String x:Key="Recording_Start_Short">⟦RËC · RËC⟧</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">⟦Stárt rëcördïng · Stárt rëcördïng⟧</system:String>
     <system:String x:Key="Recording_Start_Tooltip">⟦Stárt rëcördïng · Stárt rëcördïng⟧</system:String>

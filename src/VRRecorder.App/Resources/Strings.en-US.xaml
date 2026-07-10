@@ -19,6 +19,17 @@
     <system:String x:Key="Rights_Decline_AccessibleName">Decline and exit VR-Recorder</system:String>
     <system:String x:Key="Rights_Decline_Tooltip">Exit without enabling recording</system:String>
     <system:String x:Key="Rights_Persistence_Error">Recording remains disabled because the rights acknowledgement could not be saved.</system:String>
+    <system:String x:Key="VrChat_Selection_Title">Choose VRChat instance</system:String>
+    <system:String x:Key="VrChat_Selection_Body">More than one VRChat OSC instance is available. Choose the exact instance to record.</system:String>
+    <system:String x:Key="VrChat_Selection_Item_Format">{0} — {1}</system:String>
+    <system:String x:Key="VrChat_Selection_List_AccessibleName">Available VRChat instances</system:String>
+    <system:String x:Key="VrChat_Selection_List_Tooltip">Choose the VRChat instance whose camera should be recorded</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_Label">USE SELECTED</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_AccessibleName">Use the selected VRChat instance</system:String>
+    <system:String x:Key="VrChat_Selection_Accept_Tooltip">Continue recording setup with the selected VRChat instance</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_Label">CANCEL</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_AccessibleName">Cancel VRChat instance selection</system:String>
+    <system:String x:Key="VrChat_Selection_Cancel_Tooltip">Return without starting a recording</system:String>
     <system:String x:Key="Recording_Start_Short">REC</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">Start recording</system:String>
     <system:String x:Key="Recording_Start_Tooltip">Start recording</system:String>
