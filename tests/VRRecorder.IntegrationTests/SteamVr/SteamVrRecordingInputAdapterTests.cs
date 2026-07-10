@@ -55,6 +55,59 @@ public sealed class SteamVrRecordingInputAdapterTests
     }
 
     [Fact]
+    public async Task RepeatedChangedPressesWaitForReleaseOrInactiveBeforeRedispatch()
+    {
+        var runtime = new ScriptedSteamVrInputRuntime(
+        [
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: false,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: false,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+        ]);
+        var commands = new CapturingUiCommandDispatcher();
+        var adapter = new SteamVrRecordingInputAdapter(
+            runtime,
+            new RecordingInputDispatcher(commands));
+
+        await adapter.RunAsync(CancellationToken.None);
+
+        Assert.Equal(3, commands.Commands.Count);
+        Assert.All(commands.Commands, command =>
+        {
+            Assert.Equal(UiCommandId.ToggleRecording, command.Command);
+            Assert.Equal(UiActivationKind.SteamVrAction, command.ActivationKind);
+        });
+    }
+
+    [Fact]
     public void ActionManifestDefinesLocalizedBooleanToggleAndBindings()
     {
         var openVrDirectory = Path.Combine(
