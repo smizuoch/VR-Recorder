@@ -23,4 +23,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Arming, next);
     }
+
+    [Fact]
+    public void SignalTimeoutWhenArmingTransitionsToNoSignal()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Arming,
+            RecorderTrigger.SignalTimeout);
+
+        Assert.Equal(RecorderState.NoSignal, next);
+    }
 }
