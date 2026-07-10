@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "registryVersion": 1,
+  "components": [
+    {
+      "id": "coverlet",
+      "displayName": "Coverlet collector",
+      "version": "6.0.4",
+      "purl": "pkg:nuget/coverlet.collector@6.0.4",
+      "scope": "test-only",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) 2018 Toni Solarin-Sodara",
+      "licenseFilePath": "third-party/licenses/coverlet/LICENSE.txt",
+      "licenseFileSha256": "21c34a8ee7f16f64b39b3791a761a6bc70202dae815e00e7b004b52104edd369",
+      "repository": {
+        "url": "https://github.com/coverlet-coverage/coverlet",
+        "commit": "90b21079d43cffae3a18f264e00962b9c8a1d57a"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "coverlet.collector",
+          "version": "6.0.4",
+          "contentHashSha512": "lkhqpF8Pu2Y7IiN7OntbsTtdbpR1syMsm2F3IgX6ootA4ffRqWL5jF7XipHuZQTdVuWG/gVAAcf8mjk8Tz0xPg==",
+          "archiveSha256": "89e89497b1b9a55290e15eabc6111ed1e85ea74feed51043dc4008eb70104c8d",
+          "kind": "Direct"
+        }
+      ]
+    },
+    {
+      "id": "microsoft-vstest",
+      "displayName": "Microsoft Test Platform",
+      "version": "17.14.1",
+      "purl": "pkg:nuget/microsoft.net.test.sdk@17.14.1",
+      "scope": "test-only",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) Microsoft Corporation. All rights reserved.",
+      "licenseFilePath": "third-party/licenses/microsoft-vstest/LICENSE.txt",
+      "licenseFileSha256": "4d0502953fdb7784a9ca9e1f7e93da5db076de7c52456d6a2a666327a1a9981d",
+      "repository": {
+        "url": "https://github.com/microsoft/vstest",
+        "commit": "490850ae3fdc1b470e3804ceab4f6a41cf89ae51"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "Microsoft.NET.Test.Sdk",
+          "version": "17.14.1",
+          "contentHashSha512": "HJKqKOE+vshXra2aEHpi2TlxYX7Z9VFYkr+E5rwEvHC8eIXiyO+K9kNm8vmNom3e2rA56WqxU+/N9NJlLGXsJQ==",
+          "archiveSha256": "9995330c5bc5a7bc759caadc9d17748616cdbb983c11062df122a74607614ff0",
+          "kind": "Direct"
+        },
+        {
+          "id": "Microsoft.CodeCoverage",
+          "version": "17.14.1",
+          "contentHashSha512": "pmTrhfFIoplzFVbhVwUquT+77CbGH+h4/3mBpdmIlYtBi9nAB+kKI6dN3A/nV4DFi3wLLx/BlHIPK+MkbQ6Tpg==",
+          "archiveSha256": "7fc432b46f06bd1a0fe3baced8a1269c32f1229c9eb1aab6e931630dd5b8d06b",
+          "kind": "Transitive"
+        },
+        {
+          "id": "Microsoft.TestPlatform.ObjectModel",
+          "version": "17.14.1",
+          "contentHashSha512": "xTP1W6Mi6SWmuxd3a+jj9G9UoC850WGwZUps1Wah9r1ZxgXhdJfj1QqDLJkFjHDCvN42qDL2Ps5KjQYWUU0zcQ==",
+          "archiveSha256": "40c7fa3bec34213fb5e8caf3a3bc27f8ddb47f72f5fe60e1b3faa3984a35ad8b",
+          "kind": "Transitive"
+        },
+        {
+          "id": "Microsoft.TestPlatform.TestHost",
+          "version": "17.14.1",
+          "contentHashSha512": "d78LPzGKkJwsJXAQwsbJJ7LE7D1wB+rAyhHHAaODF+RDSQ0NgMjDFkSA1Djw18VrxO76GlKAjRUhl+H8NL8Z+Q==",
+          "archiveSha256": "d5cc4759cbc7443ee8ad0dc41043cfc55184913a71a26d7fce82020bd4889c9b",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "newtonsoft-json",
+      "displayName": "Json.NET",
+      "version": "13.0.3",
+      "purl": "pkg:nuget/newtonsoft.json@13.0.3",
+      "scope": "test-only-transitive",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) 2007 James Newton-King",
+      "licenseFilePath": "third-party/licenses/newtonsoft-json/LICENSE.txt",
+      "licenseFileSha256": "d7f83bbea3264a8e23d7739e44d9db1a4994b357274df6f00876eb2e623827ad",
+      "repository": {
+        "url": "https://github.com/JamesNK/Newtonsoft.Json",
+        "commit": "0a2e291c0d9c0c7675d445703e51750363a549ef"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "Newtonsoft.Json",
+          "version": "13.0.3",
+          "contentHashSha512": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ==",
+          "archiveSha256": "872fc189e638ab1056555b03aaa38f68bcb54286e221aa646eb1129babf63c77",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "xunit-v2",
+      "displayName": "xUnit.net v2",
+      "version": "2.9.3",
+      "purl": "pkg:nuget/xunit@2.9.3",
+      "scope": "test-only",
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors. All Rights Reserved.",
+      "licenseFilePath": "third-party/licenses/Apache-2.0/LICENSE.txt",
+      "licenseFileSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "repository": {
+        "url": "https://github.com/xunit/xunit",
+        "commit": "9712244020d385955d33136b3fe3e87de43539cd"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "xunit",
+          "version": "2.9.3",
+          "contentHashSha512": "TlXQBinK35LpOPKHAqbLY4xlEen9TBafjs0V5KnA4wZsoQLQJiirCR4CbIXvOH8NzkW4YeJKP5P/Bnrodm0h9Q==",
+          "archiveSha256": "04fae949b8e5201ecfa07fa8702baca8c0eb3198114194b3793789cc72bf23d7",
+          "kind": "Direct"
+        },
+        {
+          "id": "xunit.assert",
+          "version": "2.9.3",
+          "contentHashSha512": "/Kq28fCE7MjOV42YLVRAJzRF0WmEqsmflm0cfpMjGtzQ2lR5mYVj1/i0Y8uDAOLczkL3/jArrwehfMD0YogMAA==",
+          "archiveSha256": "bc760e75ef1b775d293a6afb89301836d3e5a87cec265e31dedd430ee61d0c20",
+          "kind": "Transitive"
+        },
+        {
+          "id": "xunit.core",
+          "version": "2.9.3",
+          "contentHashSha512": "BiAEvqGvyme19wE0wTKdADH+NloYqikiU0mcnmiNyXaF9HyHmE6sr/3DC5vnBkgsWaE6yPyWszKSPSApWdRVeQ==",
+          "archiveSha256": "aa4550f09c3f2d95a6c62ae43cec22af2edbbd99f722e691ceefeca761fc6a7c",
+          "kind": "Transitive"
+        },
+        {
+          "id": "xunit.extensibility.core",
+          "version": "2.9.3",
+          "contentHashSha512": "kf3si0YTn2a8J8eZNb+zFpwfoyvIrQ7ivNk5ZYA5yuYk1bEtMe4DxJ2CF/qsRgmEnDr7MnW1mxylBaHTZ4qErA==",
+          "archiveSha256": "99ca555fe9b447b1747aff426819db6a2f60b6ee0655caa28c4b91a9ef3d0f48",
+          "kind": "Transitive"
+        },
+        {
+          "id": "xunit.extensibility.execution",
+          "version": "2.9.3",
+          "contentHashSha512": "yMb6vMESlSrE3Wfj7V6cjQ3S4TXdXpRqYeNEI3zsX31uTsGMJjEw6oD5F5u1cHnMptjhEECnmZSsPxB6ChZHDQ==",
+          "archiveSha256": "dabc4cb360ede1c01c98e14cc0fe587774693f40679a22fc71794acac5d8d23c",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "xunit-abstractions",
+      "displayName": "xUnit.net abstractions",
+      "version": "2.0.3",
+      "purl": "pkg:nuget/xunit.abstractions@2.0.3",
+      "scope": "test-only-transitive",
+      "licenseDeclared": "LicenseRef-NuGet-LicenseUrl-Only",
+      "licenseConcluded": "Apache-2.0",
+      "copyrightNotice": "Copyright (C) Outercurve Foundation. License conclusion is a pinned candidate pending independent review.",
+      "licenseFilePath": "third-party/licenses/Apache-2.0/LICENSE.txt",
+      "licenseFileSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "repository": {
+        "url": "https://github.com/xunit/xunit",
+        "commit": null
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "xunit.abstractions",
+          "version": "2.0.3",
+          "contentHashSha512": "pot1I4YOxlWjIb5jmwvvQNbTrZ3lJQ+jUGkGjWE3hEFM0l5gOnBWS+H3qsex68s5cO52g+44vpGzhAt+42vwKg==",
+          "archiveSha256": "d03d72fc2df8880448f7a81bddb00e1bcb5c18f323c7e7cc69b4cfa727469403",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "xunit-analyzers",
+      "displayName": "xUnit.net analyzers",
+      "version": "1.18.0",
+      "purl": "pkg:nuget/xunit.analyzers@1.18.0",
+      "scope": "test-only",
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors. All Rights Reserved.",
+      "licenseFilePath": "third-party/licenses/Apache-2.0/LICENSE.txt",
+      "licenseFileSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "repository": {
+        "url": "https://github.com/xunit/xunit.analyzers",
+        "commit": "2620a4ddabcba16ceb64ea9ad19c566252015fe8"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "xunit.analyzers",
+          "version": "1.18.0",
+          "contentHashSha512": "OtFMHN8yqIcYP9wcVIgJrq01AfTxijjAqVDy/WeQVSyrDC1RzBWeQPztL49DN2syXRah8TYnfvk035s7L95EZQ==",
+          "archiveSha256": "0ce81a98b9df8bd51ae480e6dc9566f4c68e15b4926e6ab997c8f634f3b7a9dd",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "xunit-runner-visualstudio",
+      "displayName": "xUnit.net Visual Studio runner",
+      "version": "3.1.4",
+      "purl": "pkg:nuget/xunit.runner.visualstudio@3.1.4",
+      "scope": "test-only",
+      "licenseDeclared": "Apache-2.0",
+      "licenseConcluded": "Apache-2.0",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors. All Rights Reserved.",
+      "licenseFilePath": "third-party/licenses/Apache-2.0/LICENSE.txt",
+      "licenseFileSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "repository": {
+        "url": "https://github.com/xunit/visualstudio.xunit",
+        "commit": "50e68bbb8b9ddd4b1bbb95d062b62010caf99909"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "xunit.runner.visualstudio",
+          "version": "3.1.4",
+          "contentHashSha512": "5mj99LvCqrq3CNi06xYdyIAXOEh+5b33F2nErCzI5zWiDdLHXiPXEWFSUAF8zlIv0ZWqjZNCwHTQeAPYbF3pCg==",
+          "archiveSha256": "5b54674b105a5f2cbd5e6e0e67956a1b67e082d94eaa7fddbc803110e6eff2d4",
+          "kind": "Direct"
+        }
+      ]
+    }
+  ]
+}
