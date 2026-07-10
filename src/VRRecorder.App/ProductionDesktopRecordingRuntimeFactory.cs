@@ -13,6 +13,8 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
 {
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
     private const string CameraLeaseFileName = "camera-lease.json";
+    private static readonly TimeSpan OscQueryConnectTimeout =
+        TimeSpan.FromSeconds(1);
     private static readonly TimeSpan OscQueryDiscoveryTimeout =
         TimeSpan.FromSeconds(2);
 
@@ -41,35 +43,51 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
     private static async Task RecoverStaleCameraLeaseAsync(
         CancellationToken cancellationToken)
     {
-        var settingsPath = new WindowsSettingsPathProvider().GetPath();
-        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
-                                       throw new InvalidOperationException(
-                                           "The settings path has no parent directory.");
-        var leasePath = Path.Combine(
-            applicationDataDirectory,
-            CameraLeaseFileName);
-        using var leases = new FileSystemCameraLeaseStore(leasePath);
-        using var http = new HttpMessageInvoker(new SocketsHttpHandler
-        {
-            AllowAutoRedirect = false,
-            ConnectTimeout = TimeSpan.FromSeconds(1),
-            UseProxy = false,
-        });
-        var discovery = new OscQueryVrChatInstanceDiscovery(
-            new WindowsDnsSdOscQueryServiceBrowser(),
-            http,
-            OscQueryDiscoveryTimeout);
-        var connections = new VrChatCameraConnectionUseCase(
-            new VrChatTargetResolver(discovery),
-            new ConfirmedUdpVrChatCameraGatewayFactory(http));
+        using var leases = new FileSystemCameraLeaseStore(CameraLeasePath());
+        using var http = CreateLoopbackHttpInvoker();
         var warnings = new StartupCameraRestoreWarningSink();
         var result = await new StaleCameraLeaseRecoveryUseCase(
                 leases,
                 new SystemProcessCameraLeaseOwnerActivityProbe(),
-                connections,
+                CreateCameraConnections(http),
                 warnings)
             .ExecuteAsync(cancellationToken);
+        EnsureRecoverySucceeded(result, warnings.Warning);
+    }
 
+    private static string CameraLeasePath()
+    {
+        var settingsPath = new WindowsSettingsPathProvider().GetPath();
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(applicationDataDirectory, CameraLeaseFileName);
+    }
+
+    private static HttpMessageInvoker CreateLoopbackHttpInvoker() =>
+        new(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            ConnectTimeout = OscQueryConnectTimeout,
+            UseProxy = false,
+        });
+
+    private static VrChatCameraConnectionUseCase CreateCameraConnections(
+        HttpMessageInvoker http)
+    {
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new WindowsDnsSdOscQueryServiceBrowser(),
+            http,
+            OscQueryDiscoveryTimeout);
+        return new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(discovery),
+            new ConfirmedUdpVrChatCameraGatewayFactory(http));
+    }
+
+    private static void EnsureRecoverySucceeded(
+        StaleCameraLeaseRecoveryResult result,
+        CameraRestoreWarning? warning)
+    {
         switch (result)
         {
             case StaleCameraLeaseRecoveryResult.NoLease:
@@ -82,9 +100,9 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             case StaleCameraLeaseRecoveryResult.Failed failed:
                 throw new DesktopRecordingInitializationException(
                     failed.Code,
-                    warnings.Warning?.Failure.Message ??
+                    warning?.Failure.Message ??
                     "The stale VRChat camera lease could not be recovered safely.",
-                    warnings.Warning?.Failure);
+                    warning?.Failure);
             default:
                 throw new DesktopRecordingInitializationException(
                     "CAMERA_LEASE_RECOVERY_RESULT_INVALID",
