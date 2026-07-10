@@ -159,6 +159,79 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(0, engine.StartCallCount);
     }
 
+    [Fact]
+    public async Task SignalTimeoutRestoresOwnedCameraStateWithoutCreatingAFile()
+    {
+        var events = new List<string>();
+        var candidate = Candidate("selected", 9000);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(new RecordingCameraGateway(events)));
+        var signal = new ControllableVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var startRecording = new StartRecordingUseCase(
+            signal,
+            new ControllableCountdownTimer(),
+            reservation,
+            new FixedWallClock(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new StubStorageSpaceProbe(new StorageSpace(
+                StorageCapacityPolicy.MinimumStartBytes)),
+            new EncoderSelector(new ScriptedEncoderProbe(
+                (EncoderKind.MediaFoundationSoftware,
+                    EncoderProbeResult.PacketProduced))),
+            engine,
+            new FakeRecordingSessionActivator(),
+            new FakeRecordingStorageMonitor(),
+            new AutoStopScheduler(
+                new ControllableMonotonicClock(
+                    MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+                new FakeStopRequestSink()));
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new RecordingCameraLeaseStore(events),
+            startRecording,
+            new FakeStopRequestSink());
+        var start = lifecycle.StartAsync(
+            candidate.ServiceId,
+            new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)),
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                new OutputPath(Path.GetTempPath()),
+                new FrameRate(30)),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+
+        signal.CompleteWithTimeout();
+        var result = await start;
+
+        Assert.IsType<StartRecordingResult.NoSignal>(result.Recording);
+        Assert.Equal(RecorderState.NoSignal, result.State);
+        Assert.Equal(RecorderState.NoSignal, lifecycle.State);
+        Assert.Equal(
+            [
+                "lease:save",
+                "mode:Stream",
+                "streaming:true",
+                "streaming:false",
+                "mode:Photo",
+                "lease:delete",
+            ],
+            events);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
     private static VrChatInstanceCandidate Candidate(
         string serviceId,
         int oscPort) =>
