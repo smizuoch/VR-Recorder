@@ -389,6 +389,33 @@ public sealed class LegalArtifactSetGeneratorTests
     }
 
     [Fact]
+    public void EligibilityRejectsCrossComponentDocumentPathCollision()
+    {
+        var graph = Graph(reverse: false);
+        var second = graph.Components[1];
+        var collidingLicense = LegalFile(
+            LegalFileKind.License,
+            "LICENSES/a/LICENSE.txt",
+            "replacement license\n");
+        graph = graph with
+        {
+            Components =
+            [
+                graph.Components[0],
+                second with { LegalFiles = [collidingLicense] },
+            ],
+        };
+
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.False(eligibility.IsApproved);
+        Assert.Null(eligibility.ApprovedGraph);
+        var issue = Assert.Single(eligibility.Issues, item =>
+            item.Code == "duplicate-legal-document-path");
+        Assert.Equal("a,b:LICENSES/a/LICENSE.txt", issue.Subject);
+    }
+
+    [Fact]
     public void LegalFileKindDefinesAssetManifest()
     {
         Assert.True(Enum.IsDefined(
