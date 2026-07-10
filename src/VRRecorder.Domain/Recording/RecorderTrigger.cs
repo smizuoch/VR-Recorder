@@ -9,4 +9,5 @@ public enum RecorderTrigger
     StopRequested,
     FreshFrameTimeout,
     SignalRecovered,
+    GraceExpired,
 }

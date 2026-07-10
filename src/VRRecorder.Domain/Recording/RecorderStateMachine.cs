@@ -20,6 +20,8 @@ public static class RecorderStateMachine
                 RecorderState.SignalLost,
             (RecorderState.SignalLost, RecorderTrigger.SignalRecovered) =>
                 RecorderState.Recording,
+            (RecorderState.SignalLost, RecorderTrigger.GraceExpired) =>
+                RecorderState.Stopping,
             _ => throw new InvalidOperationException(
                 $"Transition from {state} by {trigger} is not defined."),
         };
