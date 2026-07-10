@@ -1,6 +1,7 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Encoding;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Desktop;
 
@@ -139,9 +140,15 @@ public sealed class DesktopRecordingSettingsController
             throw InvalidChoice("resolution change policy");
         }
 
-        if (!FrameRateChoices.Contains(draft.FrameRate))
+        try
         {
-            throw InvalidChoice("frame rate");
+            _ = new FrameRate(draft.FrameRate);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            throw new InvalidDataException(
+                "The desktop frame rate is not supported.",
+                exception);
         }
 
         if (!EncoderChoices.Contains(draft.Encoder))
