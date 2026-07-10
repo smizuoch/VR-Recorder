@@ -13,6 +13,17 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
             ["recording.stop.accessible"] = "Stop recording",
             ["camera.retry.short"] = "RETRY",
             ["camera.retry.accessible"] = "Retry camera connection",
+            ["state.booting.label"] = "Starting",
+            ["state.compliance-fault.label"] = "Compliance check failed",
+            ["state.ready.label"] = "Ready",
+            ["state.arming.label"] = "Connecting camera",
+            ["state.countdown.label"] = "Countdown",
+            ["state.starting.label"] = "Starting recording",
+            ["state.recording.label"] = "Recording",
+            ["state.signal-lost.label"] = "Camera signal lost",
+            ["state.stopping.label"] = "Saving recording",
+            ["state.no-signal.label"] = "No camera signal",
+            ["state.faulted.label"] = "Recorder error",
         };
 
     private EnglishUiLocalizer()

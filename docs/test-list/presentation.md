@@ -5,7 +5,7 @@
 - [x] ReadyはaccessibleなREC actionを1つ表示する
 - [x] Recordingは全pageから64 dp STOPへ1操作で到達できる
 - [x] NoSignal/Faulted/ComplianceFaultはStartを許可しない
-- [ ] 全RecorderStateを非色覚cue付きsemantic roleへ投影する
+- [x] 全RecorderStateを非色覚cue付きsemantic roleへ投影する
 - [ ] 日本語・英語resource key/placeholderが一致する
 - [ ] desktop click・keyboard・wrist ray・SteamVR actionが同じcommand IDになる
 - [ ] WPF hostをLinuxからcross-buildし、WindowsでUI Automationを実行する
@@ -15,7 +15,7 @@
 - [x] Show one accessible REC action in Ready
 - [x] Keep a 64 dp one-action STOP reachable from every page while Recording
 - [x] Disallow Start in NoSignal, Faulted, and ComplianceFault
-- [ ] Project every RecorderState to semantic roles with non-color cues
+- [x] Project every RecorderState to semantic roles with non-color cues
 - [ ] Keep Japanese/English resource keys and placeholders in parity
 - [ ] Map desktop click, keyboard, wrist ray, and SteamVR action to one command ID
 - [ ] Cross-build the WPF host on Linux and run UI Automation on Windows

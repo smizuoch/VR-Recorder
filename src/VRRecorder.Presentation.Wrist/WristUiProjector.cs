@@ -46,6 +46,7 @@ public sealed class WristUiProjector
         return new WristUiSnapshot(
             status.Revision,
             status.State,
+            CreateStateCue(status.State),
             page,
             actions);
     }
@@ -96,5 +97,42 @@ public sealed class WristUiProjector
             AccessibleName: accessibleName,
             Tooltip: accessibleName,
             MinimumTargetDp: 56);
+    }
+
+    private UiStateCue CreateStateCue(RecorderState state)
+    {
+        var descriptor = state switch
+        {
+            RecorderState.Booting =>
+                (UiColorRole.Surface, "system.booting", "state.booting.label"),
+            RecorderState.ComplianceFault =>
+                (UiColorRole.Error, "legal.error", "state.compliance-fault.label"),
+            RecorderState.Ready =>
+                (UiColorRole.Surface, "recording.ready", "state.ready.label"),
+            RecorderState.Arming =>
+                (UiColorRole.Surface, "camera.arming", "state.arming.label"),
+            RecorderState.Countdown =>
+                (UiColorRole.Surface, "recording.countdown", "state.countdown.label"),
+            RecorderState.Starting =>
+                (UiColorRole.Surface, "recording.starting", "state.starting.label"),
+            RecorderState.Recording =>
+                (UiColorRole.Recording, "recording.active", "state.recording.label"),
+            RecorderState.SignalLost =>
+                (UiColorRole.Error, "camera.signal-lost", "state.signal-lost.label"),
+            RecorderState.Stopping =>
+                (UiColorRole.Surface, "recording.stopping", "state.stopping.label"),
+            RecorderState.NoSignal =>
+                (UiColorRole.Error, "camera.no-signal", "state.no-signal.label"),
+            RecorderState.Faulted =>
+                (UiColorRole.Error, "system.error", "state.faulted.label"),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(state),
+                state,
+                "Unknown recorder state."),
+        };
+        return new UiStateCue(
+            descriptor.Item1,
+            descriptor.Item2,
+            _localizer.Resolve(descriptor.Item3));
     }
 }
