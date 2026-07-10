@@ -37,6 +37,37 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         Assert.Equal(Hash(manifest), verified.Identity.ManifestSha256);
     }
 
+    [Fact]
+    public async Task RejectsPayloadWhoseHashDoesNotMatchAuthenticatedManifest()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalogPath = Path.Combine(
+            directory.Path,
+            "THIRD-PARTY-COMPONENTS.json");
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(catalogPath, catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        await File.AppendAllTextAsync(catalogPath, "\n");
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new StubAuthenticatedAnchorSource(
+                new AuthenticatedLegalBundleAnchor(
+                    BundleId,
+                    Hash(manifest))));
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-payload-hash-mismatch", issue.Code);
+        Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
+    }
+
     private static string CatalogJson() => $$"""
         {
           "schemaVersion": 2,
