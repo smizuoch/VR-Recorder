@@ -32,9 +32,25 @@ public sealed class RecordingFileFinalizationUseCase
     {
         ArgumentNullException.ThrowIfNull(recording);
 
-        var finalized = await _finalizer
-            .FinalizeAsync(recording, cancellationToken)
-            .ConfigureAwait(false);
+        FinalizedRecording finalized;
+        try
+        {
+            finalized = await _finalizer
+                .FinalizeAsync(recording, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (RecordingFileFinalizationException exception)
+        {
+            var quarantined = await _recovery
+                .QuarantineAsync(
+                    exception.RecoveryCandidate,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return new RecordingFinalizationResult.RecoveryRequired(
+                RecordingRecoveryReason.FinalizationFailed,
+                quarantined);
+        }
+
         var validation = await _validator
             .ValidateAsync(finalized, cancellationToken)
             .ConfigureAwait(false);
