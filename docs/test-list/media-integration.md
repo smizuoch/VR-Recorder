@@ -4,7 +4,7 @@
 
 - [x] host FFmpegで生成した3秒H.264/AAC fMP4をprobe・rename後だけSavedにする
 - [x] native first-packet callback後だけStartAsyncを完了する
-- [ ] Stopがtrailer/flush/close後のpending recordingを返す
+- [x] Stopがtrailer/flush/close後のpending recordingを返す
 - [x] duplicate Stopがstop→finalize→probe→Saved全体で同一Taskを返す
 - [x] first packet後のnative faultをruntime fault sinkへ通知する
 - [ ] forced encoder終了時はpendingを保持しSavedを発行しない
@@ -13,7 +13,7 @@
 
 - [x] Publish Saved only after probing and renaming a 3-second H.264/AAC fMP4 made by host FFmpeg
 - [x] Complete StartAsync only after the native first-packet callback
-- [ ] Return the pending recording only after Stop writes the trailer, flushes, and closes
+- [x] Return the pending recording only after Stop writes the trailer, flushes, and closes
 - [x] Return the same Task for duplicate Stop across stop→finalize→probe→Saved
 - [x] Report native faults after the first packet to the runtime fault sink
 - [ ] Preserve pending output and suppress Saved after forced encoder termination
