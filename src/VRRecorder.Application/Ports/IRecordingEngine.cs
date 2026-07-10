@@ -8,7 +8,7 @@ public interface IRecordingEngine
         RecordingPlan plan,
         CancellationToken cancellationToken);
 
-    Task<RecordingResult> StopAsync(
+    Task<RecordingStopResult> StopAsync(
         RecordingHandle handle,
         CancellationToken cancellationToken);
 }

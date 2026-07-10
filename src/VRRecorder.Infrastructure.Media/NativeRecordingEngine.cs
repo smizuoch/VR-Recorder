@@ -48,7 +48,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         return new RecordingHandle(session.Id, committedAt);
     }
 
-    public Task<RecordingResult> StopAsync(
+    public Task<RecordingStopResult> StopAsync(
         RecordingHandle handle,
         CancellationToken cancellationToken)
     {

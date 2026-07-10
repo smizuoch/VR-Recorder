@@ -8,7 +8,7 @@ public sealed class RecordingStopCoordinator
     private readonly IRecordingEngine _recordingEngine;
     private readonly RecordingHandle _handle;
     private readonly CancellationToken _sessionLifetimeToken;
-    private Task<RecordingResult>? _stopTask;
+    private Task<RecordingStopResult>? _stopTask;
 
     public RecordingStopCoordinator(
         IRecordingEngine recordingEngine,
@@ -23,7 +23,7 @@ public sealed class RecordingStopCoordinator
         _sessionLifetimeToken = sessionLifetimeToken;
     }
 
-    public Task<RecordingResult> StopAsync()
+    public Task<RecordingStopResult> StopAsync()
     {
         lock (_gate)
         {
