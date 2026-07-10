@@ -12,8 +12,10 @@
     <system:String x:Key="Recording_State_Ready">⟦Rëády tö rëcörd · Rëády tö rëcörd⟧</system:String>
     <system:String x:Key="Recording_State_Booting">⟦Vërïfyïng lëgál bündlë · Vërïfyïng lëgál bündlë⟧</system:String>
     <system:String x:Key="Recording_State_ComplianceFault">⟦Cömplïáncë chëck fáïlëd · Cömplïáncë chëck fáïlëd⟧</system:String>
+    <system:String x:Key="Recording_State_InitializationFailed">⟦Rëcördïng ïnïtïálïzátïön fáïlëd · Rëcördïng ïnïtïálïzátïön fáïlëd⟧</system:String>
     <system:String x:Key="Status_Ready_AccessibleDescription">⟦Thë cönnëctïön ánd vïdëö sïgnál árë rëády · Thë cönnëctïön ánd vïdëö sïgnál árë rëády⟧</system:String>
     <system:String x:Key="Status_Booting_AccessibleDescription">⟦Thë rëqüïrëd öfflïnë lëgál bündlë ïs bëïng vërïfïëd · Thë rëqüïrëd öfflïnë lëgál bündlë ïs bëïng vërïfïëd⟧</system:String>
     <system:String x:Key="Status_ComplianceFault_AccessibleDescription">⟦Rëcördïng ïs dïsáblëd bëcáüsë thë rëqüïrëd lëgál bündlë ïs mïssïng ör ïnválïd · Rëcördïng ïs dïsáblëd bëcáüsë thë rëqüïrëd lëgál bündlë ïs mïssïng ör ïnválïd⟧</system:String>
+    <system:String x:Key="Status_InitializationFailed_AccessibleDescription">⟦Rëcördïng ïs dïsáblëd bëcáüsë rëqüïrëd rëcördïng sërvïcës fáïlëd tö ïnïtïálïzë · Rëcördïng ïs dïsáblëd bëcáüsë rëqüïrëd rëcördïng sërvïcës fáïlëd tö ïnïtïálïzë⟧</system:String>
     <system:String x:Key="Status_CommandUnavailable">⟦Rëcördïng sërvïcës árë nöt áváïláblë · Rëcördïng sërvïcës árë nöt áváïláblë⟧</system:String>
 </ResourceDictionary>

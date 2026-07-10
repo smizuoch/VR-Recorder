@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using VRRecorder.Application.Compliance;
+using VRRecorder.Application.Desktop;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
 
@@ -25,27 +26,56 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    internal void ApplyStartupResult(RecorderStartupResult result)
+    internal void ApplyStartupResult(
+        RecorderStartupResult result,
+        DesktopRecordingHostActivation activation)
     {
         ArgumentNullException.ThrowIfNull(result);
-        var isReady = result.State == RecorderState.Ready;
-        if (!isReady && result.State != RecorderState.ComplianceFault)
+        ArgumentNullException.ThrowIfNull(activation);
+        if (result.State is not (
+                RecorderState.Ready or RecorderState.ComplianceFault))
         {
             throw new InvalidOperationException(
                 $"Startup cannot complete in recorder state {result.State}.");
         }
 
+        var expectedHostState = result.State == RecorderState.ComplianceFault
+            ? DesktopRecordingHostState.ComplianceFault
+            : activation.State;
+        if (activation.State != expectedHostState ||
+            (result.State == RecorderState.Ready &&
+             activation.State is not (
+                 DesktopRecordingHostState.Ready or
+                 DesktopRecordingHostState.InitializationFailed)))
+        {
+            throw new InvalidOperationException(
+                $"Recorder state {result.State} cannot complete with " +
+                $"desktop host state {activation.State}.");
+        }
+
+        var isReady = activation.State == DesktopRecordingHostState.Ready;
+        var (statusText, accessibleStatus) = activation.State switch
+        {
+            DesktopRecordingHostState.Ready => (
+                "Recording_State_Ready",
+                "Status_Ready_AccessibleDescription"),
+            DesktopRecordingHostState.ComplianceFault => (
+                "Recording_State_ComplianceFault",
+                "Status_ComplianceFault_AccessibleDescription"),
+            DesktopRecordingHostState.InitializationFailed => (
+                "Recording_State_InitializationFailed",
+                "Status_InitializationFailed_AccessibleDescription"),
+            _ => throw new InvalidOperationException(
+                $"Startup cannot complete with desktop host state " +
+                $"{activation.State}."),
+        };
         RecordingToggleButton.IsEnabled = isReady;
         RecordingStatusText.SetResourceReference(
             TextBlock.TextProperty,
-            isReady
-                ? "Recording_State_Ready"
-                : "Recording_State_ComplianceFault");
+            statusText);
         RecordingStatusText.SetResourceReference(
             AutomationProperties.NameProperty,
-            isReady
-                ? "Status_Ready_AccessibleDescription"
-                : "Status_ComplianceFault_AccessibleDescription");
+            accessibleStatus);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -56,7 +86,11 @@ public partial class MainWindow : Window
         }
 
         _startupApplied = true;
-        ApplyStartupResult(await App.VerifyStartupAsync(CancellationToken.None));
+        var startup = await App.VerifyStartupAsync(CancellationToken.None);
+        var activation = await App.ActivateRecordingHostAsync(
+            startup,
+            CancellationToken.None);
+        ApplyStartupResult(startup, activation);
     }
 
     private async void OnRecordingToggleClick(

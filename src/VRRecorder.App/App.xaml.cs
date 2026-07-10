@@ -1,20 +1,38 @@
 using System.Globalization;
 using System.IO;
 using VRRecorder.Application.Compliance;
+using VRRecorder.Application.Desktop;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.App;
 
-public partial class App : System.Windows.Application
+public partial class App : System.Windows.Application, IDisposable
 {
     private const string LocaleArgumentPrefix = "--ui-locale=";
-    private readonly RecordingInputDispatcher _recordingInputs = new(
-        new UnavailableUiCommandDispatcher());
+    private readonly DesktopRecordingCommandHost _recordingHost = new(
+        new ProductionDesktopRecordingRuntimeFactory());
+    private readonly RecordingInputDispatcher _recordingInputs;
+
+    public App()
+    {
+        _recordingInputs = new RecordingInputDispatcher(
+            new RecordingUiCommandDispatcher(
+                (_, cancellationToken) =>
+                    _recordingHost.ToggleAsync(cancellationToken)));
+    }
 
     internal static RecordingInputDispatcher RecordingInputs =>
         ((App)Current)._recordingInputs;
+
+    internal static Task<DesktopRecordingHostActivation>
+        ActivateRecordingHostAsync(
+            RecorderStartupResult startup,
+            CancellationToken cancellationToken) =>
+        ((App)Current)._recordingHost.ActivateAsync(
+            startup,
+            cancellationToken);
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
@@ -27,6 +45,18 @@ public partial class App : System.Windows.Application
                 ? CultureInfo.CurrentUICulture.Name
                 : localeName[LocaleArgumentPrefix.Length..]);
         base.OnStartup(e);
+    }
+
+    protected override void OnExit(System.Windows.ExitEventArgs e)
+    {
+        Dispose();
+        base.OnExit(e);
+    }
+
+    public void Dispose()
+    {
+        _recordingHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        GC.SuppressFinalize(this);
     }
 
     internal static async Task<RecorderStartupResult> VerifyStartupAsync(
@@ -79,16 +109,4 @@ public partial class App : System.Windows.Application
         resource.Source = new Uri(resourcePath, UriKind.Relative);
     }
 
-    private sealed class UnavailableUiCommandDispatcher : IUiCommandDispatcher
-    {
-        public Task DispatchAsync(
-            UiCommandId command,
-            UiActivationKind activationKind,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromException(new InvalidOperationException(
-                "The recording command handler is not configured."));
-        }
-    }
 }
