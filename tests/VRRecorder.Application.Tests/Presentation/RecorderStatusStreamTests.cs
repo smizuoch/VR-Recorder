@@ -227,6 +227,72 @@ public sealed class RecorderStatusStreamTests
     }
 
     [Fact]
+    public async Task ConcurrentHubDisposeCallersShareTheCallbackBarrier()
+    {
+        var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        var callbackEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCallback = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = stream.Subscribe(status =>
+        {
+            if (status.Revision == 1)
+            {
+                callbackEntered.TrySetResult();
+                releaseCallback.Task.GetAwaiter().GetResult();
+            }
+        });
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+        await callbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var firstAttempted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondAttempted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var first = Task.Run(() =>
+        {
+            firstAttempted.TrySetResult();
+            stream.Dispose();
+        });
+        var second = Task.Run(() =>
+        {
+            secondAttempted.TrySetResult();
+            stream.Dispose();
+        });
+        await Task.WhenAll(firstAttempted.Task, secondAttempted.Task)
+            .WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+        releaseCallback.TrySetResult();
+        await Task.WhenAll(publishing, first, second).WaitAsync(
+            TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task SubscriberCanDisposeHubReentrantlyWithoutDeadlock()
+    {
+        var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        using var subscription = stream.Subscribe(status =>
+        {
+            if (status.Revision == 1)
+            {
+                stream.Dispose();
+            }
+        });
+
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+
+        Assert.True(await publishing.WaitAsync(TimeSpan.FromSeconds(1)));
+        Assert.False(stream.TryPublish(
+            RecorderStatusSnapshot.Create(2, RecorderState.Countdown)));
+    }
+
+    [Fact]
     public async Task SubscriberCanReenterPublishAndUnsubscribeWithoutDeadlock()
     {
         using var stream = new RecorderStatusHub(
