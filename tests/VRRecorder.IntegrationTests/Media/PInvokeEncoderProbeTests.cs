@@ -91,6 +91,41 @@ public sealed class PInvokeEncoderProbeTests
         Assert.Equal(0u, controls.CallCount());
     }
 
+    [Fact]
+    public async Task DisposeWaitsForInFlightProbeAndSuppressesLateResult()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeEncoderProbeFixtureControls(FixturePath());
+        controls.Reset();
+        controls.SetResult(status: 0, packetProduced: true);
+        controls.BlockNextProbe();
+        var probe = new PInvokeEncoderProbe(FixturePath());
+
+        var probing = probe.ProbeAsync(Request(), CancellationToken.None);
+        await controls.WaitUntilProbeEnteredAsync()
+            .WaitAsync(TimeSpan.FromSeconds(1));
+        var disposeAttempted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposal = Task.Run(() =>
+        {
+            disposeAttempted.TrySetResult();
+            probe.Dispose();
+        });
+        await disposeAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.False(disposal.IsCompleted);
+        controls.ReleaseProbe();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => probing)
+            .WaitAsync(TimeSpan.FromSeconds(1));
+        await disposal.WaitAsync(TimeSpan.FromSeconds(1));
+        probe.Dispose();
+        Assert.Equal(1u, controls.CallCount());
+    }
+
     private static EncoderProbeRequest Request() => new(
         EncoderKind.MediaFoundationSoftware,
         adapterLuid: 1,
@@ -116,6 +151,9 @@ public sealed class PInvokeEncoderProbeTests
         private readonly SetResultDelegate _setResult;
         private readonly CountDelegate _callCount;
         private readonly CopyConfigDelegate _copyConfig;
+        private readonly VoidDelegate _blockNextProbe;
+        private readonly WaitDelegate _waitUntilProbeEntered;
+        private readonly VoidDelegate _releaseProbe;
 
         public NativeEncoderProbeFixtureControls(string path)
         {
@@ -127,6 +165,12 @@ public sealed class PInvokeEncoderProbeTests
                 "vrrec_test_encoder_probe_call_count");
             _copyConfig = Resolve<CopyConfigDelegate>(
                 "vrrec_test_encoder_probe_copy_config_v1");
+            _blockNextProbe = Resolve<VoidDelegate>(
+                "vrrec_test_encoder_probe_block_next");
+            _waitUntilProbeEntered = Resolve<WaitDelegate>(
+                "vrrec_test_encoder_probe_wait_until_entered");
+            _releaseProbe = Resolve<VoidDelegate>(
+                "vrrec_test_encoder_probe_release");
         }
 
         public void Reset() => _reset();
@@ -135,6 +179,17 @@ public sealed class PInvokeEncoderProbeTests
             _setResult(status, packetProduced ? (byte)1 : (byte)0);
 
         public uint CallCount() => _callCount();
+
+        public void BlockNextProbe() => _blockNextProbe();
+
+        public async Task WaitUntilProbeEnteredAsync()
+        {
+            var entered = await Task.Run(() =>
+                _waitUntilProbeEntered(milliseconds: 1_000));
+            Assert.Equal(1, entered);
+        }
+
+        public void ReleaseProbe() => _releaseProbe();
 
         public ObservedConfig ReadConfig()
         {
@@ -168,6 +223,12 @@ public sealed class PInvokeEncoderProbeTests
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void CopyConfigDelegate(out NativeObservedConfig config);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void VoidDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int WaitDelegate(uint milliseconds);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeObservedConfig
