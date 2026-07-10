@@ -113,6 +113,54 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
     }
 
     [Fact]
+    public async Task InstallRootMirrorDoesNotFollowApplicationSymlinkDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var installRoot = Path.Combine(directory.Path, "install");
+        var output = Path.Combine(directory.Path, "recordings");
+        var outsidePlugins = Path.Combine(directory.Path, "outside-plugins");
+        var anchor = await CreateAuthenticatedBundleAsync(
+            installRoot,
+            "https://example.invalid/spdx/vr-recorder-install",
+            "ignored-application-link");
+        var authenticatedFiles = ReadTree(installRoot);
+        await WriteFileAsync(
+            outsidePlugins,
+            "nested/third-party-plugin.dll",
+            "application plugin outside the install root");
+        Directory.CreateSymbolicLink(
+            Path.Combine(installRoot, "plugins"),
+            outsidePlugins);
+        ILegalBundleOutputMirror mirror =
+            new AuthenticatedLegalBundleOutputMirror(
+                installRoot,
+                "2.5.0",
+                new AuthenticatedLegalBundleVerifier(
+                    new FixedAuthenticatedAnchorSource(anchor)));
+
+        await mirror.MirrorAsync(
+            new OutputPath(output),
+            CancellationToken.None);
+
+        AssertTreeEqual(
+            authenticatedFiles,
+            ReadTree(Path.Combine(
+                output,
+                "VR-Recorder-Legal",
+                "2.5.0")));
+        Assert.False(Directory.Exists(Path.Combine(
+            output,
+            "VR-Recorder-Legal",
+            "2.5.0",
+            "plugins")));
+    }
+
+    [Fact]
     public async Task DefaultStrictMirrorStillRejectsInstallRootPayload()
     {
         using var directory = TemporaryDirectory.Create();
