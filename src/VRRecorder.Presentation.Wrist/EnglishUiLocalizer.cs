@@ -32,6 +32,8 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
 
     public static EnglishUiLocalizer Instance { get; } = new();
 
+    public IReadOnlyCollection<string> ResourceKeys => Values.Keys;
+
     public LocalizedText Resolve(string resourceKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
