@@ -62,6 +62,33 @@ public sealed class WindowsDnsSdApiTests
         Assert.True(native.ResolveOperation.IsDisposed);
     }
 
+    [Fact]
+    public async Task ResolveCancellationDoesNotRequireNativeCallback()
+    {
+        var native = new ControllableWindowsDnsServiceNativeApi();
+        var api = new WindowsDnsSdApi(native, TimeSpan.Zero);
+        using var cancellation = new CancellationTokenSource();
+
+        var resolving = api.ResolveAsync(
+            "VRChat-Client-alpha._oscjson._tcp.local.",
+            cancellation.Token);
+        await native.ResolveStarted.Task;
+
+        await cancellation.CancelAsync();
+        var completed = await Task.WhenAny(
+            resolving,
+            Task.Delay(TimeSpan.FromSeconds(1)));
+        if (completed != resolving)
+        {
+            native.CompleteResolveCancellation();
+        }
+
+        Assert.Same(resolving, completed);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resolving);
+        Assert.Equal(1, native.ResolveOperation.CancelCallCount);
+        Assert.True(native.ResolveOperation.IsDisposed);
+    }
+
     private sealed class ControllableWindowsDnsServiceNativeApi
         : IWindowsDnsServiceNativeApi
     {
@@ -120,6 +147,12 @@ public sealed class WindowsDnsSdApiTests
                 "Resolve was not started."))(
                 status: 0,
                 service);
+
+        public void CompleteResolveCancellation() =>
+            (_resolveCallback ?? throw new InvalidOperationException(
+                "Resolve was not started."))(
+                status: 1223,
+                null);
     }
 
     private sealed class ControllableOperation : IWindowsDnsServiceOperation
