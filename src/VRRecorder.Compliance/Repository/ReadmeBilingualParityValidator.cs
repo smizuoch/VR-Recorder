@@ -19,8 +19,36 @@ public static class ReadmeBilingualParityValidator
 
         var root = Path.GetFullPath(repositoryRoot);
         var issues = new List<ComplianceIssue>();
+        var readmePaths = new SortedSet<string>(
+            RequiredReadmePaths,
+            StringComparer.OrdinalIgnoreCase);
 
-        foreach (var relativePath in RequiredReadmePaths)
+        try
+        {
+            foreach (var directory in Directory.EnumerateDirectories(
+                         root,
+                         "*-template",
+                         SearchOption.TopDirectoryOnly))
+            {
+                var directoryName = Path.GetFileName(
+                    Path.TrimEndingDirectorySeparator(directory));
+                readmePaths.Add($"{directoryName}/README.md");
+            }
+        }
+        catch (IOException)
+        {
+            issues.Add(new ComplianceIssue(
+                "unreadable-readme-inventory",
+                "."));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            issues.Add(new ComplianceIssue(
+                "unreadable-readme-inventory",
+                "."));
+        }
+
+        foreach (var relativePath in readmePaths)
         {
             var path = Path.Combine(
                 root,
