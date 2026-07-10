@@ -36,7 +36,7 @@ public sealed class JsonFileRecordingRightsAcknowledgementStoreTests
               "noticeVersion": 1,
               "acknowledgedAtUtc": "2026-07-11T01:02:03+00:00"
             }
-            """ + Environment.NewLine,
+            """ + "\n",
             await File.ReadAllTextAsync(path));
         Assert.Equal(
             acknowledgement,
