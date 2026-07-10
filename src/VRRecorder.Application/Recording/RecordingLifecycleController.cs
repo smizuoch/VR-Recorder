@@ -84,6 +84,7 @@ public sealed class RecordingLifecycleController : IDisposable
             var lease = await camera
                 .AcquireAsync(cameraSnapshot, cancellationToken)
                 .ConfigureAwait(false);
+            var restoreAttempted = false;
             try
             {
                 var recording = await _startRecording
@@ -107,6 +108,13 @@ public sealed class RecordingLifecycleController : IDisposable
                         started.Handle,
                         _stopRequests);
                 }
+                else
+                {
+                    restoreAttempted = true;
+                    await camera
+                        .RestoreAsync(lease, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
 
                 SetState(state);
                 return new RecordingLifecycleStartResult(
@@ -118,9 +126,12 @@ public sealed class RecordingLifecycleController : IDisposable
             {
                 try
                 {
-                    await camera
-                        .RestoreAsync(lease, CancellationToken.None)
-                        .ConfigureAwait(false);
+                    if (!restoreAttempted)
+                    {
+                        await camera
+                            .RestoreAsync(lease, CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
                 }
                 finally
                 {
