@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Reflection;
 using VRRecorder.DesignSystem;
 
 namespace VRRecorder.Presentation.Tests.Accessibility;
@@ -15,19 +14,13 @@ public sealed class AccessibleTextSemanticTests
         string actualValue,
         string expected)
     {
-        var semantic = InvokeFactory(
-            "FromLocalizedFormat",
-            [
-                CultureInfo.InvariantCulture,
-                localizedFormat,
-                actualValue,
-            ],
-            typeof(IFormatProvider),
-            typeof(string),
-            typeof(object));
+        var semantic = AccessibleText.FromLocalizedFormat(
+            CultureInfo.InvariantCulture,
+            localizedFormat,
+            actualValue);
 
-        Assert.Equal(expected, ReadText(semantic, "VisibleText"));
-        Assert.Equal(expected, ReadText(semantic, "AutomationName"));
+        Assert.Equal(expected, semantic.VisibleText);
+        Assert.Equal(expected, semantic.AutomationName);
     }
 
     [Fact]
@@ -39,45 +32,14 @@ public sealed class AccessibleTextSemanticTests
             "Copyright: Copyright (c) Example Authors",
             "Source: SOURCES/example-1.2.3.zip");
 
-        var semantic = InvokeFactory(
-            "FromVisibleText",
-            [detail],
-            typeof(string));
+        var semantic = AccessibleText.FromVisibleText(detail);
 
-        Assert.Equal(detail, ReadText(semantic, "VisibleText"));
-        Assert.Equal(detail, ReadText(semantic, "AutomationName"));
-        Assert.Contains("MIT", ReadText(semantic, "AutomationName"));
-        Assert.Contains("Copyright", ReadText(semantic, "AutomationName"));
-        Assert.Contains("SOURCES/example-1.2.3.zip", ReadText(
-            semantic,
-            "AutomationName"));
-    }
-
-    private static object InvokeFactory(
-        string methodName,
-        object?[] arguments,
-        params Type[] parameterTypes)
-    {
-        var semanticType = typeof(LocalizedText).Assembly.GetType(
-            "VRRecorder.DesignSystem.AccessibleText");
-        Assert.NotNull(semanticType);
-        var factory = semanticType.GetMethod(
-            methodName,
-            BindingFlags.Public | BindingFlags.Static,
-            binder: null,
-            parameterTypes,
-            modifiers: null);
-        Assert.NotNull(factory);
-        var result = factory.Invoke(null, arguments);
-        Assert.NotNull(result);
-        Assert.Equal(semanticType, result.GetType());
-        return result;
-    }
-
-    private static string ReadText(object semantic, string propertyName)
-    {
-        var property = semantic.GetType().GetProperty(propertyName);
-        Assert.NotNull(property);
-        return Assert.IsType<string>(property.GetValue(semantic));
+        Assert.Equal(detail, semantic.VisibleText);
+        Assert.Equal(detail, semantic.AutomationName);
+        Assert.Contains("MIT", semantic.AutomationName);
+        Assert.Contains("Copyright", semantic.AutomationName);
+        Assert.Contains(
+            "SOURCES/example-1.2.3.zip",
+            semantic.AutomationName);
     }
 }
