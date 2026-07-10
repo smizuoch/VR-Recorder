@@ -4,6 +4,16 @@ namespace VRRecorder.Compliance.Tests.Repository;
 
 public sealed class ReadmeBilingualParityValidatorTests
 {
+    private const string MinimalValidReadme = """
+        # Product
+
+        ## 日本語
+        <!-- readme-release: version=1 -->
+
+        ## English
+        <!-- readme-release: version=1 -->
+        """;
+
     [Fact]
     public void StructurallyPairedReadmeIsAcceptedWithoutComparingLocalizedBodyText()
     {
@@ -276,5 +286,53 @@ public sealed class ReadmeBilingualParityValidatorTests
             markdown);
 
         Assert.Empty(issues);
+    }
+
+    [Fact]
+    public void EveryTopLevelTemplateReadmeIsDiscoveredFailClosed()
+    {
+        var root = Directory.CreateTempSubdirectory(
+            "vr-recorder-readme-parity-");
+        try
+        {
+            WriteReadme(root.FullName, "README.md", MinimalValidReadme);
+            WriteReadme(root.FullName, "ui-template/README.md", MinimalValidReadme);
+            WriteReadme(root.FullName, "legal-template/README.md", MinimalValidReadme);
+            WriteReadme(
+                root.FullName,
+                "future-template/README.md",
+                """
+                # Future template
+
+                ## 日本語
+                <!-- readme-release: version=1 -->
+
+                ## English
+                <!-- readme-release: version=2 -->
+                """);
+
+            var issues = ReadmeBilingualParityValidator.VerifyRequiredReadmes(
+                root.FullName);
+
+            Assert.Contains(issues, issue =>
+                issue.Code == "release-information-parity-mismatch" &&
+                issue.Subject == "future-template/README.md");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    private static void WriteReadme(
+        string root,
+        string relativePath,
+        string markdown)
+    {
+        var path = Path.Combine(
+            root,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, markdown);
     }
 }
