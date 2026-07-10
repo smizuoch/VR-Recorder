@@ -1,3 +1,4 @@
+using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Storage;
 
@@ -11,6 +12,7 @@ public sealed class StartRecordingUseCase
     private readonly IRecordingFileReservation _fileReservation;
     private readonly IWallClock _wallClock;
     private readonly IStorageSpaceProbe _storageSpaceProbe;
+    private readonly EncoderSelector _encoderSelector;
     private readonly IRecordingEngine _recordingEngine;
     private readonly IRecordingSessionActivator _sessionActivator;
     private readonly IRecordingStorageMonitor _storageMonitor;
@@ -22,6 +24,7 @@ public sealed class StartRecordingUseCase
         IRecordingFileReservation fileReservation,
         IWallClock wallClock,
         IStorageSpaceProbe storageSpaceProbe,
+        EncoderSelector encoderSelector,
         IRecordingEngine recordingEngine,
         IRecordingSessionActivator sessionActivator,
         IRecordingStorageMonitor storageMonitor,
@@ -32,6 +35,7 @@ public sealed class StartRecordingUseCase
         ArgumentNullException.ThrowIfNull(fileReservation);
         ArgumentNullException.ThrowIfNull(wallClock);
         ArgumentNullException.ThrowIfNull(storageSpaceProbe);
+        ArgumentNullException.ThrowIfNull(encoderSelector);
         ArgumentNullException.ThrowIfNull(recordingEngine);
         ArgumentNullException.ThrowIfNull(sessionActivator);
         ArgumentNullException.ThrowIfNull(storageMonitor);
@@ -42,6 +46,7 @@ public sealed class StartRecordingUseCase
         _fileReservation = fileReservation;
         _wallClock = wallClock;
         _storageSpaceProbe = storageSpaceProbe;
+        _encoderSelector = encoderSelector;
         _recordingEngine = recordingEngine;
         _sessionActivator = sessionActivator;
         _storageMonitor = storageMonitor;
@@ -81,6 +86,13 @@ public sealed class StartRecordingUseCase
             return new StartRecordingResult.InsufficientStorage(availableSpace);
         }
 
+        var encoder = await _encoderSelector
+            .SelectAsync(
+                command.EncoderPreference,
+                command.GpuVendor,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         var startedAt = new RecordingSessionTimestamp(_wallClock.LocalNow);
         var descriptor = new RecordingFileDescriptor(
             startedAt,
@@ -98,7 +110,8 @@ public sealed class StartRecordingUseCase
             signal,
             output,
             startedAt,
-            command.FrameRate);
+            command.FrameRate,
+            encoder);
         var handle = await _recordingEngine
             .StartAsync(plan, cancellationToken)
             .ConfigureAwait(false);

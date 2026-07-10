@@ -1,4 +1,5 @@
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Video;
 
@@ -8,4 +9,5 @@ public sealed record RecordingPlan(
     StableVideoSignal Signal,
     PendingRecording Output,
     RecordingSessionTimestamp StartedAt,
-    FrameRate FrameRate);
+    FrameRate FrameRate,
+    EncoderKind Encoder = EncoderKind.MediaFoundationSoftware);

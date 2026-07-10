@@ -1,3 +1,4 @@
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
@@ -8,4 +9,6 @@ public sealed record StartRecordingCommand(
     SelfTimer SelfTimer,
     RecordingDuration AutoStop,
     OutputPath OutputPath,
-    FrameRate FrameRate);
+    FrameRate FrameRate,
+    EncoderPreference EncoderPreference = EncoderPreference.Auto,
+    GpuVendor GpuVendor = GpuVendor.Unknown);

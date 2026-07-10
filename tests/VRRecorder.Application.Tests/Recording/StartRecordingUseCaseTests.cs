@@ -110,6 +110,7 @@ public sealed class StartRecordingUseCaseTests
             reservation,
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
+            SuccessfulEncoderSelector(),
             engine,
             new FakeRecordingSessionActivator(),
             storageMonitor,
@@ -171,6 +172,7 @@ public sealed class StartRecordingUseCaseTests
             reservation,
             new FixedWallClock(TestLocalNow),
             storage,
+            SuccessfulEncoderSelector(),
             engine,
             new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
@@ -264,6 +266,7 @@ public sealed class StartRecordingUseCaseTests
             CompletedReservation(),
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
+            SuccessfulEncoderSelector(),
             engine,
             new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
@@ -317,6 +320,7 @@ public sealed class StartRecordingUseCaseTests
             CompletedReservation(),
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
+            SuccessfulEncoderSelector(),
             engine,
             activator,
             new OrderedStorageMonitor(events),
@@ -353,6 +357,7 @@ public sealed class StartRecordingUseCaseTests
             CompletedReservation(),
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
+            SuccessfulEncoderSelector(),
             engine,
             new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
@@ -381,6 +386,11 @@ public sealed class StartRecordingUseCaseTests
 
     private static StubStorageSpaceProbe SufficientStorage() =>
         new(new StorageSpace(StorageCapacityPolicy.MinimumStartBytes));
+
+    private static EncoderSelector SuccessfulEncoderSelector() =>
+        new(new ScriptedEncoderProbe(
+            (EncoderKind.MediaFoundationSoftware,
+                EncoderProbeResult.PacketProduced)));
 
     private sealed class OrderedSessionActivator(List<string> events)
         : IRecordingSessionActivator

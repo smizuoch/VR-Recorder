@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
@@ -70,6 +72,7 @@ public sealed class RecordingLifecycleIntegrationTests
                 56,
                 TimeSpan.Zero)),
             storageProbe,
+            new EncoderSelector(new MediaFoundationEncoderProbe()),
             engine,
             lifecycle,
             storageMonitor,
@@ -142,6 +145,18 @@ public sealed class RecordingLifecycleIntegrationTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class MediaFoundationEncoderProbe : IEncoderProbe
+    {
+        public Task<EncoderProbeResult> ProbeAsync(
+            EncoderKind encoder,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(EncoderKind.MediaFoundationSoftware, encoder);
+            return Task.FromResult(EncoderProbeResult.PacketProduced);
         }
     }
 
