@@ -54,7 +54,8 @@ public sealed class RecordingLifecycleControllerTests
             connections,
             new InMemoryCameraLeaseStore(),
             startRecording,
-            new FakeStopRequestSink());
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
 
         var result = await lifecycle.StartAsync(
             selectedServiceId: null,
@@ -121,7 +122,8 @@ public sealed class RecordingLifecycleControllerTests
             connections,
             new RecordingCameraLeaseStore(events),
             startRecording,
-            new FakeStopRequestSink());
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
         using var cancellation = new CancellationTokenSource();
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
@@ -198,7 +200,8 @@ public sealed class RecordingLifecycleControllerTests
             connections,
             new RecordingCameraLeaseStore(events),
             startRecording,
-            new FakeStopRequestSink());
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
             new CameraSnapshot(

@@ -15,6 +15,7 @@ public sealed class RecordingLifecycleController : IDisposable
     private readonly ICameraLeaseStore _cameraLeases;
     private readonly StartRecordingUseCase _startRecording;
     private readonly IStopRequestSink _stopRequests;
+    private readonly ICameraRestoreWarningSink _cameraRestoreWarnings;
     private CameraSessionController? _activeCamera;
     private CameraLease? _activeCameraLease;
     private VideoSignalSupervisor? _videoSignal;
@@ -24,16 +25,19 @@ public sealed class RecordingLifecycleController : IDisposable
         VrChatCameraConnectionUseCase cameraConnections,
         ICameraLeaseStore cameraLeases,
         StartRecordingUseCase startRecording,
-        IStopRequestSink stopRequests)
+        IStopRequestSink stopRequests,
+        ICameraRestoreWarningSink cameraRestoreWarnings)
     {
         ArgumentNullException.ThrowIfNull(cameraConnections);
         ArgumentNullException.ThrowIfNull(cameraLeases);
         ArgumentNullException.ThrowIfNull(startRecording);
         ArgumentNullException.ThrowIfNull(stopRequests);
+        ArgumentNullException.ThrowIfNull(cameraRestoreWarnings);
         _cameraConnections = cameraConnections;
         _cameraLeases = cameraLeases;
         _startRecording = startRecording;
         _stopRequests = stopRequests;
+        _cameraRestoreWarnings = cameraRestoreWarnings;
     }
 
     public RecorderState State
@@ -202,7 +206,9 @@ public sealed class RecordingLifecycleController : IDisposable
                     RecorderState.SignalLost,
                     RecorderTrigger.GraceExpired);
                 SetState(stopping);
-                await RestoreActiveCameraAsync().ConfigureAwait(false);
+                await RestoreActiveCameraAsync(
+                        CameraRestoreWarningReason.RecordingCompleted)
+                    .ConfigureAwait(false);
                 SetState(RecorderStateMachine.Transition(
                     stopping,
                     RecorderTrigger.StopCompleted));
@@ -231,16 +237,31 @@ public sealed class RecordingLifecycleController : IDisposable
         _videoSignal ?? throw new InvalidOperationException(
             "Video signal monitoring requires an active recording.");
 
-    private async Task RestoreActiveCameraAsync()
+    private async Task RestoreActiveCameraAsync(
+        CameraRestoreWarningReason warningReason)
     {
         var camera = _activeCamera ?? throw new InvalidOperationException(
             "Camera restoration requires an active camera session.");
         var lease = _activeCameraLease ?? throw new InvalidOperationException(
             "Camera restoration requires an active camera lease.");
-        await camera
-            .RestoreAsync(lease, CancellationToken.None)
-            .ConfigureAwait(false);
-        _activeCamera = null;
-        _activeCameraLease = null;
+        try
+        {
+            await camera
+                .RestoreAsync(lease, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            await _cameraRestoreWarnings
+                .PublishAsync(
+                    new CameraRestoreWarning(warningReason, exception),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _activeCamera = null;
+            _activeCameraLease = null;
+        }
     }
 }
