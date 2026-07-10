@@ -20,10 +20,22 @@
       "vrrecorder.domain": {
         "type": "Project"
       },
+      "vrrecorder.infrastructure.osc": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
       "vrrecorder.infrastructure.steamvr": {
         "type": "Project",
         "dependencies": {
           "VRRecorder.DesignSystem": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.infrastructure.storage": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
         }
       }
     },
