@@ -273,6 +273,52 @@ public sealed class AudioSessionIntegrationTests
     }
 
     [Fact]
+    public void DesktopRecoveryBeforeLossRampCompletesRestartsFadeFromSilence()
+    {
+        const int initialFrames = 480;
+        const int lostFrames = 240;
+        const int recoveryFrames = 480;
+        var session = CreateSession(AudioRouting.DesktopOnly);
+        ProcessSines(session, startFrame: 0, initialFrames);
+        var lost = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: initialFrames,
+            SampleRate,
+            lostFrames,
+            DesktopInterleavedSamples: [],
+            GenerateStereoSine(
+                880,
+                initialFrames,
+                lostFrames,
+                amplitude: 0.25),
+            AudioInputAvailability.Microphone));
+        Assert.All(lost.InterleavedSamples, sample => Assert.Equal(0, sample));
+
+        var recoveryStart = initialFrames + lostFrames;
+        var desktop = GenerateStereoSine(
+            440,
+            recoveryStart,
+            recoveryFrames,
+            amplitude: 0.25);
+        var recovered = session.Process(new ScheduledStereoAudioBuffer(
+            recoveryStart,
+            SampleRate,
+            recoveryFrames,
+            desktop,
+            GenerateStereoSine(
+                880,
+                recoveryStart,
+                recoveryFrames,
+                amplitude: 0.25),
+            AudioInputAvailability.All));
+
+        AssertRamp(
+            recovered.InterleavedSamples,
+            new float[recoveryFrames * ChannelCount],
+            desktop,
+            gainAtFrame: frame => (double)frame / recoveryFrames);
+    }
+
+    [Fact]
     public void RediscoveryFailureWarnsAndStillReturnsScheduledSilence()
     {
         const int blockFrames = 480;
