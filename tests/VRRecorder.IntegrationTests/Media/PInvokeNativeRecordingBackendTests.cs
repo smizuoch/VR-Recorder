@@ -24,12 +24,28 @@ public sealed class PInvokeNativeRecordingBackendTests
         var pending = new PendingRecording(
             Path.Combine(directory.Path, "take.recording.mp4"),
             Path.Combine(directory.Path, "take.mp4"));
-        var signal = new StableVideoSignal(1081, 1921);
+        var signal = new StableVideoSignal(
+            "VRChat-Spout-日本語-42",
+            0x00000001ABCDEF01,
+            "pci\\ven_10de&dev_2684|driver-32.0.15.6094",
+            GpuVendor.Nvidia,
+            1081,
+            1921,
+            VideoPixelFormat.Rgba8,
+            59.94);
         var layout = RecordingVideoLayoutSession.Start(
             signal,
             ResolutionChangePolicy.SingleFileFit);
         var currentLayout = layout.ApplyStableSignal(
-            new StableVideoSignal(1921, 1081));
+            new StableVideoSignal(
+                signal.SenderId,
+                signal.AdapterLuid,
+                signal.GpuIdentity,
+                signal.GpuVendor,
+                1921,
+                1081,
+                signal.PixelFormat,
+                signal.EstimatedSourceFramesPerSecond));
         var media = new RecordingMediaConfiguration(
             AudioRouting.MicOnly,
             "{0.0.0.00000000}.desktop-日本語",
@@ -99,6 +115,8 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(media.SpoutAdapterLuid, observed.SpoutAdapterLuid);
         Assert.Equal(media.EncoderAdapterLuid, observed.EncoderAdapterLuid);
         Assert.Equal(media.GpuIdentity, observed.GpuIdentity);
+        Assert.Equal(2u, observed.SourcePixelFormat);
+        Assert.Equal(59.94, observed.EstimatedSourceFramesPerSecond);
         await session.AbortAsync(CancellationToken.None);
     }
 

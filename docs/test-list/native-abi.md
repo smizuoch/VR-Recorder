@@ -14,6 +14,7 @@
 - [x] SteamVR inputのversioned config/state・create/poll/destroy ABIを固定する
 - [x] managed bridgeがABI v1 callbackをFIRST／STOPPED／FAULTEDへ変換する
 - [x] 選択済みencoderを固定値でmanagedからnativeへ渡し、不正値を拒否し、旧40 byte configはMF softwareへ既定化する
+- [ ] source pixel formatと推定source FPSをappend-only session configで渡し、旧160 byte configの既定値も固定する
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
 - [ ] native branch／line coverageのrelease thresholdを適用する
@@ -32,6 +33,7 @@
 - [x] Freeze the versioned SteamVR input config/state and create/poll/destroy ABI
 - [x] Translate ABI v1 callbacks into managed FIRST, STOPPED, and FAULTED events
 - [x] Carry the selected encoder through stable managed/native values, reject invalid values, and default legacy 40-byte configs to MF software
+- [ ] Carry source pixel format and estimated source FPS in an append-only session config while freezing defaults for legacy 160-byte configs
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends
 - [ ] Enforce the native branch and line coverage release thresholds
