@@ -1,4 +1,5 @@
 using System.Text;
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
 using VRRecorder.Infrastructure.Storage;
 
@@ -6,6 +7,36 @@ namespace VRRecorder.IntegrationTests.Storage;
 
 public sealed class JsonFileSettingsStoreTests
 {
+    [Fact]
+    public async Task CorruptDocumentIsBackedUpBeforeDefaultsAreReturned()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        byte[] corruptContent = "{ invalid json"u8.ToArray();
+        await File.WriteAllBytesAsync(settingsPath, corruptContent);
+        var clock = new FixedWallClock(new DateTimeOffset(
+            2026,
+            7,
+            10,
+            12,
+            34,
+            56,
+            TimeSpan.FromHours(9)));
+        var store = new JsonFileSettingsStore(settingsPath, clock);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equivalent(
+            VRRecorderSettings.CreateDefault(),
+            loaded,
+            strict: true);
+        Assert.False(File.Exists(settingsPath));
+        var backupPath = Path.Combine(
+            directory.Path,
+            "settings.corrupt-20260710T033456000Z.json");
+        Assert.Equal(corruptContent, await File.ReadAllBytesAsync(backupPath));
+    }
+
     [Fact]
     public async Task DefaultsRoundTripAsDeterministicAtomicSchemaV1Json()
     {
@@ -78,5 +109,15 @@ public sealed class JsonFileSettingsStoreTests
                 Directory.Delete(Path, recursive: true);
             }
         }
+    }
+
+    private sealed class FixedWallClock : IWallClock
+    {
+        public FixedWallClock(DateTimeOffset localNow)
+        {
+            LocalNow = localNow;
+        }
+
+        public DateTimeOffset LocalNow { get; }
     }
 }
