@@ -117,6 +117,12 @@ public sealed class SpdxSbomGeneratorTests
         var packageSpdxIds = packages
             .Select(package => package.GetProperty("SPDXID").GetString())
             .ToHashSet(StringComparer.Ordinal);
+        var describedSpdxIds = root
+            .GetProperty("documentDescribes")
+            .EnumerateArray()
+            .Select(element => element.GetString())
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.True(packageSpdxIds.SetEquals(describedSpdxIds));
         var relationships = root
             .GetProperty("relationships")
             .EnumerateArray()
