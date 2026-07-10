@@ -116,33 +116,40 @@ public sealed class RecordingFileFinalizationIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-022")]
-    public async Task ExistingFinalIsPreservedAndNumberedFinalIsPublished()
+    public async Task ReservedFinalCollisionPreservesExistingAndRecoversPending()
     {
         using var directory = TemporaryDirectory.Create();
         var temporaryPath = Path.Combine(directory.Path, "take.recording.mp4");
         var finalPath = Path.Combine(directory.Path, "take.mp4");
         var numberedPath = Path.Combine(directory.Path, "take_002.mp4");
+        var recoveryPath = Path.Combine(
+            directory.Path,
+            "VR-Recorder-Recovery",
+            "take.recording.mp4");
         byte[] existingContent = [0x01, 0x02, 0x03];
         byte[] newContent = [0x04, 0x05, 0x06];
         await File.WriteAllBytesAsync(finalPath, existingContent);
         await File.WriteAllBytesAsync(temporaryPath, newContent);
-        var savedSink = new ReopeningSavedSink(newContent);
         var useCase = new RecordingFileFinalizationUseCase(
             new SameDirectoryAtomicRecordingFileFinalizer(),
-            new ReopeningValidator(newContent),
-            new UnexpectedRecoveryStore(),
-            savedSink);
+            new UnexpectedRecordingFileValidator(),
+            new FileSystemRecordingRecoveryStore(),
+            new UnexpectedSavedSink());
 
         var result = await useCase.ExecuteAsync(
             new PendingRecording(temporaryPath, finalPath),
             CancellationToken.None);
 
-        var saved = Assert.IsType<RecordingFinalizationResult.Saved>(result);
-        Assert.Equal(Path.GetFullPath(numberedPath), saved.Recording.FinalPath);
+        var recovery =
+            Assert.IsType<RecordingFinalizationResult.RecoveryRequired>(result);
+        Assert.Equal(RecordingRecoveryReason.FinalizationFailed, recovery.Reason);
+        Assert.Equal(
+            Path.GetFullPath(recoveryPath),
+            recovery.Quarantine.QuarantinePath);
         Assert.Equal(existingContent, await File.ReadAllBytesAsync(finalPath));
-        Assert.Equal(newContent, await File.ReadAllBytesAsync(numberedPath));
+        Assert.Equal(newContent, await File.ReadAllBytesAsync(recoveryPath));
+        Assert.False(File.Exists(numberedPath));
         Assert.False(File.Exists(temporaryPath));
-        Assert.Equal(1, savedSink.CallCount);
     }
 
     [Fact]
