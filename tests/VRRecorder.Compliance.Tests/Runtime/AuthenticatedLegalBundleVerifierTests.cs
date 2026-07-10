@@ -1,0 +1,96 @@
+using System.Security.Cryptography;
+using System.Text;
+using VRRecorder.Compliance.Runtime;
+
+namespace VRRecorder.Compliance.Tests.Runtime;
+
+public sealed class AuthenticatedLegalBundleVerifierTests
+{
+    private const string BundleId =
+        "https://example.invalid/spdx/vr-recorder-0.1.0";
+
+    [Fact]
+    public async Task VerifiesBundleAgainstAuthenticatedOutOfBandManifestDigest()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new StubAuthenticatedAnchorSource(
+                new AuthenticatedLegalBundleAnchor(
+                    BundleId,
+                    Hash(manifest))));
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var verified = Assert.IsType<LegalBundleVerification.Verified>(result);
+        Assert.Equal(BundleId, verified.Identity.BundleId);
+        Assert.Equal(Hash(manifest), verified.Identity.ManifestSha256);
+    }
+
+    private static string CatalogJson() => $$"""
+        {
+          "schemaVersion": 2,
+          "bundleId": "{{BundleId}}",
+          "productName": "VR-Recorder",
+          "productVersion": "0.1.0",
+          "generatedAtUtc": "2026-07-10T00:00:00Z",
+          "integrityManifest": {
+            "path": "LEGAL-MANIFEST.sha256",
+            "algorithm": "SHA-256"
+          },
+          "components": []
+        }
+        """;
+
+    private static string Hash(ReadOnlySpan<byte> content) =>
+        Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    private sealed class StubAuthenticatedAnchorSource(
+        AuthenticatedLegalBundleAnchor anchor)
+        : IAuthenticatedLegalBundleAnchorSource
+    {
+        public ValueTask<AuthenticatedLegalBundleAnchor> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(anchor);
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        private TemporaryDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TemporaryDirectory Create()
+        {
+            var path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"vr-recorder-runtime-legal-tests-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(path);
+            return new TemporaryDirectory(path);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
+}
