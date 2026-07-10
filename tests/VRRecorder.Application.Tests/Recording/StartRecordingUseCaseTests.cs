@@ -10,12 +10,13 @@ public sealed class StartRecordingUseCaseTests
     public async Task ExecuteDoesNotStartEngineBeforeStableSignal()
     {
         var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
         var engine = new FakeRecordingEngine();
-        var useCase = new StartRecordingUseCase(signal, engine);
+        var useCase = new StartRecordingUseCase(signal, countdown, engine);
         using var cancellation = new CancellationTokenSource();
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(),
+            new StartRecordingCommand(SelfTimer.FromSeconds(0)),
             cancellation.Token);
         await signal.WaitUntilRequestedAsync();
 
@@ -30,11 +31,12 @@ public sealed class StartRecordingUseCaseTests
     public async Task SignalTimeoutReturnsNoSignalWithoutCreatingAFile()
     {
         var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
         var engine = new FakeRecordingEngine();
-        var useCase = new StartRecordingUseCase(signal, engine);
+        var useCase = new StartRecordingUseCase(signal, countdown, engine);
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(),
+            new StartRecordingCommand(SelfTimer.FromSeconds(0)),
             CancellationToken.None);
         await signal.WaitUntilRequestedAsync();
         signal.CompleteWithTimeout();
