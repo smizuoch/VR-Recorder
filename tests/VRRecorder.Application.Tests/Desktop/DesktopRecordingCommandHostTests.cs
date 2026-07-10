@@ -96,6 +96,28 @@ public sealed class DesktopRecordingCommandHostTests
         Assert.Equal(1, factory.InitializeCallCount);
     }
 
+    [Fact]
+    public async Task RuntimeReturnedAfterDisposalIsDisposedExactlyOnce()
+    {
+        var factory = new ControllableDesktopRecordingRuntimeFactory();
+        var runtime = new DisposalTrackingDesktopRecordingRuntime();
+        var host = new DesktopRecordingCommandHost(factory);
+        var activation = host.ActivateAsync(
+            ReadyStartup(),
+            CancellationToken.None);
+        await factory.WaitUntilInitializeRequestedAsync();
+
+        var disposal = host.DisposeAsync().AsTask();
+        factory.Complete(runtime);
+
+        await disposal;
+        var result = await activation;
+        await host.DisposeAsync();
+
+        Assert.Equal(DesktopRecordingHostState.Disposed, result.State);
+        Assert.Equal(1, runtime.DisposeCallCount);
+    }
+
     private static RecorderStartupResult ReadyStartup() =>
         new(RecorderState.Ready, []);
 
@@ -161,5 +183,42 @@ public sealed class DesktopRecordingCommandHostTests
         public void CompleteToggle() => _toggleCompletion.TrySetResult();
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class ControllableDesktopRecordingRuntimeFactory
+        : IDesktopRecordingRuntimeFactory
+    {
+        private readonly TaskCompletionSource _initializeRequested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<IDesktopRecordingRuntime>
+            _runtime = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IDesktopRecordingRuntime> InitializeAsync(
+            CancellationToken cancellationToken)
+        {
+            _initializeRequested.TrySetResult();
+            return _runtime.Task;
+        }
+
+        public Task WaitUntilInitializeRequestedAsync() =>
+            _initializeRequested.Task;
+
+        public void Complete(IDesktopRecordingRuntime runtime) =>
+            _runtime.TrySetResult(runtime);
+    }
+
+    private sealed class DisposalTrackingDesktopRecordingRuntime
+        : IDesktopRecordingRuntime
+    {
+        public int DisposeCallCount { get; private set; }
+
+        public Task ToggleAsync(CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
+        }
     }
 }
