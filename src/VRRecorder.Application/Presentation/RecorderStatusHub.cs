@@ -5,7 +5,9 @@ public sealed class RecorderStatusHub : IRecorderStatusSource, IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<long, Subscriber> _subscribers = [];
     private RecorderStatusSnapshot _current;
+    private Subscriber[] _disposalSubscribers = [];
     private long _nextSubscriptionId;
+    private bool _disposeCompleted;
     private bool _disposed;
 
     public RecorderStatusHub(RecorderStatusSnapshot initial)
@@ -80,19 +82,45 @@ public sealed class RecorderStatusHub : IRecorderStatusSource, IDisposable
         Subscriber[] subscribers;
         lock (_gate)
         {
-            if (_disposed)
+            if (!_disposed)
             {
+                _disposed = true;
+                subscribers = [.. _subscribers.Values];
+                _disposalSubscribers = subscribers;
+                _subscribers.Clear();
+            }
+            else
+            {
+                if (IsSubscriberCallbackThread(
+                        _disposalSubscribers,
+                        Environment.CurrentManagedThreadId))
+                {
+                    return;
+                }
+
+                while (!_disposeCompleted)
+                {
+                    Monitor.Wait(_gate);
+                }
+
                 return;
             }
-
-            _disposed = true;
-            subscribers = [.. _subscribers.Values];
-            _subscribers.Clear();
         }
 
-        foreach (var subscriber in subscribers)
+        try
         {
-            subscriber.Dispose();
+            foreach (var subscriber in subscribers)
+            {
+                subscriber.Dispose();
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _disposeCompleted = true;
+                Monitor.PulseAll(_gate);
+            }
         }
     }
 
@@ -106,6 +134,11 @@ public sealed class RecorderStatusHub : IRecorderStatusSource, IDisposable
 
         subscriber?.Dispose();
     }
+
+    private static bool IsSubscriberCallbackThread(
+        IEnumerable<Subscriber> subscribers,
+        int threadId) =>
+        subscribers.Any(subscriber => subscriber.IsCallbackThread(threadId));
 
     private sealed class Subscriber(
         Action<RecorderStatusSnapshot> callback) : IDisposable
@@ -189,6 +222,14 @@ public sealed class RecorderStatusHub : IRecorderStatusSource, IDisposable
                 _pending.Clear();
                 Monitor.PulseAll(_gate);
                 WaitForForeignCallback();
+            }
+        }
+
+        public bool IsCallbackThread(int threadId)
+        {
+            lock (_gate)
+            {
+                return _callbackActive && _callbackThreadId == threadId;
             }
         }
 
