@@ -6,6 +6,22 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class ReleaseEligibilityGateTests
 {
     [Fact]
+    public void IndependentlyReviewedComponentProducesApprovedReleaseGraph()
+    {
+        var graph = GraphWithApproval(new LegalApproval(
+            LegalApprovalStatus.Approved,
+            TicketId: "LEGAL-001",
+            RequestedBy: "developer",
+            Reviewer: "license-reviewer"));
+
+        var result = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.True(result.IsApproved);
+        Assert.Same(graph, result.ApprovedGraph!.Graph);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
     public void PendingComponentDoesNotProduceApprovedReleaseGraph()
     {
         var graph = GraphWithApproval(new LegalApproval(

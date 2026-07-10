@@ -58,7 +58,12 @@ public sealed class SpdxSbomGeneratorTests
                 TimeSpan.Zero),
             Creator: "Organization: VR-Recorder Project");
 
-        var sbom = SpdxSbomGenerator.Generate(context, graph);
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+        Assert.True(eligibility.IsApproved);
+
+        var sbom = SpdxSbomGenerator.Generate(
+            context,
+            eligibility.ApprovedGraph!);
 
         using var document = JsonDocument.Parse(sbom);
         var package = Assert.Single(document.RootElement
