@@ -7,7 +7,7 @@ CFLAGS := -std=c17 -Wall -Wextra -Wpedantic -Werror
 CXXFLAGS := -std=c++20 -O0 -g --coverage -Wall -Wextra -Wpedantic -Werror
 LDFLAGS := --coverage -pthread
 
-.PHONY: all clean test export-check
+.PHONY: all clean test export-check managed-fixture
 
 all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/c_header_smoke.o
 
@@ -19,6 +19,11 @@ $(BUILD_DIR)/c_header_smoke.o: c_header_smoke.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/abi_contract_tests: abi_contract_tests.cpp fake_media_backend.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/libvrrecorder_native_test.so: fake_media_backend.cpp fake_control_exports.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) -DVRRECORDER_NATIVE_EXPORTS -std=c++20 -O0 -g -fPIC -fvisibility=hidden -Wall -Wextra -Wpedantic -Werror $^ -shared -pthread -Wl,--no-undefined -o $@
+
+managed-fixture: $(BUILD_DIR)/libvrrecorder_native_test.so
 
 export-check:
 	$(MAKE) -C $(NATIVE_ROOT) clean all

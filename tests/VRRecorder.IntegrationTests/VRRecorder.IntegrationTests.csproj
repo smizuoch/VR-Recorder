@@ -23,4 +23,10 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+
+  <Target Name="BuildNativeTestFixture"
+          BeforeTargets="BeforeBuild"
+          Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Exec Command="make -C &quot;$(MSBuildProjectDirectory)/../VRRecorder.Native.Tests&quot; managed-fixture" />
+  </Target>
 </Project>
