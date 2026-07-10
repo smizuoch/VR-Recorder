@@ -18,6 +18,10 @@
 - [x] Legal Bundleを同一volumeのstagingから置換し、失敗時は既存bundleを保持する
 - [x] hash cycleのないschema v2 component catalogをmanifest対象として生成する
 - [x] schema v2とout-of-band trust boundaryをtemplate・ADRで固定する
+- [x] 認証済みout-of-band digestからmanifestと全payload hashを実行時検証する
+- [x] 重複catalog property・未登録file・改ざん・trust anchor欠落をfail-closedで拒否する
+- [x] runtime改ざんをComplianceFaultへ写像しREC actionを禁止する
+- [x] Release buildでbundle ID・manifest digest・payloadを必須化しdigestを照合する
 
 ## English
 
@@ -37,3 +41,7 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Replace a Legal Bundle from same-volume staging while preserving the existing bundle on failure
 - [x] Generate a manifest-covered schema-v2 component catalog without a hash cycle
 - [x] Pin schema v2 and its out-of-band trust boundary in the template and ADR
+- [x] Verify the manifest and every payload hash at runtime from an authenticated out-of-band digest
+- [x] Fail closed on duplicate catalog properties, unlisted files, tampering, or a missing trust anchor
+- [x] Map runtime tampering to ComplianceFault and suppress the REC action
+- [x] Require the bundle ID, manifest digest, and payload for Release builds and compare the digest
