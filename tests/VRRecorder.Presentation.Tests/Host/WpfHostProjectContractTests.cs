@@ -306,6 +306,57 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("RecorderState.ComplianceFault", windowCode);
     }
 
+    [Fact]
+    public void ReleaseBuildRequiresAuthenticatedLegalAnchorAndPayload()
+    {
+        var project = XDocument.Load(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "VRRecorder.App.csproj"));
+        var metadata = project
+            .Descendants("AssemblyMetadata")
+            .ToDictionary(
+                item => item.Attribute("Include")?.Value!,
+                item => item.Attribute("Value")?.Value!,
+                StringComparer.Ordinal);
+        Assert.Equal(
+            "$(LegalBundleId)",
+            metadata["VRRecorder.LegalBundleId"]);
+        Assert.Equal(
+            "$(LegalManifestSha256)",
+            metadata["VRRecorder.LegalManifestSha256"]);
+
+        var legalPayload = Assert.Single(project.Descendants("Content"), item =>
+            item.Attribute("Include")?.Value ==
+            "$(LegalBundleDirectory)/**/*");
+        Assert.Equal(
+            "PreserveNewest",
+            legalPayload.Attribute("CopyToOutputDirectory")?.Value);
+        Assert.Equal(
+            "PreserveNewest",
+            legalPayload.Attribute("CopyToPublishDirectory")?.Value);
+
+        var gate = Assert.Single(project.Descendants("Target"), target =>
+            target.Attribute("Name")?.Value == "ValidateReleaseLegalBundle");
+        Assert.Equal("PrepareForBuild", gate.Attribute("BeforeTargets")?.Value);
+        Assert.Contains(
+            "$(Configuration)",
+            gate.Attribute("Condition")?.Value,
+            StringComparison.Ordinal);
+        var errors = gate
+            .Elements("Error")
+            .Select(error => error.Attribute("Text")?.Value)
+            .Where(text => text is not null)
+            .ToArray();
+        Assert.Contains(errors, text =>
+            text!.Contains("LegalBundleId", StringComparison.Ordinal));
+        Assert.Contains(errors, text =>
+            text!.Contains("LegalManifestSha256", StringComparison.Ordinal));
+        Assert.Contains(errors, text =>
+            text!.Contains("LEGAL-MANIFEST.sha256", StringComparison.Ordinal));
+    }
+
     private static XDocument LoadRequiredXaml(
         string appDirectory,
         string relativePath)
