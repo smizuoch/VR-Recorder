@@ -157,12 +157,119 @@ public sealed class RecordingLifecycleIntegrationTests
                 "streaming:false",
                 "mode:Photo",
                 "lease:delete",
+                "gateway:dispose",
             ],
             cameraEvents);
         Assert.Equal(1, leaseStore.DeleteCallCount);
         Assert.Equal(RecorderState.Ready, lifecycle.State);
         Assert.Equal(RecorderState.Ready, sessions.State);
         Assert.Equal(1, backend.Session.StopCallCount);
+    }
+
+    [Fact]
+    public async Task RuntimeEncoderFailureKeepsPendingFileAndRestoresCamera()
+    {
+        using var directory = TemporaryDirectory.Create();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var cameraEvents = new List<string>();
+        var candidate = new VrChatInstanceCandidate(
+            "encoder-failure-selected",
+            "VRChat encoder-failure-selected",
+            new Uri("http://127.0.0.1:19002/"),
+            "127.0.0.1",
+            9002);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(
+                new FixedVrChatInstanceDiscovery(candidate)),
+            new FixedVrChatCameraGatewayFactory(
+                new RecordingVrChatCameraGateway(cameraEvents)));
+        var faultStops = new NativeRecordingFaultStopSink();
+        var stopFailure = new IOException("encoder failed to flush");
+        var backend = new FaultingNativeRecordingBackend(stopFailure);
+        var clock = new ControllableMonotonicClock();
+        var engine = new NativeRecordingEngine(backend, clock, faultStops);
+        var savedRecordings = new CapturingSavedRecordingSink();
+        var sessions = new ActiveRecordingSessionCoordinator(
+            engine,
+            new RecordingFileFinalizationUseCase(
+                new UnexpectedRecordingFileFinalizer(),
+                new UnexpectedRecordingFileValidator(),
+                new UnexpectedRecordingRecoveryStore(),
+                savedRecordings));
+        faultStops.Bind(sessions);
+        var storageProbe = new SequencedStorageSpaceProbe(
+            new StorageSpace(StorageCapacityPolicy.MinimumStartBytes));
+        var startRecording = new StartRecordingUseCase(
+            new StableVideoSignalGateway(new StableVideoSignal(320, 180)),
+            new ImmediateCountdownTimer(),
+            new FileSystemRecordingFileReservation(),
+            new FixedWallClock(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            storageProbe,
+            new EncoderSelector(new MediaFoundationEncoderProbe()),
+            engine,
+            sessions,
+            new NoOpStorageMonitor(),
+            new AutoStopScheduler(clock, sessions));
+        var leaseStore = new RecordingCameraLeaseStore(cameraEvents);
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            leaseStore,
+            startRecording,
+            sessions,
+            new UnexpectedCameraRestoreWarningSink());
+
+        var result = await lifecycle.StartAsync(
+            candidate.ServiceId,
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                new OutputPath(directory.Path),
+                new FrameRate(30)),
+            timeout.Token);
+        var started = Assert.IsType<StartRecordingResult.Started>(
+            result.Recording);
+        var pending = Assert.IsType<RecordingPlan>(backend.Plan).Output;
+
+        backend.SignalFault(new NativeRecordingFault(
+            6,
+            "encoder failed while recording"));
+        backend.SignalFault(new NativeRecordingFault(
+            9,
+            "duplicate encoder failure"));
+        await faultStops.WaitForDispatchAsync(started.Handle, timeout.Token);
+
+        Assert.Equal(RecordingStopReason.EncoderFailure, sessions.StopReason);
+        Assert.Equal(RecorderState.Faulted, sessions.State);
+        Assert.Equal(RecorderState.Faulted, lifecycle.State);
+        Assert.Equal(1, backend.Session.StopCallCount);
+        Assert.Equal(1, backend.Session.AbortCallCount);
+        Assert.True(File.Exists(pending.TemporaryPath));
+        Assert.False(File.Exists(pending.FinalPath));
+        Assert.Empty(savedRecordings.Recordings);
+        var dispatchFailure = Assert.IsType<NativeRecordingFaultStopFailure>(
+            faultStops.LastFailure);
+        Assert.Same(stopFailure, dispatchFailure.Exception);
+        Assert.Equal(started.Handle, dispatchFailure.Handle);
+        Assert.Equal(
+            [
+                "snapshot:read",
+                "lease:save",
+                "mode:Stream",
+                "streaming:true",
+                "streaming:false",
+                "mode:Photo",
+                "lease:delete",
+                "gateway:dispose",
+            ],
+            cameraEvents);
+        Assert.Equal(1, leaseStore.DeleteCallCount);
     }
 
     private sealed class FixedVrChatInstanceDiscovery(
@@ -185,7 +292,7 @@ public sealed class RecordingLifecycleIntegrationTests
     }
 
     private sealed class RecordingVrChatCameraGateway(List<string> events)
-        : IVrChatCameraGateway
+        : IVrChatCameraGateway, IAsyncDisposable
     {
         public Task<CameraSnapshot> ReadSnapshotAsync(
             CancellationToken cancellationToken)
@@ -213,6 +320,12 @@ public sealed class RecordingLifecycleIntegrationTests
             cancellationToken.ThrowIfCancellationRequested();
             events.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
             return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            events.Add("gateway:dispose");
+            return ValueTask.CompletedTask;
         }
     }
 
@@ -359,6 +472,69 @@ public sealed class RecordingLifecycleIntegrationTests
         public void CompleteDelay() => _delayCompletion.TrySetResult();
     }
 
+    private sealed class NoOpStorageMonitor : IRecordingStorageMonitor
+    {
+        public Task RunAsync(
+            RecordingHandle handle,
+            OutputPath outputPath,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FaultingNativeRecordingBackend(Exception stopFailure)
+        : INativeRecordingBackend
+    {
+        private NativeRecordingCallbacks? _callbacks;
+
+        public RecordingPlan? Plan { get; private set; }
+
+        public FaultingNativeRecordingSession Session { get; } =
+            new(stopFailure);
+
+        public Task<INativeRecordingSession> OpenAsync(
+            RecordingPlan plan,
+            NativeRecordingCallbacks callbacks,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Plan = plan;
+            _callbacks = callbacks;
+            callbacks.FirstVideoPacketMuxed();
+            return Task.FromResult<INativeRecordingSession>(Session);
+        }
+
+        public void SignalFault(NativeRecordingFault fault) =>
+            (_callbacks ?? throw new InvalidOperationException(
+                "The native session was not opened."))
+            .Faulted(fault);
+    }
+
+    private sealed class FaultingNativeRecordingSession(Exception stopFailure)
+        : INativeRecordingSession
+    {
+        public string Id => "faulting-native-session-001";
+
+        public int AbortCallCount { get; private set; }
+
+        public int StopCallCount { get; private set; }
+
+        public Task AbortAsync(CancellationToken cancellationToken)
+        {
+            AbortCallCount++;
+            return Task.CompletedTask;
+        }
+
+        public Task<RecordingStopResult> StopAsync(
+            CancellationToken cancellationToken)
+        {
+            StopCallCount++;
+            return Task.FromException<RecordingStopResult>(stopFailure);
+        }
+    }
+
     private sealed class SyntheticNativeRecordingBackend(string ffmpegPath)
         : INativeRecordingBackend
     {
@@ -428,6 +604,36 @@ public sealed class RecordingLifecycleIntegrationTests
             Recordings.Add(recording);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class UnexpectedRecordingFileFinalizer
+        : IRecordingFileFinalizer
+    {
+        public Task<FinalizedRecording> FinalizeAsync(
+            PendingRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "A failed native stop must not finalize its pending file.");
+    }
+
+    private sealed class UnexpectedRecordingFileValidator
+        : IRecordingFileValidator
+    {
+        public Task<RecordingFileValidation> ValidateAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "A failed native stop must not validate a recording.");
+    }
+
+    private sealed class UnexpectedRecordingRecoveryStore
+        : IRecordingRecoveryStore
+    {
+        public Task<QuarantinedRecording> QuarantineAsync(
+            RecoverableRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "A failed native stop must keep its pending file in place.");
     }
 
     private sealed class UnexpectedRuntimeFaultSink
