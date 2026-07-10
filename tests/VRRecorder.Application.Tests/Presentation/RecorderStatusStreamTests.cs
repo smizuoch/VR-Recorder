@@ -31,7 +31,7 @@ public sealed class RecorderStatusStreamTests
     [Fact]
     public void StreamReplaysCurrentAndRejectsDuplicateOrOutOfOrderUpdates()
     {
-        using var stream = new RecorderStatusStream(
+        using var stream = new RecorderStatusHub(
             RecorderStatusSnapshot.Create(4, RecorderState.Arming));
         List<RecorderStatusSnapshot> observed = [];
         using var subscription = stream.Subscribe(observed.Add);
@@ -58,7 +58,7 @@ public sealed class RecorderStatusStreamTests
     [Fact]
     public void ThrowingSubscriberCannotBlockRecordingStatusOrOtherSubscribers()
     {
-        using var stream = new RecorderStatusStream(
+        using var stream = new RecorderStatusHub(
             RecorderStatusSnapshot.Create(0, RecorderState.Ready));
         using var throwing = stream.Subscribe(_ =>
             throw new InvalidOperationException("subscriber failed"));
@@ -81,7 +81,7 @@ public sealed class RecorderStatusStreamTests
     [Fact]
     public void UnsubscribeAndDisposePreventLateDelivery()
     {
-        var stream = new RecorderStatusStream(
+        var stream = new RecorderStatusHub(
             RecorderStatusSnapshot.Create(0, RecorderState.Ready));
         List<RecorderStatusSnapshot> observed = [];
         var subscription = stream.Subscribe(observed.Add);
