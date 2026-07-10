@@ -22,7 +22,9 @@ public sealed class RecordingStartLifecycleIntegrationTests
 {
     [Fact]
     [Trait("Scenario", "IT-001")]
+    [Trait("Scenario", "IT-006")]
     [Trait("Scenario", "IT-007")]
+    [Trait("Scenario", "IT-015")]
     public async Task ExactTargetStartsAtFirstPacketAndSignalLossSafelyFinalizes()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
