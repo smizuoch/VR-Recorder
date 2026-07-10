@@ -493,7 +493,7 @@ bool RejectsInvalidRuntimeLayoutAbiInputs()
     CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     layout = ValidRuntimeLayout();
-    layout.destination_x = 1313;
+    layout.destination_x = 1315;
     CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     layout = ValidRuntimeLayout();
