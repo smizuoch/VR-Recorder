@@ -199,8 +199,10 @@ public sealed class FileSystemCameraLeaseStore : ICameraLeaseStore, IDisposable
             EnsureNoReparsePoint(parent);
         }
 
-        if (File.Exists(_path) &&
-            (File.GetAttributes(_path) & FileAttributes.ReparsePoint) != 0)
+        var leaseFile = new FileInfo(_path);
+        if (leaseFile.LinkTarget is not null ||
+            (leaseFile.Exists &&
+             (leaseFile.Attributes & FileAttributes.ReparsePoint) != 0))
         {
             throw new InvalidDataException(
                 "The camera lease file cannot be a reparse point.");
@@ -302,9 +304,7 @@ public sealed class FileSystemCameraLeaseStore : ICameraLeaseStore, IDisposable
         var previousModeKnown = RequiredBoolean(root, "previousModeKnown");
         var previousModeElement = root.GetProperty("previousMode");
         var previousMode = previousModeKnown
-            ? ObservedCameraValue.Known(Enum.Parse<CameraMode>(
-                RequiredString(previousModeElement),
-                ignoreCase: false))
+            ? ObservedCameraValue.Known(RequiredCameraMode(previousModeElement))
             : previousModeElement.ValueKind == JsonValueKind.Null
                 ? ObservedCameraValue.Unknown<CameraMode>()
                 : throw new FormatException("Unknown mode must be null.");
@@ -374,6 +374,19 @@ public sealed class FileSystemCameraLeaseStore : ICameraLeaseStore, IDisposable
             ? element.GetString()!
             : throw new FormatException("A required string is invalid.");
 
+    private static CameraMode RequiredCameraMode(JsonElement element)
+    {
+        var name = RequiredString(element);
+        if (!Enum.TryParse<CameraMode>(name, ignoreCase: false, out var mode) ||
+            !Enum.IsDefined(mode) ||
+            !string.Equals(Enum.GetName(mode), name, StringComparison.Ordinal))
+        {
+            throw new FormatException("The previous camera mode is invalid.");
+        }
+
+        return mode;
+    }
+
     private static int RequiredInt32(JsonElement parent, string name)
     {
         var element = parent.GetProperty(name);
@@ -400,6 +413,14 @@ public sealed class FileSystemCameraLeaseStore : ICameraLeaseStore, IDisposable
         {
             throw new ArgumentException(
                 "The camera lease does not have persistent owner identity.",
+                nameof(lease));
+        }
+
+        if (lease.PreviousMode.IsKnown &&
+            !Enum.IsDefined(lease.PreviousMode.Value))
+        {
+            throw new ArgumentException(
+                "The camera lease contains an undefined previous mode.",
                 nameof(lease));
         }
     }
