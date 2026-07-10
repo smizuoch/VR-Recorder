@@ -48,6 +48,18 @@ public static class ReleaseEligibilityGate
                     "missing-approval-requester",
                     component.Id));
             }
+
+            if (!string.IsNullOrWhiteSpace(component.Approval.RequestedBy) &&
+                !string.IsNullOrWhiteSpace(component.Approval.Reviewer) &&
+                string.Equals(
+                    component.Approval.RequestedBy,
+                    component.Approval.Reviewer,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new ComplianceIssue(
+                    "self-approval",
+                    component.Id));
+            }
         }
 
         var orderedIssues = issues
