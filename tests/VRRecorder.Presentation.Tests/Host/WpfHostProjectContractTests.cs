@@ -353,6 +353,108 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var mainWindow = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var legalWindow = LoadRequiredXaml(appDirectory, "LegalWindow.xaml");
+
+        var aboutButton = Assert.Single(
+            mainWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "AboutLegalButton");
+        Assert.Equal(
+            "{DynamicResource Legal_Open_AccessibleName}",
+            aboutButton.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_Open_Tooltip}",
+            aboutButton.Attribute("ToolTip")?.Value);
+        Assert.Equal("OnAboutLegalClick", aboutButton.Attribute("Click")?.Value);
+
+        Assert.Equal(
+            "VRRecorder.App.LegalWindow",
+            legalWindow.Root?.Attribute(Xaml + "Class")?.Value);
+        Assert.Equal(
+            "{DynamicResource Layout.FlowDirection}",
+            legalWindow.Root?.Attribute("FlowDirection")?.Value);
+        var scrollViewer = Assert.Single(
+            legalWindow.Descendants(Presentation + "ScrollViewer"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "LegalContentScrollViewer");
+        Assert.Equal(
+            "Auto",
+            scrollViewer.Attribute("VerticalScrollBarVisibility")?.Value);
+        Assert.Equal(
+            "Auto",
+            scrollViewer.Attribute("HorizontalScrollBarVisibility")?.Value);
+
+        foreach (var name in new[]
+                 {
+                     "LegalComponentList",
+                     "ShowLicenseButton",
+                     "OpenLicenseFolderButton",
+                     "RefreshLegalButton",
+                     "CloseLegalButton",
+                 })
+        {
+            var control = Assert.Single(
+                legalWindow.Descendants(),
+                element => element.Attribute(Xaml + "Name")?.Value == name);
+            Assert.NotNull(control.Attribute("AutomationProperties.Name"));
+            Assert.NotNull(control.Attribute("ToolTip"));
+        }
+
+        var identityFields = legalWindow
+            .Descendants(Presentation + "TextBlock")
+            .Select(element => element.Attribute(Xaml + "Name")?.Value)
+            .Where(name => name is not null)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Contains("ProductVersionText", identityFields);
+        Assert.Contains("BundleIdentityText", identityFields);
+        Assert.Contains("ComponentDetailText", identityFields);
+        Assert.Contains("LegalUnavailableText", identityFields);
+        Assert.Single(
+            legalWindow.Descendants(Presentation + "TextBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "FullLicenseText");
+
+        var mainCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("new LegalWindow", mainCode);
+        Assert.Contains("legalWindow.Show();", mainCode);
+        Assert.DoesNotContain("legalWindow.ShowDialog", mainCode);
+        var legalCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "LegalWindow.xaml.cs"));
+        Assert.Contains("DesktopLegalController", legalCode);
+        Assert.DoesNotContain("RecordingInputDispatcher", legalCode);
+        Assert.DoesNotContain("UiCommandId.ToggleRecording", legalCode);
+        Assert.DoesNotContain("HttpClient", legalCode);
+
+        var english = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.en-US.xaml");
+        foreach (var key in new[]
+                 {
+                     "Legal_Title",
+                     "Legal_ProductVersion_Label",
+                     "Legal_BundleIdentity_Label",
+                     "Legal_ThirdPartyComponents",
+                     "Legal_FullLicense",
+                     "Legal_OpenFolder_AccessibleName",
+                     "Legal_OpenFolder_Tooltip",
+                     "Legal_State_ComplianceFault",
+                 })
+        {
+            Assert.Contains(key, english.Keys);
+        }
+    }
+
+    [Fact]
     public void ReleaseBuildRequiresAuthenticatedLegalAnchorAndPayload()
     {
         var project = XDocument.Load(Path.Combine(
