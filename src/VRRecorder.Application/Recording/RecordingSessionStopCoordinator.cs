@@ -9,7 +9,6 @@ public sealed class RecordingSessionStopCoordinator
     private readonly IRecordingEngine _recordingEngine;
     private readonly RecordingHandle _handle;
     private readonly RecordingFileFinalizationUseCase _finalization;
-    private readonly CancellationToken _sessionLifetimeToken;
     private Task<RecordingFinalizationResult>? _stopTask;
 
     public RecordingSessionStopCoordinator(
@@ -24,7 +23,6 @@ public sealed class RecordingSessionStopCoordinator
         _recordingEngine = recordingEngine;
         _handle = handle;
         _finalization = finalization;
-        _sessionLifetimeToken = sessionLifetimeToken;
     }
 
     public Task<RecordingFinalizationResult> StopAsync()
@@ -38,10 +36,10 @@ public sealed class RecordingSessionStopCoordinator
     private async Task<RecordingFinalizationResult> StopAndFinalizeAsync()
     {
         var stopped = await _recordingEngine
-            .StopAsync(_handle, _sessionLifetimeToken)
+            .StopAsync(_handle, CancellationToken.None)
             .ConfigureAwait(false);
         return await _finalization
-            .ExecuteAsync(stopped.Recording, _sessionLifetimeToken)
+            .ExecuteAsync(stopped.Recording, CancellationToken.None)
             .ConfigureAwait(false);
     }
 }
