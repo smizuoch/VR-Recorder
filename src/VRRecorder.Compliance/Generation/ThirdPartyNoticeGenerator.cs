@@ -50,8 +50,13 @@ public static class ThirdPartyNoticeGenerator
             }
 
             output.Append("\n--- LICENSE TEXT ---\n")
-                .Append(component.LicenseText.TrimEnd())
-                .Append("\n--- END LICENSE TEXT ---\n\n");
+                .Append(component.LicenseText);
+            if (!component.LicenseText.EndsWith('\n'))
+            {
+                output.Append('\n');
+            }
+
+            output.Append("--- END LICENSE TEXT ---\n\n");
         }
 
         return output.ToString();
