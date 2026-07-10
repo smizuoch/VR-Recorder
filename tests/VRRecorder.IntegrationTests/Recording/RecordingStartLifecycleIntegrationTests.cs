@@ -85,7 +85,8 @@ public sealed class RecordingStartLifecycleIntegrationTests
         using var lifecycle = new RecordingLifecycleController(
             connections,
             leaseStore,
-            startRecording);
+            startRecording,
+            sessions);
 
         var starting = lifecycle.StartAsync(
             selected.ServiceId,

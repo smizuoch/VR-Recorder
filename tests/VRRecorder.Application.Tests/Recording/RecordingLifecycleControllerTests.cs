@@ -53,7 +53,8 @@ public sealed class RecordingLifecycleControllerTests
         using var lifecycle = new RecordingLifecycleController(
             connections,
             new InMemoryCameraLeaseStore(),
-            startRecording);
+            startRecording,
+            new FakeStopRequestSink());
 
         var result = await lifecycle.StartAsync(
             selectedServiceId: null,

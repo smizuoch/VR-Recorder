@@ -2,6 +2,8 @@ using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
 using VRRecorder.Domain.Recording;
+using VRRecorder.Domain.Timing;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Recording;
 
@@ -12,19 +14,24 @@ public sealed class RecordingLifecycleController : IDisposable
     private readonly VrChatCameraConnectionUseCase _cameraConnections;
     private readonly ICameraLeaseStore _cameraLeases;
     private readonly StartRecordingUseCase _startRecording;
+    private readonly IStopRequestSink _stopRequests;
+    private VideoSignalSupervisor? _videoSignal;
     private RecorderState _state = RecorderState.Ready;
 
     public RecordingLifecycleController(
         VrChatCameraConnectionUseCase cameraConnections,
         ICameraLeaseStore cameraLeases,
-        StartRecordingUseCase startRecording)
+        StartRecordingUseCase startRecording,
+        IStopRequestSink stopRequests)
     {
         ArgumentNullException.ThrowIfNull(cameraConnections);
         ArgumentNullException.ThrowIfNull(cameraLeases);
         ArgumentNullException.ThrowIfNull(startRecording);
+        ArgumentNullException.ThrowIfNull(stopRequests);
         _cameraConnections = cameraConnections;
         _cameraLeases = cameraLeases;
         _startRecording = startRecording;
+        _stopRequests = stopRequests;
     }
 
     public RecorderState State
@@ -92,11 +99,71 @@ public sealed class RecordingLifecycleController : IDisposable
                 _ => throw new InvalidOperationException(
                     $"Unknown recording start result {recording.GetType().Name}."),
             };
+            if (recording is StartRecordingResult.Started started)
+            {
+                _videoSignal = new VideoSignalSupervisor(
+                    started.Handle,
+                    _stopRequests);
+            }
+
             SetState(state);
             return new RecordingLifecycleStartResult(
                 state,
                 connection,
                 recording);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task ObserveFreshVideoFrameAsync(
+        VideoFrameObservation frame,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        await _operationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            var supervisor = ActiveVideoSignalSupervisor();
+            supervisor.ObserveFreshFrame(frame);
+            if (State == RecorderState.SignalLost)
+            {
+                SetState(RecorderStateMachine.Transition(
+                    RecorderState.SignalLost,
+                    RecorderTrigger.SignalRecovered));
+            }
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<VideoSignalStatus> EvaluateVideoSignalAsync(
+        MonotonicTimestamp now,
+        CancellationToken cancellationToken)
+    {
+        await _operationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            var status = await ActiveVideoSignalSupervisor()
+                .EvaluateAsync(now, cancellationToken)
+                .ConfigureAwait(false);
+            if (status == VideoSignalStatus.SignalLost &&
+                State == RecorderState.Recording)
+            {
+                SetState(RecorderStateMachine.Transition(
+                    RecorderState.Recording,
+                    RecorderTrigger.FreshFrameTimeout));
+            }
+
+            return status;
         }
         finally
         {
@@ -113,4 +180,8 @@ public sealed class RecordingLifecycleController : IDisposable
             _state = state;
         }
     }
+
+    private VideoSignalSupervisor ActiveVideoSignalSupervisor() =>
+        _videoSignal ?? throw new InvalidOperationException(
+            "Video signal monitoring requires an active recording.");
 }
