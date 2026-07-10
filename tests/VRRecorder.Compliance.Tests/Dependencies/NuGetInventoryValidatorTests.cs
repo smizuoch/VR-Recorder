@@ -42,4 +42,26 @@ public sealed class NuGetInventoryValidatorTests
         Assert.Equal("registry-version-mismatch", issue.Code);
         Assert.Equal("Versioned.Package@2.0.0", issue.Subject);
     }
+
+    [Theory]
+    [InlineData("UNKNOWN")]
+    [InlineData("NOASSERTION")]
+    [InlineData("NONE")]
+    public void PackageWithUnacceptableLicenseConclusionProducesIssue(string license)
+    {
+        NuGetPackage[] packages =
+        [
+            new("Forbidden.Package", "1.0.0", NuGetDependencyKind.Direct),
+        ];
+        RegisteredNuGetPackage[] registry =
+        [
+            new("Forbidden.Package", "1.0.0", license),
+        ];
+
+        var issues = NuGetInventoryValidator.Validate(packages, registry);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("unacceptable-license-conclusion", issue.Code);
+        Assert.Equal("Forbidden.Package@1.0.0", issue.Subject);
+    }
 }
