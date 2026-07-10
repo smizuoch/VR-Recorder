@@ -37,12 +37,12 @@ public sealed class ThirdPartyNoticeGeneratorTests
                         new VerifiedLegalFile(
                             LegalFileKind.Notice,
                             "notices/dual-license/NOTICE.txt",
-                            ValidSha256,
+                            ValidNoticeSha256,
                             "COMPONENT NOTICE\n\n"),
                         new VerifiedLegalFile(
                             LegalFileKind.License,
                             "licenses/dual-license/LICENSE.txt",
-                            ValidSha256,
+                            ValidLicenseSha256,
                             "SELECTED MIT LICENSE\n"),
                     ],
                     Scope: NoticeScope.RuntimeBundled,
@@ -204,6 +204,9 @@ public sealed class ThirdPartyNoticeGeneratorTests
         Assert.Contains("FULL MIT LICENSE TEXT", notice, StringComparison.Ordinal);
     }
 
-    private const string ValidSha256 =
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    private const string ValidLicenseSha256 =
+        "a5019fdc5b3c42dc39c743d45f66d814fca4c0042f959acc84a650f5139bcde1";
+
+    private const string ValidNoticeSha256 =
+        "73956b3a208cf4f35d1b0d9982295204f9d1d48d17d0432cf747573cf4cfb148";
 }

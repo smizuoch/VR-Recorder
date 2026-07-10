@@ -22,6 +22,29 @@ public sealed class ReleaseEligibilityGateTests
     }
 
     [Fact]
+    public void LegalFileHashMismatchDoesNotProduceApprovedReleaseGraph()
+    {
+        var graph = GraphWithApproval(
+            new LegalApproval(
+                LegalApprovalStatus.Approved,
+                TicketId: "LEGAL-001",
+                RequestedBy: "developer",
+                Reviewer: "license-reviewer"),
+            legalFileSha256:
+                "0000000000000000000000000000000000000000000000000000000000000000");
+
+        var result = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.False(result.IsApproved);
+        Assert.Null(result.ApprovedGraph);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("legal-file-hash-mismatch", issue.Code);
+        Assert.Equal(
+            "pending-package:licenses/pending-package/LICENSE.txt",
+            issue.Subject);
+    }
+
+    [Fact]
     public void PendingComponentDoesNotProduceApprovedReleaseGraph()
     {
         var graph = GraphWithApproval(new LegalApproval(
@@ -112,7 +135,8 @@ public sealed class ReleaseEligibilityGateTests
     }
 
     private static NormalizedComponentGraph GraphWithApproval(
-        LegalApproval approval) =>
+        LegalApproval approval,
+        string legalFileSha256 = ValidLegalFileSha256) =>
         new(
             Dependencies:
             [
@@ -139,7 +163,7 @@ public sealed class ReleaseEligibilityGateTests
                         new VerifiedLegalFile(
                             LegalFileKind.License,
                             "licenses/pending-package/LICENSE.txt",
-                            ValidSha256,
+                            legalFileSha256,
                             "FULL MIT LICENSE TEXT"),
                     ],
                     Scope: NoticeScope.RuntimeBundled,
@@ -150,6 +174,6 @@ public sealed class ReleaseEligibilityGateTests
                     ]),
             ]);
 
-    private const string ValidSha256 =
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    private const string ValidLegalFileSha256 =
+        "cf3a2d0a24a2a4dde18505d43e94a24bbc0a73c8f6e1deb2bae3743c0c9370ce";
 }
