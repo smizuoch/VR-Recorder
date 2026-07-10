@@ -15,6 +15,8 @@ public sealed class RecordingLifecycleController : IDisposable
     private readonly ICameraLeaseStore _cameraLeases;
     private readonly StartRecordingUseCase _startRecording;
     private readonly IStopRequestSink _stopRequests;
+    private CameraSessionController? _activeCamera;
+    private CameraLease? _activeCameraLease;
     private VideoSignalSupervisor? _videoSignal;
     private RecorderState _state = RecorderState.Ready;
 
@@ -104,6 +106,8 @@ public sealed class RecordingLifecycleController : IDisposable
                 };
                 if (recording is StartRecordingResult.Started started)
                 {
+                    _activeCamera = camera;
+                    _activeCameraLease = lease;
                     _videoSignal = new VideoSignalSupervisor(
                         started.Handle,
                         _stopRequests);
@@ -197,6 +201,8 @@ public sealed class RecordingLifecycleController : IDisposable
                 var stopping = RecorderStateMachine.Transition(
                     RecorderState.SignalLost,
                     RecorderTrigger.GraceExpired);
+                SetState(stopping);
+                await RestoreActiveCameraAsync().ConfigureAwait(false);
                 SetState(RecorderStateMachine.Transition(
                     stopping,
                     RecorderTrigger.StopCompleted));
@@ -224,4 +230,17 @@ public sealed class RecordingLifecycleController : IDisposable
     private VideoSignalSupervisor ActiveVideoSignalSupervisor() =>
         _videoSignal ?? throw new InvalidOperationException(
             "Video signal monitoring requires an active recording.");
+
+    private async Task RestoreActiveCameraAsync()
+    {
+        var camera = _activeCamera ?? throw new InvalidOperationException(
+            "Camera restoration requires an active camera session.");
+        var lease = _activeCameraLease ?? throw new InvalidOperationException(
+            "Camera restoration requires an active camera lease.");
+        await camera
+            .RestoreAsync(lease, CancellationToken.None)
+            .ConfigureAwait(false);
+        _activeCamera = null;
+        _activeCameraLease = null;
+    }
 }
