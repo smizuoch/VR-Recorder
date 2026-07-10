@@ -215,6 +215,7 @@ public sealed class LegalReleasePackageIntegrationTests
     [InlineData("runtime-network", "true")]
     [InlineData("approval", "")]
     [InlineData("approval", "../RIGHTS-APPROVAL")]
+    [InlineData("evidence", "")]
     [InlineData("evidence", "../material-symbols.md")]
     public async Task RightsLedgerMismatchFailsClosed(
         string mutation,
