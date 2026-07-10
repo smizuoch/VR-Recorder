@@ -589,6 +589,63 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopWindowCloseHidesToAnOperationalTrayMenu()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var project = XDocument.Load(Path.Combine(
+            appDirectory,
+            "VRRecorder.App.csproj"));
+        Assert.Equal(
+            "true",
+            project.Descendants("UseWindowsForms").Single().Value);
+
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        Assert.Equal("OnClosing", window.Root?.Attribute("Closing")?.Value);
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("App.IsExitRequested", windowCode);
+        Assert.Contains("e.Cancel = true", windowCode);
+        Assert.Contains("Hide()", windowCode);
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("NotifyIcon", appCode);
+        Assert.Contains("ContextMenuStrip", appCode);
+        Assert.Contains("InitializeTrayIcon", appCode);
+        Assert.Contains("UiActivationKind.DesktopTray", appCode);
+        Assert.Contains("OpenLegalWindow", appCode);
+        Assert.Contains("OpenLicenseFolderAsync", appCode);
+        Assert.Contains("Shutdown()", appCode);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Tray_Show_Label",
+                         "Tray_Toggle_Label",
+                         "Tray_Legal_Label",
+                         "Tray_LicenseFolder_Label",
+                         "Tray_Exit_Label",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
