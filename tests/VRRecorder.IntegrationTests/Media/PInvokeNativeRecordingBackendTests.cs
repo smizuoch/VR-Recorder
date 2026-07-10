@@ -53,10 +53,10 @@ public sealed class PInvokeNativeRecordingBackendTests
             desktopGainDb: -12.25,
             microphoneGainDb: 3.0,
             VideoQualityPreset.Standard,
-            spoutSenderIdentity: "VRChat-Spout-日本語-42",
-            spoutAdapterLuid: 0x00000001ABCDEF01,
-            encoderAdapterLuid: 0x00000001ABCDEF01,
-            gpuIdentity: "pci\\ven_10de&dev_2684|driver-32.0.15.6094");
+            spoutSenderIdentity: "stale-settings-sender",
+            spoutAdapterLuid: 0x00000000DEADBEEF,
+            encoderAdapterLuid: 0x00000000DEADBEEF,
+            gpuIdentity: "stale-settings-gpu");
         var plan = new RecordingPlan(
             signal,
             pending,
@@ -82,6 +82,7 @@ public sealed class PInvokeNativeRecordingBackendTests
             new NativeRecordingCallbacks(() => { }, _ => { }),
             CancellationToken.None);
         var observed = controls.MediaConfig();
+        await session.AbortAsync(CancellationToken.None);
 
         Assert.Equal(
             checked((uint)currentLayout.OutputCanvas.Width),
@@ -111,13 +112,12 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(media.MicrophoneEndpointId, observed.MicrophoneEndpointId);
         Assert.Equal(media.DesktopGainDb, observed.DesktopGainDb);
         Assert.Equal(media.MicrophoneGainDb, observed.MicrophoneGainDb);
-        Assert.Equal(media.SpoutSenderIdentity, observed.SpoutSenderIdentity);
-        Assert.Equal(media.SpoutAdapterLuid, observed.SpoutAdapterLuid);
-        Assert.Equal(media.EncoderAdapterLuid, observed.EncoderAdapterLuid);
-        Assert.Equal(media.GpuIdentity, observed.GpuIdentity);
+        Assert.Equal(signal.SenderId, observed.SpoutSenderIdentity);
+        Assert.Equal(signal.AdapterLuid, observed.SpoutAdapterLuid);
+        Assert.Equal(signal.AdapterLuid, observed.EncoderAdapterLuid);
+        Assert.Equal(signal.GpuIdentity, observed.GpuIdentity);
         Assert.Equal(2u, observed.SourcePixelFormat);
         Assert.Equal(59.94, observed.EstimatedSourceFramesPerSecond);
-        await session.AbortAsync(CancellationToken.None);
     }
 
     [Fact]
@@ -654,7 +654,9 @@ public sealed class PInvokeNativeRecordingBackendTests
                 Marshal.PtrToStringUTF8(native.SpoutSenderIdentityUtf8)!,
                 native.SpoutAdapterLuid,
                 native.EncoderAdapterLuid,
-                Marshal.PtrToStringUTF8(native.GpuIdentityUtf8)!);
+                Marshal.PtrToStringUTF8(native.GpuIdentityUtf8)!,
+                native.SourcePixelFormat,
+                native.EstimatedSourceFramesPerSecond);
         }
 
         public ObservedVideoLayout VideoLayout()
@@ -765,6 +767,8 @@ public sealed class PInvokeNativeRecordingBackendTests
             public ulong SpoutAdapterLuid;
             public ulong EncoderAdapterLuid;
             public nint GpuIdentityUtf8;
+            public uint SourcePixelFormat;
+            public double EstimatedSourceFramesPerSecond;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -803,7 +807,9 @@ public sealed class PInvokeNativeRecordingBackendTests
         string SpoutSenderIdentity,
         ulong SpoutAdapterLuid,
         ulong EncoderAdapterLuid,
-        string GpuIdentity);
+        string GpuIdentity,
+        uint SourcePixelFormat,
+        double EstimatedSourceFramesPerSecond);
 
     private sealed record ObservedVideoLayout(
         int SourceWidth,
