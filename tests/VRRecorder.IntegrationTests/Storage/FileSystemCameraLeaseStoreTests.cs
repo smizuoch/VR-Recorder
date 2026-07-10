@@ -10,7 +10,7 @@ public sealed class FileSystemCameraLeaseStoreTests
     {
         using var directory = TemporaryDirectory.Create();
         var path = Path.Combine(directory.Path, "camera-lease.json");
-        var store = new FileSystemCameraLeaseStore(path);
+        using var store = new FileSystemCameraLeaseStore(path);
         var lease = Lease("session-a", "service-a", processId: 1234);
 
         await store.SaveAsync(lease, CancellationToken.None);
@@ -42,7 +42,7 @@ public sealed class FileSystemCameraLeaseStoreTests
     {
         using var directory = TemporaryDirectory.Create();
         var path = Path.Combine(directory.Path, "camera-lease.json");
-        var store = new FileSystemCameraLeaseStore(path);
+        using var store = new FileSystemCameraLeaseStore(path);
         var persisted = Lease("session-a", "service-a", processId: 1234);
         var different = Lease("session-b", "service-a", processId: 5678);
         await store.SaveAsync(persisted, CancellationToken.None);
@@ -69,7 +69,7 @@ public sealed class FileSystemCameraLeaseStoreTests
         using var directory = TemporaryDirectory.Create();
         var path = Path.Combine(directory.Path, "camera-lease.json");
         await File.WriteAllTextAsync(path, content);
-        var store = new FileSystemCameraLeaseStore(path);
+        using var store = new FileSystemCameraLeaseStore(path);
         var evidence = await File.ReadAllBytesAsync(path);
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
@@ -91,7 +91,7 @@ public sealed class FileSystemCameraLeaseStoreTests
         var link = Path.Combine(directory.Path, "camera-lease.json");
         await File.WriteAllTextAsync(outside, "outside evidence");
         File.CreateSymbolicLink(link, outside);
-        var store = new FileSystemCameraLeaseStore(link);
+        using var store = new FileSystemCameraLeaseStore(link);
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             store.SaveAsync(
