@@ -86,11 +86,13 @@ public sealed class RecordingStartLifecycleIntegrationTests
             new NoOpStorageMonitor(),
             new AutoStopScheduler(clock, sessions));
         var leaseStore = new CapturingCameraLeaseStore();
+        var restoreWarnings = new CapturingCameraRestoreWarningSink();
         using var lifecycle = new RecordingLifecycleController(
             connections,
             leaseStore,
             startRecording,
-            sessions);
+            sessions,
+            restoreWarnings);
 
         var starting = lifecycle.StartAsync(
             selected.ServiceId,
@@ -238,24 +240,16 @@ public sealed class RecordingStartLifecycleIntegrationTests
         Assert.Equal(
             OscPacketCodec.EncodeStreaming(enabled: false),
             restoreStreaming.Buffer);
-        await selectedOsc.SendAsync(
-            restoreStreaming.Buffer,
-            restoreStreaming.RemoteEndPoint,
-            timeout.Token);
-        var restoreModeReceive = selectedOsc
+        var restoreRetryReceive = selectedOsc
             .ReceiveAsync(timeout.Token)
             .AsTask();
         Assert.Same(
-            restoreModeReceive,
-            await Task.WhenAny(safeStop, restoreModeReceive));
-        var restoreMode = await restoreModeReceive;
+            restoreRetryReceive,
+            await Task.WhenAny(safeStop, restoreRetryReceive));
+        var restoreRetry = await restoreRetryReceive;
         Assert.Equal(
-            OscPacketCodec.EncodeMode(CameraMode.Photo),
-            restoreMode.Buffer);
-        await selectedOsc.SendAsync(
-            restoreMode.Buffer,
-            restoreMode.RemoteEndPoint,
-            timeout.Token);
+            OscPacketCodec.EncodeStreaming(enabled: false),
+            restoreRetry.Buffer);
 
         Assert.Equal(VideoSignalStatus.SafeStop, await safeStop);
         await userStop;
@@ -267,7 +261,12 @@ public sealed class RecordingStartLifecycleIntegrationTests
         Assert.Equal(
             Path.GetFullPath(backend.Plan!.Output.FinalPath),
             Assert.Single(savedRecordings.Recordings).FinalPath);
-        Assert.Equal(1, leaseStore.DeleteCallCount);
+        Assert.Equal(0, leaseStore.DeleteCallCount);
+        var warning = Assert.Single(restoreWarnings.Warnings);
+        Assert.Equal(
+            CameraRestoreWarningReason.RecordingCompleted,
+            warning.Reason);
+        Assert.IsType<CameraWriteConfirmationException>(warning.Failure);
     }
 
     private static OscQueryServiceAdvertisement Advertisement(
@@ -391,6 +390,21 @@ public sealed class RecordingStartLifecycleIntegrationTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             DeleteCallCount++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingCameraRestoreWarningSink
+        : ICameraRestoreWarningSink
+    {
+        public List<CameraRestoreWarning> Warnings { get; } = [];
+
+        public Task PublishAsync(
+            CameraRestoreWarning warning,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Warnings.Add(warning);
             return Task.CompletedTask;
         }
     }
