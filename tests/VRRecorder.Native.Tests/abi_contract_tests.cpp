@@ -100,9 +100,9 @@ vrrec_video_layout_v1 ValidRuntimeLayout()
         1920,
         1920,
         1080,
-        656,
+        657,
         0,
-        608,
+        606,
         1080,
         VRREC_CANVAS_BACKGROUND_BLACK,
         VRREC_VIDEO_ROTATION_NONE,
@@ -439,9 +439,9 @@ bool UpdatesStableLayoutWithoutChangingTheOutputCanvas()
     CHECK(observed.source_height == 1920);
     CHECK(observed.canvas_width == 1920);
     CHECK(observed.canvas_height == 1080);
-    CHECK(observed.destination_x == 656);
+    CHECK(observed.destination_x == 657);
     CHECK(observed.destination_y == 0);
-    CHECK(observed.destination_width == 608);
+    CHECK(observed.destination_width == 606);
     CHECK(observed.destination_height == 1080);
     CHECK(observed.canvas_background == VRREC_CANVAS_BACKGROUND_BLACK);
     CHECK(observed.rotation == VRREC_VIDEO_ROTATION_NONE);
@@ -543,6 +543,18 @@ bool QueriesVersionedSessionStatistics()
     CHECK(statistics.dropped_source_video_frame_count == 30);
     CHECK(statistics.duplicated_output_video_frame_count == 4);
     CHECK(statistics.latest_encode_latency_microseconds == 2400);
+    CHECK(statistics.maximum_encode_latency_microseconds == 8000);
+    CHECK(statistics.audio_video_offset_microseconds == -15000);
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::CompleteTrailerFlushClose(90, 142);
+    statistics = ValidStatisticsOutput();
+    CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
+          VRREC_STATUS_OK);
+    CHECK(statistics.muxed_video_packet_count == 90);
+    CHECK(statistics.muxed_audio_packet_count == 142);
+    CHECK(statistics.dropped_source_video_frame_count == 30);
+    CHECK(statistics.duplicated_output_video_frame_count == 4);
     CHECK(statistics.maximum_encode_latency_microseconds == 8000);
     CHECK(statistics.audio_video_offset_microseconds == -15000);
 
