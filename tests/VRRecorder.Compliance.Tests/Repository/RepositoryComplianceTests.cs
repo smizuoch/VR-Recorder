@@ -16,6 +16,17 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void RequiredReadmesHaveBilingualHeadingAndReleaseParity()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = ReadmeBilingualParityValidator.VerifyRequiredReadmes(
+            repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
