@@ -147,14 +147,37 @@ public sealed class NativeRecordingEngineTests
         var start = engine.StartAsync(CreatePlan(), CancellationToken.None);
         await backend.WaitUntilOpenedAsync();
         backend.SignalFirstVideoPacketMuxed();
-        await start;
+        var handle = await start;
         var fault = new NativeRecordingFault(
             Status: 6,
             Message: "encoder failed while recording");
 
         backend.SignalFault(fault);
 
-        Assert.Equal(fault, Assert.Single(runtimeFaults.Faults));
+        var report = Assert.Single(runtimeFaults.Reports);
+        Assert.Equal(handle, report.Handle);
+        Assert.Equal(fault, report.Fault);
+    }
+
+    [Fact]
+    public async Task ImmediatePostPacketFaultWaitsForActivatedRecordingHandle()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var clock = new ControllableClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(4)));
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var engine = new NativeRecordingEngine(backend, clock, runtimeFaults);
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        var fault = new NativeRecordingFault(6, "immediate encoder failure");
+
+        backend.SignalFirstVideoPacketMuxed();
+        backend.SignalFault(fault);
+        var handle = await starting;
+
+        var report = Assert.Single(runtimeFaults.Reports);
+        Assert.Equal(handle, report.Handle);
+        Assert.Equal(fault, report.Fault);
     }
 
     private static RecordingPlan CreatePlan() =>
@@ -272,9 +295,13 @@ public sealed class NativeRecordingEngineTests
     private sealed class CapturingRuntimeFaultSink
         : INativeRecordingRuntimeFaultSink
     {
-        public List<NativeRecordingFault> Faults { get; } = [];
+        public List<(RecordingHandle Handle, NativeRecordingFault Fault)>
+            Reports
+        { get; } = [];
 
-        public void Report(NativeRecordingFault fault) => Faults.Add(fault);
+        public void Report(
+            RecordingHandle handle,
+            NativeRecordingFault fault) => Reports.Add((handle, fault));
     }
 
     private sealed class ControllableClock : IMonotonicClock
