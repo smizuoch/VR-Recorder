@@ -33,4 +33,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.NoSignal, next);
     }
+
+    [Fact]
+    public void FirstPacketCommittedWhenStartingTransitionsToRecording()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Starting,
+            RecorderTrigger.FirstPacketCommitted);
+
+        Assert.Equal(RecorderState.Recording, next);
+    }
 }
