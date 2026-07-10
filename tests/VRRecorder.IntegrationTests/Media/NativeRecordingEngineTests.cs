@@ -11,6 +11,36 @@ namespace VRRecorder.IntegrationTests.Media;
 public sealed class NativeRecordingEngineTests
 {
     [Fact]
+    public async Task CancelledStopLeavesNativeSessionAvailableForRetry()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var clock = new ControllableClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var engine = new NativeRecordingEngine(
+            backend,
+            clock,
+            new CapturingRuntimeFaultSink());
+        var start = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await start;
+        using var cancellation = new CancellationTokenSource();
+
+        var cancelledStop = engine.StopAsync(handle, cancellation.Token);
+        await backend.Session.WaitUntilFirstStopStartedAsync();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => cancelledStop);
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(CreatePlan().Output, stopped.Recording);
+        Assert.Equal(90, stopped.VideoPacketCount);
+        Assert.Equal(142, stopped.AudioPacketCount);
+        Assert.Equal(2, backend.Session.StopCallCount);
+    }
+
+    [Fact]
     public async Task CancellationBeforeFirstPacketAbortsOpenedNativeSession()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -153,7 +183,12 @@ public sealed class NativeRecordingEngineTests
 
     private sealed class StubNativeRecordingSession : INativeRecordingSession
     {
+        private readonly TaskCompletionSource _firstStopStarted = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
         public int AbortCallCount { get; private set; }
+
+        public int StopCallCount { get; private set; }
 
         public string Id => "native-session-001";
 
@@ -163,14 +198,25 @@ public sealed class NativeRecordingEngineTests
             return Task.CompletedTask;
         }
 
-        public Task<RecordingStopResult> StopAsync(
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new RecordingStopResult(
+        public async Task<RecordingStopResult> StopAsync(
+            CancellationToken cancellationToken)
+        {
+            StopCallCount++;
+            if (StopCallCount == 1)
+            {
+                _firstStopStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            return new RecordingStopResult(
                 new PendingRecording(
                     Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
                     Path.Combine(Path.GetTempPath(), "take.mp4")),
                 VideoPacketCount: 90,
-                AudioPacketCount: 142));
+                AudioPacketCount: 142);
+        }
+
+        public Task WaitUntilFirstStopStartedAsync() => _firstStopStarted.Task;
     }
 
     private sealed class CapturingRuntimeFaultSink
