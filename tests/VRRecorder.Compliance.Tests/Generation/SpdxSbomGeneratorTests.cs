@@ -34,7 +34,11 @@ public sealed class SpdxSbomGeneratorTests
                         "https://example.invalid/dual-license@commit",
                     LicenseText: "FULL SELECTED MIT LICENSE TEXT",
                     Scope: NoticeScope.RuntimeBundled,
-                    ApprovalStatus: LegalApprovalStatus.Approved,
+                    Approval: new LegalApproval(
+                        LegalApprovalStatus.Approved,
+                        TicketId: "LEGAL-001",
+                        RequestedBy: "developer",
+                        Reviewer: "license-reviewer"),
                     Packages:
                     [
                         new NoticePackage("Dual.License.Package", "3.0.0"),

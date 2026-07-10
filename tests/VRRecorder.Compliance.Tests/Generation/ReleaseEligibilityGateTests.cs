@@ -8,7 +8,11 @@ public sealed class ReleaseEligibilityGateTests
     [Fact]
     public void PendingComponentDoesNotProduceApprovedReleaseGraph()
     {
-        var graph = GraphWithApproval(LegalApprovalStatus.Pending);
+        var graph = GraphWithApproval(new LegalApproval(
+            LegalApprovalStatus.Pending,
+            TicketId: null,
+            RequestedBy: "developer",
+            Reviewer: null));
 
         var result = ReleaseEligibilityGate.Evaluate(graph);
 
@@ -19,8 +23,26 @@ public sealed class ReleaseEligibilityGateTests
         Assert.Equal("pending-package", issue.Subject);
     }
 
+    [Fact]
+    public void ApprovedComponentWithoutTicketDoesNotProduceApprovedReleaseGraph()
+    {
+        var graph = GraphWithApproval(new LegalApproval(
+            LegalApprovalStatus.Approved,
+            TicketId: null,
+            RequestedBy: "developer",
+            Reviewer: "license-reviewer"));
+
+        var result = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.False(result.IsApproved);
+        Assert.Null(result.ApprovedGraph);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("missing-approval-ticket", issue.Code);
+        Assert.Equal("pending-package", issue.Subject);
+    }
+
     private static NormalizedComponentGraph GraphWithApproval(
-        LegalApprovalStatus approvalStatus) =>
+        LegalApproval approval) =>
         new(
             Dependencies:
             [
@@ -43,7 +65,7 @@ public sealed class ReleaseEligibilityGateTests
                     SourceInformation: "https://example.invalid/source@commit",
                     LicenseText: "FULL MIT LICENSE TEXT",
                     Scope: NoticeScope.RuntimeBundled,
-                    ApprovalStatus: approvalStatus,
+                    Approval: approval,
                     Packages:
                     [
                         new NoticePackage("Pending.Package", "1.0.0"),
