@@ -51,6 +51,28 @@ public sealed class NativeRecordingEngineTests
         Assert.Equal(clock.Now, handle.FirstPacketCommittedAt);
     }
 
+    [Fact]
+    public async Task FaultBeforeFirstPacketFailsStartAndAbortsSession()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var clock = new ControllableClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var engine = new NativeRecordingEngine(backend, clock);
+
+        var start = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFault(new NativeRecordingFault(
+            Status: 6,
+            Message: "encoder initialization failed"));
+
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => start);
+
+        Assert.Equal(6, exception.Fault.Status);
+        Assert.Equal("encoder initialization failed", exception.Fault.Message);
+        Assert.Equal(1, backend.Session.AbortCallCount);
+    }
+
     private static RecordingPlan CreatePlan() =>
         new(
             new StableVideoSignal(320, 180),
@@ -72,23 +94,29 @@ public sealed class NativeRecordingEngineTests
     {
         private readonly TaskCompletionSource _opened = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        private Action? _firstVideoPacketMuxed;
+        private NativeRecordingCallbacks? _callbacks;
 
         public StubNativeRecordingSession Session { get; } = new();
 
         public Task<INativeRecordingSession> OpenAsync(
             RecordingPlan plan,
-            Action firstVideoPacketMuxed,
+            NativeRecordingCallbacks callbacks,
             CancellationToken cancellationToken)
         {
-            _firstVideoPacketMuxed = firstVideoPacketMuxed;
+            _callbacks = callbacks;
             _opened.TrySetResult();
             return Task.FromResult<INativeRecordingSession>(Session);
         }
 
         public void SignalFirstVideoPacketMuxed() =>
-            (_firstVideoPacketMuxed ??
-             throw new InvalidOperationException("The backend is not open."))();
+            (_callbacks ??
+             throw new InvalidOperationException("The backend is not open."))
+            .FirstVideoPacketMuxed();
+
+        public void SignalFault(NativeRecordingFault fault) =>
+            (_callbacks ??
+             throw new InvalidOperationException("The backend is not open."))
+            .Faulted(fault);
 
         public Task WaitUntilOpenedAsync() => _opened.Task;
     }
