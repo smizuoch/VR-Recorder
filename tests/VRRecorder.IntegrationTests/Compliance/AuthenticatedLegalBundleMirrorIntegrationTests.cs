@@ -1,12 +1,135 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
+using VRRecorder.Application.Ports;
 using VRRecorder.Compliance.Runtime;
+using VRRecorder.Domain.Storage;
 
 namespace VRRecorder.IntegrationTests.Compliance;
 
 public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
 {
+    [Fact]
+    [Trait("Scenario", "IT-030")]
+    public async Task InstallRootMirrorCopiesOnlyAuthenticatedLegalFiles()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var installRoot = Path.Combine(directory.Path, "install");
+        var output = Path.Combine(directory.Path, "recordings");
+        var anchor = await CreateAuthenticatedBundleAsync(
+            installRoot,
+            "https://example.invalid/spdx/vr-recorder-install",
+            "install-root");
+        var authenticatedFiles = ReadTree(installRoot);
+        await WriteFileAsync(
+            installRoot,
+            "VRRecorder.App.exe",
+            "application executable");
+        await WriteFileAsync(
+            installRoot,
+            "native/vrrecorder_native.dll",
+            "native application payload");
+        await WriteFileAsync(
+            installRoot,
+            "resources/application.json",
+            "{\"not\":\"legal\"}\n");
+        ILegalBundleOutputMirror mirror =
+            new AuthenticatedLegalBundleOutputMirror(
+                installRoot,
+                "2.5.0",
+                new AuthenticatedLegalBundleVerifier(
+                    new FixedAuthenticatedAnchorSource(anchor)));
+
+        await mirror.MirrorAsync(
+            new OutputPath(output),
+            CancellationToken.None);
+
+        var mirroredVersion = Path.Combine(
+            output,
+            "VR-Recorder-Legal",
+            "2.5.0");
+        AssertTreeEqual(authenticatedFiles, ReadTree(mirroredVersion));
+        Assert.False(File.Exists(Path.Combine(
+            mirroredVersion,
+            "VRRecorder.App.exe")));
+        Assert.False(File.Exists(Path.Combine(
+            mirroredVersion,
+            "native",
+            "vrrecorder_native.dll")));
+        var verification = await new AuthenticatedLegalBundleVerifier(
+                new FixedAuthenticatedAnchorSource(anchor))
+            .VerifyAsync(mirroredVersion, CancellationToken.None);
+        Assert.IsType<LegalBundleVerification.Verified>(verification);
+        Assert.Equal(
+            "2.5.0/\n"u8.ToArray(),
+            await File.ReadAllBytesAsync(Path.Combine(
+                output,
+                "VR-Recorder-Legal",
+                "CURRENT.txt")));
+        Assert.True(File.Exists(Path.Combine(
+            output,
+            "VR-Recorder-Legal",
+            "OPEN-NOTICES.html")));
+    }
+
+    [Fact]
+    public async Task InstallRootMirrorRejectsUnmanifestedLegalPayload()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var installRoot = Path.Combine(directory.Path, "install");
+        var output = Path.Combine(directory.Path, "recordings");
+        var anchor = await CreateAuthenticatedBundleAsync(
+            installRoot,
+            "https://example.invalid/spdx/vr-recorder-install",
+            "unregistered-legal");
+        await WriteFileAsync(
+            installRoot,
+            "LICENSES/rogue/LICENSE.txt",
+            "unregistered legal payload");
+        ILegalBundleOutputMirror mirror =
+            new AuthenticatedLegalBundleOutputMirror(
+                installRoot,
+                "2.5.0",
+                new AuthenticatedLegalBundleVerifier(
+                    new FixedAuthenticatedAnchorSource(anchor)));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            mirror.MirrorAsync(
+                new OutputPath(output),
+                CancellationToken.None));
+
+        Assert.False(Directory.Exists(Path.Combine(
+            output,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    public async Task DefaultStrictMirrorStillRejectsInstallRootPayload()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var installRoot = Path.Combine(directory.Path, "install");
+        var output = Path.Combine(directory.Path, "recordings");
+        var anchor = await CreateAuthenticatedBundleAsync(
+            installRoot,
+            "https://example.invalid/spdx/vr-recorder-install",
+            "strict-source");
+        await WriteFileAsync(
+            installRoot,
+            "VRRecorder.App.exe",
+            "application executable");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            CreateMirror(anchor).MirrorAsync(
+                installRoot,
+                output,
+                "2.5.0",
+                CancellationToken.None));
+
+        Assert.False(Directory.Exists(Path.Combine(
+            output,
+            "VR-Recorder-Legal")));
+    }
+
     [Fact]
     [Trait("Scenario", "IT-030")]
     public async Task NewCurrentMirrorPreservesOlderBundleAndIsDeterministicOffline()
@@ -293,6 +416,18 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
             Path.Combine(directory, "LEGAL-MANIFEST.sha256"),
             manifest);
         return new AuthenticatedLegalBundleAnchor(bundleId, Hash(manifest));
+    }
+
+    private static async Task WriteFileAsync(
+        string root,
+        string relativePath,
+        string content)
+    {
+        var path = Path.Combine(
+            root,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, content);
     }
 
     private static void AssertOfflineRelativeIndex(
