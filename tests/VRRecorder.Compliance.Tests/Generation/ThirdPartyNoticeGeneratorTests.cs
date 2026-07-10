@@ -6,6 +6,43 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class ThirdPartyNoticeGeneratorTests
 {
     [Fact]
+    public void NoticePreservesReviewedLicenseTextWithoutTrimming()
+    {
+        const string reviewedLicenseText = "LINE ONE\nLINE TWO\n\n";
+        NuGetPackage[] dependencies =
+        [
+            new("Exact.License", "1.0.0", NuGetDependencyKind.Direct),
+        ];
+        NoticeComponent[] components =
+        [
+            new(
+                Id: "exact-license",
+                DisplayName: "Exact License",
+                Version: "1.0.0",
+                LicenseExpression: "MIT",
+                CopyrightNotice: "Copyright (c) Example",
+                Usage: "runtime-feature",
+                Linkage: "managed-library",
+                Modified: false,
+                SourceInformation: "https://example.invalid/source@commit",
+                LicenseText: reviewedLicenseText,
+                Scope: NoticeScope.RuntimeBundled,
+                ApprovalStatus: LegalApprovalStatus.Approved,
+                Packages: [new NoticePackage("Exact.License", "1.0.0")]),
+        ];
+
+        var notice = ThirdPartyNoticeGenerator.Generate(
+            "VR-Recorder",
+            dependencies,
+            components);
+
+        Assert.Contains(
+            $"--- LICENSE TEXT ---\n{reviewedLicenseText}--- END LICENSE TEXT ---",
+            notice,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MitComponentWithoutCopyrightNoticeStopsGeneration()
     {
         NuGetPackage[] dependencies =
