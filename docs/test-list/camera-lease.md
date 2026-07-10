@@ -11,8 +11,9 @@
 - [x] session／VRChat service／process／UTC時刻と所有変更flagをatomic JSONへ保存する
 - [x] 別sessionによるlease上書き・削除、重複／未知JSON、symlinkをfail-closedで拒否する
 - [x] 起動時にlive ownerのleaseは変更せず保持する
-- [x] stale leaseは記録された正確なVRChat serviceだけへStreaming→Mode順で復元する
-- [x] 対象欠落・復元失敗時はtyped warningを出し、次回修復用leaseを保持する
+- [x] stale leaseは所有したStreamingだけを記録された正確なVRChat serviceへfalse復元し、Modeは変更しない
+- [x] stale leaseがStreamingを所有していなければcamera書込みなしで証拠を削除する
+- [x] 対象欠落・復元失敗時はtyped warningを出し、失敗・cancel時は次回修復用leaseを保持する
 - [x] 通常のcamera取得で注入identity sourceからpersist可能なleaseを作る
 - [x] process開始時刻でPID再利用を識別し、別ownerをlive扱いしない
 
@@ -27,7 +28,8 @@ The CameraLease ownership rules from Basic Design v0.3 §§9.3 and 24 are implem
 - [x] Persist session, VRChat service, process, UTC time, and owned-change flags in atomic JSON
 - [x] Fail closed on cross-session overwrite/delete, duplicate or unknown JSON, and symlinks
 - [x] Preserve a lease owned by a live process during startup
-- [x] Restore a stale lease only to its exact VRChat service in Streaming-to-Mode order
-- [x] Publish a typed warning and retain repair evidence when the target or restore is unavailable
+- [x] Restore only stale-lease-owned Streaming to false on its exact VRChat service and never change Mode
+- [x] Delete stale evidence without a camera write when the lease owns no Streaming change
+- [x] Publish a typed warning when the target or restore is unavailable, and retain repair evidence on failure or cancellation
 - [x] Create a persistable lease from an injected identity source during normal camera acquisition
 - [x] Distinguish PID reuse by process start time instead of treating another owner as live

@@ -86,6 +86,31 @@ public sealed class StaleCameraLeaseRecoveryUseCase
             return new StaleCameraLeaseRecoveryResult.OwnerStillActive(sessionId);
         }
 
+        if (!lease.ChangedStreamingByRecorder)
+        {
+            try
+            {
+                await _leases
+                    .DeleteAsync(lease, cancellationToken)
+                    .ConfigureAwait(false);
+                return new StaleCameraLeaseRecoveryResult.Restored(sessionId);
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                return await FailAsync(
+                        "CAMERA_LEASE_RESTORE_FAILED",
+                        sessionId,
+                        "The stale VRChat camera state could not be restored.",
+                        exception)
+                    .ConfigureAwait(false);
+            }
+        }
+
         var serviceId = lease.VrChatServiceId ??
                         throw new InvalidDataException(
                             "A persisted camera lease has no VRChat service identity.");
@@ -126,8 +151,11 @@ public sealed class StaleCameraLeaseRecoveryUseCase
 
         try
         {
-            await new CameraSessionController(connected.Gateway, _leases)
-                .RestoreAsync(lease, cancellationToken)
+            await connected.Gateway
+                .SetStreamingAsync(enabled: false, cancellationToken)
+                .ConfigureAwait(false);
+            await _leases
+                .DeleteAsync(lease, cancellationToken)
                 .ConfigureAwait(false);
             return new StaleCameraLeaseRecoveryResult.Restored(sessionId);
         }
