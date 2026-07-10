@@ -3,6 +3,7 @@
 ## 日本語
 
 - [x] 切断した音声inputだけを無音としscheduled sample countを保つ
+- [ ] desktop audio切断時はdefault render endpointを5秒間再探索する
 基本設計書 v0.3 §12、§18.4、§24の48 kHz mix、routing、click防止、無音継続規則をRed–Green–Refactorで実装します。
 
 - [x] Mic OFFは10 msでmic gainだけを0へランプする
@@ -14,6 +15,7 @@
 ## English
 
 - [x] Replace only a disconnected audio input with silence while preserving the scheduled sample count
+- [ ] Search for the default render endpoint for five seconds after desktop-audio loss
 The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from Basic Design v0.3 §§12, 18.4, and 24 are implemented with Red–Green–Refactor.
 
 - [x] Ramp only microphone gain to zero over 10 ms for Mic Off
