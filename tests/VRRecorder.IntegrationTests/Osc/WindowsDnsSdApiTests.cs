@@ -65,8 +65,8 @@ public sealed class WindowsDnsSdApiTests
     private sealed class ControllableWindowsDnsServiceNativeApi
         : IWindowsDnsServiceNativeApi
     {
-        private Action<uint, IReadOnlyList<string>>? _browseCallback;
-        private Action<uint, WindowsDnsSdResolvedService?>? _resolveCallback;
+        private WindowsDnsServiceBrowseCallback? _browseCallback;
+        private WindowsDnsServiceResolveCallback? _resolveCallback;
 
         public bool IsSupported => true;
 
@@ -84,7 +84,7 @@ public sealed class WindowsDnsSdApiTests
 
         public IWindowsDnsServiceOperation StartBrowse(
             string queryName,
-            Action<uint, IReadOnlyList<string>> callback)
+            WindowsDnsServiceBrowseCallback callback)
         {
             _browseCallback = callback;
             BrowseOperation = new ControllableOperation();
@@ -101,7 +101,7 @@ public sealed class WindowsDnsSdApiTests
 
         public IWindowsDnsServiceOperation StartResolve(
             string serviceInstanceName,
-            Action<uint, WindowsDnsSdResolvedService?> callback)
+            WindowsDnsServiceResolveCallback callback)
         {
             _resolveCallback = callback;
             ResolveOperation = new ControllableOperation();
