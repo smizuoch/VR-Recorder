@@ -74,8 +74,8 @@ public sealed class PInvokeNativeRecordingBackend
                 StructSize = checked((uint)Marshal.SizeOf<NativeSessionConfigV1>()),
                 AbiVersion = NativeAbiLibrary.SupportedAbiVersion,
                 TemporaryOutputPathUtf8 = temporaryPath,
-                Width = checked((uint)plan.Signal.Width),
-                Height = checked((uint)plan.Signal.Height),
+                Width = checked((uint)plan.VideoLayout.OutputCanvas.Width),
+                Height = checked((uint)plan.VideoLayout.OutputCanvas.Height),
                 FramesPerSecondNumerator = checked((uint)plan.FrameRate.Value),
                 FramesPerSecondDenominator = 1,
                 StartedAtUnixMillisecondsUtc = plan.StartedAt.UtcStartedAt

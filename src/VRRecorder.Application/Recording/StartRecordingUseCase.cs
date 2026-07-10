@@ -72,6 +72,10 @@ public sealed class StartRecordingUseCase
             return new StartRecordingResult.NoSignal();
         }
 
+        var videoLayout = RecordingVideoLayoutSession.Start(
+            signal,
+            command.ResolutionChangePolicy);
+
         if (command.SelfTimer.IsEnabled)
         {
             await _countdownTimer
@@ -97,8 +101,8 @@ public sealed class StartRecordingUseCase
         var startedAt = new RecordingSessionTimestamp(_wallClock.LocalNow);
         var descriptor = new RecordingFileDescriptor(
             startedAt,
-            signal.Width,
-            signal.Height,
+            videoLayout.OutputCanvas.Width,
+            videoLayout.OutputCanvas.Height,
             command.FrameRate,
             SegmentNumber: 1);
         var output = await _fileReservation
@@ -112,7 +116,8 @@ public sealed class StartRecordingUseCase
             output,
             startedAt,
             command.FrameRate,
-            encoder);
+            encoder,
+            videoLayout);
         var handle = await _recordingEngine
             .StartAsync(plan, cancellationToken)
             .ConfigureAwait(false);

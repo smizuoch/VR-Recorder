@@ -4,6 +4,22 @@ public sealed record VideoGeometry
 {
     public VideoGeometry(int width, int height, VideoPixelFormat pixelFormat)
     {
+        if (width <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(width),
+                width,
+                "Video width must be positive.");
+        }
+
+        if (height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(height),
+                height,
+                "Video height must be positive.");
+        }
+
         Width = width;
         Height = height;
         PixelFormat = pixelFormat;
