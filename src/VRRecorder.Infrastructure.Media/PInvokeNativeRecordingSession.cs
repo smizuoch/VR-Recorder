@@ -10,6 +10,7 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
     private readonly NativeAbiLibrary _library;
     private readonly NativeSessionSafeHandle _session;
     private readonly NativeCallbackState _callbackState;
+    private readonly Action _releaseBackendLease;
     private GCHandle _callbackHandle;
     private Task<RecordingStopResult>? _stopTask;
     private int _released;
@@ -18,12 +19,15 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
         NativeAbiLibrary library,
         NativeSessionSafeHandle session,
         NativeCallbackState callbackState,
-        GCHandle callbackHandle)
+        GCHandle callbackHandle,
+        Action releaseBackendLease)
     {
+        ArgumentNullException.ThrowIfNull(releaseBackendLease);
         _library = library;
         _session = session;
         _callbackState = callbackState;
         _callbackHandle = callbackHandle;
+        _releaseBackendLease = releaseBackendLease;
         Id = $"native-{Guid.NewGuid():N}";
     }
 
@@ -82,10 +86,23 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
             return;
         }
 
-        _session.Dispose();
-        if (_callbackHandle.IsAllocated)
+        try
         {
-            _callbackHandle.Free();
+            _session.Dispose();
+        }
+        finally
+        {
+            try
+            {
+                if (_callbackHandle.IsAllocated)
+                {
+                    _callbackHandle.Free();
+                }
+            }
+            finally
+            {
+                _releaseBackendLease();
+            }
         }
     }
 

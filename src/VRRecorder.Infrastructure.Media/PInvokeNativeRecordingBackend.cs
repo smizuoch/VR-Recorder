@@ -8,7 +8,10 @@ public sealed class PInvokeNativeRecordingBackend
     : INativeRecordingBackend, IDisposable
 {
     private static readonly NativeEventCallback EventCallback = OnNativeEvent;
+    private readonly object _lifetimeGate = new();
     private readonly NativeAbiLibrary _library;
+    private int _activeSessionCount;
+    private bool _disposed;
 
     public PInvokeNativeRecordingBackend(string libraryPath)
     {
@@ -24,6 +27,42 @@ public sealed class PInvokeNativeRecordingBackend
         ArgumentNullException.ThrowIfNull(callbacks);
         cancellationToken.ThrowIfCancellationRequested();
 
+        AcquireSessionLease();
+        try
+        {
+            return OpenCore(plan, callbacks);
+        }
+        catch
+        {
+            ReleaseSessionLease();
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_lifetimeGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_activeSessionCount != 0)
+            {
+                throw new InvalidOperationException(
+                    "The native recording backend has an active session.");
+            }
+
+            _library.Dispose();
+            _disposed = true;
+        }
+    }
+
+    private Task<INativeRecordingSession> OpenCore(
+        RecordingPlan plan,
+        NativeRecordingCallbacks callbacks)
+    {
         var callbackState = new NativeCallbackState(plan, callbacks);
         var callbackHandle = GCHandle.Alloc(callbackState);
         var temporaryPath = Marshal.StringToCoTaskMemUTF8(
@@ -74,7 +113,8 @@ public sealed class PInvokeNativeRecordingBackend
                         _library,
                         safeSession,
                         callbackState,
-                        callbackHandle));
+                        callbackHandle,
+                        ReleaseSessionLease));
             }
             catch
             {
@@ -97,7 +137,22 @@ public sealed class PInvokeNativeRecordingBackend
         }
     }
 
-    public void Dispose() => _library.Dispose();
+    private void AcquireSessionLease()
+    {
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _activeSessionCount++;
+        }
+    }
+
+    private void ReleaseSessionLease()
+    {
+        lock (_lifetimeGate)
+        {
+            _activeSessionCount--;
+        }
+    }
 
     private static void OnNativeEvent(nint userData, nint nativeEvent)
     {
