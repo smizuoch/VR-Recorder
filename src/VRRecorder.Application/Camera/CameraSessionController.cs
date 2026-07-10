@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
 
@@ -91,18 +92,39 @@ public sealed class CameraSessionController
         await _leaseStore
             .SaveAsync(lease, cancellationToken)
             .ConfigureAwait(false);
-        if (changeMode)
+        try
         {
-            await _gateway
-                .SetModeAsync(CameraMode.Stream, cancellationToken)
-                .ConfigureAwait(false);
-        }
+            if (changeMode)
+            {
+                await _gateway
+                    .SetModeAsync(CameraMode.Stream, cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
-        if (changeStreaming)
+            if (changeStreaming)
+            {
+                await _gateway
+                    .SetStreamingAsync(true, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (Exception acquisitionFailure)
         {
-            await _gateway
-                .SetStreamingAsync(true, cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await RestoreAsync(lease, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception restorationFailure)
+            {
+                throw new CameraAcquisitionRollbackException(
+                    acquisitionFailure,
+                    restorationFailure);
+            }
+
+            ExceptionDispatchInfo.Capture(acquisitionFailure).Throw();
+            throw new InvalidOperationException(
+                "Unreachable after rethrowing the camera acquisition failure.");
         }
 
         return lease;

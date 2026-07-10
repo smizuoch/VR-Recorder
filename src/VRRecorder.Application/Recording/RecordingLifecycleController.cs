@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
@@ -122,16 +123,44 @@ public sealed class RecordingLifecycleController : IDisposable
                     connected.Gateway,
                     _cameraLeases,
                     _cameraLeaseIdentities);
-            var lease = _cameraLeaseIdentities is null
-                ? await camera
-                    .AcquireAsync(cameraSnapshot, cancellationToken)
-                    .ConfigureAwait(false)
-                : await camera
-                    .AcquireAsync(
-                        cameraSnapshot,
-                        connected.Candidate.ServiceId,
-                        cancellationToken)
+            CameraLease lease;
+            try
+            {
+                lease = _cameraLeaseIdentities is null
+                    ? await camera
+                        .AcquireAsync(cameraSnapshot, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await camera
+                        .AcquireAsync(
+                            cameraSnapshot,
+                            connected.Candidate.ServiceId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+            }
+            catch (CameraAcquisitionRollbackException exception)
+            {
+                var warningReason =
+                    exception.AcquisitionFailure is OperationCanceledException &&
+                    cancellationToken.IsCancellationRequested
+                        ? CameraRestoreWarningReason.StartCanceled
+                        : CameraRestoreWarningReason.StartFailed;
+                await PublishCameraRestoreWarningBestEffortAsync(
+                        new CameraRestoreWarning(
+                            warningReason,
+                            exception.RestorationFailure))
                     .ConfigureAwait(false);
+                SetState(RecorderState.Ready);
+                ExceptionDispatchInfo.Capture(exception.AcquisitionFailure)
+                    .Throw();
+                throw new InvalidOperationException(
+                    "Unreachable after rethrowing the camera acquisition failure.");
+            }
+            catch
+            {
+                SetState(RecorderState.Ready);
+                throw;
+            }
+
             var completionSink = new CameraSessionCompletionSink(
                 this,
                 camera,
@@ -331,11 +360,25 @@ public sealed class RecordingLifecycleController : IDisposable
         }
         catch (Exception exception)
         {
-            await _cameraRestoreWarnings
-                .PublishAsync(
-                    new CameraRestoreWarning(warningReason, exception),
-                    CancellationToken.None)
+            await PublishCameraRestoreWarningBestEffortAsync(
+                    new CameraRestoreWarning(warningReason, exception))
                 .ConfigureAwait(false);
+        }
+    }
+
+    private async Task PublishCameraRestoreWarningBestEffortAsync(
+        CameraRestoreWarning warning)
+    {
+        try
+        {
+            await _cameraRestoreWarnings
+                .PublishAsync(warning, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Warning delivery is secondary to camera evidence, recording
+            // finalization, and lifecycle convergence.
         }
     }
 
