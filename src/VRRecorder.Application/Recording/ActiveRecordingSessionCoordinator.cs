@@ -87,16 +87,20 @@ public sealed class ActiveRecordingSessionCoordinator
                 return Task.CompletedTask;
             }
 
-            if (_activeSession.StopTask is null)
+            var session = _activeSession;
+            if (session.StopTask is null)
             {
                 _stopReason = request.Reason;
                 _state = RecorderStateMachine.Transition(
                     _state,
                     RecorderTrigger.StopRequested);
-                _activeSession.StopTask = CompleteStopAsync(_activeSession);
+                var completion = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                session.StopTask = completion.Task;
+                _ = CompleteStopAsync(session, completion);
             }
 
-            stopTask = _activeSession.StopTask;
+            stopTask = session.StopTask;
         }
 
         return cancellationToken.CanBeCanceled
@@ -104,7 +108,9 @@ public sealed class ActiveRecordingSessionCoordinator
             : stopTask;
     }
 
-    private async Task CompleteStopAsync(ActiveSession session)
+    private async Task CompleteStopAsync(
+        ActiveSession session,
+        TaskCompletionSource completion)
     {
         try
         {
@@ -115,6 +121,7 @@ public sealed class ActiveRecordingSessionCoordinator
             {
                 if (!ReferenceEquals(_activeSession, session))
                 {
+                    completion.TrySetResult();
                     return;
                 }
 
@@ -125,8 +132,10 @@ public sealed class ActiveRecordingSessionCoordinator
                     : RecorderState.Faulted;
                 _activeSession = null;
             }
+
+            completion.TrySetResult();
         }
-        catch
+        catch (Exception exception)
         {
             lock (_gate)
             {
@@ -137,7 +146,7 @@ public sealed class ActiveRecordingSessionCoordinator
                 }
             }
 
-            throw;
+            completion.TrySetException(exception);
         }
     }
 
