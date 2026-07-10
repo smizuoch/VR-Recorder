@@ -31,6 +31,19 @@ typedef struct vrrec_test_media_config_v1 {
     const char *gpu_identity_utf8;
 } vrrec_test_media_config_v1;
 
+typedef struct vrrec_test_video_layout_v1 {
+    std::uint32_t source_width;
+    std::uint32_t source_height;
+    std::uint32_t canvas_width;
+    std::uint32_t canvas_height;
+    std::uint32_t destination_x;
+    std::uint32_t destination_y;
+    std::uint32_t destination_width;
+    std::uint32_t destination_height;
+    std::uint32_t canvas_background;
+    std::uint32_t rotation;
+} vrrec_test_video_layout_v1;
+
 extern "C" VRREC_TEST_API void vrrec_test_commit_muxed_video_packet(void)
 {
     vrrecorder::native::testing::CommitMuxedVideoPacket();
@@ -89,6 +102,53 @@ extern "C" VRREC_TEST_API void vrrec_test_copy_media_config_v1(
         config.encoder_adapter_luid,
         config.gpu_identity.c_str(),
     };
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_copy_video_layout_v1(
+    vrrec_test_video_layout_v1 *out_layout)
+{
+    if (out_layout == nullptr) {
+        return;
+    }
+
+    const auto &layout = vrrecorder::native::testing::VideoLayout();
+    *out_layout = vrrec_test_video_layout_v1 {
+        layout.source_width,
+        layout.source_height,
+        layout.canvas_width,
+        layout.canvas_height,
+        layout.destination_x,
+        layout.destination_y,
+        layout.destination_width,
+        layout.destination_height,
+        layout.canvas_background,
+        layout.rotation,
+    };
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_set_statistics_v1(
+    std::uint64_t source_video_frame_count,
+    std::uint64_t muxed_video_packet_count,
+    std::uint64_t muxed_audio_packet_count,
+    std::uint64_t dropped_source_video_frame_count,
+    std::uint64_t duplicated_output_video_frame_count,
+    std::uint64_t latest_encode_latency_microseconds,
+    std::uint64_t maximum_encode_latency_microseconds,
+    std::int64_t audio_video_offset_microseconds)
+{
+    vrrecorder::native::testing::SetStatistics(
+        vrrec_session_statistics_v1 {
+            sizeof(vrrec_session_statistics_v1),
+            VRREC_ABI_V1,
+            source_video_frame_count,
+            muxed_video_packet_count,
+            muxed_audio_packet_count,
+            dropped_source_video_frame_count,
+            duplicated_output_video_frame_count,
+            latest_encode_latency_microseconds,
+            maximum_encode_latency_microseconds,
+            audio_video_offset_microseconds,
+        });
 }
 
 extern "C" VRREC_TEST_API void vrrec_test_set_steamvr_digital_state(

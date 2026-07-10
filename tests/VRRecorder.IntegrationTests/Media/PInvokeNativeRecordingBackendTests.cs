@@ -140,6 +140,98 @@ public sealed class PInvokeNativeRecordingBackendTests
         await session.AbortAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task StableRuntimeLayoutUpdateCrossesManagedNativeAbi()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var signal = new StableVideoSignal(1081, 1921);
+        var layoutSession = RecordingVideoLayoutSession.Start(
+            signal,
+            ResolutionChangePolicy.SingleFileFit);
+        var plan = new RecordingPlan(
+            signal,
+            new PendingRecording(
+                Path.Combine(directory.Path, "take.recording.mp4"),
+                Path.Combine(directory.Path, "take.mp4")),
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30),
+            EncoderKind.MediaFoundationSoftware,
+            layoutSession);
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        var landscape = layoutSession.ApplyStableSignal(
+            new StableVideoSignal(1921, 1081));
+
+        await session.UpdateVideoLayoutAsync(
+            landscape,
+            CancellationToken.None);
+        var observed = controls.VideoLayout();
+
+        Assert.Equal(landscape.Source.Width, observed.SourceWidth);
+        Assert.Equal(landscape.Source.Height, observed.SourceHeight);
+        Assert.Equal(landscape.OutputCanvas.Width, observed.CanvasWidth);
+        Assert.Equal(landscape.OutputCanvas.Height, observed.CanvasHeight);
+        Assert.Equal(landscape.Placement.OffsetX, observed.DestinationX);
+        Assert.Equal(landscape.Placement.OffsetY, observed.DestinationY);
+        Assert.Equal(landscape.Placement.Width, observed.DestinationWidth);
+        Assert.Equal(landscape.Placement.Height, observed.DestinationHeight);
+        Assert.Equal(1u, observed.CanvasBackground);
+        Assert.Equal(1u, observed.Rotation);
+        await session.AbortAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StatisticsRemainAvailableAfterGracefulStopDestroysHandle()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            new PendingRecording(
+                Path.Combine(directory.Path, "take.recording.mp4"),
+                Path.Combine(directory.Path, "take.mp4")),
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        var expected = new NativeRecordingSessionStatistics(
+            SourceVideoFrameCount: 120,
+            MuxedVideoPacketCount: 90,
+            MuxedAudioPacketCount: 142,
+            DroppedSourceVideoFrameCount: 30,
+            DuplicatedOutputVideoFrameCount: 4,
+            LatestEncodeLatency: TimeSpan.FromMicroseconds(2400),
+            MaximumEncodeLatency: TimeSpan.FromMicroseconds(8000),
+            AudioVideoOffset: TimeSpan.FromMicroseconds(-15000));
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        controls.SetStatistics(expected);
+
+        var active = await session.GetStatisticsAsync(CancellationToken.None);
+        var stopping = session.StopAsync(CancellationToken.None);
+        controls.CompleteTrailerFlushClose(90, 142);
+        await stopping;
+        var terminal = await session.GetStatisticsAsync(CancellationToken.None);
+
+        Assert.Equal(expected, active);
+        Assert.Equal(expected, terminal);
+    }
+
     [Theory]
     [InlineData(EncoderKind.Nvenc, 1u)]
     [InlineData(EncoderKind.Amf, 2u)]
@@ -374,6 +466,8 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly FailDelegate _fail;
         private readonly EncoderKindDelegate _encoderKind;
         private readonly CopyMediaConfigDelegate _copyMediaConfig;
+        private readonly CopyVideoLayoutDelegate _copyVideoLayout;
+        private readonly SetStatisticsDelegate _setStatistics;
 
         public NativeFixtureControls(string path)
         {
@@ -399,6 +493,16 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_copy_media_config_v1"));
+            _copyVideoLayout = Marshal.GetDelegateForFunctionPointer<
+                CopyVideoLayoutDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_copy_video_layout_v1"));
+            _setStatistics = Marshal.GetDelegateForFunctionPointer<
+                SetStatisticsDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_set_statistics_v1"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -439,6 +543,34 @@ public sealed class PInvokeNativeRecordingBackendTests
                 Marshal.PtrToStringUTF8(native.GpuIdentityUtf8)!);
         }
 
+        public ObservedVideoLayout VideoLayout()
+        {
+            var native = new NativeObservedVideoLayout();
+            _copyVideoLayout(ref native);
+            return new ObservedVideoLayout(
+                checked((int)native.SourceWidth),
+                checked((int)native.SourceHeight),
+                checked((int)native.CanvasWidth),
+                checked((int)native.CanvasHeight),
+                checked((int)native.DestinationX),
+                checked((int)native.DestinationY),
+                checked((int)native.DestinationWidth),
+                checked((int)native.DestinationHeight),
+                native.CanvasBackground,
+                native.Rotation);
+        }
+
+        public void SetStatistics(NativeRecordingSessionStatistics statistics) =>
+            _setStatistics(
+                statistics.SourceVideoFrameCount,
+                statistics.MuxedVideoPacketCount,
+                statistics.MuxedAudioPacketCount,
+                statistics.DroppedSourceVideoFrameCount,
+                statistics.DuplicatedOutputVideoFrameCount,
+                checked((ulong)statistics.LatestEncodeLatency.TotalMicroseconds),
+                checked((ulong)statistics.MaximumEncodeLatency.TotalMicroseconds),
+                checked((long)statistics.AudioVideoOffset.TotalMicroseconds));
+
         public void Dispose() => NativeLibrary.Free(_library);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -460,6 +592,21 @@ public sealed class PInvokeNativeRecordingBackendTests
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void CopyMediaConfigDelegate(
             ref NativeObservedMediaConfig config);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void CopyVideoLayoutDelegate(
+            ref NativeObservedVideoLayout layout);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void SetStatisticsDelegate(
+            ulong sourceVideoFrameCount,
+            ulong muxedVideoPacketCount,
+            ulong muxedAudioPacketCount,
+            ulong droppedSourceVideoFrameCount,
+            ulong duplicatedOutputVideoFrameCount,
+            ulong latestEncodeLatencyMicroseconds,
+            ulong maximumEncodeLatencyMicroseconds,
+            long audioVideoOffsetMicroseconds);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeObservedMediaConfig
@@ -485,6 +632,21 @@ public sealed class PInvokeNativeRecordingBackendTests
             public ulong EncoderAdapterLuid;
             public nint GpuIdentityUtf8;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeObservedVideoLayout
+        {
+            public uint SourceWidth;
+            public uint SourceHeight;
+            public uint CanvasWidth;
+            public uint CanvasHeight;
+            public uint DestinationX;
+            public uint DestinationY;
+            public uint DestinationWidth;
+            public uint DestinationHeight;
+            public uint CanvasBackground;
+            public uint Rotation;
+        }
     }
 
     private sealed record ObservedMediaConfig(
@@ -508,6 +670,18 @@ public sealed class PInvokeNativeRecordingBackendTests
         ulong SpoutAdapterLuid,
         ulong EncoderAdapterLuid,
         string GpuIdentity);
+
+    private sealed record ObservedVideoLayout(
+        int SourceWidth,
+        int SourceHeight,
+        int CanvasWidth,
+        int CanvasHeight,
+        int DestinationX,
+        int DestinationY,
+        int DestinationWidth,
+        int DestinationHeight,
+        uint CanvasBackground,
+        uint Rotation);
 
     private sealed class TemporaryDirectory : IDisposable
     {
