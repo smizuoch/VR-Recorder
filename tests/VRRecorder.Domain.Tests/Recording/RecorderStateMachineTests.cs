@@ -5,7 +5,7 @@ namespace VRRecorder.Domain.Tests.Recording;
 public sealed class RecorderStateMachineTests
 {
     [Fact]
-    public void StartRequested_WhenReady_TransitionsToArming()
+    public void StartRequestedWhenReadyTransitionsToArming()
     {
         var next = RecorderStateMachine.Transition(
             RecorderState.Ready,
