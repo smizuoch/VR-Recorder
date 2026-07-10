@@ -54,6 +54,9 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         var activeSession = new ActiveSession(session);
         if (!_sessions.TryAdd(session.Id, activeSession))
         {
+            await session
+                .AbortAsync(CancellationToken.None)
+                .ConfigureAwait(false);
             throw new InvalidOperationException(
                 $"Native recording session {session.Id} already exists.");
         }
