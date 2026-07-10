@@ -11,6 +11,7 @@ public sealed record NormalizedComponent(
     bool Modified,
     string SourceInformation,
     string LicenseText,
+    IReadOnlyList<VerifiedLegalFile> LegalFiles,
     NoticeScope Scope,
     LegalApproval Approval,
     IReadOnlyList<NoticePackage> Packages);

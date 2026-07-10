@@ -90,14 +90,21 @@ public static class ThirdPartyNoticeGenerator
                     .Append(")\n");
             }
 
-            output.Append("\n--- LICENSE TEXT ---\n")
-                .Append(component.LicenseText);
-            if (!component.LicenseText.EndsWith('\n'))
+            if (showLicenseDecision)
             {
-                output.Append('\n');
+                AppendLegalFiles(output, component.LegalFiles);
             }
+            else
+            {
+                output.Append("\n--- LICENSE TEXT ---\n")
+                    .Append(component.LicenseText);
+                if (!component.LicenseText.EndsWith('\n'))
+                {
+                    output.Append('\n');
+                }
 
-            output.Append("--- END LICENSE TEXT ---\n\n");
+                output.Append("--- END LICENSE TEXT ---\n\n");
+            }
         }
 
         return output.ToString();
@@ -178,6 +185,7 @@ public static class ThirdPartyNoticeGenerator
             component.Modified,
             component.SourceInformation,
             component.LicenseText,
+            [],
             component.Scope,
             component.ApprovalStatus == LegalApprovalStatus.Approved,
             component.Packages);
@@ -196,6 +204,7 @@ public static class ThirdPartyNoticeGenerator
             component.Modified,
             component.SourceInformation,
             component.LicenseText,
+            component.LegalFiles,
             component.Scope,
             component.Approval.Status == LegalApprovalStatus.Approved,
             component.Packages);
@@ -212,7 +221,33 @@ public static class ThirdPartyNoticeGenerator
         bool Modified,
         string SourceInformation,
         string LicenseText,
+        IReadOnlyList<VerifiedLegalFile> LegalFiles,
         NoticeScope Scope,
         bool IsApproved,
         IReadOnlyList<NoticePackage> Packages);
+
+    private static void AppendLegalFiles(
+        StringBuilder output,
+        IEnumerable<VerifiedLegalFile> legalFiles)
+    {
+        foreach (var legalFile in legalFiles
+                     .OrderBy(file => file.Kind)
+                     .ThenBy(file => file.RelativePath, StringComparer.Ordinal))
+        {
+            output.Append("\n--- LEGAL FILE (")
+                .Append(legalFile.Kind)
+                .Append("): ")
+                .Append(legalFile.RelativePath)
+                .Append(" ---\n")
+                .Append(legalFile.Utf8Content);
+            if (!legalFile.Utf8Content.EndsWith('\n'))
+            {
+                output.Append('\n');
+            }
+
+            output.Append("--- END LEGAL FILE ---\n");
+        }
+
+        output.Append('\n');
+    }
 }

@@ -175,6 +175,7 @@ public static class SpdxSbomGenerator
             component.Modified,
             component.SourceInformation,
             component.LicenseText,
+            [],
             component.Scope,
             new LegalApproval(
                 component.ApprovalStatus,
