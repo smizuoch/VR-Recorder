@@ -1,4 +1,5 @@
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 
 namespace VRRecorder.Application.Storage;
 
@@ -28,6 +29,28 @@ public sealed class RecordingFileFinalizationUseCase
 
     public async Task<RecordingFinalizationResult> ExecuteAsync(
         PendingRecording recording,
+        CancellationToken cancellationToken) =>
+        await ExecuteCoreAsync(
+                recording,
+                mediaExpectation: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<RecordingFinalizationResult> ExecuteAsync(
+        RecordingStopResult stopped,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stopped);
+        return await ExecuteCoreAsync(
+                stopped.Recording,
+                stopped.MediaExpectation,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<RecordingFinalizationResult> ExecuteCoreAsync(
+        PendingRecording recording,
+        RecordingMediaExpectation? mediaExpectation,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recording);
@@ -51,9 +74,16 @@ public sealed class RecordingFileFinalizationUseCase
                 quarantined);
         }
 
-        var validation = await _validator
-            .ValidateAsync(finalized, cancellationToken)
-            .ConfigureAwait(false);
+        var validation = mediaExpectation is null
+            ? await _validator
+                .ValidateAsync(finalized, cancellationToken)
+                .ConfigureAwait(false)
+            : await _validator
+                .ValidateAsync(
+                    finalized,
+                    mediaExpectation,
+                    cancellationToken)
+                .ConfigureAwait(false);
         if (validation == RecordingFileValidation.Invalid)
         {
             var quarantined = await _recovery

@@ -5,4 +5,5 @@ namespace VRRecorder.Application.Recording;
 public sealed record RecordingStopResult(
     PendingRecording Recording,
     long VideoPacketCount,
-    long AudioPacketCount);
+    long AudioPacketCount,
+    RecordingMediaExpectation? MediaExpectation = null);

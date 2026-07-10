@@ -39,7 +39,7 @@ public sealed class RecordingSessionStopCoordinator
             .StopAsync(_handle, CancellationToken.None)
             .ConfigureAwait(false);
         return await _finalization
-            .ExecuteAsync(stopped.Recording, CancellationToken.None)
+            .ExecuteAsync(stopped, CancellationToken.None)
             .ConfigureAwait(false);
     }
 }
