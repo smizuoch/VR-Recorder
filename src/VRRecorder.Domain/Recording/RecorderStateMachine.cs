@@ -16,6 +16,8 @@ public static class RecorderStateMachine
                 RecorderState.Stopping,
             (RecorderState.Stopping, RecorderTrigger.StopRequested) =>
                 RecorderState.Stopping,
+            (RecorderState.Recording, RecorderTrigger.FreshFrameTimeout) =>
+                RecorderState.SignalLost,
             _ => throw new InvalidOperationException(
                 $"Transition from {state} by {trigger} is not defined."),
         };

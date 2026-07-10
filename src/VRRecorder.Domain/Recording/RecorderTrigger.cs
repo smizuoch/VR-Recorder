@@ -7,4 +7,5 @@ public enum RecorderTrigger
     FirstPacketCommitted,
     DurationElapsed,
     StopRequested,
+    FreshFrameTimeout,
 }
