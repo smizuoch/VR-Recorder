@@ -11,7 +11,7 @@
 - [x] 未承認componentが1件でもあればrelease artifact生成を拒否する
 - [ ] 同一入力からbyte-for-byte同一の成果物を生成する
 - [ ] 生成済みNoticesの手編集を再生成差分で検出する
-- [ ] SBOMのUNKNOWN／NOASSERTION／NONEを拒否する
+- [x] SBOMのUNKNOWN／NOASSERTION／NONEを拒否する
 
 ## English
 
@@ -24,4 +24,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, the component manifes
 - [x] Reject release-artifact generation when any component is unapproved
 - [ ] Produce byte-for-byte identical artifacts from identical inputs
 - [ ] Detect manual edits to generated Notices through regeneration diff
-- [ ] Reject UNKNOWN, NOASSERTION, and NONE in the SBOM
+- [x] Reject UNKNOWN, NOASSERTION, and NONE in the SBOM

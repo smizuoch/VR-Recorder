@@ -14,6 +14,15 @@ public static class ReleaseEligibilityGate
         var issues = new List<ComplianceIssue>();
         foreach (var component in graph.Components)
         {
+            ArgumentNullException.ThrowIfNull(component.License);
+            if (IsUnresolved(component.License.DeclaredExpression) ||
+                IsUnresolved(component.License.ConcludedExpression))
+            {
+                issues.Add(new ComplianceIssue(
+                    "unresolved-license",
+                    component.Id));
+            }
+
             foreach (var legalFile in component.LegalFiles)
             {
                 var actualHash = Convert
@@ -93,4 +102,12 @@ public static class ReleaseEligibilityGate
                 [])
             : new ReleaseEligibilityResult(null, orderedIssues);
     }
+
+    private static bool IsUnresolved(string expression) =>
+        string.Equals(expression, "UNKNOWN", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(
+            expression,
+            "NOASSERTION",
+            StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(expression, "NONE", StringComparison.OrdinalIgnoreCase);
 }
