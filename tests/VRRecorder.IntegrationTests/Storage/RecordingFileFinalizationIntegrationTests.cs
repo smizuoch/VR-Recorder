@@ -43,6 +43,24 @@ public sealed class RecordingFileFinalizationIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-018")]
+    public async Task StartupRecoveryTreatsMissingOutputDirectoryAsEmpty()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var missingOutput = Path.Combine(directory.Path, "removed-output");
+        var useCase = new StaleRecordingRecoveryUseCase(
+            new FileSystemStaleRecordingCatalog(),
+            new FileSystemRecordingRecoveryStore());
+
+        var recovered = await useCase.ExecuteAsync(
+            missingOutput,
+            CancellationToken.None);
+
+        Assert.Empty(recovered);
+        Assert.False(Directory.Exists(missingOutput));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-018")]
     public async Task RenameFailureMovesPendingFileToRecovery()
     {
         using var directory = TemporaryDirectory.Create();
