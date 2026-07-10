@@ -52,4 +52,42 @@ public sealed class RecordingSessionStopCoordinatorTests
         Assert.Same(first, coordinator.StopAsync());
         Assert.Equal(1, engine.StopCallCount);
     }
+
+    [Fact]
+    public async Task CanceledSessionLifetimeCannotInterruptSafeFinalization()
+    {
+        using var sessionLifetime = new CancellationTokenSource();
+        var engine = new FakeRecordingEngine();
+        var finalizer = new ControllableRecordingFileFinalizer();
+        var finalization = new RecordingFileFinalizationUseCase(
+            finalizer,
+            new StubRecordingFileValidator(RecordingFileValidation.Valid),
+            new FakeRecordingRecoveryStore(),
+            new FakeSavedRecordingSink());
+        var handle = new RecordingHandle(
+            "session-shutdown",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var coordinator = new RecordingSessionStopCoordinator(
+            engine,
+            handle,
+            finalization,
+            sessionLifetime.Token);
+        await sessionLifetime.CancelAsync();
+
+        var stopping = coordinator.StopAsync();
+
+        Assert.False(Assert.Single(engine.StopCancellationTokens).CanBeCanceled);
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "shutdown.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "shutdown.mp4"));
+        engine.CompleteStop(new RecordingStopResult(
+            pending,
+            VideoPacketCount: 1,
+            AudioPacketCount: 1));
+        await finalizer.WaitUntilRequestedAsync();
+        Assert.False(finalizer.RequestedCancellationToken.CanBeCanceled);
+
+        finalizer.Complete(new FinalizedRecording(pending.FinalPath));
+        Assert.IsType<RecordingFinalizationResult.Saved>(await stopping);
+    }
 }

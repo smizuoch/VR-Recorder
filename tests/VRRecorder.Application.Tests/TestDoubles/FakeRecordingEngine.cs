@@ -20,6 +20,8 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
 
     public List<RecordingPlan> StartedPlans { get; } = [];
 
+    public List<CancellationToken> StopCancellationTokens { get; } = [];
+
     public Task<RecordingHandle> StartAsync(
         RecordingPlan plan,
         CancellationToken cancellationToken)
@@ -36,6 +38,7 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
         CancellationToken cancellationToken)
     {
         StopCallCount++;
+        StopCancellationTokens.Add(cancellationToken);
         return _stopCompletion.Task.WaitAsync(cancellationToken);
     }
 

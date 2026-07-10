@@ -10,10 +10,13 @@ internal sealed class ControllableRecordingFileFinalizer : IRecordingFileFinaliz
     private readonly TaskCompletionSource<FinalizedRecording> _completed = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public CancellationToken RequestedCancellationToken { get; private set; }
+
     public Task<FinalizedRecording> FinalizeAsync(
         PendingRecording recording,
         CancellationToken cancellationToken)
     {
+        RequestedCancellationToken = cancellationToken;
         _requested.TrySetResult();
         return _completed.Task.WaitAsync(cancellationToken);
     }
