@@ -9,9 +9,14 @@ public sealed class RecordingFileFinalizationUseCaseTests
     public async Task SavedIsNotPublishedBeforeFinalRenameCompletes()
     {
         var finalizer = new ControllableRecordingFileFinalizer();
+        var validator = new StubRecordingFileValidator(
+            RecordingFileValidation.Valid);
+        var recovery = new FakeRecordingRecoveryStore();
         var savedRecordings = new FakeSavedRecordingSink();
         var useCase = new RecordingFileFinalizationUseCase(
             finalizer,
+            validator,
+            recovery,
             savedRecordings);
         var pending = new PendingRecording(
             "recording.recording.mp4",
@@ -26,8 +31,10 @@ public sealed class RecordingFileFinalizationUseCaseTests
         finalizer.Complete(finalized);
         var result = await execution;
 
-        Assert.Equal(finalized, result);
+        var saved = Assert.IsType<RecordingFinalizationResult.Saved>(result);
+        Assert.Equal(finalized, saved.Recording);
         Assert.Equal(finalized, Assert.Single(savedRecordings.Recordings));
+        Assert.Empty(recovery.Recordings);
     }
 
     [Fact]
