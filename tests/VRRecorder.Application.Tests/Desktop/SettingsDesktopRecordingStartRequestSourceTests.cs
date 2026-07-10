@@ -154,6 +154,25 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
         Assert.Equal(Path.GetFullPath(root), request.Command.OutputPath.FullPath);
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\Recorder\Videos")]
+    [InlineData(@"\\recording-server\captures\VR-Recorder")]
+    public async Task WindowsDriveAndUncAbsolutePathsAreAccepted(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(CreateSettings(outputFolder: path)),
+            new TrackingDefaultOutputPathProvider(AbsolutePath("unused")));
+
+        var request = await source.GetAsync(CancellationToken.None);
+
+        Assert.Equal(Path.GetFullPath(path), request.Command.OutputPath.FullPath);
+    }
+
     [Fact]
     public async Task ControlCharacterInAbsolutePathFailsClosed()
     {
