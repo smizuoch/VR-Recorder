@@ -17,7 +17,7 @@
 - [x] 生成対象外のfileがLegal Bundle directoryに残っていれば検証を失敗させる
 - [x] Legal Bundleを同一volumeのstagingから置換し、失敗時は既存bundleを保持する
 - [x] hash cycleのないschema v2 component catalogをmanifest対象として生成する
-- [ ] schema v2とout-of-band trust boundaryをtemplate・ADRで固定する
+- [x] schema v2とout-of-band trust boundaryをtemplate・ADRで固定する
 
 ## English
 
@@ -36,4 +36,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Fail Legal Bundle directory verification when any unexpected file remains
 - [x] Replace a Legal Bundle from same-volume staging while preserving the existing bundle on failure
 - [x] Generate a manifest-covered schema-v2 component catalog without a hash cycle
-- [ ] Pin schema v2 and its out-of-band trust boundary in the template and ADR
+- [x] Pin schema v2 and its out-of-band trust boundary in the template and ADR

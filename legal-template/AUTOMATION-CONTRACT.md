@@ -35,6 +35,8 @@
 - `M3-CONFORMANCE-REPORT.json`
 - `LEGAL-MANIFEST.sha256`
 
+`THIRD-PARTY-COMPONENTS.json` release出力はschema v2とし、`bundleId`をSPDX `documentNamespace`と一致させます。catalogはmanifestのpathとalgorithmのみを指し、catalog自体はmanifestのhash対象に含めます。manifest bytesの期待SHA-256は署名済みresourceまたは認証済みrelease metadataでout-of-bandに保持し、schema v1と未知schemaはreleaseで拒否します。
+
 ## CIゲート
 
 以下は警告ではなくエラーです。
