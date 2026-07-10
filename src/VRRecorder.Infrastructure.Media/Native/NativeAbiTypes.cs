@@ -1,0 +1,59 @@
+using System.Runtime.InteropServices;
+
+namespace VRRecorder.Infrastructure.Media.Native;
+
+internal enum NativeStatus
+{
+    Ok = 0,
+    InvalidArgument = 1,
+    UnsupportedAbi = 2,
+    InvalidState = 3,
+    BackendUnavailable = 4,
+    OutOfMemory = 5,
+    InternalError = 6,
+}
+
+internal enum NativeEventKind : uint
+{
+    FirstVideoPacketMuxed = 1,
+    Stopped = 2,
+    Faulted = 3,
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSessionConfigV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public nint TemporaryOutputPathUtf8;
+    public uint Width;
+    public uint Height;
+    public uint FramesPerSecondNumerator;
+    public uint FramesPerSecondDenominator;
+    public long StartedAtUnixMillisecondsUtc;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeEventV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public NativeEventKind Kind;
+    public NativeStatus Status;
+    public ulong Sequence;
+    public ulong VideoPacketCount;
+    public ulong AudioPacketCount;
+    public nint MessageUtf8;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeCallbacksV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public nint OnEvent;
+    public nint UserData;
+}
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void NativeEventCallback(nint userData, nint nativeEvent);
