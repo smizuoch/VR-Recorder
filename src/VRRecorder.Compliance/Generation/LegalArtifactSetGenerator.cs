@@ -39,10 +39,36 @@ public static class LegalArtifactSetGenerator
                 context,
                 approvedGraph)));
 
-        foreach (var legalFile in approvedGraph.Graph.Components
+        foreach (var legalFileGroup in approvedGraph.Graph.Components
                      .SelectMany(component => component.LegalFiles)
-                     .OrderBy(file => file.RelativePath, StringComparer.Ordinal))
+                     .GroupBy(
+                         file => file.RelativePath,
+                         StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
+            var legalFiles = legalFileGroup
+                .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
+                .ToArray();
+            var legalFile = legalFiles[0];
+            if (legalFiles.Skip(1).Any(file =>
+                    file.Kind != legalFile.Kind ||
+                    !string.Equals(
+                        file.RelativePath,
+                        legalFile.RelativePath,
+                        StringComparison.Ordinal) ||
+                    !string.Equals(
+                        file.Sha256,
+                        legalFile.Sha256,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(
+                        file.Utf8Content,
+                        legalFile.Utf8Content,
+                        StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    $"Legal artifact path {legalFileGroup.Key} has conflicting payloads.");
+            }
+
             AddArtifact(
                 artifacts,
                 legalFile.RelativePath,

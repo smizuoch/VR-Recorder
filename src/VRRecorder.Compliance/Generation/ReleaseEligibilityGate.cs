@@ -154,17 +154,43 @@ public static class ReleaseEligibilityGate
 
         foreach (var collision in graph.Components
                      .SelectMany(component => component.LegalFiles.Select(file =>
-                         new ComponentLegalPath(
+                         new ComponentLegalDocument(
                              component.Id,
-                             file.RelativePath)))
+                             file.Kind,
+                             file.RelativePath,
+                             file.Sha256,
+                             file.Utf8Content)))
                      .GroupBy(
                          item => item.RelativePath,
                          StringComparer.OrdinalIgnoreCase)
-                     .Where(group => group
-                         .Select(item => item.ComponentId)
-                         .Distinct(StringComparer.Ordinal)
-                         .Skip(1)
-                         .Any()))
+                     .Where(group =>
+                     {
+                         var documents = group.ToArray();
+                         if (!documents
+                             .Select(item => item.ComponentId)
+                             .Distinct(StringComparer.Ordinal)
+                             .Skip(1)
+                             .Any())
+                         {
+                             return false;
+                         }
+
+                         var first = documents[0];
+                         return documents.Skip(1).Any(item =>
+                             item.Kind != first.Kind ||
+                             !string.Equals(
+                                 item.RelativePath,
+                                 first.RelativePath,
+                                 StringComparison.Ordinal) ||
+                             !string.Equals(
+                                 item.Sha256,
+                                 first.Sha256,
+                                 StringComparison.OrdinalIgnoreCase) ||
+                             !string.Equals(
+                                 item.Utf8Content,
+                                 first.Utf8Content,
+                                 StringComparison.Ordinal));
+                     }))
         {
             var componentIds = collision
                 .Select(item => item.ComponentId)
@@ -175,7 +201,7 @@ public static class ReleaseEligibilityGate
                 .OrderBy(path => path, StringComparer.Ordinal)
                 .First();
             issues.Add(new ComplianceIssue(
-                "duplicate-legal-document-path",
+                "conflicting-legal-document-path",
                 $"{string.Join(',', componentIds)}:{canonicalPath}"));
         }
 
@@ -199,7 +225,10 @@ public static class ReleaseEligibilityGate
             StringComparison.OrdinalIgnoreCase) ||
         string.Equals(expression, "NONE", StringComparison.OrdinalIgnoreCase);
 
-    private sealed record ComponentLegalPath(
+    private sealed record ComponentLegalDocument(
         string ComponentId,
-        string RelativePath);
+        LegalFileKind Kind,
+        string RelativePath,
+        string Sha256,
+        string Utf8Content);
 }
