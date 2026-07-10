@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -83,7 +84,7 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     vrrec_status_t RequestStop() noexcept
     {
         {
-            const std::lock_guard lock(state_mutex_);
+            std::unique_lock lock(state_mutex_);
             if (state_ == SessionState::Terminal) {
                 return VRREC_STATUS_OK;
             }
@@ -99,6 +100,13 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
             }
 
             stop_requested_ = true;
+            state_condition_.wait(lock, [this] {
+                return active_runtime_operations_ == 0;
+            });
+            if (state_ == SessionState::Terminal ||
+                state_ == SessionState::Aborted) {
+                return VRREC_STATUS_OK;
+            }
         }
 
         const auto status = backend_->RequestStop();
@@ -115,39 +123,56 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     vrrec_status_t UpdateVideoLayout(
         const vrrec_video_layout_v1 &layout) noexcept
     {
-        const std::lock_guard lock(state_mutex_);
-        if (state_ != SessionState::Started || stop_requested_) {
-            return VRREC_STATUS_INVALID_STATE;
+        {
+            const std::lock_guard lock(state_mutex_);
+            if (state_ != SessionState::Started || stop_requested_) {
+                return VRREC_STATUS_INVALID_STATE;
+            }
+
+            if (layout.canvas_width != config_.width ||
+                layout.canvas_height != config_.height) {
+                return VRREC_STATUS_INVALID_ARGUMENT;
+            }
+
+            ++active_runtime_operations_;
         }
 
-        if (layout.canvas_width != config_.width ||
-            layout.canvas_height != config_.height) {
-            return VRREC_STATUS_INVALID_ARGUMENT;
-        }
-
-        return backend_->UpdateVideoLayout(layout);
+        const auto status = backend_->UpdateVideoLayout(layout);
+        EndRuntimeOperation();
+        return status;
     }
 
     vrrec_status_t GetStatistics(
         vrrec_session_statistics_v1 &statistics) noexcept
     {
-        const std::lock_guard lock(state_mutex_);
-        if (state_ == SessionState::Aborted) {
-            return VRREC_STATUS_INVALID_STATE;
+        {
+            const std::lock_guard lock(state_mutex_);
+            if ((state_ != SessionState::Started &&
+                 state_ != SessionState::Terminal) ||
+                (state_ == SessionState::Started && stop_requested_)) {
+                return VRREC_STATUS_INVALID_STATE;
+            }
+
+            ++active_runtime_operations_;
         }
 
-        return backend_->GetStatistics(statistics);
+        const auto status = backend_->GetStatistics(statistics);
+        EndRuntimeOperation();
+        return status;
     }
 
     vrrec_status_t Abort() noexcept
     {
         {
-            const std::lock_guard lock(state_mutex_);
+            std::unique_lock lock(state_mutex_);
             if (state_ == SessionState::Aborted) {
                 return VRREC_STATUS_OK;
             }
 
             state_ = SessionState::Aborted;
+            state_condition_.wait(lock, [this] {
+                return active_runtime_operations_ == 0;
+            });
         }
 
         backend_->Abort();
@@ -239,6 +264,13 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     }
 
 private:
+    void EndRuntimeOperation() noexcept
+    {
+        const std::lock_guard lock(state_mutex_);
+        --active_runtime_operations_;
+        state_condition_.notify_all();
+    }
+
     void Emit(const vrrec_event_v1 &event) noexcept
     {
         try {
@@ -257,11 +289,13 @@ private:
     vrrec_callbacks_v1 callbacks_;
     std::unique_ptr<vrrecorder::native::MediaBackend> backend_;
     std::mutex state_mutex_;
+    std::condition_variable state_condition_;
     std::mutex callback_mutex_;
     SessionState state_ = SessionState::Created;
     bool stop_requested_ = false;
     bool first_packet_emitted_ = false;
     std::uint64_t sequence_ = 0;
+    std::size_t active_runtime_operations_ = 0;
 };
 
 struct vrrec_steamvr_input final {
