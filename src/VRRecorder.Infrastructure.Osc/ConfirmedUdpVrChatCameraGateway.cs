@@ -83,7 +83,7 @@ public sealed class ConfirmedUdpVrChatCameraGateway
             }
         }
 
-        throw new CameraWriteConfirmationException();
+        throw new CameraWriteConfirmationException(attempts: 2);
     }
 
     private async Task<bool> WaitForEchoAsync(
