@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/VRRecorder.Application/VRRecorder.Application.csproj" />
     <ProjectReference Include="../../src/VRRecorder.Infrastructure.Media/VRRecorder.Infrastructure.Media.csproj" />
+    <ProjectReference Include="../../src/VRRecorder.Infrastructure.Osc/VRRecorder.Infrastructure.Osc.csproj" />
     <ProjectReference Include="../../src/VRRecorder.Infrastructure.Storage/VRRecorder.Infrastructure.Storage.csproj" />
   </ItemGroup>
 
