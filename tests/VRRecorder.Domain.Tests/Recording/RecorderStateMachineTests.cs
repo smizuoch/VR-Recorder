@@ -83,4 +83,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.SignalLost, next);
     }
+
+    [Fact]
+    public void SignalRecoveredWhenLostReturnsToRecording()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.SignalLost,
+            RecorderTrigger.SignalRecovered);
+
+        Assert.Equal(RecorderState.Recording, next);
+    }
 }
