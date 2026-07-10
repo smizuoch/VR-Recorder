@@ -73,6 +73,21 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
     [InlineData("placeholder-output-hash", "material-symbols-placeholder-value")]
     [InlineData("placeholder-tool", "material-symbols-placeholder-value")]
     [InlineData("placeholder-recipe", "material-symbols-placeholder-value")]
+    [InlineData(
+        "empty-codepoints-file",
+        "material-symbols-source-policy-mismatch")]
+    [InlineData(
+        "unsafe-codepoints-file",
+        "material-symbols-source-policy-mismatch")]
+    [InlineData(
+        "empty-conversion-tool",
+        "material-symbols-rendering-policy-mismatch")]
+    [InlineData(
+        "empty-conversion-recipe",
+        "material-symbols-rendering-policy-mismatch")]
+    [InlineData(
+        "unsafe-conversion-recipe",
+        "material-symbols-rendering-policy-mismatch")]
     [InlineData("repository", "material-symbols-source-policy-mismatch")]
     [InlineData("license", "material-symbols-source-policy-mismatch")]
     [InlineData("acquisition", "material-symbols-source-policy-mismatch")]
@@ -104,6 +119,24 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
     [InlineData("invalid-source-hash", "material-symbols-icon-hash-invalid")]
     [InlineData("invalid-output-hash", "material-symbols-icon-hash-invalid")]
     [InlineData(
+        "unsafe-source-path",
+        "material-symbols-icon-source-path-invalid")]
+    [InlineData(
+        "invalid-semantic-id",
+        "material-symbols-icon-identity-invalid")]
+    [InlineData(
+        "invalid-codepoint",
+        "material-symbols-icon-identity-invalid")]
+    [InlineData(
+        "uppercase-codepoint",
+        "material-symbols-icon-identity-invalid")]
+    [InlineData(
+        "unknown-surface",
+        "material-symbols-icon-surface-invalid")]
+    [InlineData(
+        "duplicate-surface",
+        "material-symbols-icon-surface-invalid")]
+    [InlineData(
         "modified-without-notice",
         "material-symbols-modification-notice-missing")]
     [InlineData(
@@ -111,6 +144,9 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
         "material-symbols-accessibility-metadata-missing")]
     [InlineData(
         "interactive-without-tooltip",
+        "material-symbols-accessibility-metadata-missing")]
+    [InlineData(
+        "noninteractive-without-description-or-decorative",
         "material-symbols-accessibility-metadata-missing")]
     [InlineData("outside-output-root", "material-symbols-output-path-invalid")]
     public void InvalidManifestCannotProduceApprovedGraph(
@@ -144,6 +180,63 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
             issue.Subject.StartsWith(
                 "material-symbols",
                 StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("root")]
+    [InlineData("source")]
+    [InlineData("icon")]
+    [InlineData("axes")]
+    public void DuplicateJsonPropertyAtAnyDepthFailsClosed(string depth)
+    {
+        var manifest = ManifestTextWithDuplicateProperty(depth);
+
+        var result = ReleaseEligibilityGate.Evaluate(Graph(
+            MaterialComponent(manifest)));
+
+        Assert.False(result.IsApproved);
+        Assert.Null(result.ApprovedGraph);
+        Assert.Contains(result.Issues, issue =>
+            issue.Code == "material-symbols-manifest-invalid" &&
+            issue.Subject == "material-symbols");
+    }
+
+    [Fact]
+    public void NonInteractiveIconMayUseVisibleLabelWithDecorativeFlag()
+    {
+        var manifest = Manifest();
+        var icon = manifest["selectedIcons"]![0]!.AsObject();
+        icon["interactive"] = false;
+        icon.Remove("accessibleNameKey");
+        icon.Remove("tooltipKey");
+        icon["decorativeWhenVisibleLabelPresent"] = true;
+
+        var result = ReleaseEligibilityGate.Evaluate(Graph(
+            MaterialComponent(ManifestText(manifest))));
+
+        Assert.True(result.IsApproved);
+        Assert.NotNull(result.ApprovedGraph);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public void NonInteractiveIconMayUseAccessibleDescription()
+    {
+        var manifest = Manifest();
+        var icon = manifest["selectedIcons"]![0]!.AsObject();
+        icon["interactive"] = false;
+        icon.Remove("visibleLabelKey");
+        icon.Remove("accessibleNameKey");
+        icon.Remove("tooltipKey");
+        icon["accessibleDescriptionKey"] =
+            "Recording_Start_AccessibleDescription";
+
+        var result = ReleaseEligibilityGate.Evaluate(Graph(
+            MaterialComponent(ManifestText(manifest))));
+
+        Assert.True(result.IsApproved);
+        Assert.NotNull(result.ApprovedGraph);
+        Assert.Empty(result.Issues);
     }
 
     [Fact]
@@ -306,6 +399,37 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
     private static string ManifestText(JsonObject? manifest = null) =>
         (manifest ?? Manifest()).ToJsonString() + "\n";
 
+    private static string ManifestTextWithDuplicateProperty(string depth)
+    {
+        var manifest = ManifestText();
+        var (property, duplicate) = depth switch
+        {
+            "root" => (
+                "\"schemaVersion\":2",
+                "\"schemaVersion\":2,\"schemaVersion\":2"),
+            "source" => (
+                "\"commit\":\"0123456789abcdef0123456789abcdef01234567\"",
+                "\"commit\":\"0123456789abcdef0123456789abcdef01234567\"," +
+                "\"commit\":\"0123456789abcdef0123456789abcdef01234567\""),
+            "icon" => (
+                "\"semanticId\":\"recording.start\"",
+                "\"semanticId\":\"recording.start\"," +
+                "\"semanticId\":\"recording.start\""),
+            "axes" => (
+                "\"fill\":0",
+                "\"fill\":0,\"fill\":0"),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(depth),
+                depth,
+                "Unknown duplicate-property depth."),
+        };
+
+        return manifest.Replace(
+            property,
+            duplicate,
+            StringComparison.Ordinal);
+    }
+
     private static JsonObject Manifest() =>
         new()
         {
@@ -448,6 +572,21 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
             case "placeholder-recipe":
                 rendering["conversionRecipe"] = "<recipe>";
                 break;
+            case "empty-codepoints-file":
+                source["codepointsFile"] = "";
+                break;
+            case "unsafe-codepoints-file":
+                source["codepointsFile"] = "../MaterialSymbols.codepoints";
+                break;
+            case "empty-conversion-tool":
+                rendering["conversionTool"] = "";
+                break;
+            case "empty-conversion-recipe":
+                rendering["conversionRecipe"] = "";
+                break;
+            case "unsafe-conversion-recipe":
+                rendering["conversionRecipe"] = "../svgo.config.mjs";
+                break;
             case "repository":
                 source["repository"] = "https://example.invalid/icons";
                 break;
@@ -512,6 +651,24 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
             case "invalid-output-hash":
                 first["outputSha256"] = "not-a-hash";
                 break;
+            case "unsafe-source-path":
+                first["sourcePath"] = "../fiber_manual_record.svg";
+                break;
+            case "invalid-semantic-id":
+                first["semanticId"] = "Recording Start";
+                break;
+            case "invalid-codepoint":
+                first["codepoint"] = "not-hex";
+                break;
+            case "uppercase-codepoint":
+                first["codepoint"] = "E061";
+                break;
+            case "unknown-surface":
+                first["surfaces"] = new JsonArray("watch");
+                break;
+            case "duplicate-surface":
+                first["surfaces"] = new JsonArray("wrist", "wrist");
+                break;
             case "modified-without-notice":
                 first.Remove("modificationNotice");
                 break;
@@ -520,6 +677,12 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
                 break;
             case "interactive-without-tooltip":
                 first.Remove("tooltipKey");
+                break;
+            case "noninteractive-without-description-or-decorative":
+                first["interactive"] = false;
+                first.Remove("accessibleNameKey");
+                first.Remove("tooltipKey");
+                first.Remove("visibleLabelKey");
                 break;
             case "outside-output-root":
                 first["outputPath"] = "assets/recording-start.svg";
