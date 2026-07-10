@@ -12,6 +12,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private readonly IDesktopRecordingStartRequestSource _requests;
     private readonly IRecordingLifecycleController _lifecycle;
     private readonly IStopRequestSink _stopRequests;
+    private readonly IAsyncDisposable? _ownedLifetime;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly RecorderStatusHub _statuses;
     private readonly IDisposable _lifecycleStatusSubscription;
@@ -28,7 +29,8 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     public DesktopRecordingRuntime(
         IDesktopRecordingStartRequestSource requests,
         IRecordingLifecycleController lifecycle,
-        IStopRequestSink stopRequests)
+        IStopRequestSink stopRequests,
+        IAsyncDisposable? ownedLifetime = null)
     {
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentNullException.ThrowIfNull(lifecycle);
@@ -36,6 +38,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         _requests = requests;
         _lifecycle = lifecycle;
         _stopRequests = stopRequests;
+        _ownedLifetime = ownedLifetime;
         _statuses = new RecorderStatusHub(
             RecorderStatusSnapshot.Create(0, lifecycle.State));
         _lifecycleStatusSubscription = lifecycle.Subscribe(status =>
@@ -294,7 +297,19 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
                 }
                 finally
                 {
-                    _lifetime.Dispose();
+                    try
+                    {
+                        _lifetime.Dispose();
+                    }
+                    finally
+                    {
+                        if (_ownedLifetime is not null)
+                        {
+                            await _ownedLifetime
+                                .DisposeAsync()
+                                .ConfigureAwait(false);
+                        }
+                    }
                 }
             }
         }
