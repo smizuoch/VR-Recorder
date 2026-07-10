@@ -39,4 +39,17 @@ public sealed class CameraLeaseTests
 
         Assert.Equal(false, plan.Streaming);
     }
+
+    [Fact]
+    public void UnknownStreamingCanBeLeftUnchangedByPolicy()
+    {
+        var lease = new CameraLease(
+            ObservedCameraValue.Unknown<bool>(),
+            changedStreamingByRecorder: true);
+
+        var plan = lease.CreateRestorePlan(
+            UnknownCameraStatePolicy.LeaveUnchanged);
+
+        Assert.Null(plan.Streaming);
+    }
 }
