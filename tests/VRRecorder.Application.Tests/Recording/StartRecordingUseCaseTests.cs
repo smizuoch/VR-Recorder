@@ -1,8 +1,10 @@
 using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Settings;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
@@ -143,7 +145,11 @@ public sealed class StartRecordingUseCaseTests
 
         reservation.Complete(pending);
         await engine.WaitUntilStartRequestedAsync();
-        Assert.Equal(pending, Assert.Single(engine.StartedPlans).Output);
+        var startedPlan = Assert.Single(engine.StartedPlans);
+        Assert.Equal(pending, startedPlan.Output);
+        Assert.Equal(AudioRouting.Mixed, startedPlan.Media.AudioRouting);
+        Assert.Equal(-6.0, startedPlan.Media.DesktopGainDb);
+        Assert.Equal(-6.0, startedPlan.Media.MicrophoneGainDb);
         Assert.Empty(storageMonitor.Requests);
         var handle = new RecordingHandle(
             "session-001",
@@ -155,6 +161,47 @@ public sealed class StartRecordingUseCaseTests
         Assert.Equal(handle, monitorRequest.Handle);
         Assert.Equal(TestOutputPath, monitorRequest.OutputPath);
         Assert.True(started.StorageMonitoringCompletion.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task CommandMediaConfigurationIsPropagatedToRecordingPlan()
+    {
+        var signal = new ControllableVideoSignalGateway();
+        var engine = new FakeRecordingEngine();
+        var useCase = CreateUseCase(
+            signal,
+            new ControllableCountdownTimer(),
+            engine);
+        var media = new RecordingMediaConfiguration(
+            AudioRouting.DesktopOnly,
+            "desktop-endpoint-42",
+            "microphone-endpoint-42",
+            desktopGainDb: -9.0,
+            microphoneGainDb: -18.0,
+            VideoQualityPreset.Standard,
+            spoutSenderIdentity: "VRChat-Spout-Sender-42",
+            spoutAdapterLuid: 0x00000001ABCDEF01,
+            encoderAdapterLuid: 0x00000001ABCDEF01,
+            gpuIdentity: "pci\\ven_10de&dev_2684");
+        var execution = useCase.ExecuteAsync(
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                TestOutputPath,
+                TestFrameRate,
+                Media: media),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await engine.WaitUntilStartRequestedAsync();
+
+        var plan = Assert.Single(engine.StartedPlans);
+        Assert.Same(media, plan.Media);
+
+        engine.CommitFirstPacket(new RecordingHandle(
+            "session-001",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+        Assert.IsType<StartRecordingResult.Started>(await execution);
     }
 
     [Fact]
