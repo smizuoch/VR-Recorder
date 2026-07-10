@@ -217,6 +217,9 @@ public sealed class DesktopLegalViewerIntegrationTests
             DesktopRecordingHostState.ComplianceFault,
             unavailable.State);
         Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ComplianceFault],
+            runtime.ShutdownReasons);
     }
 
     private static async Task<BundleFixture> WriteGeneratedBundleAsync(
@@ -391,6 +394,8 @@ public sealed class DesktopLegalViewerIntegrationTests
     private sealed class TrackingRecordingRuntime : IDesktopRecordingRuntime
     {
         public int DisposeCallCount { get; private set; }
+
+        public List<RecordingStopReason> ShutdownReasons { get; } = [];
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {

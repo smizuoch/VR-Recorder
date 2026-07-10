@@ -178,6 +178,9 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
         Assert.Equal(1, desktopSink.CallCount);
         Assert.Equal(DesktopRecordingHostState.ComplianceFault, recordingHost.State);
         Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ComplianceFault],
+            runtime.ShutdownReasons);
         var permanentlyUnavailable = await Assert.ThrowsAsync<
             DesktopRecordingUnavailableException>(() =>
             recordingHost.ToggleAsync(CancellationToken.None));
@@ -315,6 +318,8 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
     private sealed class TrackingRecordingRuntime : IDesktopRecordingRuntime
     {
         public int DisposeCallCount { get; private set; }
+
+        public List<RecordingStopReason> ShutdownReasons { get; } = [];
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
