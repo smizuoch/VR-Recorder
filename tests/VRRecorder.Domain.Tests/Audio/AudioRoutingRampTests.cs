@@ -21,4 +21,21 @@ public sealed class AudioRoutingRampTests
 
         Assert.Equal(new AudioGains(1, 0), ramp.AtSample(480));
     }
+
+    [Fact]
+    public void MicOnRampsOnlyMicrophoneGainBackOverTenMilliseconds()
+    {
+        var ramp = AudioRoutingRamp.Create(
+            AudioRouting.DesktopOnly,
+            AudioRouting.Mixed,
+            sampleRate: 48_000);
+
+        Assert.Equal(new AudioGains(1, 0), ramp.AtSample(0));
+
+        var halfway = ramp.AtSample(240);
+        Assert.Equal(1, halfway.Desktop);
+        Assert.Equal(0.5, halfway.Microphone, precision: 10);
+
+        Assert.Equal(new AudioGains(1, 1), ramp.AtSample(480));
+    }
 }
