@@ -1,6 +1,7 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Encoding;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Encoding;
 
@@ -40,6 +41,28 @@ public sealed class EncoderSelector
                 preference,
                 signal.GpuVendor,
                 encoder => EncoderProbeRequest.ForSignal(encoder, signal),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<EncoderKind> SelectAsync(
+        EncoderPreference preference,
+        StableVideoSignal signal,
+        int outputWidth,
+        int outputHeight,
+        FrameRate outputFrameRate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(signal);
+        return await SelectAsync(
+                preference,
+                signal.GpuVendor,
+                encoder => EncoderProbeRequest.ForSignal(
+                    encoder,
+                    signal,
+                    outputWidth,
+                    outputHeight,
+                    outputFrameRate),
                 cancellationToken)
             .ConfigureAwait(false);
     }
