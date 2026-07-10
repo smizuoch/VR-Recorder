@@ -91,6 +91,12 @@ public static class ThirdPartyNoticeGenerator
                     $"Component {component.Id} is not approved for release notices.");
             }
 
+            if (string.IsNullOrWhiteSpace(component.CopyrightNotice))
+            {
+                throw new InvalidOperationException(
+                    $"Component {component.Id} is missing its copyright notice.");
+            }
+
             selected.TryAdd(component.Id, component);
         }
 
