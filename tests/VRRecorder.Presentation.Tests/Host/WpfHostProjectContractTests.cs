@@ -895,6 +895,121 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopSettingsWindowPersistsSupportedRecordingChoices()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var mainWindow = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var settingsButton = Assert.Single(
+            mainWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "SettingsButton");
+        Assert.Equal(
+            "OnSettingsClick",
+            settingsButton.Attribute("Click")?.Value);
+
+        var settingsWindow = LoadRequiredXaml(
+            appDirectory,
+            "SettingsWindow.xaml");
+        Assert.Equal(
+            "VRRecorder.App.SettingsWindow",
+            settingsWindow.Root?.Attribute(Xaml + "Class")?.Value);
+        foreach (var comboName in new[]
+                 {
+                     "SelfTimerComboBox",
+                     "AutoStopComboBox",
+                     "FrameRateComboBox",
+                     "ResolutionPolicyComboBox",
+                     "EncoderComboBox",
+                     "QualityPresetComboBox",
+                 })
+        {
+            var combo = Assert.Single(
+                settingsWindow.Descendants(Presentation + "ComboBox"),
+                element => element.Attribute(Xaml + "Name")?.Value ==
+                           comboName);
+            Assert.Equal(
+                "OnSelectionChanged",
+                combo.Attribute("SelectionChanged")?.Value);
+            Assert.NotNull(combo.Attribute("AutomationProperties.Name"));
+            Assert.NotNull(combo.Attribute("AutomationProperties.HelpText"));
+        }
+
+        var rightsNotice = Assert.Single(
+            settingsWindow.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute("Text")?.Value ==
+                       "{DynamicResource Rights_Body}");
+        Assert.Equal("Wrap", rightsNotice.Attribute("TextWrapping")?.Value);
+        var save = Assert.Single(
+            settingsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "SaveSettingsButton");
+        Assert.Equal("False", save.Attribute("IsEnabled")?.Value);
+        Assert.Equal("OnSave", save.Attribute("Click")?.Value);
+        Assert.Single(
+            settingsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnCancel");
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("JsonFileSettingsStore", appCode);
+        Assert.Contains("DesktopRecordingSettingsController", appCode);
+        Assert.Contains("RecordingSettings", appCode);
+        var mainCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("SettingsWindow", mainCode);
+        Assert.Contains("OpenSettingsWindow", mainCode);
+        var settingsCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "SettingsWindow.xaml.cs"));
+        Assert.Contains("SupportedSelfTimerSeconds", settingsCode);
+        Assert.Contains("SupportedAutoStopSeconds", settingsCode);
+        Assert.Contains("SupportedFrameRates", settingsCode);
+        Assert.Contains("SupportedResolutionChangePolicies", settingsCode);
+        Assert.Contains("SupportedEncoders", settingsCode);
+        Assert.Contains("SupportedQualityPresets", settingsCode);
+        Assert.Contains("LoadAsync", settingsCode);
+        Assert.Contains("SaveAsync", settingsCode);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Settings_Open_Label",
+                         "Settings_Open_AccessibleName",
+                         "Settings_Open_Tooltip",
+                         "Settings_Title",
+                         "Settings_Intro",
+                         "Settings_Rights_Heading",
+                         "Settings_SelfTimer_Label",
+                         "Settings_AutoStop_Label",
+                         "Settings_FrameRate_Label",
+                         "Settings_ResolutionPolicy_Label",
+                         "Settings_Encoder_Label",
+                         "Settings_Quality_Label",
+                         "Settings_Save_Label",
+                         "Settings_Cancel_Label",
+                         "Settings_Load_Error",
+                         "Settings_Save_Error",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
