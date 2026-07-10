@@ -122,11 +122,25 @@ public sealed class DesktopRecordingRuntimeTests
             lifecycle,
             stops);
 
+        var toggling = runtime.ToggleAsync(CancellationToken.None);
+        await stops.WaitUntilRequestedAsync();
+
+        Assert.Equal(
+            "session-inconsistent",
+            stops.Requests.Single().Request.Handle.Id);
+        Assert.Equal(
+            RecordingStopReason.InvariantViolation,
+            stops.Requests.Single().Request.Reason);
+        Assert.Equal(CancellationToken.None, stops.Requests.Single().Token);
+        Assert.False(toggling.IsCompleted);
+
+        stops.Complete();
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            runtime.ToggleAsync(CancellationToken.None));
+            toggling);
 
         Assert.Contains("inconsistent", failure.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(stops.Requests);
+        Assert.Single(stops.Requests);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
     }
 
     [Fact]
@@ -341,7 +355,8 @@ public sealed class DesktopRecordingRuntimeTests
         public RecorderState? NextStartStateOverride { get; init; }
 
         public List<(string? ServiceId, StartRecordingCommand Command)>
-            StartRequests { get; } = [];
+            StartRequests
+        { get; } = [];
 
         public int DisposeCallCount { get; private set; }
 
@@ -398,7 +413,8 @@ public sealed class DesktopRecordingRuntimeTests
         public bool CompleteImmediately { get; init; }
 
         public List<(RecordingStopRequest Request, CancellationToken Token)>
-            Requests { get; } = [];
+            Requests
+        { get; } = [];
 
         public Task RequestStopAsync(
             RecordingStopRequest request,
