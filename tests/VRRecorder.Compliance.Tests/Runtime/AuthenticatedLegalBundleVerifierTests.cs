@@ -112,6 +112,73 @@ public sealed class AuthenticatedLegalBundleVerifierTests
     }
 
     [Fact]
+    public async Task DefaultScopeRejectsUnmanifestedApplicationPayload()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        await File.WriteAllTextAsync(
+            Path.Combine(directory.Path, "VRRecorder.App.dll"),
+            "application payload");
+        var verifier = CreateVerifier(manifest);
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-payload-unexpected", issue.Code);
+        Assert.Equal("VRRecorder.App.dll", issue.Subject);
+    }
+
+    [Theory]
+    [InlineData("LICENSES/unregistered/LICENSE.txt")]
+    [InlineData("COPYRIGHTS/unregistered.txt")]
+    [InlineData("SBOM/unregistered.cdx.json")]
+    [InlineData("SOURCE-OFFERS/unregistered.txt")]
+    [InlineData("SOURCES/unregistered.zip")]
+    [InlineData("RIGHTS/unregistered.txt")]
+    [InlineData("MATERIAL-SYMBOLS-MANIFEST.json")]
+    public async Task InstallRootScopeRejectsUnmanifestedLegalOwnedPayload(
+        string relativePath)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        var unexpectedPath = Path.Combine(
+            directory.Path,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(unexpectedPath)!);
+        await File.WriteAllTextAsync(unexpectedPath, "unregistered legal payload");
+        var verifier = CreateVerifier(manifest);
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            LegalBundleVerificationScope.InstallRoot,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-payload-unexpected", issue.Code);
+        Assert.Equal(relativePath, issue.Subject);
+    }
+
+    [Fact]
     [Trait("Scenario", "IT-031")]
     public async Task TamperedRuntimeBundleLocksRecorderInComplianceFault()
     {
@@ -269,6 +336,13 @@ public sealed class AuthenticatedLegalBundleVerifierTests
 
     private static string Hash(ReadOnlySpan<byte> content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    private static AuthenticatedLegalBundleVerifier CreateVerifier(
+        byte[] manifest) =>
+        new(new StubAuthenticatedAnchorSource(
+            new AuthenticatedLegalBundleAnchor(
+                BundleId,
+                Hash(manifest))));
 
     private sealed class StubAuthenticatedAnchorSource(
         AuthenticatedLegalBundleAnchor anchor)

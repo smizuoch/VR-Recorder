@@ -299,6 +299,11 @@ public sealed class WpfHostProjectContractTests
             "AssemblyMetadataAuthenticatedLegalBundleAnchorSource",
             appCode);
         Assert.Contains("RuntimeLegalBundleVerificationGateway", appCode);
+        Assert.Equal(
+            3,
+            appCode.Split(
+                "LegalBundleVerificationScope.InstallRoot",
+                StringSplitOptions.None).Length - 1);
         var windowCode = File.ReadAllText(Path.Combine(
             appDirectory,
             "MainWindow.xaml.cs"));

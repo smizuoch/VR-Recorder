@@ -30,18 +30,25 @@ public sealed class DesktopLegalViewerIntegrationTests
             var fixture = await WriteGeneratedBundleAsync(
                 installDirectory,
                 sourceInformation);
+            await WriteApplicationPayloadsAsync(installDirectory);
             var verifier = new AuthenticatedLegalBundleVerifier(
                 new FixedAuthenticatedAnchorSource(fixture.Anchor));
+            var verification = await verifier.VerifyAsync(
+                installDirectory,
+                LegalBundleVerificationScope.InstallRoot,
+                CancellationToken.None);
             var shell = new CapturingLegalFolderShell();
             var controller = new DesktopLegalController(
                 new AuthenticatedLegalCatalogReader(
                     installDirectory,
-                    verifier),
+                    verifier,
+                    LegalBundleVerificationScope.InstallRoot),
                 new AuthenticatedLegalBundleFolderOpener(
                     installDirectory,
                     installDirectory,
                     verifier,
-                    shell));
+                    shell,
+                    LegalBundleVerificationScope.InstallRoot));
             await using var recordingHost = new DesktopRecordingCommandHost(
                 new FailingRecordingRuntimeFactory());
 
@@ -56,6 +63,9 @@ public sealed class DesktopLegalViewerIntegrationTests
             Assert.Equal(
                 DesktopRecordingHostState.InitializationFailed,
                 activation.State);
+            Assert.IsType<
+                VRRecorder.Compliance.Runtime.LegalBundleVerification.Verified>(
+                verification);
             Assert.Equal(DesktopLegalView.LicenseText, controller.State.View);
             Assert.Equal(fixture.Anchor.BundleId, controller.State.BundleId);
             Assert.Equal("0.1.0", controller.State.ProductVersion);
@@ -234,6 +244,25 @@ public sealed class DesktopLegalViewerIntegrationTests
 
     private static string Hash(ReadOnlySpan<byte> content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    private static async Task WriteApplicationPayloadsAsync(string directory)
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "VRRecorder.App.exe"),
+            "application executable");
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "VRRecorder.Application.dll"),
+            "managed runtime payload");
+        var nativeDirectory = Path.Combine(
+            directory,
+            "runtimes",
+            "win-x64",
+            "native");
+        Directory.CreateDirectory(nativeDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(nativeDirectory, "vr_recorder_native.dll"),
+            "native runtime payload");
+    }
 
     private sealed record BundleFixture(
         AuthenticatedLegalBundleAnchor Anchor);
