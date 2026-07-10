@@ -1,7 +1,9 @@
+using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
@@ -193,6 +195,57 @@ public sealed class StartRecordingUseCaseTests
         Assert.Equal(TestOutputPath, storage.RequestedOutputPath);
         Assert.Null(reservation.RequestedDescriptor);
         Assert.Equal(0, engine.StartCallCount);
+    }
+
+    [Fact]
+    public async Task FailedSameGpuNvencProbeFallsBackWithoutSecondReservation()
+    {
+        var signal = new ControllableVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        reservation.Complete(new PendingRecording(
+            Path.Combine(TestOutputPath.FullPath, "take.recording.mp4"),
+            Path.Combine(TestOutputPath.FullPath, "take.mp4")));
+        var probe = new ScriptedEncoderProbe(
+            (EncoderKind.Nvenc, EncoderProbeResult.Failed),
+            (EncoderKind.MediaFoundationSoftware,
+                EncoderProbeResult.PacketProduced));
+        var engine = new FakeRecordingEngine();
+        var useCase = new StartRecordingUseCase(
+            signal,
+            new ControllableCountdownTimer(),
+            reservation,
+            new FixedWallClock(TestLocalNow),
+            SufficientStorage(),
+            new EncoderSelector(probe),
+            engine,
+            new FakeRecordingSessionActivator(),
+            new FakeRecordingStorageMonitor(),
+            CreateAutoStopScheduler());
+        var execution = useCase.ExecuteAsync(
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                TestOutputPath,
+                TestFrameRate,
+                EncoderPreference.Auto,
+                GpuVendor.Nvidia),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await engine.WaitUntilStartRequestedAsync();
+
+        Assert.Equal(
+            [EncoderKind.Nvenc, EncoderKind.MediaFoundationSoftware],
+            probe.ProbedEncoders);
+        Assert.Equal(1, reservation.CallCount);
+        var plan = Assert.Single(engine.StartedPlans);
+        Assert.Equal(EncoderKind.MediaFoundationSoftware, plan.Encoder);
+
+        engine.CommitFirstPacket(new RecordingHandle(
+            "session-001",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+        Assert.IsType<StartRecordingResult.Started>(await execution);
     }
 
     [Fact]

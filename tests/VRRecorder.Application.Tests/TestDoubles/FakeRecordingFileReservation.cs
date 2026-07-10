@@ -16,11 +16,14 @@ internal sealed class FakeRecordingFileReservation
 
     public RecordingFileDescriptor? RequestedDescriptor { get; private set; }
 
+    public int CallCount { get; private set; }
+
     public Task<PendingRecording> ReserveAsync(
         OutputPath outputPath,
         RecordingFileDescriptor descriptor,
         CancellationToken cancellationToken)
     {
+        CallCount++;
         RequestedOutputPath = outputPath;
         RequestedDescriptor = descriptor;
         _requested.TrySetResult();
