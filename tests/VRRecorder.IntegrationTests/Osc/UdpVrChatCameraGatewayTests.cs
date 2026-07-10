@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using VRRecorder.Application.Camera;
@@ -9,6 +10,38 @@ namespace VRRecorder.IntegrationTests.Osc;
 
 public sealed class UdpVrChatCameraGatewayTests
 {
+    [Fact]
+    [Trait("Scenario", "IT-001")]
+    public async Task MissingFirstEchoRetriesOnceAfterTwoHundredMilliseconds()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var fakeVrChat = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(endpoint);
+        var stopwatch = Stopwatch.StartNew();
+
+        var write = gateway.SetStreamingAsync(true, timeout.Token);
+        var first = await fakeVrChat.ReceiveAsync(timeout.Token);
+        var firstReceivedAt = stopwatch.Elapsed;
+        var second = await fakeVrChat.ReceiveAsync(timeout.Token);
+        var retryDelay = stopwatch.Elapsed - firstReceivedAt;
+        await fakeVrChat.SendAsync(
+            second.Buffer,
+            second.RemoteEndPoint,
+            timeout.Token);
+        await write;
+
+        Assert.Equal(StreamingTruePacket, first.Buffer);
+        Assert.Equal(StreamingTruePacket, second.Buffer);
+        Assert.InRange(
+            retryDelay,
+            TimeSpan.FromMilliseconds(150),
+            TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromMilliseconds(250), timeout.Token);
+        Assert.Equal(0, fakeVrChat.Available);
+    }
+
     [Fact]
     [Trait("Scenario", "IT-001")]
     public async Task AcquireAndRestoreSendOrderedLoopbackDatagrams()
