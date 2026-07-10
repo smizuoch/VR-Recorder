@@ -1,6 +1,8 @@
 #include "fake_media_backend.hpp"
 
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "media_backend.hpp"
@@ -82,14 +84,40 @@ public:
 
     vrrec_status_t RequestStop() noexcept override
     {
+        const std::lock_guard lock(control_mutex_);
+        ++request_stop_call_count_;
         return VRREC_STATUS_OK;
     }
 
     vrrec_status_t UpdateVideoLayout(
         const vrrec_video_layout_v1 &layout) noexcept override
     {
-        video_layout_ = layout;
-        ++video_layout_update_count_;
+        auto fault = false;
+        {
+            std::unique_lock lock(control_mutex_);
+            video_layout_ = layout;
+            ++video_layout_update_count_;
+            if (block_next_video_layout_update_) {
+                video_layout_update_entered_ = true;
+                control_condition_.notify_all();
+                control_condition_.wait(lock, [this] {
+                    return release_video_layout_update_;
+                });
+                block_next_video_layout_update_ = false;
+                release_video_layout_update_ = false;
+            }
+
+            fault = fault_during_next_video_layout_update_;
+            fault_during_next_video_layout_update_ = false;
+        }
+
+        if (fault) {
+            events_.Faulted(
+                VRREC_STATUS_INTERNAL_ERROR,
+                "layout update failed");
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+
         return VRREC_STATUS_OK;
     }
 
@@ -153,6 +181,42 @@ public:
         statistics_ = statistics;
     }
 
+    void FaultDuringNextVideoLayoutUpdate() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        fault_during_next_video_layout_update_ = true;
+    }
+
+    void BlockNextVideoLayoutUpdate() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        block_next_video_layout_update_ = true;
+        video_layout_update_entered_ = false;
+        release_video_layout_update_ = false;
+    }
+
+    bool WaitUntilVideoLayoutUpdateEntered(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(control_mutex_);
+        return control_condition_.wait_for(lock, timeout, [this] {
+            return video_layout_update_entered_;
+        });
+    }
+
+    void ReleaseVideoLayoutUpdate() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        release_video_layout_update_ = true;
+        control_condition_.notify_all();
+    }
+
+    std::uint32_t RequestStopCallCount() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        return request_stop_call_count_;
+    }
+
 private:
     MediaEventSink &events_;
     std::uint32_t encoder_kind_;
@@ -160,6 +224,13 @@ private:
     vrrec_video_layout_v1 video_layout_;
     vrrec_session_statistics_v1 statistics_;
     std::uint32_t video_layout_update_count_ = 0;
+    std::mutex control_mutex_;
+    std::condition_variable control_condition_;
+    bool fault_during_next_video_layout_update_ = false;
+    bool block_next_video_layout_update_ = false;
+    bool video_layout_update_entered_ = false;
+    bool release_video_layout_update_ = false;
+    std::uint32_t request_stop_call_count_ = 0;
     bool aborted_ = false;
     static FakeMediaBackend *active_;
 };
@@ -303,6 +374,32 @@ std::uint32_t VideoLayoutUpdateCount()
 void SetStatistics(const vrrec_session_statistics_v1 &statistics)
 {
     FakeMediaBackend::Active()->SetStatistics(statistics);
+}
+
+void FaultDuringNextVideoLayoutUpdate()
+{
+    FakeMediaBackend::Active()->FaultDuringNextVideoLayoutUpdate();
+}
+
+void BlockNextVideoLayoutUpdate()
+{
+    FakeMediaBackend::Active()->BlockNextVideoLayoutUpdate();
+}
+
+bool WaitUntilVideoLayoutUpdateEntered(std::chrono::milliseconds timeout)
+{
+    return FakeMediaBackend::Active()->WaitUntilVideoLayoutUpdateEntered(
+        timeout);
+}
+
+void ReleaseVideoLayoutUpdate()
+{
+    FakeMediaBackend::Active()->ReleaseVideoLayoutUpdate();
+}
+
+std::uint32_t RequestStopCallCount()
+{
+    return FakeMediaBackend::Active()->RequestStopCallCount();
 }
 
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed)

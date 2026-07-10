@@ -1,7 +1,10 @@
+#include <chrono>
 #include <cstdint>
+#include <future>
 #include <limits>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "fake_media_backend.hpp"
@@ -509,6 +512,74 @@ bool RejectsInvalidRuntimeLayoutAbiInputs()
     return true;
 }
 
+bool SynchronousLayoutFaultDoesNotDeadlockTheAbi()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::FaultDuringNextVideoLayoutUpdate();
+    auto layout = ValidRuntimeLayout();
+    std::promise<vrrec_status_t> update_result;
+    auto completed = update_result.get_future();
+    std::thread update([&] {
+        update_result.set_value(
+            vrrec_session_update_video_layout_v1(session, &layout));
+    });
+
+    if (completed.wait_for(std::chrono::milliseconds(250)) !=
+        std::future_status::ready) {
+        update.detach();
+        std::cerr << __func__
+                  << " timed out waiting for reentrant fault callback\n";
+        return false;
+    }
+
+    update.join();
+    CHECK(completed.get() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_FAULTED);
+    CHECK(log.events[0].message == "layout update failed");
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_STATE);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool StopWaitsForAnInFlightLayoutUpdateWithoutHoldingTheStateLock()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextVideoLayoutUpdate();
+    auto layout = ValidRuntimeLayout();
+    auto updating = std::async(std::launch::async, [&] {
+        return vrrec_session_update_video_layout_v1(session, &layout);
+    });
+    CHECK(vrrecorder::native::testing::WaitUntilVideoLayoutUpdateEntered(
+        std::chrono::milliseconds(250)));
+    auto stopping = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+
+    CHECK(stopping.wait_for(std::chrono::milliseconds(50)) ==
+          std::future_status::timeout);
+    CHECK(vrrecorder::native::testing::RequestStopCallCount() == 0);
+    vrrecorder::native::testing::ReleaseVideoLayoutUpdate();
+    CHECK(updating.get() == VRREC_STATUS_OK);
+    CHECK(stopping.get() == VRREC_STATUS_OK);
+    CHECK(vrrecorder::native::testing::RequestStopCallCount() == 1);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool QueriesVersionedSessionStatistics()
 {
     EventLog log;
@@ -517,6 +588,9 @@ bool QueriesVersionedSessionStatistics()
     vrrec_session_t *session = nullptr;
     CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
           VRREC_STATUS_OK);
+    auto statistics = ValidStatisticsOutput();
+    CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
+          VRREC_STATUS_INVALID_STATE);
     CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
     vrrecorder::native::testing::SetStatistics(
         vrrec_session_statistics_v1 {
@@ -531,7 +605,7 @@ bool QueriesVersionedSessionStatistics()
             8000,
             -15000,
         });
-    auto statistics = ValidStatisticsOutput();
+    statistics = ValidStatisticsOutput();
 
     CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
           VRREC_STATUS_OK);
@@ -702,6 +776,8 @@ int main()
         !RejectsTruncatedOrInvalidExtendedSessionConfig() ||
         !UpdatesStableLayoutWithoutChangingTheOutputCanvas() ||
         !RejectsInvalidRuntimeLayoutAbiInputs() ||
+        !SynchronousLayoutFaultDoesNotDeadlockTheAbi() ||
+        !StopWaitsForAnInFlightLayoutUpdateWithoutHoldingTheStateLock() ||
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||

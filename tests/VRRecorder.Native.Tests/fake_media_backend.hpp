@@ -2,6 +2,7 @@
 #define VRRECORDER_NATIVE_TEST_FAKE_MEDIA_BACKEND_HPP
 
 #include <cstdint>
+#include <chrono>
 #include <string>
 #include <string_view>
 
@@ -42,6 +43,11 @@ const ObservedMediaSessionConfig &SessionConfig();
 const vrrec_video_layout_v1 &VideoLayout();
 std::uint32_t VideoLayoutUpdateCount();
 void SetStatistics(const vrrec_session_statistics_v1 &statistics);
+void FaultDuringNextVideoLayoutUpdate();
+void BlockNextVideoLayoutUpdate();
+bool WaitUntilVideoLayoutUpdateEntered(std::chrono::milliseconds timeout);
+void ReleaseVideoLayoutUpdate();
+std::uint32_t RequestStopCallCount();
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed);
 std::string_view SteamVrManifestPath();
 std::string_view SteamVrActionSetPath();
