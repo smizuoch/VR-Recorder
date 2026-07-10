@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
@@ -64,6 +65,11 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         {
             var settingsPath = new WindowsSettingsPathProvider().GetPath();
             var cameraLeasePath = CameraLeasePath(settingsPath);
+            var recordingRights =
+                new JsonFileRecordingRightsAcknowledgementStore(
+                    RecordingRightsPath(settingsPath),
+                    SystemWallClock.Instance);
+            resources.Add(recordingRights);
             var diagnosticLog = new RotatingJsonLinesDiagnosticLog(
                 LogDirectory(settingsPath));
             resources.Add(diagnosticLog);
@@ -144,6 +150,9 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                     AppContext.BaseDirectory,
                     ProductVersion(),
                     legalVerifier));
+            requests = new RightsAcknowledgedDesktopRecordingStartRequestSource(
+                requests,
+                new RecordingRightsGate(recordingRights, wallClock));
             var ownedLifetime = new RecordingRuntimeResourceLifetime(
                 [.. resources]);
             return new DesktopRecordingRuntime(
@@ -201,6 +210,16 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                                        throw new InvalidOperationException(
                                            "The settings path has no parent directory.");
         return Path.Combine(applicationDataDirectory, "logs");
+    }
+
+    private static string RecordingRightsPath(string settingsPath)
+    {
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(
+            applicationDataDirectory,
+            "recording-rights.json");
     }
 
     private static void DisposeResourcesBestEffort(
