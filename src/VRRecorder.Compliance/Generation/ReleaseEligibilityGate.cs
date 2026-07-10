@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace VRRecorder.Compliance.Generation;
 
 public static class ReleaseEligibilityGate
@@ -11,6 +14,23 @@ public static class ReleaseEligibilityGate
         var issues = new List<ComplianceIssue>();
         foreach (var component in graph.Components)
         {
+            foreach (var legalFile in component.LegalFiles)
+            {
+                var actualHash = Convert
+                    .ToHexString(SHA256.HashData(
+                        Encoding.UTF8.GetBytes(legalFile.Utf8Content)))
+                    .ToLowerInvariant();
+                if (!string.Equals(
+                        legalFile.Sha256,
+                        actualHash,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    issues.Add(new ComplianceIssue(
+                        "legal-file-hash-mismatch",
+                        $"{component.Id}:{legalFile.RelativePath}"));
+                }
+            }
+
             ArgumentNullException.ThrowIfNull(component.Approval);
             if (component.Approval.Status == LegalApprovalStatus.Pending)
             {
