@@ -128,7 +128,16 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
 
         var numerator = double.Parse(parts[0], CultureInfo.InvariantCulture);
         var denominator = double.Parse(parts[1], CultureInfo.InvariantCulture);
-        return numerator / denominator;
+        var frameRate = numerator / denominator;
+        if (!double.IsFinite(numerator) || numerator <= 0 ||
+            !double.IsFinite(denominator) || denominator <= 0 ||
+            !double.IsFinite(frameRate) || frameRate <= 0)
+        {
+            throw new FormatException(
+                "The video frame rate must be a finite positive rational.");
+        }
+
+        return frameRate;
     }
 
     private async Task<ProbeResult> RunProbeAsync(
