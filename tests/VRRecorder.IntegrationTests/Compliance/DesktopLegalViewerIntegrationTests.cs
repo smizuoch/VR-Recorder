@@ -48,7 +48,8 @@ public sealed class DesktopLegalViewerIntegrationTests
                     installDirectory,
                     verifier,
                     shell,
-                    LegalBundleVerificationScope.InstallRoot));
+                    LegalBundleVerificationScope.InstallRoot),
+                new CapturingComplianceFaultSink());
             await using var recordingHost = new DesktopRecordingCommandHost(
                 new FailingRecordingRuntimeFactory());
 
@@ -107,7 +108,8 @@ public sealed class DesktopLegalViewerIntegrationTests
                 installDirectory,
                 outsideBundle,
                 verifier,
-                shell));
+                shell),
+            new CapturingComplianceFaultSink());
         await controller.OpenAsync(CancellationToken.None);
         await controller.ShowDetailAsync("a", CancellationToken.None);
         await controller.ShowLicenseAsync(CancellationToken.None);
@@ -134,7 +136,8 @@ public sealed class DesktopLegalViewerIntegrationTests
                 installDirectory,
                 installDirectory,
                 insideVerifier,
-                shell));
+                shell),
+            new CapturingComplianceFaultSink());
         await tamperController.OpenAsync(CancellationToken.None);
         await tamperController.ShowDetailAsync("a", CancellationToken.None);
         await tamperController.ShowLicenseAsync(CancellationToken.None);
@@ -148,6 +151,71 @@ public sealed class DesktopLegalViewerIntegrationTests
         Assert.Null(tamperController.State.FullLicenseText);
         Assert.Null(tamperController.State.BundleId);
         Assert.Empty(tamperController.State.Components);
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-031")]
+    public async Task RuntimeTamperPermanentlyFaultsReadyRecordingHost()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var installDirectory = Path.Combine(directory.Path, "install");
+        var fixture = await WriteGeneratedBundleAsync(
+            installDirectory,
+            "offline source");
+        await WriteApplicationPayloadsAsync(installDirectory);
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new FixedAuthenticatedAnchorSource(fixture.Anchor));
+        var runtime = new TrackingRecordingRuntime();
+        await using var recordingHost = new DesktopRecordingCommandHost(
+            new ReadyRecordingRuntimeFactory(runtime));
+        var controller = new DesktopLegalController(
+            new AuthenticatedLegalCatalogReader(
+                installDirectory,
+                verifier,
+                LegalBundleVerificationScope.InstallRoot),
+            new AuthenticatedLegalBundleFolderOpener(
+                installDirectory,
+                installDirectory,
+                verifier,
+                new CapturingLegalFolderShell(),
+                LegalBundleVerificationScope.InstallRoot),
+            recordingHost);
+
+        var initialActivation = await recordingHost.ActivateAsync(
+            new RecorderStartupResult(RecorderState.Ready, []),
+            CancellationToken.None);
+        await controller.OpenAsync(CancellationToken.None);
+        await controller.ShowDetailAsync("a", CancellationToken.None);
+        await controller.ShowLicenseAsync(CancellationToken.None);
+        await File.WriteAllTextAsync(
+            Path.Combine(installDirectory, "LICENSES", "a", "LICENSE.txt"),
+            "tampered stale text");
+
+        await controller.RefreshAsync(CancellationToken.None);
+
+        var cachedActivation = await recordingHost.ActivateAsync(
+            new RecorderStartupResult(RecorderState.Ready, []),
+            CancellationToken.None);
+        var unavailable = await Assert.ThrowsAsync<
+            DesktopRecordingUnavailableException>(() =>
+            recordingHost.ToggleAsync(CancellationToken.None));
+        Assert.Equal(DesktopRecordingHostState.Ready, initialActivation.State);
+        Assert.Equal(DesktopLegalView.Unavailable, controller.State.View);
+        Assert.Null(controller.State.BundleId);
+        Assert.Null(controller.State.ProductVersion);
+        Assert.Null(controller.State.SelectedComponent);
+        Assert.Null(controller.State.FullLicenseText);
+        Assert.Empty(controller.State.Components);
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            recordingHost.State);
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            cachedActivation.State);
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            unavailable.State);
+        Assert.Equal(1, runtime.DisposeCallCount);
     }
 
     private static async Task<BundleFixture> WriteGeneratedBundleAsync(
@@ -304,6 +372,46 @@ public sealed class DesktopLegalViewerIntegrationTests
                 new DesktopRecordingInitializationException(
                     "NATIVE_MEDIA_UNAVAILABLE",
                     "The native recording runtime is unavailable."));
+        }
+    }
+
+    private sealed class ReadyRecordingRuntimeFactory(
+        IDesktopRecordingRuntime runtime)
+        : IDesktopRecordingRuntimeFactory
+    {
+        public Task<IDesktopRecordingRuntime> InitializeAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(runtime);
+        }
+    }
+
+    private sealed class TrackingRecordingRuntime : IDesktopRecordingRuntime
+    {
+        public int DisposeCallCount { get; private set; }
+
+        public Task ToggleAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingComplianceFaultSink : IComplianceFaultSink
+    {
+        public int CallCount { get; private set; }
+
+        public ValueTask EnterComplianceFaultAsync()
+        {
+            CallCount++;
+            return ValueTask.CompletedTask;
         }
     }
 

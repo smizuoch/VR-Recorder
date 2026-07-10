@@ -118,6 +118,66 @@ public sealed class DesktopRecordingCommandHostTests
         Assert.Equal(1, runtime.DisposeCallCount);
     }
 
+    [Fact]
+    public async Task ComplianceFaultDuringInitializationCanNeverPublishReady()
+    {
+        var factory = new ControllableDesktopRecordingRuntimeFactory();
+        var runtime = new DisposalTrackingDesktopRecordingRuntime();
+        await using var host = new DesktopRecordingCommandHost(factory);
+        var activation = host.ActivateAsync(
+            ReadyStartup(),
+            CancellationToken.None);
+        await factory.WaitUntilInitializeRequestedAsync();
+
+        var complianceFault = ((IComplianceFaultSink)host)
+            .EnterComplianceFaultAsync()
+            .AsTask();
+        factory.Complete(runtime);
+
+        var racedActivation = await activation;
+        await complianceFault;
+        var cachedActivation = await host.ActivateAsync(
+            ReadyStartup(),
+            CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<
+            DesktopRecordingUnavailableException>(() =>
+            host.ToggleAsync(CancellationToken.None));
+
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            racedActivation.State);
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            cachedActivation.State);
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            exception.State);
+        Assert.Equal(DesktopRecordingHostState.ComplianceFault, host.State);
+        Assert.Equal(1, runtime.DisposeCallCount);
+    }
+
+    [Fact]
+    public async Task ComplianceFaultCancelsToggleAndDisposesRuntimeExactlyOnce()
+    {
+        var runtime = new ControllableDesktopRecordingRuntime(holdToggle: true);
+        var factory = new StubDesktopRecordingRuntimeFactory(runtime);
+        var host = new DesktopRecordingCommandHost(factory);
+        await host.ActivateAsync(ReadyStartup(), CancellationToken.None);
+        var toggle = host.ToggleAsync(CancellationToken.None);
+        await runtime.WaitUntilToggleRequestedAsync();
+
+        await ((IComplianceFaultSink)host).EnterComplianceFaultAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => toggle);
+        Assert.Equal(DesktopRecordingHostState.ComplianceFault, host.State);
+        Assert.Equal(1, runtime.DisposeCallCount);
+
+        await host.DisposeAsync();
+        await host.DisposeAsync();
+
+        Assert.Equal(1, runtime.DisposeCallCount);
+    }
+
     private static RecorderStartupResult ReadyStartup() =>
         new(RecorderState.Ready, []);
 
@@ -170,6 +230,8 @@ public sealed class DesktopRecordingCommandHostTests
 
         public int ToggleCallCount { get; private set; }
 
+        public int DisposeCallCount { get; private set; }
+
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -182,7 +244,11 @@ public sealed class DesktopRecordingCommandHostTests
 
         public void CompleteToggle() => _toggleCompletion.TrySetResult();
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class ControllableDesktopRecordingRuntimeFactory

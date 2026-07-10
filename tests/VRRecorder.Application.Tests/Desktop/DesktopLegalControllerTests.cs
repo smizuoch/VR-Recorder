@@ -11,7 +11,10 @@ public sealed class DesktopLegalControllerTests
     {
         var reader = new StubLegalCatalogReader(Catalog());
         var folderOpener = new CapturingLegalBundleFolderOpener();
-        var controller = new DesktopLegalController(reader, folderOpener);
+        var controller = new DesktopLegalController(
+            reader,
+            folderOpener,
+            new CapturingComplianceFaultSink());
 
         await controller.OpenAsync(CancellationToken.None);
 
@@ -43,7 +46,8 @@ public sealed class DesktopLegalControllerTests
         var reader = new StubLegalCatalogReader(Catalog());
         var controller = new DesktopLegalController(
             reader,
-            new CapturingLegalBundleFolderOpener());
+            new CapturingLegalBundleFolderOpener(),
+            new CapturingComplianceFaultSink());
         await controller.OpenAsync(CancellationToken.None);
         await controller.ShowDetailAsync("a", CancellationToken.None);
         await controller.ShowLicenseAsync(CancellationToken.None);
@@ -66,7 +70,8 @@ public sealed class DesktopLegalControllerTests
     {
         var controller = new DesktopLegalController(
             new StubLegalCatalogReader(Catalog()),
-            new CapturingLegalBundleFolderOpener(reject: true));
+            new CapturingLegalBundleFolderOpener(reject: true),
+            new CapturingComplianceFaultSink());
         await controller.OpenAsync(CancellationToken.None);
         await controller.ShowDetailAsync("a", CancellationToken.None);
         await controller.ShowLicenseAsync(CancellationToken.None);
@@ -78,6 +83,57 @@ public sealed class DesktopLegalControllerTests
         Assert.Empty(controller.State.Components);
         Assert.Contains(controller.State.Issues, issue =>
             issue.Code == "legal-folder-outside-install-bundle");
+    }
+
+    [Fact]
+    public async Task ConcurrentLicenseReadCannotMixTextWithLaterSelection()
+    {
+        var reader = new StubLegalCatalogReader(Catalog());
+        var controller = new DesktopLegalController(
+            reader,
+            new CapturingLegalBundleFolderOpener(),
+            new CapturingComplianceFaultSink());
+        await controller.OpenAsync(CancellationToken.None);
+        await controller.ShowDetailAsync("a", CancellationToken.None);
+        reader.HoldLicenseReads();
+
+        var showLicense = controller.ShowLicenseAsync(CancellationToken.None);
+        await reader.WaitUntilLicenseReadRequestedAsync();
+        var showLaterDetail = controller.ShowDetailAsync(
+            "b",
+            CancellationToken.None);
+        reader.ReleaseLicenseReads();
+
+        await Task.WhenAll(showLicense, showLaterDetail);
+
+        Assert.Equal(DesktopLegalView.ComponentDetail, controller.State.View);
+        Assert.Equal("b", controller.State.SelectedComponent?.Id);
+        Assert.Null(controller.State.FullLicenseText);
+    }
+
+    [Fact]
+    public async Task SinkFailureCannotPreservePreviouslyAuthenticatedText()
+    {
+        var reader = new StubLegalCatalogReader(Catalog());
+        var sink = new CapturingComplianceFaultSink(reject: true);
+        var controller = new DesktopLegalController(
+            reader,
+            new CapturingLegalBundleFolderOpener(),
+            sink);
+        await controller.OpenAsync(CancellationToken.None);
+        await controller.ShowDetailAsync("a", CancellationToken.None);
+        await controller.ShowLicenseAsync(CancellationToken.None);
+        reader.RejectLicenseReads = true;
+
+        await controller.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(1, sink.CallCount);
+        Assert.Equal(DesktopLegalView.Unavailable, controller.State.View);
+        Assert.Null(controller.State.BundleId);
+        Assert.Null(controller.State.ProductVersion);
+        Assert.Null(controller.State.SelectedComponent);
+        Assert.Null(controller.State.FullLicenseText);
+        Assert.Empty(controller.State.Components);
     }
 
     private static LegalCatalogSnapshot Catalog() =>
@@ -98,7 +154,21 @@ public sealed class DesktopLegalControllerTests
     private sealed class StubLegalCatalogReader(LegalCatalogSnapshot catalog)
         : ILegalCatalogReader
     {
+        private TaskCompletionSource? _licenseReadRelease;
+        private readonly TaskCompletionSource _licenseReadRequested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
         public bool RejectLicenseReads { get; set; }
+
+        public void HoldLicenseReads() =>
+            _licenseReadRelease = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WaitUntilLicenseReadRequestedAsync() =>
+            _licenseReadRequested.Task;
+
+        public void ReleaseLicenseReads() =>
+            _licenseReadRelease?.TrySetResult();
 
         public Task<LegalCatalogReadResult> ReadAsync(
             CancellationToken cancellationToken)
@@ -108,12 +178,18 @@ public sealed class DesktopLegalControllerTests
                 new LegalCatalogReadResult.Available(catalog));
         }
 
-        public Task<LegalTextReadResult> ReadLicenseTextAsync(
+        public async Task<LegalTextReadResult> ReadLicenseTextAsync(
             string componentId,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult<LegalTextReadResult>(RejectLicenseReads
+            _licenseReadRequested.TrySetResult();
+            if (_licenseReadRelease is not null)
+            {
+                await _licenseReadRelease.Task.WaitAsync(cancellationToken);
+            }
+
+            return RejectLicenseReads
                 ? new LegalTextReadResult.Rejected(
                 [
                     new LegalCatalogIssue(
@@ -123,7 +199,22 @@ public sealed class DesktopLegalControllerTests
                 : new LegalTextReadResult.Available(new LegalTextDocument(
                     componentId,
                     $"LICENSES/{componentId}/LICENSE.txt",
-                    $"{componentId} LICENSE\nline two\n")));
+                    $"{componentId} LICENSE\nline two\n"));
+        }
+    }
+
+    private sealed class CapturingComplianceFaultSink(bool reject = false)
+        : IComplianceFaultSink
+    {
+        public int CallCount { get; private set; }
+
+        public ValueTask EnterComplianceFaultAsync()
+        {
+            CallCount++;
+            return reject
+                ? ValueTask.FromException(
+                    new InvalidOperationException("sink unavailable"))
+                : ValueTask.CompletedTask;
         }
     }
 

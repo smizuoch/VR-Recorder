@@ -436,6 +436,12 @@ public sealed class WpfHostProjectContractTests
             appDirectory,
             "LegalWindow.xaml.cs"));
         Assert.Contains("DesktopLegalController", legalCode);
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("_recordingHost);", appCode);
+        Assert.Contains("RunLegalOperationAsync", legalCode);
+        Assert.Contains("catch (Exception)", legalCode);
         Assert.DoesNotContain("RecordingInputDispatcher", legalCode);
         Assert.DoesNotContain("UiCommandId.ToggleRecording", legalCode);
         Assert.DoesNotContain("HttpClient", legalCode);
