@@ -166,7 +166,6 @@ public sealed class NativeMediaPreflightContractIntegrationTests
     [InlineData("gpuIdentity")]
     [InlineData("gpuVendor")]
     [InlineData("pixelFormat")]
-    [InlineData("sourceFps")]
     public async Task CandidateStabilityRestartsWhenItsSignatureChanges(
         string changedField)
     {
@@ -209,11 +208,6 @@ public sealed class NativeMediaPreflightContractIntegrationTests
                 1_300,
                 AdapterLuid,
                 pixelFormat: VideoPixelFormat.Bgra8),
-            "sourceFps" => Frame(
-                3,
-                1_300,
-                AdapterLuid,
-                estimatedSourceFramesPerSecond: 30),
             _ => throw new InvalidOperationException(
                 $"Unsupported changed field {changedField}."),
         };
@@ -235,6 +229,36 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         });
 
         Assert.Equal(changed.Signal.SenderId, (await waiting).SenderId);
+    }
+
+    [Fact]
+    public async Task RollingSourceFpsDoesNotResetAnOtherwiseStableCandidate()
+    {
+        var source = new ControllableSpoutVideoSource([]);
+        var gateway = new SpoutVideoSignalGateway(source);
+        await gateway.CaptureBaselineAsync(CancellationToken.None);
+        var waiting = gateway.WaitForStableSignalAsync(
+            TimeSpan.FromSeconds(1),
+            CancellationToken.None);
+        await source.WaitUntilObservingAsync().WaitAsync(TimeSpan.FromSeconds(1));
+
+        source.Publish(Frame(
+            1,
+            1_000,
+            AdapterLuid,
+            estimatedSourceFramesPerSecond: 59.8));
+        source.Publish(Frame(
+            2,
+            1_150,
+            AdapterLuid,
+            estimatedSourceFramesPerSecond: 60.1));
+        source.Publish(Frame(
+            3,
+            1_300,
+            AdapterLuid,
+            estimatedSourceFramesPerSecond: 59.94));
+
+        Assert.Equal(59.94, (await waiting).EstimatedSourceFramesPerSecond);
     }
 
     [Fact]
@@ -361,6 +385,40 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         await cancellation.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled);
+    }
+
+    [Fact]
+    public async Task LegacyPlaceholderSignalIsRejectedAtTheSourceBoundary()
+    {
+        var source = new ControllableSpoutVideoSource([]);
+        var gateway = new SpoutVideoSignalGateway(source);
+        await gateway.CaptureBaselineAsync(CancellationToken.None);
+        var waiting = gateway.WaitForStableSignalAsync(
+            TimeSpan.FromSeconds(1),
+            CancellationToken.None);
+        await source.WaitUntilObservingAsync().WaitAsync(TimeSpan.FromSeconds(1));
+
+        source.Publish(new SpoutFrameObservation(
+            new StableVideoSignal(1920, 1080),
+            1,
+            MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(1))));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => waiting);
+    }
+
+    [Fact]
+    public async Task QuietSourceCompletionAfterCallerCancelRemainsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var source = new CancelThenCompleteSpoutVideoSource(cancellation);
+        var gateway = new SpoutVideoSignalGateway(source);
+        await gateway.CaptureBaselineAsync(CancellationToken.None);
+
+        var waiting = gateway.WaitForStableSignalAsync(
+            TimeSpan.FromSeconds(1),
+            cancellation.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
     }
 
     [Fact]
@@ -552,6 +610,23 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         }
     }
 
+    private sealed class CancelThenCompleteSpoutVideoSource(
+        CancellationTokenSource cancellation) : ISpoutVideoSource
+    {
+        public Task<IReadOnlyList<SpoutSenderSnapshot>> SnapshotAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SpoutSenderSnapshot>>([]);
+
+        public async IAsyncEnumerable<SpoutFrameObservation> ObserveFramesAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            await Task.Yield();
+            yield break;
+        }
+    }
+
     private sealed class FallbackEncoderProbe : IEncoderProbe
     {
         public List<EncoderProbeRequest> Requests { get; } = [];
@@ -661,8 +736,8 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(new PendingRecording(
-                Path.Combine(outputPath.Value, "contract.recording.mp4"),
-                Path.Combine(outputPath.Value, "contract.mp4")));
+                Path.Combine(outputPath.FullPath, "contract.recording.mp4"),
+                Path.Combine(outputPath.FullPath, "contract.mp4")));
         }
     }
 
