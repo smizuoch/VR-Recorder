@@ -12,6 +12,7 @@ public static class RecordingInputContract
         {
             UiActivationKind.DesktopClick or
             UiActivationKind.DesktopKeyboard or
+            UiActivationKind.DesktopTray or
             UiActivationKind.WristRay or
             UiActivationKind.SteamVrAction => UiCommandId.ToggleRecording,
             _ => throw new ArgumentOutOfRangeException(

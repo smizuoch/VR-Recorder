@@ -3,6 +3,11 @@
                     xmlns:system="clr-namespace:System;assembly=System.Runtime">
     <system:String x:Key="App_Title">⟦VR-Rëcördër · VR-Rëcördër⟧</system:String>
     <system:String x:Key="App_Window_AccessibleName">⟦VR-Rëcördër · VR-Rëcördër⟧</system:String>
+    <system:String x:Key="Tray_Show_Label">⟦Shöw VR-Rëcördër · Shöw VR-Rëcördër⟧</system:String>
+    <system:String x:Key="Tray_Toggle_Label">⟦Stárt ör stöp rëcördïng · Stárt ör stöp rëcördïng⟧</system:String>
+    <system:String x:Key="Tray_Legal_Label">⟦Áböüt ánd lïcënsës · Áböüt ánd lïcënsës⟧</system:String>
+    <system:String x:Key="Tray_LicenseFolder_Label">⟦Öpën lïcënsë földër · Öpën lïcënsë földër⟧</system:String>
+    <system:String x:Key="Tray_Exit_Label">⟦Ëxït VR-Rëcördër sáfëly · Ëxït VR-Rëcördër sáfëly⟧</system:String>
     <system:String x:Key="Recording_Start_Short">⟦RËC · RËC⟧</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">⟦Stárt rëcördïng · Stárt rëcördïng⟧</system:String>
     <system:String x:Key="Recording_Start_Tooltip">⟦Stárt rëcördïng · Stárt rëcördïng⟧</system:String>

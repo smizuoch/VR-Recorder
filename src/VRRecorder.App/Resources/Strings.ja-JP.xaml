@@ -3,6 +3,11 @@
                     xmlns:system="clr-namespace:System;assembly=System.Runtime">
     <system:String x:Key="App_Title">VR-Recorder</system:String>
     <system:String x:Key="App_Window_AccessibleName">VR-Recorder</system:String>
+    <system:String x:Key="Tray_Show_Label">VR-Recorderを表示</system:String>
+    <system:String x:Key="Tray_Toggle_Label">録画を開始または停止</system:String>
+    <system:String x:Key="Tray_Legal_Label">この製品とライセンス</system:String>
+    <system:String x:Key="Tray_LicenseFolder_Label">ライセンスフォルダーを開く</system:String>
+    <system:String x:Key="Tray_Exit_Label">安全にVR-Recorderを終了</system:String>
     <system:String x:Key="Recording_Start_Short">REC</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">録画を開始</system:String>
     <system:String x:Key="Recording_Start_Tooltip">録画を開始します</system:String>

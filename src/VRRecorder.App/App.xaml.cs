@@ -22,6 +22,9 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly DesktopLegalController _legalController;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
+    private System.Windows.Forms.ContextMenuStrip? _trayMenu;
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private bool _exitRequested;
     private int _disposeStarted;
 
     public App()
@@ -56,14 +59,18 @@ public partial class App : System.Windows.Application, IDisposable
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
 
+    internal static bool IsExitRequested =>
+        ((App)Current)._exitRequested;
+
     internal static async Task<DesktopRecordingHostActivation>
         ActivateRecordingHostAsync(
             RecorderStartupResult startup,
             CancellationToken cancellationToken)
     {
         var app = (App)Current;
-        var activation = await app._recordingHost
-            .ActivateAsync(startup, cancellationToken)
+        var activation = await app._recordingHost.ActivateAsync(
+                startup,
+                cancellationToken)
             .ConfigureAwait(true);
         if (activation.State == DesktopRecordingHostState.Ready)
         {
@@ -84,10 +91,12 @@ public partial class App : System.Windows.Application, IDisposable
                 ? CultureInfo.CurrentUICulture.Name
                 : localeName[LocaleArgumentPrefix.Length..]);
         base.OnStartup(e);
+        InitializeTrayIcon();
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
     {
+        _exitRequested = true;
         Dispose();
         base.OnExit(e);
     }
@@ -101,6 +110,16 @@ public partial class App : System.Windows.Application, IDisposable
 
         try
         {
+            _exitRequested = true;
+            if (_trayIcon is not null)
+            {
+                _trayIcon.Visible = false;
+                _trayIcon.Dispose();
+                _trayIcon = null;
+            }
+
+            _trayMenu?.Dispose();
+            _trayMenu = null;
             _steamVrInputLifetime.Cancel();
             Task? steamVrInputTask;
             lock (_steamVrInputGate)
@@ -117,6 +136,109 @@ public partial class App : System.Windows.Application, IDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    private void InitializeTrayIcon()
+    {
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
+            LocalizedString("Tray_Show_Label"),
+            image: null,
+            (_, _) => ShowMainWindow()));
+        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
+            LocalizedString("Tray_Toggle_Label"),
+            image: null,
+            async (_, _) => await DispatchTrayRecordingAsync()));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
+            LocalizedString("Tray_Legal_Label"),
+            image: null,
+            (_, _) => ShowLegalWindow()));
+        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
+            LocalizedString("Tray_LicenseFolder_Label"),
+            image: null,
+            async (_, _) => await OpenLicenseFolderFromTrayAsync()));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
+            LocalizedString("Tray_Exit_Label"),
+            image: null,
+            (_, _) => RequestExit()));
+
+        var icon = new System.Windows.Forms.NotifyIcon
+        {
+            ContextMenuStrip = menu,
+            Icon = System.Drawing.SystemIcons.Application,
+            Text = LocalizedString("App_Title"),
+            Visible = true,
+        };
+        icon.DoubleClick += (_, _) => ShowMainWindow();
+        _trayMenu = menu;
+        _trayIcon = icon;
+    }
+
+    private string LocalizedString(string resourceKey) =>
+        Resources[resourceKey] as string ?? throw new InvalidOperationException(
+            $"The localized resource {resourceKey} is missing.");
+
+    private void ShowMainWindow()
+    {
+        if (MainWindow is not VRRecorder.App.MainWindow window)
+        {
+            return;
+        }
+
+        window.Show();
+        window.WindowState = System.Windows.WindowState.Normal;
+        window.Activate();
+    }
+
+    private void ShowLegalWindow()
+    {
+        ShowMainWindow();
+        if (MainWindow is VRRecorder.App.MainWindow window)
+        {
+            window.OpenLegalWindow();
+        }
+    }
+
+    private async Task DispatchTrayRecordingAsync()
+    {
+        try
+        {
+            await _recordingInputs
+                .DispatchAsync(
+                    UiActivationKind.DesktopTray,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (InvalidOperationException exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "Tray recording command is unavailable: {0}",
+                exception.Message);
+        }
+    }
+
+    private async Task OpenLicenseFolderFromTrayAsync()
+    {
+        try
+        {
+            await _legalController
+                .OpenLicenseFolderAsync(CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (InvalidOperationException exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "The license folder could not be opened: {0}",
+                exception.Message);
+        }
+    }
+
+    private void RequestExit()
+    {
+        _exitRequested = true;
+        Shutdown();
     }
 
     private void StartSteamVrInput()

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -108,6 +109,17 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (App.IsExitRequested)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        Hide();
+    }
+
     private void OnRecordingStatusChanged(RecorderStatusSnapshot status)
     {
         if (Dispatcher.CheckAccess())
@@ -155,6 +167,11 @@ public partial class MainWindow : Window
 
     private void OnAboutLegalClick(object sender, RoutedEventArgs e)
     {
+        OpenLegalWindow();
+    }
+
+    internal void OpenLegalWindow()
+    {
         if (_legalWindow is { IsVisible: true })
         {
             _legalWindow.Activate();
@@ -170,7 +187,9 @@ public partial class MainWindow : Window
         legalWindow.Show();
     }
 
-    private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    private async void OnPreviewKeyDown(
+        object sender,
+        System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key != Key.R ||
             (Keyboard.Modifiers & ModifierKeys.Control) == 0)

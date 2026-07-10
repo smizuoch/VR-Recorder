@@ -7,6 +7,7 @@ public sealed class RecordingInputContractTests
     [Theory]
     [InlineData(UiActivationKind.DesktopClick)]
     [InlineData(UiActivationKind.DesktopKeyboard)]
+    [InlineData(UiActivationKind.DesktopTray)]
     [InlineData(UiActivationKind.WristRay)]
     [InlineData(UiActivationKind.SteamVrAction)]
     public void EveryActivationKindResolvesToCanonicalToggleCommand(
