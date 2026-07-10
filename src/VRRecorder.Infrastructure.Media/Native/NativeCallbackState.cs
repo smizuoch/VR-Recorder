@@ -1,10 +1,13 @@
 using System.Runtime.InteropServices;
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Storage;
 
 namespace VRRecorder.Infrastructure.Media.Native;
 
 internal sealed class NativeCallbackState
 {
+    private const int RequiredAudioChannels = 2;
     private readonly object _gate = new();
     private readonly NativeRecordingCallbacks _callbacks;
     private readonly RecordingPlan _plan;
@@ -47,10 +50,13 @@ internal sealed class NativeCallbackState
                     break;
                 case NativeEventKind.Stopped:
                     _terminal = true;
+                    var videoPacketCount = checked(
+                        (long)nativeEvent.VideoPacketCount);
                     stopped = new RecordingStopResult(
                         _plan.Output,
-                        checked((long)nativeEvent.VideoPacketCount),
-                        checked((long)nativeEvent.AudioPacketCount));
+                        videoPacketCount,
+                        checked((long)nativeEvent.AudioPacketCount),
+                        CreateMediaExpectation(videoPacketCount));
                     break;
                 case NativeEventKind.Faulted:
                     _terminal = true;
@@ -79,5 +85,19 @@ internal sealed class NativeCallbackState
             Stopped.TrySetException(new NativeRecordingException(fault));
             _callbacks.Faulted(fault);
         }
+    }
+
+    private RecordingMediaExpectation CreateMediaExpectation(
+        long videoPacketCount)
+    {
+        var output = _plan.VideoLayout.OutputCanvas;
+        return new RecordingMediaExpectation(
+            output.Width,
+            output.Height,
+            _plan.FrameRate.Value,
+            AudioSessionService.RequiredSampleRate,
+            RequiredAudioChannels,
+            TimeSpan.FromSeconds(
+                (double)videoPacketCount / _plan.FrameRate.Value));
     }
 }
