@@ -23,4 +23,24 @@ public sealed class RecordingUiCommandDispatcherTests
 
         Assert.Equal([UiActivationKind.DesktopClick], routed);
     }
+
+    [Fact]
+    public async Task NoSignalRetryRoutesToTheSameRecordingOperation()
+    {
+        var routed = new List<UiActivationKind>();
+        var dispatcher = new RecordingUiCommandDispatcher(
+            (activationKind, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                routed.Add(activationKind);
+                return Task.CompletedTask;
+            });
+
+        await dispatcher.DispatchAsync(
+            UiCommandId.Retry,
+            UiActivationKind.WristRay,
+            CancellationToken.None);
+
+        Assert.Equal([UiActivationKind.WristRay], routed);
+    }
 }
