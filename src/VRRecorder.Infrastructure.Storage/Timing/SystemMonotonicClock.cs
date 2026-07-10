@@ -8,7 +8,6 @@ public sealed class SystemMonotonicClock : IMonotonicClock
     private static readonly TimeSpan MaximumTimerDelay =
         TimeSpan.FromMilliseconds(int.MaxValue - 1L);
     private readonly TimeProvider _timeProvider;
-    private readonly long _originTimestamp;
 
     public SystemMonotonicClock()
         : this(TimeProvider.System)
@@ -20,14 +19,15 @@ public sealed class SystemMonotonicClock : IMonotonicClock
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _timeProvider = timeProvider;
-        _originTimestamp = timeProvider.GetTimestamp();
     }
 
     public MonotonicTimestamp Now
     {
         get
         {
-            var elapsed = _timeProvider.GetElapsedTime(_originTimestamp);
+            var elapsed = _timeProvider.GetElapsedTime(
+                startingTimestamp: 0,
+                _timeProvider.GetTimestamp());
             return MonotonicTimestamp.FromElapsed(
                 elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed);
         }
