@@ -123,6 +123,9 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         Assert.Equal(EncoderKind.Nvenc, request.Encoder);
         Assert.Equal(adapterLuid, request.AdapterLuid);
         Assert.Equal("NVIDIA RTX contract adapter", request.GpuIdentity);
+        Assert.Equal(1920, request.Width);
+        Assert.Equal(1080, request.Height);
+        Assert.Equal(new FrameRate(60), request.FrameRate);
         Assert.Equal("VRChat-Spout-new", plan.Signal.SenderId);
         Assert.Equal(adapterLuid, plan.Signal.AdapterLuid);
         Assert.Equal(VideoPixelFormat.Rgba8, plan.Signal.PixelFormat);
@@ -461,6 +464,11 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         Assert.All(
             probe.Requests,
             request => Assert.Equal(signal.GpuIdentity, request.GpuIdentity));
+        Assert.All(probe.Requests, request => Assert.Equal(1920, request.Width));
+        Assert.All(probe.Requests, request => Assert.Equal(1080, request.Height));
+        Assert.All(
+            probe.Requests,
+            request => Assert.Equal(new FrameRate(60), request.FrameRate));
     }
 
     private const ulong AdapterLuid = 0x00000001ABCDEF01;
