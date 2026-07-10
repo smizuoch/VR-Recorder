@@ -243,10 +243,11 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     {
         ArgumentNullException.ThrowIfNull(selection.Candidates);
         var candidates = selection.Candidates.ToArray();
-        if (candidates.Length < 2 || candidates.Any(candidate => candidate is null))
+        if (candidates.Length == 0 ||
+            candidates.Any(candidate => candidate is null))
         {
             throw new InvalidDataException(
-                "VRChat instance selection requires at least two valid candidates.");
+                "VRChat instance selection requires valid candidates.");
         }
 
         var selectedServiceId = await _vrChatSelection
