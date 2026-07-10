@@ -324,6 +324,12 @@ public sealed class LegalReleasePackageIntegrationTests
                     "MATERIAL-SYMBOLS-MANIFEST.json",
                     Hash(Encoding.UTF8.GetBytes(manifest)),
                     manifest),
+                new VerifiedLegalFile(
+                    LegalFileKind.Attribution,
+                    "RIGHTS/material-symbols-attribution.txt",
+                    Hash(Encoding.UTF8.GetBytes(
+                        "Material Symbols test attribution\n")),
+                    "Material Symbols test attribution\n"),
             ],
             Scope: NoticeScope.RuntimeBundled,
             Approval: new LegalApproval(

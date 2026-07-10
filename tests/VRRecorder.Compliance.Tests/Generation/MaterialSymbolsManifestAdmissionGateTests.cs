@@ -19,6 +19,50 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
         Assert.Empty(result.Issues);
     }
 
+    [Fact]
+    public void CanonicalStateVariantsProduceApprovedGraph()
+    {
+        var manifest = Manifest();
+        var icon = manifest["selectedIcons"]![0]!.AsObject();
+        icon.Remove("axes");
+        icon["stateVariants"] = new JsonObject
+        {
+            ["ready"] = Axes(fill: 0, opticalSize: 48),
+            ["recording"] = Axes(fill: 1, opticalSize: 48),
+        };
+
+        var result = ReleaseEligibilityGate.Evaluate(Graph(
+            MaterialComponent(ManifestText(manifest))));
+
+        Assert.True(result.IsApproved);
+        Assert.NotNull(result.ApprovedGraph);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public void GenericEligibilityDoesNotClaimProductReleaseCompleteness()
+    {
+        const string license = "MIT test fixture\n";
+        var component = MaterialComponent(ManifestText()) with
+        {
+            Id = "ordinary-component",
+            DisplayName = "Ordinary component",
+            License = new LicenseDecision("MIT", "MIT"),
+            LegalFiles =
+            [
+                LegalFile(
+                    LegalFileKind.License,
+                    "LICENSES/ordinary/LICENSE.txt",
+                    license),
+            ],
+        };
+
+        var result = ReleaseEligibilityGate.Evaluate(Graph(component));
+
+        Assert.True(result.IsApproved);
+        Assert.NotNull(result.ApprovedGraph);
+    }
+
     [Theory]
     [InlineData("schema-version", "material-symbols-manifest-invalid")]
     [InlineData("unknown-member", "material-symbols-manifest-invalid")]
@@ -33,6 +77,28 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
     [InlineData("license", "material-symbols-source-policy-mismatch")]
     [InlineData("acquisition", "material-symbols-source-policy-mismatch")]
     [InlineData("runtime-network", "material-symbols-source-policy-mismatch")]
+    [InlineData("component-commit", "material-symbols-source-policy-mismatch")]
+    [InlineData(
+        "license-document",
+        "material-symbols-legal-document-mismatch")]
+    [InlineData(
+        "attribution-document",
+        "material-symbols-legal-document-mismatch")]
+    [InlineData(
+        "notice-document",
+        "material-symbols-notice-document-missing")]
+    [InlineData(
+        "rights-required-flag",
+        "material-symbols-rights-policy-mismatch")]
+    [InlineData(
+        "rights-forbidden-flag",
+        "material-symbols-rights-policy-mismatch")]
+    [InlineData(
+        "prohibited-asset-class",
+        "material-symbols-rights-policy-mismatch")]
+    [InlineData(
+        "validation-required-flag",
+        "material-symbols-validation-policy-mismatch")]
     [InlineData("duplicate-semantic-id", "material-symbols-icon-duplicate")]
     [InlineData("duplicate-output-path", "material-symbols-icon-duplicate")]
     [InlineData("invalid-source-hash", "material-symbols-icon-hash-invalid")]
@@ -53,7 +119,21 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
     {
         var manifest = Manifest();
         Mutate(manifest, mutation);
-        var graph = Graph(MaterialComponent(ManifestText(manifest)));
+        var component = MaterialComponent(ManifestText(manifest));
+        if (mutation == "component-commit")
+        {
+            component = component with { Version = new string('c', 40) };
+        }
+        else if (mutation == "attribution-document")
+        {
+            component = component with
+            {
+                LegalFiles = component.LegalFiles.Where(file =>
+                    file.Kind != LegalFileKind.Attribution).ToArray(),
+            };
+        }
+
+        var graph = Graph(component);
 
         var result = ReleaseEligibilityGate.Evaluate(graph);
 
@@ -199,6 +279,10 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
                     LegalFileKind.AssetManifest,
                     "MATERIAL-SYMBOLS-MANIFEST.json",
                     manifest),
+                LegalFile(
+                    LegalFileKind.Attribution,
+                    "RIGHTS/material-symbols-attribution.txt",
+                    "Material Symbols test attribution\n"),
             ],
             Scope: NoticeScope.RuntimeBundled,
             Approval: new LegalApproval(
@@ -375,6 +459,33 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
                 break;
             case "runtime-network":
                 source["runtimeNetworkAllowed"] = true;
+                break;
+            case "component-commit":
+                break;
+            case "license-document":
+                source["licenseFile"] =
+                    "LICENSES/material-symbols/OTHER.txt";
+                break;
+            case "attribution-document":
+                break;
+            case "notice-document":
+                source["noticeStatus"] = "present";
+                break;
+            case "rights-required-flag":
+                manifest["rightsPolicy"]![
+                    "attributionDisplayedInLegalUi"] = false;
+                break;
+            case "rights-forbidden-flag":
+                manifest["rightsPolicy"]![
+                    "implyGoogleAffiliationAllowed"] = true;
+                break;
+            case "prohibited-asset-class":
+                manifest["rightsPolicy"]!["prohibitedAssetClasses"] =
+                    new JsonArray("google-logo");
+                break;
+            case "validation-required-flag":
+                manifest["validation"]![
+                    "failOnSourceOrOutputHashMismatch"] = false;
                 break;
             case "duplicate-semantic-id":
             {
