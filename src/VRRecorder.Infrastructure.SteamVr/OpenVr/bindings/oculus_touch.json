@@ -1,0 +1,30 @@
+{
+  "action_manifest_version": 1,
+  "bindings": {
+    "/actions/vrrecorder": {
+      "sources": [
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/toggle_recording"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/right/input/a"
+        },
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/toggle_recording"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/left/input/x"
+        }
+      ]
+    }
+  },
+  "controller_type": "oculus_touch",
+  "description": "Recommended VR-Recorder recording toggle for Oculus Touch controllers through SteamVR",
+  "name": "VR-Recorder Oculus Touch bindings"
+}

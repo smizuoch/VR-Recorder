@@ -105,6 +105,9 @@
           "VRRecorder.Domain": "[1.0.0, )"
         }
       },
+      "vrrecorder.designsystem": {
+        "type": "Project"
+      },
       "vrrecorder.domain": {
         "type": "Project"
       },
@@ -118,6 +121,12 @@
         "type": "Project",
         "dependencies": {
           "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.infrastructure.steamvr": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.DesignSystem": "[1.0.0, )"
         }
       },
       "vrrecorder.infrastructure.storage": {

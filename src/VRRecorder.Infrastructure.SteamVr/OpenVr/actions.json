@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "minimum_required_version": 1,
+  "default_bindings": [
+    {
+      "controller_type": "knuckles",
+      "binding_url": "bindings/knuckles.json"
+    },
+    {
+      "controller_type": "oculus_touch",
+      "binding_url": "bindings/oculus_touch.json"
+    },
+    {
+      "controller_type": "vive_controller",
+      "binding_url": "bindings/vive_controller.json"
+    }
+  ],
+  "actions": [
+    {
+      "name": "/actions/vrrecorder/in/toggle_recording",
+      "requirement": "mandatory",
+      "type": "boolean"
+    },
+    {
+      "name": "/actions/vrrecorder/in/toggle_microphone",
+      "requirement": "suggested",
+      "type": "boolean"
+    },
+    {
+      "name": "/actions/vrrecorder/in/toggle_overlay",
+      "requirement": "suggested",
+      "type": "boolean"
+    },
+    {
+      "name": "/actions/vrrecorder/in/recenter_overlay",
+      "requirement": "suggested",
+      "type": "boolean"
+    },
+    {
+      "name": "/actions/vrrecorder/out/haptic",
+      "type": "vibration"
+    }
+  ],
+  "action_sets": [
+    {
+      "name": "/actions/vrrecorder",
+      "usage": "single"
+    }
+  ],
+  "localization": [
+    {
+      "language_tag": "en_US",
+      "/actions/vrrecorder": "VR-Recorder",
+      "/actions/vrrecorder/in/toggle_recording": "Toggle recording",
+      "/actions/vrrecorder/in/toggle_microphone": "Toggle microphone",
+      "/actions/vrrecorder/in/toggle_overlay": "Show or hide wrist panel",
+      "/actions/vrrecorder/in/recenter_overlay": "Recenter wrist panel",
+      "/actions/vrrecorder/out/haptic": "VR-Recorder haptic feedback"
+    },
+    {
+      "language_tag": "ja_JP",
+      "/actions/vrrecorder": "VR-Recorder",
+      "/actions/vrrecorder/in/toggle_recording": "録画を開始または停止",
+      "/actions/vrrecorder/in/toggle_microphone": "マイクを切り替え",
+      "/actions/vrrecorder/in/toggle_overlay": "手首パネルを表示または非表示",
+      "/actions/vrrecorder/in/recenter_overlay": "手首パネルを中央へ戻す",
+      "/actions/vrrecorder/out/haptic": "VR-Recorderの振動フィードバック"
+    }
+  ]
+}

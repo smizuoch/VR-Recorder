@@ -1,0 +1,30 @@
+{
+  "action_manifest_version": 1,
+  "bindings": {
+    "/actions/vrrecorder": {
+      "sources": [
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/toggle_recording"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/right/input/application_menu"
+        },
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/toggle_recording"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/left/input/application_menu"
+        }
+      ]
+    }
+  },
+  "controller_type": "vive_controller",
+  "description": "Recommended VR-Recorder recording toggle for Vive controllers",
+  "name": "VR-Recorder Vive bindings"
+}

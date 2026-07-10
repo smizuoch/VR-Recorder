@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Presentation.Tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.App", "src\VRRecorder.App\VRRecorder.App.csproj", "{0D5CDBD5-499B-45B2-9A35-324884433709}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Infrastructure.SteamVr", "src\VRRecorder.Infrastructure.SteamVr\VRRecorder.Infrastructure.SteamVr.csproj", "{D46AF283-D538-4D3C-BDD7-33AAFD1395BD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -93,5 +95,9 @@ Global
 		{0D5CDBD5-499B-45B2-9A35-324884433709}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D5CDBD5-499B-45B2-9A35-324884433709}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D5CDBD5-499B-45B2-9A35-324884433709}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D46AF283-D538-4D3C-BDD7-33AAFD1395BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D46AF283-D538-4D3C-BDD7-33AAFD1395BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D46AF283-D538-4D3C-BDD7-33AAFD1395BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D46AF283-D538-4D3C-BDD7-33AAFD1395BD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

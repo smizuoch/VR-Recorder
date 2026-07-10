@@ -7,6 +7,9 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class SteamVrRecordingInputAdapterTests
 {
+    private static readonly string[] ExpectedControllerTypes =
+        ["knuckles", "oculus_touch", "vive_controller"];
+
     [Fact]
     public async Task DispatchesCanonicalToggleOnlyForActiveRisingEdges()
     {
@@ -60,10 +63,10 @@ public sealed class SteamVrRecordingInputAdapterTests
         var manifestPath = Path.Combine(openVrDirectory, "actions.json");
         using var manifest = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
         var root = manifest.RootElement;
-        var toggle = Assert.Single(root.GetProperty("actions")
-            .EnumerateArray()
-            .Where(action => action.GetProperty("name").GetString() ==
-                             RecordingInputContract.SteamVrToggleActionPath));
+        var toggle = Assert.Single(
+            root.GetProperty("actions").EnumerateArray(),
+            action => action.GetProperty("name").GetString() ==
+                      RecordingInputContract.SteamVrToggleActionPath);
         Assert.Equal("boolean", toggle.GetProperty("type").GetString());
         Assert.Equal("mandatory", toggle.GetProperty("requirement").GetString());
 
@@ -90,7 +93,7 @@ public sealed class SteamVrRecordingInputAdapterTests
                 item => item.GetProperty("binding_url").GetString()!,
                 StringComparer.Ordinal);
         Assert.Equal(
-            new[] { "knuckles", "oculus_touch", "vive_controller" },
+            ExpectedControllerTypes,
             bindings.Keys.Order(StringComparer.Ordinal));
         foreach (var binding in bindings)
         {
@@ -166,7 +169,8 @@ public sealed class SteamVrRecordingInputAdapterTests
     private sealed class CapturingUiCommandDispatcher : IUiCommandDispatcher
     {
         public List<(UiCommandId Command, UiActivationKind ActivationKind)>
-            Commands { get; } = [];
+            Commands
+        { get; } = [];
 
         public Task DispatchAsync(
             UiCommandId command,
