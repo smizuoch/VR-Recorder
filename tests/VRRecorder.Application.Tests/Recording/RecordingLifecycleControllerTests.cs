@@ -79,9 +79,6 @@ public sealed class RecordingLifecycleControllerTests
             new FixedLeaseIdentitySource(leaseIdentity));
         var starting = lifecycle.StartAsync(
             candidate.ServiceId,
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
             new StartRecordingCommand(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite,
@@ -113,7 +110,7 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(1, engine.StopCallCount);
         Assert.Equal(RecordingStopReason.UserRequested, sessions.StopReason);
         Assert.Equal(
-            ["lease:save", "mode:Stream", "streaming:true"],
+            ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
             events);
         engine.CompleteStop(new RecordingStopResult(
             pending,
@@ -121,7 +118,7 @@ public sealed class RecordingLifecycleControllerTests
             AudioPacketCount: 142));
         await finalizer.WaitUntilRequestedAsync();
         Assert.Equal(
-            ["lease:save", "mode:Stream", "streaming:true"],
+            ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
             events);
 
         var finalized = new FinalizedRecording(pending.FinalPath);
@@ -130,6 +127,7 @@ public sealed class RecordingLifecycleControllerTests
 
         Assert.Equal(
             [
+                "snapshot:read",
                 "lease:save",
                 "mode:Stream",
                 "streaming:true",
@@ -190,9 +188,6 @@ public sealed class RecordingLifecycleControllerTests
 
         var result = await lifecycle.StartAsync(
             selectedServiceId: null,
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
             new StartRecordingCommand(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite,
@@ -208,6 +203,91 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(RecorderState.Ready, lifecycle.State);
         Assert.Null(result.Recording);
         Assert.Empty(gateways.CreatedFor);
+        Assert.Equal(0, signal.CallCount);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
+    [Fact]
+    public async Task IncompleteSelectedSnapshotFailsBeforeLeaseOrRecordingWork()
+    {
+        var candidate = Candidate("selected-snapshot", 9000);
+        var gateway = new SnapshotCameraGateway(new CameraSnapshot(
+            ObservedCameraValue.Known(CameraMode.Photo),
+            ObservedCameraValue.Unknown<bool>()));
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(gateway));
+        var signal = new UnexpectedVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var leaseEvents = new List<string>();
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new RecordingCameraLeaseStore(leaseEvents),
+            CreateUnexpectedStartRecording(signal, reservation, engine),
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
+
+        var result = await lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            CancellationToken.None);
+
+        var failure = Assert.IsType<CameraSnapshotStartFailure>(
+            result.SnapshotFailure);
+        Assert.Equal(CameraSnapshotStartFailureKind.Incomplete, failure.Kind);
+        Assert.Equal(candidate.ServiceId, failure.VrChatServiceId);
+        Assert.Null(failure.Failure);
+        Assert.Equal(RecorderState.Ready, result.State);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.IsType<VrChatCameraConnectionResolution.Connected>(
+            result.Connection);
+        Assert.Null(result.Recording);
+        Assert.Equal(1, gateway.ReadCallCount);
+        Assert.Equal(0, gateway.WriteCallCount);
+        Assert.Empty(leaseEvents);
+        Assert.Equal(0, signal.CallCount);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
+    [Fact]
+    public async Task SelectedSnapshotReadFailureReturnsTypedFailureWithoutFallback()
+    {
+        var candidate = Candidate("selected-read-failure", 9000);
+        var expectedFailure = new TestCameraSnapshotReadException();
+        var gateway = new FailingSnapshotCameraGateway(expectedFailure);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(gateway));
+        var signal = new UnexpectedVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var leaseEvents = new List<string>();
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new RecordingCameraLeaseStore(leaseEvents),
+            CreateUnexpectedStartRecording(signal, reservation, engine),
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
+
+        var result = await lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            CancellationToken.None);
+
+        var failure = Assert.IsType<CameraSnapshotStartFailure>(
+            result.SnapshotFailure);
+        Assert.Equal(CameraSnapshotStartFailureKind.ReadFailed, failure.Kind);
+        Assert.Equal(candidate.ServiceId, failure.VrChatServiceId);
+        Assert.Same(expectedFailure, failure.Failure);
+        Assert.Equal(RecorderState.Ready, result.State);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Null(result.Recording);
+        Assert.Equal(1, gateway.ReadCallCount);
+        Assert.Equal(0, gateway.WriteCallCount);
+        Assert.Empty(leaseEvents);
         Assert.Equal(0, signal.CallCount);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);
@@ -259,9 +339,6 @@ public sealed class RecordingLifecycleControllerTests
         using var cancellation = new CancellationTokenSource();
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
             new StartRecordingCommand(
                 SelfTimer.FromSeconds(3),
                 RecordingDuration.Infinite,
@@ -273,13 +350,14 @@ public sealed class RecordingLifecycleControllerTests
         await countdown.WaitUntilRequestedAsync();
 
         Assert.Equal(
-            ["lease:save", "mode:Stream", "streaming:true"],
+            ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
             events);
         await cancellation.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start);
         Assert.Equal(
             [
+                "snapshot:read",
                 "lease:save",
                 "mode:Stream",
                 "streaming:true",
@@ -338,9 +416,6 @@ public sealed class RecordingLifecycleControllerTests
             restoreWarnings);
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
             new StartRecordingCommand(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite,
@@ -357,6 +432,7 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(RecorderState.NoSignal, lifecycle.State);
         Assert.Equal(
             [
+                "snapshot:read",
                 "lease:save",
                 "mode:Stream",
                 "streaming:true",
@@ -379,6 +455,42 @@ public sealed class RecordingLifecycleControllerTests
             new Uri($"http://127.0.0.1:{oscPort + 1000}/"),
             "127.0.0.1",
             oscPort);
+
+    private static StartRecordingCommand StartCommand() =>
+        new(
+            SelfTimer.FromSeconds(0),
+            RecordingDuration.Infinite,
+            new OutputPath(Path.GetTempPath()),
+            new FrameRate(30));
+
+    private static StartRecordingUseCase CreateUnexpectedStartRecording(
+        IVideoSignalGateway signal,
+        IRecordingFileReservation reservation,
+        IRecordingEngine engine) =>
+        new(
+            signal,
+            new ControllableCountdownTimer(),
+            reservation,
+            new FixedWallClock(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new StubStorageSpaceProbe(new StorageSpace(
+                StorageCapacityPolicy.MinimumStartBytes)),
+            new EncoderSelector(new ScriptedEncoderProbe(
+                (EncoderKind.MediaFoundationSoftware,
+                    EncoderProbeResult.PacketProduced))),
+            engine,
+            new FakeRecordingSessionActivator(),
+            new FakeRecordingStorageMonitor(),
+            new AutoStopScheduler(
+                new ControllableMonotonicClock(
+                    MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+                new FakeStopRequestSink()));
 
     private sealed class StubDiscovery(
         IReadOnlyList<VrChatInstanceCandidate> candidates)
@@ -413,6 +525,14 @@ public sealed class RecordingLifecycleControllerTests
     private sealed class FailingRestoreCameraGateway(List<string> events)
         : IVrChatCameraGateway
     {
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add("snapshot:read");
+            return Task.FromResult(KnownPhotoSnapshot());
+        }
+
         public Task SetModeAsync(
             CameraMode mode,
             CancellationToken cancellationToken)
@@ -440,6 +560,14 @@ public sealed class RecordingLifecycleControllerTests
     private sealed class RecordingCameraGateway(List<string> events)
         : IVrChatCameraGateway
     {
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add("snapshot:read");
+            return Task.FromResult(KnownPhotoSnapshot());
+        }
+
         public Task SetModeAsync(
             CameraMode mode,
             CancellationToken cancellationToken)
@@ -461,6 +589,74 @@ public sealed class RecordingLifecycleControllerTests
 
     private sealed class TestCameraRestoreException : Exception
     {
+    }
+
+    private sealed class TestCameraSnapshotReadException : Exception
+    {
+    }
+
+    private sealed class SnapshotCameraGateway(CameraSnapshot snapshot)
+        : IVrChatCameraGateway
+    {
+        public int ReadCallCount { get; private set; }
+
+        public int WriteCallCount { get; private set; }
+
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReadCallCount++;
+            return Task.FromResult(snapshot);
+        }
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken)
+        {
+            WriteCallCount++;
+            throw new InvalidOperationException("Camera writes were not expected.");
+        }
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken)
+        {
+            WriteCallCount++;
+            throw new InvalidOperationException("Camera writes were not expected.");
+        }
+    }
+
+    private sealed class FailingSnapshotCameraGateway(Exception failure)
+        : IVrChatCameraGateway
+    {
+        public int ReadCallCount { get; private set; }
+
+        public int WriteCallCount { get; private set; }
+
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReadCallCount++;
+            return Task.FromException<CameraSnapshot>(failure);
+        }
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken)
+        {
+            WriteCallCount++;
+            throw new InvalidOperationException("Camera writes were not expected.");
+        }
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken)
+        {
+            WriteCallCount++;
+            throw new InvalidOperationException("Camera writes were not expected.");
+        }
     }
 
     private sealed class RecordingCameraLeaseStore(List<string> events)
@@ -500,6 +696,10 @@ public sealed class RecordingLifecycleControllerTests
 
     private sealed class UnexpectedCameraGateway : IVrChatCameraGateway
     {
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Camera reads were not expected.");
+
         public Task SetModeAsync(
             CameraMode mode,
             CancellationToken cancellationToken) =>
@@ -534,4 +734,9 @@ public sealed class RecordingLifecycleControllerTests
             CameraLease lease,
             CancellationToken cancellationToken) => Task.CompletedTask;
     }
+
+    private static CameraSnapshot KnownPhotoSnapshot() =>
+        new(
+            ObservedCameraValue.Known(CameraMode.Photo),
+            ObservedCameraValue.Known(false));
 }

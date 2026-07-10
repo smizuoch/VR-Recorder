@@ -101,9 +101,6 @@ public sealed class RecordingLifecycleIntegrationTests
 
         var result = await lifecycle.StartAsync(
             candidate.ServiceId,
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
             new StartRecordingCommand(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite,
@@ -117,7 +114,7 @@ public sealed class RecordingLifecycleIntegrationTests
         Assert.Equal(RecorderState.Recording, lifecycle.State);
         Assert.Equal(RecorderState.Recording, sessions.State);
         Assert.Equal(
-            ["lease:save", "mode:Stream", "streaming:true"],
+            ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
             cameraEvents);
         Assert.True(File.Exists(plan.Output.TemporaryPath));
         Assert.False(File.Exists(plan.Output.FinalPath));
@@ -153,6 +150,7 @@ public sealed class RecordingLifecycleIntegrationTests
             Assert.Single(savedRecordings.Recordings).FinalPath);
         Assert.Equal(
             [
+                "snapshot:read",
                 "lease:save",
                 "mode:Stream",
                 "streaming:true",
@@ -189,6 +187,16 @@ public sealed class RecordingLifecycleIntegrationTests
     private sealed class RecordingVrChatCameraGateway(List<string> events)
         : IVrChatCameraGateway
     {
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add("snapshot:read");
+            return Task.FromResult(new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)));
+        }
+
         public Task SetModeAsync(
             CameraMode mode,
             CancellationToken cancellationToken)

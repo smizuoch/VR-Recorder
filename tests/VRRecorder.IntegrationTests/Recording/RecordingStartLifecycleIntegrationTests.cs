@@ -35,7 +35,7 @@ public sealed class RecordingStartLifecycleIntegrationTests
             new IPEndPoint(IPAddress.Loopback, 0));
         var first = Advertisement("start-alpha", httpPort: 19101);
         var selected = Advertisement("start-beta", httpPort: 19102);
-        using var http = new HttpMessageInvoker(new OscQueryFixtureHandler(
+        var oscQuery = new OscQueryFixtureHandler(
             new Dictionary<int, OscQueryFixture>
             {
                 [first.HttpPort] = new(
@@ -44,13 +44,14 @@ public sealed class RecordingStartLifecycleIntegrationTests
                 [selected.HttpPort] = new(
                     selected.InstanceName,
                     ((IPEndPoint)selectedOsc.Client.LocalEndPoint!).Port),
-            }));
+            });
+        using var http = new HttpMessageInvoker(oscQuery);
         var discovery = new OscQueryVrChatInstanceDiscovery(
             new StubOscQueryServiceBrowser([selected, first]),
             http,
             TimeSpan.FromSeconds(1));
         var gatewayFactory = new CapturingGatewayFactory(
-            new ConfirmedUdpVrChatCameraGatewayFactory());
+            new ConfirmedUdpVrChatCameraGatewayFactory(http));
         var connections = new VrChatCameraConnectionUseCase(
             new VrChatTargetResolver(discovery),
             gatewayFactory);
@@ -96,9 +97,6 @@ public sealed class RecordingStartLifecycleIntegrationTests
 
         var starting = lifecycle.StartAsync(
             selected.ServiceId,
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
             new StartRecordingCommand(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite,
@@ -169,6 +167,18 @@ public sealed class RecordingStartLifecycleIntegrationTests
         Assert.Equal(1, leaseStore.SaveCallCount);
         Assert.Equal(1, backend.OpenCallCount);
         Assert.Equal(0, firstOsc.Available);
+        Assert.Equal(
+            2,
+            oscQuery.Requests.Count(request =>
+                request.Port == first.HttpPort &&
+                request.PathAndQuery is "/usercamera/Mode" or
+                    "/usercamera/Streaming"));
+        Assert.Equal(
+            4,
+            oscQuery.Requests.Count(request =>
+                request.Port == selected.HttpPort &&
+                request.PathAndQuery is "/usercamera/Mode" or
+                    "/usercamera/Streaming"));
 
         var firstFrameAt = started.Handle.FirstPacketCommittedAt;
         await lifecycle.ObserveFreshVideoFrameAsync(
@@ -305,6 +315,8 @@ public sealed class RecordingStartLifecycleIntegrationTests
         IReadOnlyDictionary<int, OscQueryFixture> fixtures)
         : HttpMessageHandler
     {
+        public List<(int Port, string PathAndQuery)> Requests { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -313,6 +325,11 @@ public sealed class RecordingStartLifecycleIntegrationTests
             var uri = request.RequestUri ??
                       throw new InvalidOperationException(
                           "The OSCQuery request URI is missing.");
+            lock (Requests)
+            {
+                Requests.Add((uri.Port, uri.PathAndQuery));
+            }
+
             var fixture = fixtures[uri.Port];
             var json = uri.PathAndQuery switch
             {
@@ -328,10 +345,11 @@ public sealed class RecordingStartLifecycleIntegrationTests
                     """,
                 "/usercamera/Mode" => Endpoint(
                     "/usercamera/Mode",
-                    "i"),
+                    "i",
+                    "\"VALUE\": [1]"),
                 "/usercamera/Streaming" => Endpoint(
                     "/usercamera/Streaming",
-                    "T"),
+                    "F"),
                 "/usercamera/OrientationIsLandscape" => Endpoint(
                     "/usercamera/OrientationIsLandscape",
                     "T"),
@@ -348,11 +366,14 @@ public sealed class RecordingStartLifecycleIntegrationTests
             });
         }
 
-        private static string Endpoint(string path, string type) => $$"""
+        private static string Endpoint(
+            string path,
+            string type,
+            string? value = null) => $$"""
             {
               "FULL_PATH": "{{path}}",
               "TYPE": "{{type}}",
-              "ACCESS": 3
+              "ACCESS": 3{{(value is null ? string.Empty : $",\n  {value}")}}
             }
             """;
     }

@@ -31,8 +31,8 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         var first = Advertisement("select-alpha", httpPort: 19007);
         var second = Advertisement("select-beta", httpPort: 19008);
         var browser = new StubOscQueryServiceBrowser([second, first]);
-        using var invoker = new HttpMessageInvoker(
-            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+        var oscQuery = new OscQueryFixtureHandler(
+            new Dictionary<int, Fixture>
             {
                 [first.HttpPort] = new Fixture(
                     first.InstanceName,
@@ -40,13 +40,14 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                 [second.HttpPort] = new Fixture(
                     second.InstanceName,
                     ((IPEndPoint)secondOsc.Client.LocalEndPoint!).Port),
-            }));
+            });
+        using var invoker = new HttpMessageInvoker(oscQuery);
         var discovery = new OscQueryVrChatInstanceDiscovery(
             browser,
             invoker,
             TimeSpan.FromSeconds(1));
         var gateways = new CapturingGatewayFactory(
-            new ConfirmedUdpVrChatCameraGatewayFactory());
+            new ConfirmedUdpVrChatCameraGatewayFactory(invoker));
         var useCase = new VrChatCameraConnectionUseCase(
             new VrChatTargetResolver(discovery),
             gateways);
@@ -82,10 +83,9 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         var controller = new CameraSessionController(
             connected.Gateway,
             new InMemoryCameraLeaseStore());
+        var snapshot = await connected.Gateway.ReadSnapshotAsync(timeout.Token);
         var acquisition = controller.AcquireAsync(
-            new CameraSnapshot(
-                ObservedCameraValue.Known(CameraMode.Photo),
-                ObservedCameraValue.Known(false)),
+            snapshot,
             timeout.Token);
 
         var mode = await secondOsc.ReceiveAsync(timeout.Token);
@@ -103,6 +103,18 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         await acquisition;
 
         Assert.Equal(0, firstOsc.Available);
+        Assert.Equal(
+            2,
+            oscQuery.Requests.Count(request =>
+                request.Port == first.HttpPort &&
+                request.PathAndQuery is "/usercamera/Mode" or
+                    "/usercamera/Streaming"));
+        Assert.Equal(
+            4,
+            oscQuery.Requests.Count(request =>
+                request.Port == second.HttpPort &&
+                request.PathAndQuery is "/usercamera/Mode" or
+                    "/usercamera/Streaming"));
     }
 
     [Fact]
@@ -142,6 +154,40 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         Assert.Equal(
             8,
             http.Requests.Count);
+    }
+
+    [Fact]
+    public async Task SelectedGatewayRejectsSnapshotAfterOscQueryIdentityChanges()
+    {
+        var advertisement = Advertisement("identity-swap", httpPort: 19010);
+        using var osc = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var handler = new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+        {
+            [advertisement.HttpPort] = new Fixture(
+                advertisement.InstanceName,
+                ((IPEndPoint)osc.Client.LocalEndPoint!).Port),
+        });
+        using var invoker = new HttpMessageInvoker(handler);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new OscQueryVrChatInstanceDiscovery(
+                new StubOscQueryServiceBrowser([advertisement]),
+                invoker,
+                TimeSpan.FromSeconds(1))),
+            new ConfirmedUdpVrChatCameraGatewayFactory(invoker));
+        var resolution = await connections.ResolveAsync(
+            advertisement.ServiceId,
+            CancellationToken.None);
+        var connected = Assert.IsType<
+            VrChatCameraConnectionResolution.Connected>(resolution);
+        await using var gatewayLifetime = Assert.IsAssignableFrom<IAsyncDisposable>(
+            connected.Gateway);
+        handler.HostInfoNameOverrides[advertisement.HttpPort] =
+            "VRChat-Client-different-service";
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            connected.Gateway.ReadSnapshotAsync(CancellationToken.None));
+
+        Assert.Equal(0, osc.Available);
     }
 
     [Fact]
@@ -354,6 +400,9 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         public ConcurrentBag<(int Port, string PathAndQuery)> Requests
         { get; } = [];
 
+        public ConcurrentDictionary<int, string> HostInfoNameOverrides
+        { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -364,6 +413,11 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                           "The OSCQuery request URI is missing.");
             Requests.Add((uri.Port, uri.PathAndQuery));
             var fixture = _fixtures[uri.Port];
+            var hostInfoName = HostInfoNameOverrides.TryGetValue(
+                uri.Port,
+                out var overrideName)
+                ? overrideName
+                : fixture.Name;
             if (string.Equals(
                     uri.AbsolutePath,
                     fixture.MissingPath,
@@ -385,7 +439,7 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                 "/?HOST_INFO" => fixture.HostInfoJson ?? $$"""
                     {
                       "HOST_INFO": {
-                        "NAME": "{{fixture.Name}}",
+                        "NAME": "{{hostInfoName}}",
                         "OSC_IP": "127.0.0.1",
                         "OSC_PORT": {{fixture.OscPort}},
                         "OSC_TRANSPORT": "UDP"
@@ -394,10 +448,11 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                     """,
                 "/usercamera/Mode" => Endpoint(
                     "/usercamera/Mode",
-                    "i"),
+                    "i",
+                    "\"VALUE\": [1]"),
                 "/usercamera/Streaming" => Endpoint(
                     "/usercamera/Streaming",
-                    "T"),
+                    "F"),
                 "/usercamera/OrientationIsLandscape" => Endpoint(
                     "/usercamera/OrientationIsLandscape",
                     "T"),
@@ -422,11 +477,14 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             return Task.FromResult(response);
         }
 
-        private static string Endpoint(string path, string type) => $$"""
+        private static string Endpoint(
+            string path,
+            string type,
+            string? value = null) => $$"""
             {
               "FULL_PATH": "{{path}}",
               "TYPE": "{{type}}",
-              "ACCESS": 3
+              "ACCESS": 3{{(value is null ? string.Empty : $",\n  {value}")}}
             }
             """;
     }
