@@ -11,6 +11,30 @@ namespace VRRecorder.IntegrationTests.Media;
 public sealed class NativeRecordingEngineTests
 {
     [Fact]
+    public async Task DuplicateSessionIdAbortsNewlyOpenedSession()
+    {
+        var backend = new DuplicateIdNativeRecordingBackend();
+        var clock = new ControllableClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var engine = new NativeRecordingEngine(
+            backend,
+            clock,
+            new CapturingRuntimeFaultSink());
+        var firstStart = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        backend.SignalFirstVideoPacketMuxed(sessionIndex: 0);
+        await firstStart;
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => engine.StartAsync(CreatePlan(), CancellationToken.None));
+
+        Assert.Equal(
+            "Native recording session native-session-001 already exists.",
+            exception.Message);
+        Assert.Equal(0, backend.Sessions[0].AbortCallCount);
+        Assert.Equal(1, backend.Sessions[1].AbortCallCount);
+    }
+
+    [Fact]
     public async Task CancelledStopLeavesNativeSessionAvailableForRetry()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -179,6 +203,32 @@ public sealed class NativeRecordingEngineTests
             .Faulted(fault);
 
         public Task WaitUntilOpenedAsync() => _opened.Task;
+    }
+
+    private sealed class DuplicateIdNativeRecordingBackend
+        : INativeRecordingBackend
+    {
+        private readonly List<NativeRecordingCallbacks> _callbacks = [];
+        private int _nextSession;
+
+        public IReadOnlyList<StubNativeRecordingSession> Sessions { get; } =
+        [
+            new(),
+            new(),
+        ];
+
+        public Task<INativeRecordingSession> OpenAsync(
+            RecordingPlan plan,
+            NativeRecordingCallbacks callbacks,
+            CancellationToken cancellationToken)
+        {
+            _callbacks.Add(callbacks);
+            return Task.FromResult<INativeRecordingSession>(
+                Sessions[_nextSession++]);
+        }
+
+        public void SignalFirstVideoPacketMuxed(int sessionIndex) =>
+            _callbacks[sessionIndex].FirstVideoPacketMuxed();
     }
 
     private sealed class StubNativeRecordingSession : INativeRecordingSession
