@@ -8,6 +8,77 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class LegalArtifactSetGeneratorTests
 {
     [Fact]
+    public async Task RewritingBundleRemovesArtifactsNoLongerGenerated()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var first = LegalArtifactSetGenerator.Generate(
+            Context("stale-removal"),
+            eligibility.ApprovedGraph!);
+        await LegalArtifactDirectoryWriter.WriteAsync(
+            directory.Path,
+            first,
+            CancellationToken.None);
+        var removed = first.Artifacts.Single(
+            artifact => artifact.RelativePath == "LICENSES/b/LICENSE.txt");
+        var replacement = new GeneratedLegalArtifactSet(first.Artifacts
+            .Where(artifact => artifact != removed)
+            .ToArray());
+
+        await LegalArtifactDirectoryWriter.WriteAsync(
+            directory.Path,
+            replacement,
+            CancellationToken.None);
+
+        Assert.False(File.Exists(Path.Combine(
+            directory.Path,
+            "LICENSES",
+            "b",
+            "LICENSE.txt")));
+        Assert.Empty(await LegalArtifactDirectoryVerifier.VerifyAsync(
+            directory.Path,
+            replacement,
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FailedRewriteLeavesPreviouslyVerifiedBundleUntouched()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var baseline = LegalArtifactSetGenerator.Generate(
+            Context("rewrite-rollback"),
+            eligibility.ApprovedGraph!);
+        await LegalArtifactDirectoryWriter.WriteAsync(
+            directory.Path,
+            baseline,
+            CancellationToken.None);
+        var changedContent = Encoding.UTF8.GetBytes("changed before failure");
+        var invalidReplacement = new GeneratedLegalArtifactSet(
+        [
+            new GeneratedLegalArtifact(
+                "THIRD-PARTY-NOTICES.txt",
+                changedContent,
+                Hash(changedContent)),
+            new GeneratedLegalArtifact(
+                "../escape.txt",
+                Encoding.UTF8.GetBytes("invalid"),
+                Hash(Encoding.UTF8.GetBytes("invalid"))),
+        ]);
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            LegalArtifactDirectoryWriter.WriteAsync(
+                directory.Path,
+                invalidReplacement,
+                CancellationToken.None));
+
+        Assert.Empty(await LegalArtifactDirectoryVerifier.VerifyAsync(
+            directory.Path,
+            baseline,
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task UnexpectedFileIsRejectedByDirectoryVerification()
     {
         using var directory = TemporaryDirectory.Create();
