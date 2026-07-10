@@ -1,0 +1,64 @@
+using System.Collections.Concurrent;
+using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Timing;
+
+namespace VRRecorder.Infrastructure.Media;
+
+public sealed class NativeRecordingEngine : IRecordingEngine
+{
+    private readonly INativeRecordingBackend _backend;
+    private readonly IMonotonicClock _clock;
+    private readonly ConcurrentDictionary<string, INativeRecordingSession> _sessions =
+        new(StringComparer.Ordinal);
+
+    public NativeRecordingEngine(
+        INativeRecordingBackend backend,
+        IMonotonicClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+        ArgumentNullException.ThrowIfNull(clock);
+        _backend = backend;
+        _clock = clock;
+    }
+
+    public async Task<RecordingHandle> StartAsync(
+        RecordingPlan plan,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var session = await _backend
+            .OpenAsync(
+                plan,
+                () => firstPacket.TrySetResult(_clock.Now),
+                cancellationToken)
+            .ConfigureAwait(false);
+        ArgumentException.ThrowIfNullOrWhiteSpace(session.Id);
+        if (!_sessions.TryAdd(session.Id, session))
+        {
+            throw new InvalidOperationException(
+                $"Native recording session {session.Id} already exists.");
+        }
+
+        var committedAt = await firstPacket.Task
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new RecordingHandle(session.Id, committedAt);
+    }
+
+    public Task<RecordingResult> StopAsync(
+        RecordingHandle handle,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(handle);
+        if (!_sessions.TryRemove(handle.Id, out var session))
+        {
+            throw new InvalidOperationException(
+                $"Native recording session {handle.Id} is not active.");
+        }
+
+        return session.StopAsync(cancellationToken);
+    }
+}
