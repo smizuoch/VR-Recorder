@@ -1,9 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using VRRecorder.Application.Compliance;
+using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Compliance.Dependencies;
 using VRRecorder.Compliance.Generation;
 using VRRecorder.Compliance.Runtime;
+using VRRecorder.Domain.Recording;
+using VRRecorder.Presentation.Wrist;
 
 namespace VRRecorder.IntegrationTests.Compliance;
 
@@ -88,6 +93,50 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
             Assert.Equal(texts[reference.RelativePath], document.Text);
         }
 
+        var desktopSink = new CapturingComplianceFaultSink();
+        var desktop = new DesktopLegalController(
+            reader,
+            new NeverOpenedFolderOpener(),
+            desktopSink);
+        await desktop.OpenAsync(CancellationToken.None);
+        await desktop.ShowDetailAsync(component.Id, CancellationToken.None);
+        foreach (var reference in component.LegalDocuments)
+        {
+            await desktop.ShowDocumentAsync(reference, CancellationToken.None);
+            Assert.Equal(reference, desktop.State.SelectedDocument);
+            Assert.Equal(
+                texts[reference.RelativePath],
+                desktop.State.FullDocumentText);
+        }
+
+        var runtime = new TrackingRecordingRuntime();
+        await using var recordingHost = new DesktopRecordingCommandHost(
+            new ReadyRecordingRuntimeFactory(runtime));
+        await recordingHost.ActivateAsync(
+            new RecorderStartupResult(RecorderState.Ready, []),
+            CancellationToken.None);
+        var wrist = new WristLegalController(
+            reader,
+            recordingHost,
+            linesPerPage: 2);
+        await wrist.OpenAsync(CancellationToken.None);
+        await wrist.ShowDetailAsync(component.Id, CancellationToken.None);
+        var notice = component.LegalDocuments.Single(reference =>
+            reference.Kind == LegalDocumentKind.Notice);
+        await wrist.ShowDocumentAsync(notice, CancellationToken.None);
+        var wristProjection = new WristLegalProjector(
+            EnglishUiLocalizer.Instance).Project(
+                wrist.State,
+                new RecorderStatusSnapshot(
+                    Revision: 1,
+                    State: RecorderState.Recording,
+                    AvailableActions: RecorderAvailableActions.Stop));
+        Assert.Equal(manifest.Sha256, wrist.State.ManifestSha256);
+        Assert.Equal(
+            component.LegalDocuments,
+            wristProjection.Documents.Select(document => document.Reference));
+        Assert.Equal(texts[notice.RelativePath], wristProjection.DocumentPage?.Text);
+
         await File.AppendAllTextAsync(
             Path.Combine(
                 directory.Path,
@@ -95,6 +144,45 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
                 "example",
                 "NOTICE.txt"),
             "tamper");
+
+        await wrist.RefreshAsync(CancellationToken.None);
+        await desktop.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(WristLegalView.Unavailable, wrist.State.View);
+        Assert.Null(wrist.State.BundleId);
+        Assert.Null(wrist.State.ManifestSha256);
+        Assert.Null(wrist.State.SelectedComponent);
+        Assert.Null(wrist.State.SelectedDocument);
+        Assert.Null(wrist.State.FullDocumentText);
+        Assert.Empty(wrist.State.Components);
+        Assert.Equal(DesktopLegalView.Unavailable, desktop.State.View);
+        Assert.Null(desktop.State.BundleId);
+        Assert.Null(desktop.State.ManifestSha256);
+        Assert.Null(desktop.State.SelectedComponent);
+        Assert.Null(desktop.State.SelectedDocument);
+        Assert.Null(desktop.State.FullDocumentText);
+        Assert.Empty(desktop.State.Components);
+        Assert.Equal(1, desktopSink.CallCount);
+        Assert.Equal(DesktopRecordingHostState.ComplianceFault, recordingHost.State);
+        Assert.Equal(1, runtime.DisposeCallCount);
+        var permanentlyUnavailable = await Assert.ThrowsAsync<
+            DesktopRecordingUnavailableException>(() =>
+            recordingHost.ToggleAsync(CancellationToken.None));
+        Assert.Equal(
+            DesktopRecordingHostState.ComplianceFault,
+            permanentlyUnavailable.State);
+        var faultProjection = new WristLegalProjector(
+            EnglishUiLocalizer.Instance).Project(
+                wrist.State,
+                new RecorderStatusSnapshot(
+                    Revision: 2,
+                    State: RecorderState.Recording,
+                    AvailableActions: RecorderAvailableActions.Stop));
+        Assert.Null(faultProjection.DocumentPage);
+        Assert.Equal(
+            "recording.stop",
+            Assert.Single(faultProjection.FixedRecordingActions).SemanticId);
+
         var tampered = await reader.ReadDocumentAsync(
             component.Id,
             component.LegalDocuments.Single(reference =>
@@ -173,6 +261,55 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(anchor);
+        }
+    }
+
+    private sealed class CapturingComplianceFaultSink : IComplianceFaultSink
+    {
+        public int CallCount { get; private set; }
+
+        public ValueTask EnterComplianceFaultAsync()
+        {
+            CallCount++;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class NeverOpenedFolderOpener : ILegalBundleFolderOpener
+    {
+        public Task<LegalFolderOpenResult> OpenAsync(
+            string expectedBundleId,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                $"Folder {expectedBundleId} must not be opened by this test.");
+    }
+
+    private sealed class ReadyRecordingRuntimeFactory(
+        IDesktopRecordingRuntime runtime)
+        : IDesktopRecordingRuntimeFactory
+    {
+        public Task<IDesktopRecordingRuntime> InitializeAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(runtime);
+        }
+    }
+
+    private sealed class TrackingRecordingRuntime : IDesktopRecordingRuntime
+    {
+        public int DisposeCallCount { get; private set; }
+
+        public Task ToggleAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
         }
     }
 
