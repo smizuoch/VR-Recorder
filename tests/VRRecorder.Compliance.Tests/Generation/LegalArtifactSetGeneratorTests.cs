@@ -8,6 +8,37 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class LegalArtifactSetGeneratorTests
 {
     [Fact]
+    public void ArtifactSetIncludesOfflineHtmlNoticesWithContentsAndFullText()
+    {
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var generated = LegalArtifactSetGenerator.Generate(
+            Context("html-notices"),
+            eligibility.ApprovedGraph!);
+
+        var artifact = Assert.Single(
+            generated.Artifacts,
+            item => item.RelativePath == "THIRD-PARTY-NOTICES.html");
+        var html = Encoding.UTF8.GetString(artifact.Content.Span);
+
+        Assert.StartsWith("<!doctype html>\n", html, StringComparison.Ordinal);
+        Assert.Contains("<nav aria-label=\"Contents\">", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"#component-a\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"#component-b\"", html, StringComparison.Ordinal);
+        Assert.Contains("<section id=\"component-a\">", html, StringComparison.Ordinal);
+        Assert.Contains("<pre>a LICENSE\n</pre>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<link", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(" src=", html, StringComparison.OrdinalIgnoreCase);
+
+        var manifest = generated.Artifacts.Single(
+            item => item.RelativePath == "LEGAL-MANIFEST.sha256");
+        Assert.Contains(
+            $"{artifact.Sha256}  THIRD-PARTY-NOTICES.html\n",
+            Encoding.UTF8.GetString(manifest.Content.Span),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ArtifactSetIncludesDeterministicManifestForEveryPayloadFile()
     {
         var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
