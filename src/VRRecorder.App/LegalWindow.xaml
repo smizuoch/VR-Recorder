@@ -27,7 +27,7 @@
             </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0"
-                       FontSize="22"
+                       FontSize="{StaticResource Typography.HeadlineMedium.FontSize}"
                        FontWeight="SemiBold"
                        Text="{DynamicResource Legal_Title}"
                        TextWrapping="Wrap" />
@@ -36,12 +36,10 @@
                         Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
                 <TextBlock x:Name="ProductVersionText"
                            Text="{DynamicResource Legal_ProductVersion_Label}"
-                           TextWrapping="Wrap"
-                           AutomationProperties.Name="{DynamicResource Legal_ProductVersion_AccessibleName}" />
+                           TextWrapping="Wrap" />
                 <TextBlock x:Name="BundleIdentityText"
                            Text="{DynamicResource Legal_BundleIdentity_Label}"
-                           TextWrapping="Wrap"
-                           AutomationProperties.Name="{DynamicResource Legal_BundleIdentity_AccessibleName}" />
+                           TextWrapping="Wrap" />
                 <TextBlock Text="{DynamicResource Legal_NoAffiliation}"
                            Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                            TextWrapping="Wrap" />
@@ -70,8 +68,7 @@
             <StackPanel Grid.Row="4"
                         Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
                 <TextBlock x:Name="ComponentDetailText"
-                           TextWrapping="Wrap"
-                           AutomationProperties.Name="{DynamicResource Legal_ComponentDetail_AccessibleName}" />
+                           TextWrapping="Wrap" />
                 <Button x:Name="ShowLicenseButton"
                         Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                         MinHeight="{StaticResource Interaction.MinimumTarget}"

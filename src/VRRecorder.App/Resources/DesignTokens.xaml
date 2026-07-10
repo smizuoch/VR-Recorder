@@ -3,4 +3,5 @@
                     xmlns:system="clr-namespace:System;assembly=System.Runtime">
     <system:Double x:Key="Spacing.LayoutGrid">8</system:Double>
     <system:Double x:Key="Interaction.MinimumTarget">48</system:Double>
+    <system:Double x:Key="Typography.HeadlineMedium.FontSize">22</system:Double>
 </ResourceDictionary>

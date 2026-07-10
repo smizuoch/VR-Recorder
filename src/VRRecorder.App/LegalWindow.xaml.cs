@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
+using VRRecorder.DesignSystem;
 
 namespace VRRecorder.App;
 
@@ -95,12 +96,16 @@ public partial class LegalWindow : Window
         _applyingState = true;
         try
         {
-            ProductVersionText.Text = state.ProductVersion is null
-                ? Format("Legal_ProductVersion_Format", string.Empty)
-                : Format("Legal_ProductVersion_Format", state.ProductVersion);
-            BundleIdentityText.Text = state.BundleId is null
-                ? Format("Legal_BundleIdentity_Format", string.Empty)
-                : Format("Legal_BundleIdentity_Format", state.BundleId);
+            ApplyAccessibleText(ProductVersionText, AccessibleText
+                .FromLocalizedFormat(
+                    CultureInfo.CurrentCulture,
+                    Resolve("Legal_ProductVersion_Format"),
+                    state.ProductVersion ?? string.Empty));
+            ApplyAccessibleText(BundleIdentityText, AccessibleText
+                .FromLocalizedFormat(
+                    CultureInfo.CurrentCulture,
+                    Resolve("Legal_BundleIdentity_Format"),
+                    state.BundleId ?? string.Empty));
             var items = state.Components
                 .OrderBy(item => item.Id, StringComparer.Ordinal)
                 .Select(item => new LegalListItem(
@@ -114,9 +119,11 @@ public partial class LegalWindow : Window
                     item.Component.Id,
                     state.SelectedComponent.Id,
                     StringComparison.Ordinal));
-            ComponentDetailText.Text = state.SelectedComponent is null
-                ? string.Empty
-                : FormatDetail(state.SelectedComponent);
+            ApplyAccessibleText(ComponentDetailText,
+                AccessibleText.FromVisibleText(
+                    state.SelectedComponent is null
+                        ? string.Empty
+                        : FormatDetail(state.SelectedComponent)));
             FullLicenseText.Text = state.FullLicenseText ?? string.Empty;
             var available = state.View != DesktopLegalView.Unavailable;
             LegalComponentList.IsEnabled = available;
@@ -137,6 +144,14 @@ public partial class LegalWindow : Window
         {
             _applyingState = false;
         }
+    }
+
+    private static void ApplyAccessibleText(
+        TextBlock target,
+        AccessibleText semantic)
+    {
+        target.Text = semantic.VisibleText;
+        AutomationProperties.SetName(target, semantic.AutomationName);
     }
 
     private string FormatDetail(LegalCatalogComponent component) =>
