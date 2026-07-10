@@ -18,12 +18,15 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
 
     public List<string> CreatedFiles { get; } = [];
 
+    public List<RecordingPlan> StartedPlans { get; } = [];
+
     public Task<RecordingHandle> StartAsync(
         RecordingPlan plan,
         CancellationToken cancellationToken)
     {
         StartCallCount++;
-        CreatedFiles.Add("recording.recording.mp4");
+        StartedPlans.Add(plan);
+        CreatedFiles.Add(plan.Output.TemporaryPath);
         _startRequested.TrySetResult();
         return _firstPacketCommitted.Task.WaitAsync(cancellationToken);
     }

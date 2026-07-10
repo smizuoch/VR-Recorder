@@ -1,11 +1,25 @@
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
+using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Tests.Recording;
 
 public sealed class StartRecordingUseCaseTests
 {
+    private static readonly OutputPath TestOutputPath = new(Path.GetTempPath());
+    private static readonly FrameRate TestFrameRate = new(30);
+    private static readonly DateTimeOffset TestLocalNow = new(
+        2026,
+        7,
+        10,
+        12,
+        34,
+        56,
+        TimeSpan.FromHours(9));
+
     [Fact]
     public async Task ExecuteDoesNotStartEngineBeforeStableSignal()
     {
@@ -16,7 +30,7 @@ public sealed class StartRecordingUseCaseTests
         using var cancellation = new CancellationTokenSource();
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(
+            Command(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite),
             cancellation.Token);
@@ -38,7 +52,7 @@ public sealed class StartRecordingUseCaseTests
         var useCase = CreateUseCase(signal, countdown, engine);
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(
+            Command(
                 SelfTimer.FromSeconds(0),
                 RecordingDuration.Infinite),
             CancellationToken.None);
@@ -62,7 +76,7 @@ public sealed class StartRecordingUseCaseTests
         using var cancellation = new CancellationTokenSource();
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(
+            Command(
                 SelfTimer.FromSeconds(3),
                 RecordingDuration.Infinite),
             cancellation.Token);
@@ -80,6 +94,56 @@ public sealed class StartRecordingUseCaseTests
     }
 
     [Fact]
+    public async Task ReservesOutputAfterCountdownAndBeforeEngineStart()
+    {
+        var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var useCase = new StartRecordingUseCase(
+            signal,
+            countdown,
+            reservation,
+            new FixedWallClock(TestLocalNow),
+            engine,
+            CreateAutoStopScheduler());
+        var pending = new PendingRecording(
+            Path.Combine(TestOutputPath.FullPath, "take.recording.mp4"),
+            Path.Combine(TestOutputPath.FullPath, "take.mp4"));
+
+        var execution = useCase.ExecuteAsync(
+            Command(
+                SelfTimer.FromSeconds(3),
+                RecordingDuration.Infinite),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await countdown.WaitUntilRequestedAsync();
+
+        Assert.Null(reservation.RequestedDescriptor);
+        countdown.Complete();
+        await reservation.WaitUntilRequestedAsync();
+
+        Assert.Equal(0, engine.StartCallCount);
+        Assert.Equal(TestOutputPath, reservation.RequestedOutputPath);
+        Assert.Equal(1920, reservation.RequestedDescriptor?.Width);
+        Assert.Equal(1080, reservation.RequestedDescriptor?.Height);
+        Assert.Equal(TestFrameRate, reservation.RequestedDescriptor?.FrameRate);
+        Assert.Equal(
+            TestLocalNow,
+            reservation.RequestedDescriptor?.Timestamp.LocalStartedAt);
+
+        reservation.Complete(pending);
+        await engine.WaitUntilStartRequestedAsync();
+        Assert.Equal(pending, Assert.Single(engine.StartedPlans).Output);
+        engine.CommitFirstPacket(new RecordingHandle(
+            "session-001",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+
+        Assert.IsType<StartRecordingResult.Started>(await execution);
+    }
+
+    [Fact]
     public async Task AutoStopDeadlineStartsAtEngineFirstPacketCommit()
     {
         var initialNow = MonotonicTimestamp.FromElapsed(TimeSpan.Zero);
@@ -92,11 +156,13 @@ public sealed class StartRecordingUseCaseTests
         var useCase = new StartRecordingUseCase(
             signal,
             countdown,
+            CompletedReservation(),
+            new FixedWallClock(TestLocalNow),
             engine,
             autoStop);
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(
+            Command(
                 SelfTimer.FromSeconds(3),
                 RecordingDuration.FromSeconds(3)),
             CancellationToken.None);
@@ -140,7 +206,29 @@ public sealed class StartRecordingUseCaseTests
         return new StartRecordingUseCase(
             signal,
             countdown,
+            CompletedReservation(),
+            new FixedWallClock(TestLocalNow),
             engine,
             new AutoStopScheduler(clock, new FakeStopRequestSink()));
     }
+
+    private static StartRecordingCommand Command(
+        SelfTimer selfTimer,
+        RecordingDuration autoStop) =>
+        new(selfTimer, autoStop, TestOutputPath, TestFrameRate);
+
+    private static FakeRecordingFileReservation CompletedReservation()
+    {
+        var reservation = new FakeRecordingFileReservation();
+        reservation.Complete(new PendingRecording(
+            Path.Combine(TestOutputPath.FullPath, "take.recording.mp4"),
+            Path.Combine(TestOutputPath.FullPath, "take.mp4")));
+        return reservation;
+    }
+
+    private static AutoStopScheduler CreateAutoStopScheduler() =>
+        new(
+            new ControllableMonotonicClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new FakeStopRequestSink());
 }
