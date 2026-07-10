@@ -34,7 +34,7 @@ internal static class MaterialSymbolsAssetProvenanceValidator
 
         if (evidence.RightsLedgerEntry is null ||
             evidence.StagedAssets is null ||
-            !MaterialSymbolsManifestAdmissionGate.TryReadManifest(
+            !MaterialSymbolsManifestReader.TryRead(
                 graph.Components,
                 out var manifest))
         {

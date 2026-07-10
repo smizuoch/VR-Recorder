@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace VRRecorder.Compliance.Generation;
 
 internal static class MaterialSymbolsManifestAdmissionGate
@@ -26,14 +23,6 @@ internal static class MaterialSymbolsManifestAdmissionGate
         "unregistered-symbol",
         "runtime-cdn-font",
     ];
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        RespectNullableAnnotations = true,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-    };
-
     public static IReadOnlyList<ComplianceIssue> Validate(
         IReadOnlyList<NormalizedComponent> components,
         bool materialComponentRequired)
@@ -128,7 +117,9 @@ internal static class MaterialSymbolsManifestAdmissionGate
             return Order(issues);
         }
 
-        if (!TryParseManifest(manifestFile.Utf8Content, out var manifest))
+        if (!MaterialSymbolsManifestReader.TryParse(
+                manifestFile.Utf8Content,
+                out var manifest))
         {
             issues.Add(Issue(
                 "material-symbols-manifest-invalid",
@@ -159,55 +150,6 @@ internal static class MaterialSymbolsManifestAdmissionGate
         ValidateValidationPolicy(validatedManifest.Validation, issues);
         ValidateIcons(validatedManifest.SelectedIcons, issues);
         return Order(issues);
-    }
-
-    internal static bool TryReadManifest(
-        IReadOnlyList<NormalizedComponent> components,
-        out MaterialSymbolsManifestDocument? manifest)
-    {
-        manifest = null;
-        var materialComponents = components.Where(component =>
-                string.Equals(component.Id, ComponentId, StringComparison.Ordinal))
-            .ToArray();
-        if (materialComponents.Length != 1)
-        {
-            return false;
-        }
-
-        var manifests = materialComponents[0].LegalFiles.Where(file =>
-                file.Kind == LegalFileKind.AssetManifest &&
-                string.Equals(
-                    file.RelativePath,
-                    ManifestPath,
-                    StringComparison.Ordinal))
-            .ToArray();
-        return manifests.Length == 1 &&
-               TryParseManifest(manifests[0].Utf8Content, out manifest) &&
-               HasValidStructure(manifest);
-    }
-
-    private static bool TryParseManifest(
-        string utf8Content,
-        out MaterialSymbolsManifestDocument? manifest)
-    {
-        manifest = null;
-        try
-        {
-            using var json = JsonDocument.Parse(utf8Content);
-            if (ContainsDuplicateProperty(json.RootElement))
-            {
-                return false;
-            }
-
-            manifest = json.RootElement.Deserialize<
-                MaterialSymbolsManifestDocument>(
-                JsonOptions);
-            return manifest is not null;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
     }
 
     private static bool HasValidStructure(
@@ -604,27 +546,6 @@ internal static class MaterialSymbolsManifestAdmissionGate
         return values.Any(value =>
             value?.Contains('<', StringComparison.Ordinal) == true ||
             value?.Contains('>', StringComparison.Ordinal) == true);
-    }
-
-    private static bool ContainsDuplicateProperty(JsonElement element)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            var propertyNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var property in element.EnumerateObject())
-            {
-                if (!propertyNames.Add(property.Name) ||
-                    ContainsDuplicateProperty(property.Value))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return element.ValueKind == JsonValueKind.Array &&
-               element.EnumerateArray().Any(ContainsDuplicateProperty);
     }
 
     private static bool IsLowerHex(string value, int length) =>
