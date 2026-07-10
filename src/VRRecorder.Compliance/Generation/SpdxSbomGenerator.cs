@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using VRRecorder.Compliance.Dependencies;
@@ -134,7 +135,7 @@ public static class SpdxSbomGenerator
 
     private static string CreatePackageSpdxId(NuGetPackage dependency)
     {
-        var value = $"{dependency.Id}-{dependency.Version}";
+        var value = dependency.Id;
         var builder = new StringBuilder("SPDXRef-Package-");
         foreach (var character in value)
         {
@@ -144,6 +145,9 @@ public static class SpdxSbomGenerator
                     : '-');
         }
 
+        var identityHash = SHA256.HashData(
+            Encoding.UTF8.GetBytes(dependency.Identity));
+        builder.Append('-').Append(Convert.ToHexString(identityHash));
         return builder.ToString();
     }
 
