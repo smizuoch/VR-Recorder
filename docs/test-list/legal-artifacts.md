@@ -23,6 +23,10 @@
 - [x] runtime改ざんをComplianceFaultへ写像しREC actionを禁止する
 - [x] Release buildでbundle ID・manifest digest・payloadを必須化しdigestを照合する
 - [x] 検証済みstagingからbyte-identicalなZIPを一時file経由で安全に確定する
+- [ ] 選択した録画保存先へ、lifecycle／OSC／camera開始前に認証済みversion付きLegal Bundleをミラーする
+- [ ] Legal Bundleのミラー失敗・取消では録画開始とcamera writeを行わない
+- [ ] install rootからはmanifest認証済みLegal fileだけをミラーし、同居するEXE／DLL等をコピーしない
+- [ ] `CURRENT.txt`、`OPEN-NOTICES.html`、過去version、atomic置換、symlink拒否を保存先連携後も維持する
 
 ## English
 
@@ -47,3 +51,7 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Map runtime tampering to ComplianceFault and suppress the REC action
 - [x] Require the bundle ID, manifest digest, and payload for Release builds and compare the digest
 - [x] Publish a byte-identical ZIP from verified staging through a fail-safe temporary file
+- [ ] Mirror the authenticated, versioned Legal Bundle to the selected recording output before lifecycle, OSC, or camera startup
+- [ ] Do not start recording or write camera state when Legal Bundle mirroring fails or is cancelled
+- [ ] Mirror only manifest-authenticated Legal files from the install root, never colocated EXE, DLL, or other application payloads
+- [ ] Preserve `CURRENT.txt`, `OPEN-NOTICES.html`, prior versions, atomic replacement, and symlink rejection after output integration
