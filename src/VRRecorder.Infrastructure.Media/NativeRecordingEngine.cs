@@ -10,7 +10,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
     private readonly INativeRecordingBackend _backend;
     private readonly IMonotonicClock _clock;
     private readonly INativeRecordingRuntimeFaultSink _runtimeFaults;
-    private readonly ConcurrentDictionary<string, INativeRecordingSession> _sessions =
+    private readonly ConcurrentDictionary<string, ActiveSession> _sessions =
         new(StringComparer.Ordinal);
 
     public NativeRecordingEngine(
@@ -51,7 +51,8 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 cancellationToken)
             .ConfigureAwait(false);
         ArgumentException.ThrowIfNullOrWhiteSpace(session.Id);
-        if (!_sessions.TryAdd(session.Id, session))
+        var activeSession = new ActiveSession(session);
+        if (!_sessions.TryAdd(session.Id, activeSession))
         {
             throw new InvalidOperationException(
                 $"Native recording session {session.Id} already exists.");
@@ -74,17 +75,50 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         }
     }
 
-    public Task<RecordingStopResult> StopAsync(
+    public async Task<RecordingStopResult> StopAsync(
         RecordingHandle handle,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(handle);
-        if (!_sessions.TryRemove(handle.Id, out var session))
+        if (!_sessions.TryGetValue(handle.Id, out var activeSession))
         {
             throw new InvalidOperationException(
                 $"Native recording session {handle.Id} is not active.");
         }
 
-        return session.StopAsync(cancellationToken);
+        await activeSession.StopGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(handle.Id, out var currentSession) ||
+                !ReferenceEquals(activeSession, currentSession))
+            {
+                throw new InvalidOperationException(
+                    $"Native recording session {handle.Id} is not active.");
+            }
+
+            var result = await activeSession.Session
+                .StopAsync(cancellationToken)
+                .ConfigureAwait(false);
+            _sessions.TryRemove(handle.Id, out _);
+            return result;
+        }
+        finally
+        {
+            activeSession.StopGate.Release();
+        }
+    }
+
+    private sealed class ActiveSession
+    {
+        public ActiveSession(INativeRecordingSession session)
+        {
+            Session = session;
+        }
+
+        public INativeRecordingSession Session { get; }
+
+        public SemaphoreSlim StopGate { get; } = new(1, 1);
     }
 }
