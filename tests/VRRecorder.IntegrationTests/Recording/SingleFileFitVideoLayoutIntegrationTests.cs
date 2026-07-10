@@ -91,6 +91,47 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
         Assert.Same(plan, engine.Plan);
     }
 
+    [Fact]
+    [Trait("Scenario", "IT-009-Deferred")]
+    public async Task ExactFollowSegmentsIsRejectedBeforeOutputOrMediaStart()
+    {
+        var reservation = new CapturingRecordingFileReservation();
+        var engine = new CapturingRecordingEngine();
+        var useCase = new StartRecordingUseCase(
+            new StableSignalGateway(new StableVideoSignal(1920, 1080)),
+            new ImmediateCountdownTimer(),
+            reservation,
+            new FixedWallClock(),
+            new SufficientStorageProbe(),
+            new EncoderSelector(new SoftwareEncoderProbe()),
+            engine,
+            new NoOpSessionActivator(),
+            new NoOpStorageMonitor(),
+            new AutoStopScheduler(
+                new UnexpectedDelayClock(),
+                new UnexpectedStopRequestSink()));
+
+        var exception = await Assert.ThrowsAsync<
+            UnsupportedResolutionChangePolicyException>(() =>
+            useCase.ExecuteAsync(
+                new StartRecordingCommand(
+                    SelfTimer.FromSeconds(0),
+                    RecordingDuration.Infinite,
+                    new OutputPath(Path.GetTempPath()),
+                    new FrameRate(30),
+                    ResolutionChangePolicy:
+                        ResolutionChangePolicy.ExactFollowSegments),
+                CancellationToken.None));
+
+        Assert.Equal(
+            ResolutionChangePolicy.ExactFollowSegments,
+            exception.Policy);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Empty(reservation.Descriptors);
+        Assert.Equal(0, engine.StartCallCount);
+        Assert.Null(engine.Plan);
+    }
+
     private sealed class StableSignalGateway(StableVideoSignal signal)
         : IVideoSignalGateway
     {

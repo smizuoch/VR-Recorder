@@ -4,6 +4,17 @@ namespace VRRecorder.Domain.Tests.Video;
 
 public sealed class VideoGeometryTests
 {
+    [Theory]
+    [InlineData(0, 1080)]
+    [InlineData(-1, 1080)]
+    [InlineData(1920, 0)]
+    [InlineData(1920, -1)]
+    public void NonPositiveTextureDimensionsAreRejected(int width, int height)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new VideoGeometry(width, height, VideoPixelFormat.Bgra8));
+    }
+
     [Fact]
     public void HeightGreaterThanWidthIsPortrait()
     {
