@@ -47,6 +47,29 @@ public sealed class EncoderSelector
 
     public async Task<EncoderKind> SelectAsync(
         EncoderPreference preference,
+        GpuVendor candidateVendor,
+        StableVideoSignal signal,
+        int outputWidth,
+        int outputHeight,
+        FrameRate outputFrameRate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(signal);
+        return await SelectAsync(
+                preference,
+                candidateVendor,
+                encoder => EncoderProbeRequest.ForSignal(
+                    encoder,
+                    signal,
+                    outputWidth,
+                    outputHeight,
+                    outputFrameRate),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<EncoderKind> SelectAsync(
+        EncoderPreference preference,
         StableVideoSignal signal,
         int outputWidth,
         int outputHeight,

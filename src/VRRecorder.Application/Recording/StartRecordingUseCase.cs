@@ -115,15 +115,26 @@ public sealed class StartRecordingUseCase
             return new StartRecordingResult.InsufficientStorage(availableSpace);
         }
 
-        var encoder = await _encoderSelector
-            .SelectAsync(
-                command.EncoderPreference,
-                signal,
-                videoLayout.OutputCanvas.Width,
-                videoLayout.OutputCanvas.Height,
-                command.FrameRate,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var encoder = signal.HasDiscoveredSourceIdentity
+            ? await _encoderSelector
+                .SelectAsync(
+                    command.EncoderPreference,
+                    signal,
+                    videoLayout.OutputCanvas.Width,
+                    videoLayout.OutputCanvas.Height,
+                    command.FrameRate,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : await _encoderSelector
+                .SelectAsync(
+                    command.EncoderPreference,
+                    command.GpuVendor,
+                    signal,
+                    videoLayout.OutputCanvas.Width,
+                    videoLayout.OutputCanvas.Height,
+                    command.FrameRate,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
         var startedAt = new RecordingSessionTimestamp(_wallClock.LocalNow);
         var descriptor = new RecordingFileDescriptor(
