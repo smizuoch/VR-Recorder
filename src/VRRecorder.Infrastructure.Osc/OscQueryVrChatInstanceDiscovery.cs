@@ -93,15 +93,18 @@ public sealed class OscQueryVrChatInstanceDiscovery
         {
             ReadEndpointAsync(
                 queryEndpoint,
+                advertisement.ServiceId,
                 "/usercamera/Mode",
                 expectedType: "i",
                 cancellationToken),
             ReadBooleanEndpointAsync(
                 queryEndpoint,
+                advertisement.ServiceId,
                 "/usercamera/Streaming",
                 cancellationToken),
             ReadBooleanEndpointAsync(
                 queryEndpoint,
+                advertisement.ServiceId,
                 "/usercamera/OrientationIsLandscape",
                 cancellationToken),
         };
@@ -156,25 +159,51 @@ public sealed class OscQueryVrChatInstanceDiscovery
 
     private Task<bool> ReadBooleanEndpointAsync(
         Uri queryEndpoint,
+        string serviceId,
         string path,
         CancellationToken cancellationToken) =>
         ReadEndpointAsync(
             queryEndpoint,
+            serviceId,
             path,
             expectedType: null,
             cancellationToken);
 
     private async Task<bool> ReadEndpointAsync(
         Uri queryEndpoint,
+        string serviceId,
         string path,
         string? expectedType,
         CancellationToken cancellationToken)
     {
-        using var document = await ReadJsonAsync(
-                new Uri(queryEndpoint, path),
-                cancellationToken)
-            .ConfigureAwait(false);
-        var root = document.RootElement;
+        JsonDocument document;
+        try
+        {
+            document = await ReadJsonAsync(
+                    new Uri(queryEndpoint, path),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (HttpRequestException exception) when (
+            exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new VrChatCameraEndpointMissingException(
+                serviceId,
+                path,
+                exception);
+        }
+
+        using (document)
+        {
+            return IsCompatibleEndpoint(document.RootElement, path, expectedType);
+        }
+    }
+
+    private static bool IsCompatibleEndpoint(
+        JsonElement root,
+        string path,
+        string? expectedType)
+    {
         if (!TryReadString(root, "FULL_PATH", out var fullPath) ||
             !string.Equals(fullPath, path, StringComparison.Ordinal) ||
             !TryReadString(root, "TYPE", out var type) ||
