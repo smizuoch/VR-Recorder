@@ -10,14 +10,11 @@ namespace VRRecorder.Infrastructure.Storage;
 public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
 {
     private readonly string _ffprobePath;
-    private readonly RecordingMediaExpectation _expectation;
+    private readonly RecordingMediaExpectation? _defaultExpectation;
 
-    public FfprobeRecordingFileValidator(
-        string ffprobePath,
-        RecordingMediaExpectation expectation)
+    public FfprobeRecordingFileValidator(string ffprobePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ffprobePath);
-        ArgumentNullException.ThrowIfNull(expectation);
         if (!Path.IsPathFullyQualified(ffprobePath))
         {
             throw new ArgumentException(
@@ -25,15 +22,34 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
                 nameof(ffprobePath));
         }
 
-        _ffprobePath = ffprobePath;
-        _expectation = expectation;
+        _ffprobePath = Path.GetFullPath(ffprobePath);
     }
+
+    public FfprobeRecordingFileValidator(
+        string ffprobePath,
+        RecordingMediaExpectation expectation)
+        : this(ffprobePath)
+    {
+        ArgumentNullException.ThrowIfNull(expectation);
+        _defaultExpectation = expectation;
+    }
+
+    public Task<RecordingFileValidation> ValidateAsync(
+        FinalizedRecording recording,
+        CancellationToken cancellationToken) =>
+        ValidateAsync(
+            recording,
+            _defaultExpectation ?? throw new InvalidOperationException(
+                "A recording media expectation is required for validation."),
+            cancellationToken);
 
     public async Task<RecordingFileValidation> ValidateAsync(
         FinalizedRecording recording,
+        RecordingMediaExpectation expectation,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recording);
+        ArgumentNullException.ThrowIfNull(expectation);
 
         try
         {
@@ -41,7 +57,8 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
                     recording.FinalPath,
                     cancellationToken)
                 .ConfigureAwait(false);
-            return probe.ExitCode == 0 && MatchesExpectation(probe.StandardOutput)
+            return probe.ExitCode == 0 &&
+                   MatchesExpectation(probe.StandardOutput, expectation)
                 ? RecordingFileValidation.Valid
                 : RecordingFileValidation.Invalid;
         }
@@ -63,7 +80,9 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
         }
     }
 
-    private bool MatchesExpectation(string json)
+    private static bool MatchesExpectation(
+        string json,
+        RecordingMediaExpectation expectation)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -89,22 +108,22 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
                 video.GetProperty("codec_name").GetString(),
                 "h264",
                 StringComparison.Ordinal) ||
-            video.GetProperty("width").GetInt32() != _expectation.Width ||
-            video.GetProperty("height").GetInt32() != _expectation.Height ||
-            Math.Abs(ReadFrameRate(video) - _expectation.FramesPerSecond) > 0.001 ||
+            video.GetProperty("width").GetInt32() != expectation.Width ||
+            video.GetProperty("height").GetInt32() != expectation.Height ||
+            Math.Abs(ReadFrameRate(video) - expectation.FramesPerSecond) > 0.001 ||
             !string.Equals(
                 audio.GetProperty("codec_name").GetString(),
                 "aac",
                 StringComparison.Ordinal) ||
             int.Parse(
                 audio.GetProperty("sample_rate").GetString()!,
-                CultureInfo.InvariantCulture) != _expectation.AudioSampleRate ||
-            audio.GetProperty("channels").GetInt32() != _expectation.AudioChannels)
+                CultureInfo.InvariantCulture) != expectation.AudioSampleRate ||
+            audio.GetProperty("channels").GetInt32() != expectation.AudioChannels)
         {
             return false;
         }
 
-        if (_expectation.ExpectedDuration is not { } expectedDuration)
+        if (expectation.ExpectedDuration is not { } expectedDuration)
         {
             return true;
         }
