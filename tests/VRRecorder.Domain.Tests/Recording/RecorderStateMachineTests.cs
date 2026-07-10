@@ -13,4 +13,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Arming, next);
     }
+
+    [Fact]
+    public void StartRequestedWhenArmingKeepsArming()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Arming,
+            RecorderTrigger.StartRequested);
+
+        Assert.Equal(RecorderState.Arming, next);
+    }
 }
