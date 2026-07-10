@@ -34,13 +34,13 @@ public sealed class PInvokeNativeRecordingBackendTests
             AudioRouting.MicOnly,
             "{0.0.0.00000000}.desktop-日本語",
             "{0.0.1.00000000}.microphone-日本語",
-            DesktopGainDb: -12.25,
-            MicrophoneGainDb: 3.0,
+            desktopGainDb: -12.25,
+            microphoneGainDb: 3.0,
             VideoQualityPreset.Standard,
-            SpoutSenderIdentity: "VRChat-Spout-日本語-42",
-            SpoutAdapterLuid: 0x00000001ABCDEF01,
-            EncoderAdapterLuid: 0x00000001ABCDEF01,
-            GpuIdentity: "pci\\ven_10de&dev_2684|driver-32.0.15.6094");
+            spoutSenderIdentity: "VRChat-Spout-日本語-42",
+            spoutAdapterLuid: 0x00000001ABCDEF01,
+            encoderAdapterLuid: 0x00000001ABCDEF01,
+            gpuIdentity: "pci\\ven_10de&dev_2684|driver-32.0.15.6094");
         var plan = new RecordingPlan(
             signal,
             pending,

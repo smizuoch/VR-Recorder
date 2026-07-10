@@ -67,7 +67,7 @@
         },
         "qualityPreset": {
           "type": "string",
-          "enum": ["High"]
+          "enum": ["Standard", "High"]
         },
         "codec": {
           "type": "string",

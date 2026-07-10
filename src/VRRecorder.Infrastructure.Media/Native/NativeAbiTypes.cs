@@ -28,6 +28,30 @@ internal enum NativeEncoderKind : uint
     MediaFoundationSoftware = 4,
 }
 
+internal enum NativeCanvasBackground : uint
+{
+    Black = 1,
+}
+
+internal enum NativeVideoRotation : uint
+{
+    None = 1,
+}
+
+internal enum NativeAudioRouting : uint
+{
+    Mixed = 1,
+    DesktopOnly = 2,
+    MicOnly = 3,
+    Muted = 4,
+}
+
+internal enum NativeQualityPreset : uint
+{
+    Standard = 1,
+    High = 2,
+}
+
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeSessionConfigV1
 {
@@ -41,6 +65,25 @@ internal struct NativeSessionConfigV1
     public long StartedAtUnixMillisecondsUtc;
     public NativeEncoderKind Encoder;
     public uint Reserved;
+    public uint SourceWidth;
+    public uint SourceHeight;
+    public uint DestinationX;
+    public uint DestinationY;
+    public uint DestinationWidth;
+    public uint DestinationHeight;
+    public NativeCanvasBackground CanvasBackground;
+    public NativeVideoRotation Rotation;
+    public NativeAudioRouting AudioRouting;
+    public NativeQualityPreset QualityPreset;
+    public nint DesktopEndpointIdUtf8;
+    public nint MicrophoneEndpointIdUtf8;
+    public double DesktopGainDb;
+    public double MicrophoneGainDb;
+    public nint SpoutSenderIdentityUtf8;
+    public ulong SpoutAdapterLuid;
+    public ulong EncoderAdapterLuid;
+    public nint GpuIdentityUtf8;
+    public ulong ReservedV1;
 }
 
 [StructLayout(LayoutKind.Sequential)]

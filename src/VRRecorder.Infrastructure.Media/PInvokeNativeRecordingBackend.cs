@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Settings;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.Infrastructure.Media;
@@ -65,23 +67,54 @@ public sealed class PInvokeNativeRecordingBackend
     {
         var callbackState = new NativeCallbackState(plan, callbacks);
         var callbackHandle = GCHandle.Alloc(callbackState);
-        var temporaryPath = Marshal.StringToCoTaskMemUTF8(
-            plan.Output.TemporaryPath);
+        var nativeStrings = new List<nint>();
         try
         {
+            var media = plan.Media ?? throw new InvalidOperationException(
+                "The recording media configuration is required.");
+            var layout = plan.VideoLayout.CurrentLayout;
             var config = new NativeSessionConfigV1
             {
                 StructSize = checked((uint)Marshal.SizeOf<NativeSessionConfigV1>()),
                 AbiVersion = NativeAbiLibrary.SupportedAbiVersion,
-                TemporaryOutputPathUtf8 = temporaryPath,
-                Width = checked((uint)plan.VideoLayout.OutputCanvas.Width),
-                Height = checked((uint)plan.VideoLayout.OutputCanvas.Height),
+                TemporaryOutputPathUtf8 = AllocateUtf8(
+                    plan.Output.TemporaryPath,
+                    nativeStrings),
+                Width = checked((uint)layout.OutputCanvas.Width),
+                Height = checked((uint)layout.OutputCanvas.Height),
                 FramesPerSecondNumerator = checked((uint)plan.FrameRate.Value),
                 FramesPerSecondDenominator = 1,
                 StartedAtUnixMillisecondsUtc = plan.StartedAt.UtcStartedAt
                     .ToUnixTimeMilliseconds(),
                 Encoder = ToNativeEncoder(plan.Encoder),
                 Reserved = 0,
+                SourceWidth = checked((uint)layout.Source.Width),
+                SourceHeight = checked((uint)layout.Source.Height),
+                DestinationX = checked((uint)layout.Placement.OffsetX),
+                DestinationY = checked((uint)layout.Placement.OffsetY),
+                DestinationWidth = checked((uint)layout.Placement.Width),
+                DestinationHeight = checked((uint)layout.Placement.Height),
+                CanvasBackground = ToNativeBackground(layout.Background),
+                Rotation = ToNativeRotation(layout.Rotation),
+                AudioRouting = ToNativeAudioRouting(media.AudioRouting),
+                QualityPreset = ToNativeQualityPreset(media.QualityPreset),
+                DesktopEndpointIdUtf8 = AllocateUtf8(
+                    media.DesktopEndpointId,
+                    nativeStrings),
+                MicrophoneEndpointIdUtf8 = AllocateUtf8(
+                    media.MicrophoneEndpointId,
+                    nativeStrings),
+                DesktopGainDb = media.DesktopGainDb,
+                MicrophoneGainDb = media.MicrophoneGainDb,
+                SpoutSenderIdentityUtf8 = AllocateUtf8(
+                    media.SpoutSenderIdentity,
+                    nativeStrings),
+                SpoutAdapterLuid = media.SpoutAdapterLuid,
+                EncoderAdapterLuid = media.EncoderAdapterLuid,
+                GpuIdentityUtf8 = AllocateUtf8(
+                    media.GpuIdentity,
+                    nativeStrings),
+                ReservedV1 = 0,
             };
             var nativeCallbacks = new NativeCallbacksV1
             {
@@ -135,8 +168,18 @@ public sealed class PInvokeNativeRecordingBackend
         }
         finally
         {
-            Marshal.FreeCoTaskMem(temporaryPath);
+            foreach (var nativeString in nativeStrings)
+            {
+                Marshal.FreeCoTaskMem(nativeString);
+            }
         }
+    }
+
+    private static nint AllocateUtf8(string value, List<nint> allocations)
+    {
+        var nativeString = Marshal.StringToCoTaskMemUTF8(value);
+        allocations.Add(nativeString);
+        return nativeString;
     }
 
     private void AcquireSessionLease()
@@ -196,5 +239,49 @@ public sealed class PInvokeNativeRecordingBackend
                 nameof(encoder),
                 encoder,
                 "The selected encoder kind is unsupported by the native ABI."),
+        };
+
+    private static NativeCanvasBackground ToNativeBackground(
+        VideoCanvasBackground background) => background switch
+        {
+            VideoCanvasBackground.Black => NativeCanvasBackground.Black,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(background),
+                background,
+                "The canvas background is unsupported by the native ABI."),
+        };
+
+    private static NativeVideoRotation ToNativeRotation(
+        VideoRotation rotation) => rotation switch
+        {
+            VideoRotation.None => NativeVideoRotation.None,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(rotation),
+                rotation,
+                "The video rotation is unsupported by the native ABI."),
+        };
+
+    private static NativeAudioRouting ToNativeAudioRouting(
+        AudioRouting routing) => routing switch
+        {
+            AudioRouting.Mixed => NativeAudioRouting.Mixed,
+            AudioRouting.DesktopOnly => NativeAudioRouting.DesktopOnly,
+            AudioRouting.MicOnly => NativeAudioRouting.MicOnly,
+            AudioRouting.Muted => NativeAudioRouting.Muted,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(routing),
+                routing,
+                "The audio routing is unsupported by the native ABI."),
+        };
+
+    private static NativeQualityPreset ToNativeQualityPreset(
+        VideoQualityPreset preset) => preset switch
+        {
+            VideoQualityPreset.Standard => NativeQualityPreset.Standard,
+            VideoQualityPreset.High => NativeQualityPreset.High,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(preset),
+                preset,
+                "The quality preset is unsupported by the native ABI."),
         };
 }

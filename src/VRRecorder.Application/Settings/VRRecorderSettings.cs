@@ -85,6 +85,7 @@ public enum ResolutionChangePolicy
 
 public enum VideoQualityPreset
 {
+    Standard,
     High,
 }
 

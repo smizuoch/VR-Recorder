@@ -14,6 +14,9 @@ public sealed record RecordingPlan(
     EncoderKind Encoder,
     RecordingVideoLayoutSession VideoLayout)
 {
+    public RecordingMediaConfiguration Media { get; init; } =
+        RecordingMediaConfiguration.CreateDefault();
+
     public RecordingPlan(
         StableVideoSignal signal,
         PendingRecording output,
