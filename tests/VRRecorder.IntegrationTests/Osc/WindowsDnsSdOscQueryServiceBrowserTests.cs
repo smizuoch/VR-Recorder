@@ -6,6 +6,20 @@ namespace VRRecorder.IntegrationTests.Osc;
 public sealed class WindowsDnsSdOscQueryServiceBrowserTests
 {
     [Fact]
+    public async Task DefaultBrowserFailsClosedOutsideWindows()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var browser = new WindowsDnsSdOscQueryServiceBrowser();
+
+        await Assert.ThrowsAsync<PlatformNotSupportedException>(() =>
+            browser.BrowseAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task FiltersAndOrdersDistinctOscJsonServicesBeforeMapping()
     {
         var alphaId = "VRChat-Client-alpha._oscjson._tcp.local.";
