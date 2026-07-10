@@ -8,7 +8,8 @@
 - [x] 全RecorderStateを非色覚cue付きsemantic roleへ投影する
 - [x] 日本語・英語resource key/placeholderが一致する
 - [ ] desktop click・keyboard・wrist ray・SteamVR actionが同じcommand IDになる
-- [ ] WPF hostをLinuxからcross-buildし、WindowsでUI Automationを実行する
+- [x] x64 WPF hostをLinuxからcross-buildする
+- [ ] WindowsでWPF hostのUI Automationを実行する
 
 ## English
 
@@ -18,4 +19,5 @@
 - [x] Project every RecorderState to semantic roles with non-color cues
 - [x] Keep Japanese/English resource keys and placeholders in parity
 - [ ] Map desktop click, keyboard, wrist ray, and SteamVR action to one command ID
-- [ ] Cross-build the WPF host on Linux and run UI Automation on Windows
+- [x] Cross-build the x64 WPF host on Linux
+- [ ] Run WPF host UI Automation on Windows
