@@ -37,6 +37,23 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void RepositoryComplianceWorkflowWatchesCompleteLegalTemplateInventory()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var workflowPath = Path.Combine(
+            repositoryRoot,
+            ".github",
+            "workflows",
+            "repository-compliance.yml");
+
+        var workflowLines = File.ReadAllLines(workflowPath)
+            .Select(line => line.Trim())
+            .ToArray();
+
+        Assert.Contains("- legal-template/**", workflowLines);
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
