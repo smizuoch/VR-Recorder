@@ -9,6 +9,7 @@
 - [x] trailer／flush／close完了通知後だけSTOPPEDをpacket count付きで1回発行する
 - [x] FAULTEDをterminal eventにし、abort後のcallbackを抑止する
 - [x] production shared libraryのexportを承認済み6 symbolに限定しlink mapを生成する
+- [ ] SteamVR inputのversioned config/state・create/poll/destroy ABIを固定する
 - [x] managed bridgeがABI v1 callbackをFIRST／STOPPED／FAULTEDへ変換する
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
@@ -23,6 +24,7 @@
 - [x] Emit one STOPPED event with packet counts only after trailer, flush, and close completion
 - [x] Make FAULTED terminal and suppress callbacks after abort
 - [x] Limit the production shared-library exports to six approved symbols and generate a link map
+- [ ] Freeze the versioned SteamVR input config/state and create/poll/destroy ABI
 - [x] Translate ABI v1 callbacks into managed FIRST, STOPPED, and FAULTED events
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends

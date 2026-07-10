@@ -6,6 +6,12 @@
 _Static_assert(sizeof(vrrec_session_config_v1) == 40, "config ABI drift");
 _Static_assert(sizeof(vrrec_event_v1) == 48, "event ABI drift");
 _Static_assert(sizeof(vrrec_callbacks_v1) == 24, "callback ABI drift");
+_Static_assert(
+    sizeof(vrrec_steamvr_input_config_v1) == 32,
+    "SteamVR input config ABI drift");
+_Static_assert(
+    sizeof(vrrec_steamvr_digital_state_v1) == 12,
+    "SteamVR digital state ABI drift");
 #endif
 
 static void VRREC_CALL consume_event(

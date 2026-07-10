@@ -10,6 +10,8 @@ static_assert(VRREC_ABI_V1 == 1);
 static_assert(sizeof(vrrec_session_config_v1) == 40);
 static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
+static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
+static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
 
 namespace {
 
@@ -62,6 +64,17 @@ vrrec_callbacks_v1 ValidCallbacks(EventLog &log)
         VRREC_ABI_V1,
         CaptureEvent,
         &log,
+    };
+}
+
+vrrec_steamvr_input_config_v1 ValidSteamVrConfig()
+{
+    return vrrec_steamvr_input_config_v1 {
+        sizeof(vrrec_steamvr_input_config_v1),
+        VRREC_ABI_V1,
+        "/opt/VR Recorder/OpenVr/actions.json",
+        "/actions/vrrecorder",
+        "/actions/vrrecorder/in/toggle_recording",
     };
 }
 
@@ -178,6 +191,80 @@ bool FaultIsTerminalAndAbortQuiescesCallbacks()
     return true;
 }
 
+bool RejectsInvalidSteamVrAbiInputs()
+{
+    auto config = ValidSteamVrConfig();
+    auto *input = reinterpret_cast<vrrec_steamvr_input_t *>(UINTPTR_MAX);
+    CHECK(vrrec_steamvr_input_create_v1(nullptr, &input) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(input == nullptr);
+
+    config.struct_size = sizeof(config) - 1;
+    CHECK(vrrec_steamvr_input_create_v1(&config, &input) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(input == nullptr);
+
+    config = ValidSteamVrConfig();
+    config.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_steamvr_input_create_v1(&config, &input) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    CHECK(input == nullptr);
+
+    config = ValidSteamVrConfig();
+    config.action_manifest_path_utf8 = "relative/actions.json";
+    CHECK(vrrec_steamvr_input_create_v1(&config, &input) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(input == nullptr);
+    CHECK(vrrec_steamvr_input_poll_v1(nullptr, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_input_destroy_v1(nullptr);
+    return true;
+}
+
+bool PollsSteamVrDigitalStateThroughVersionedAbi()
+{
+    auto config = ValidSteamVrConfig();
+    vrrec_steamvr_input_t *input = nullptr;
+    CHECK(vrrec_steamvr_input_create_v1(&config, &input) ==
+          VRREC_STATUS_OK);
+    CHECK(input != nullptr);
+    CHECK(vrrecorder::native::testing::SteamVrManifestPath() ==
+          config.action_manifest_path_utf8);
+    CHECK(vrrecorder::native::testing::SteamVrActionSetPath() ==
+          config.action_set_path_utf8);
+    CHECK(vrrecorder::native::testing::SteamVrDigitalActionPath() ==
+          config.digital_action_path_utf8);
+
+    vrrecorder::native::testing::SetSteamVrDigitalState(
+        true,
+        true,
+        true);
+    vrrec_steamvr_digital_state_v1 state {
+        sizeof(vrrec_steamvr_digital_state_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+        0,
+    };
+    CHECK(vrrec_steamvr_input_poll_v1(input, &state) == VRREC_STATUS_OK);
+    CHECK(state.is_active == 1);
+    CHECK(state.state == 1);
+    CHECK(state.changed == 1);
+    CHECK(state.reserved == 0);
+    CHECK(vrrecorder::native::testing::SteamVrPollCount() == 1);
+
+    state.struct_size = sizeof(state) - 1;
+    CHECK(vrrec_steamvr_input_poll_v1(input, &state) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    state.struct_size = sizeof(state);
+    state.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_steamvr_input_poll_v1(input, &state) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    vrrec_steamvr_input_destroy_v1(input);
+    return true;
+}
+
 }
 
 int main()
@@ -185,7 +272,9 @@ int main()
     if (vrrec_abi_version() != VRREC_ABI_V1 ||
         !RejectsInvalidAbiInputs() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
-        !FaultIsTerminalAndAbortQuiescesCallbacks()) {
+        !FaultIsTerminalAndAbortQuiescesCallbacks() ||
+        !RejectsInvalidSteamVrAbiInputs() ||
+        !PollsSteamVrDigitalStateThroughVersionedAbi()) {
         return 1;
     }
 
