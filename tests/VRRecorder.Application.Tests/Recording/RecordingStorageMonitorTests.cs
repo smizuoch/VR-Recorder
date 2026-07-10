@@ -20,15 +20,16 @@ public sealed class RecordingStorageMonitorTests
         var stopRequests = new FakeStopRequestSink();
         var handle = new RecordingHandle("session-001", firstPacketAt);
         var monitor = new RecordingStorageMonitor(
-            handle,
-            outputPath,
             estimatedBytesPerSecond: 10_000_000,
             clock,
             storage,
             statuses,
             stopRequests);
 
-        var monitoring = monitor.RunAsync(CancellationToken.None);
+        var monitoring = monitor.RunAsync(
+            handle,
+            outputPath,
+            CancellationToken.None);
         var firstDeadline = await clock.WaitUntilDeadlineRequestedAsync();
 
         Assert.Equal(

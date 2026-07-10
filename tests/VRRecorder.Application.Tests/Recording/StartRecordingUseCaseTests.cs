@@ -99,6 +99,7 @@ public sealed class StartRecordingUseCaseTests
         var signal = new ControllableVideoSignalGateway();
         var countdown = new ControllableCountdownTimer();
         var reservation = new FakeRecordingFileReservation();
+        var storageMonitor = new FakeRecordingStorageMonitor();
         var engine = new FakeRecordingEngine();
         var useCase = new StartRecordingUseCase(
             signal,
@@ -107,6 +108,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
             engine,
+            storageMonitor,
             CreateAutoStopScheduler());
         var pending = new PendingRecording(
             Path.Combine(TestOutputPath.FullPath, "take.recording.mp4"),
@@ -137,11 +139,17 @@ public sealed class StartRecordingUseCaseTests
         reservation.Complete(pending);
         await engine.WaitUntilStartRequestedAsync();
         Assert.Equal(pending, Assert.Single(engine.StartedPlans).Output);
-        engine.CommitFirstPacket(new RecordingHandle(
+        Assert.Empty(storageMonitor.Requests);
+        var handle = new RecordingHandle(
             "session-001",
-            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        engine.CommitFirstPacket(handle);
 
-        Assert.IsType<StartRecordingResult.Started>(await execution);
+        var started = Assert.IsType<StartRecordingResult.Started>(await execution);
+        var monitorRequest = Assert.Single(storageMonitor.Requests);
+        Assert.Equal(handle, monitorRequest.Handle);
+        Assert.Equal(TestOutputPath, monitorRequest.OutputPath);
+        Assert.True(started.StorageMonitoringCompletion.IsCompletedSuccessfully);
     }
 
     [Fact]
@@ -160,6 +168,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             storage,
             engine,
+            new FakeRecordingStorageMonitor(),
             CreateAutoStopScheduler());
 
         var execution = useCase.ExecuteAsync(
@@ -200,6 +209,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
             engine,
+            new FakeRecordingStorageMonitor(),
             autoStop);
 
         var execution = useCase.ExecuteAsync(
@@ -251,6 +261,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
             engine,
+            new FakeRecordingStorageMonitor(),
             new AutoStopScheduler(clock, new FakeStopRequestSink()));
     }
 
