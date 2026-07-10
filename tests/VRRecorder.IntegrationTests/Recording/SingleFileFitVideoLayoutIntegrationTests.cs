@@ -53,8 +53,12 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
             new VideoGeometry(1082, 1922, VideoPixelFormat.Nv12),
             initial.OutputCanvas);
         Assert.Equal(
-            new VideoPlacement(0, 0, 1081, 1921),
+            VideoContainCalculator.Calculate(
+                initial.Source,
+                initial.OutputCanvas),
             initial.Placement);
+        Assert.Equal(0, initial.Placement.Width % 2);
+        Assert.Equal(0, initial.Placement.Height % 2);
         Assert.Equal(VideoCanvasBackground.Black, initial.Background);
         Assert.Equal(VideoRotation.None, initial.Rotation);
 
@@ -80,6 +84,27 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
         Assert.Equal(VideoCanvasBackground.Black, portrait.Background);
         Assert.Equal(VideoRotation.None, portrait.Rotation);
         Assert.Equal(portrait, plan.VideoLayout.CurrentLayout);
+
+        var returnedToInitialDimensions =
+            plan.VideoLayout.ApplyStableSignal(
+                new StableVideoSignal(1081, 1921));
+
+        Assert.Equal(initial.Source, returnedToInitialDimensions.Source);
+        Assert.Equal(initial.OutputCanvas, returnedToInitialDimensions.OutputCanvas);
+        Assert.Equal(
+            VideoContainCalculator.Calculate(
+                returnedToInitialDimensions.Source,
+                returnedToInitialDimensions.OutputCanvas),
+            returnedToInitialDimensions.Placement);
+        Assert.Equal(0, returnedToInitialDimensions.Placement.Width % 2);
+        Assert.Equal(0, returnedToInitialDimensions.Placement.Height % 2);
+        Assert.Equal(
+            VideoCanvasBackground.Black,
+            returnedToInitialDimensions.Background);
+        Assert.Equal(VideoRotation.None, returnedToInitialDimensions.Rotation);
+        Assert.Equal(
+            returnedToInitialDimensions,
+            plan.VideoLayout.CurrentLayout);
 
         var descriptor = Assert.Single(reservation.Descriptors);
         Assert.Equal(initial.OutputCanvas.Width, descriptor.Width);
