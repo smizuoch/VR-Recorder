@@ -1,5 +1,6 @@
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Domain.Storage;
@@ -176,9 +177,18 @@ public sealed class LegalBundleMirroringDesktopRecordingStartRequestSourceTests
     private sealed class NeverStartedRecordingLifecycle
         : IRecordingLifecycleController
     {
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+
         public RecorderState State => RecorderState.Ready;
 
+        public RecorderStatusSnapshot Current => _statuses.Current;
+
         public int StartCallCount { get; private set; }
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
 
         public Task<RecordingLifecycleStartResult> StartAsync(
             string? selectedServiceId,
@@ -192,6 +202,7 @@ public sealed class LegalBundleMirroringDesktopRecordingStartRequestSourceTests
 
         public void Dispose()
         {
+            _statuses.Dispose();
         }
     }
 

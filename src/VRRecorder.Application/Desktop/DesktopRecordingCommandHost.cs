@@ -1,5 +1,6 @@
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Recording;
 
@@ -7,21 +8,28 @@ namespace VRRecorder.Application.Desktop;
 
 public sealed class DesktopRecordingCommandHost
     : IAsyncDisposable,
-      IComplianceFaultSink
+      IComplianceFaultSink,
+      IRecorderStatusSource
 {
     private const string UnexpectedInitializationFailureCode =
         "RECORDING_INITIALIZATION_FAILED";
     private readonly object _gate = new();
+    private readonly object _statusGate = new();
     private readonly IDesktopRecordingRuntimeFactory _runtimeFactory;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly RecorderStatusHub _statuses = new(
+        RecorderStatusSnapshot.Create(0, RecorderState.Booting));
     private Task<DesktopRecordingHostActivation>? _activationTask;
     private Task? _toggleTask;
     private Task? _shutdownTask;
     private Task? _disposeTask;
     private IDesktopRecordingRuntime? _runtime;
+    private IDisposable? _runtimeStatusSubscription;
     private DesktopRecordingHostState _state = DesktopRecordingHostState.Booting;
     private DesktopRecordingInitializationFailure? _failure;
     private RecordingStopReason? _shutdownReason;
+    private long _statusRevision;
+    private bool _terminalStatus;
     private bool _complianceFaulted;
     private bool _disposed;
 
@@ -42,6 +50,11 @@ public sealed class DesktopRecordingCommandHost
             }
         }
     }
+
+    public RecorderStatusSnapshot Current => _statuses.Current;
+
+    public IDisposable Subscribe(Action<RecorderStatusSnapshot> subscriber) =>
+        _statuses.Subscribe(subscriber);
 
     public Task<DesktopRecordingHostActivation> ActivateAsync(
         RecorderStartupResult startup,
@@ -152,6 +165,7 @@ public sealed class DesktopRecordingCommandHost
 
         if (cancelLifetime)
         {
+            PublishStatus(RecorderState.ComplianceFault);
             CancelLifetime();
         }
 
@@ -194,6 +208,7 @@ public sealed class DesktopRecordingCommandHost
             var code = exception is DesktopRecordingInitializationException failure
                 ? failure.Code
                 : UnexpectedInitializationFailureCode;
+            DesktopRecordingHostActivation activation;
             lock (_gate)
             {
                 if (_disposed)
@@ -212,8 +227,13 @@ public sealed class DesktopRecordingCommandHost
                     code,
                     exception.Message);
                 _state = DesktopRecordingHostState.InitializationFailed;
-                return new DesktopRecordingHostActivation(_state, _failure);
+                activation = new DesktopRecordingHostActivation(
+                    _state,
+                    _failure);
             }
+
+            PublishStatus(RecorderState.Faulted);
+            return activation;
         }
 
         lock (_gate)
@@ -232,6 +252,8 @@ public sealed class DesktopRecordingCommandHost
             }
 
             _state = DesktopRecordingHostState.Ready;
+            _runtimeStatusSubscription = runtime.Subscribe(status =>
+                PublishStatus(status.State));
             return new DesktopRecordingHostActivation(
                 _state,
                 Failure: null);
@@ -241,8 +263,15 @@ public sealed class DesktopRecordingCommandHost
     private async Task DisposeCoreAsync()
     {
         await Task.Yield();
-        await EnsureShutdownStarted().ConfigureAwait(false);
-        _lifetime.Dispose();
+        try
+        {
+            await EnsureShutdownStarted().ConfigureAwait(false);
+        }
+        finally
+        {
+            _statuses.Dispose();
+            _lifetime.Dispose();
+        }
     }
 
     private Task EnsureShutdownStarted()
@@ -284,7 +313,38 @@ public sealed class DesktopRecordingCommandHost
             .ConfigureAwait(false);
         if (runtime is not null)
         {
-            await runtime.ShutdownAsync(reason).ConfigureAwait(false);
+            try
+            {
+                await runtime.ShutdownAsync(reason).ConfigureAwait(false);
+            }
+            finally
+            {
+                IDisposable? subscription;
+                lock (_gate)
+                {
+                    subscription = _runtimeStatusSubscription;
+                    _runtimeStatusSubscription = null;
+                }
+
+                subscription?.Dispose();
+            }
+        }
+    }
+
+    private void PublishStatus(RecorderState state)
+    {
+        lock (_statusGate)
+        {
+            if (_terminalStatus || _statuses.Current.State == state)
+            {
+                return;
+            }
+
+            _terminalStatus = state is
+                RecorderState.Faulted or RecorderState.ComplianceFault;
+            _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                checked(++_statusRevision),
+                state));
         }
     }
 

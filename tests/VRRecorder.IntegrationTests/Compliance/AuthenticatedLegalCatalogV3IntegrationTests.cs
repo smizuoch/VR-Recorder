@@ -317,9 +317,18 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
 
     private sealed class TrackingRecordingRuntime : IDesktopRecordingRuntime
     {
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+
         public int DisposeCallCount { get; private set; }
 
         public List<RecordingStopReason> ShutdownReasons { get; } = [];
+
+        public RecorderStatusSnapshot Current => _statuses.Current;
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
@@ -336,6 +345,7 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
         public ValueTask DisposeAsync()
         {
             DisposeCallCount++;
+            _statuses.Dispose();
             return ValueTask.CompletedTask;
         }
     }

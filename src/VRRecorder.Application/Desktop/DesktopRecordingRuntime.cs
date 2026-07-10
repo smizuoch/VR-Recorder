@@ -14,7 +14,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private readonly IStopRequestSink _stopRequests;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly RecorderStatusHub _statuses;
-    private readonly IDisposable? _lifecycleStatusSubscription;
+    private readonly IDisposable _lifecycleStatusSubscription;
     private RecordingHandle? _activeHandle;
     private Task? _sessionStopTask;
     private Task? _transportToggleTask;
@@ -38,11 +38,8 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         _stopRequests = stopRequests;
         _statuses = new RecorderStatusHub(
             RecorderStatusSnapshot.Create(0, lifecycle.State));
-        if (lifecycle is IRecorderStatusSource statusSource)
-        {
-            _lifecycleStatusSubscription = statusSource.Subscribe(status =>
-                PublishStatus(status.State));
-        }
+        _lifecycleStatusSubscription = lifecycle.Subscribe(status =>
+            PublishStatus(status.State));
     }
 
     public RecorderStatusSnapshot Current => _statuses.Current;
@@ -286,7 +283,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         {
             try
             {
-                _lifecycleStatusSubscription?.Dispose();
+                _lifecycleStatusSubscription.Dispose();
                 _lifecycle.Dispose();
             }
             finally

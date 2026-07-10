@@ -5,6 +5,7 @@ using System.Text;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Compliance.Dependencies;
 using VRRecorder.Compliance.Generation;
@@ -393,9 +394,18 @@ public sealed class DesktopLegalViewerIntegrationTests
 
     private sealed class TrackingRecordingRuntime : IDesktopRecordingRuntime
     {
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+
         public int DisposeCallCount { get; private set; }
 
         public List<RecordingStopReason> ShutdownReasons { get; } = [];
+
+        public RecorderStatusSnapshot Current => _statuses.Current;
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
@@ -412,6 +422,7 @@ public sealed class DesktopLegalViewerIntegrationTests
         public ValueTask DisposeAsync()
         {
             DisposeCallCount++;
+            _statuses.Dispose();
             return ValueTask.CompletedTask;
         }
     }

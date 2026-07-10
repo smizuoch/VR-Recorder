@@ -1,9 +1,12 @@
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Ports;
 
-public interface IRecordingLifecycleController : IDisposable
+public interface IRecordingLifecycleController
+    : IDisposable,
+      IRecorderStatusSource
 {
     RecorderState State { get; }
 

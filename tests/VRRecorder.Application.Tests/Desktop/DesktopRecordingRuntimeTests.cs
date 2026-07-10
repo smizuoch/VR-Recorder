@@ -694,8 +694,13 @@ public sealed class DesktopRecordingRuntimeTests
             TaskCompletionSource<RecordingLifecycleStartResult>> _starts = [];
         private readonly TaskCompletionSource _startRequested = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        private long _statusRevision;
 
-        public RecorderState State { get; private set; } = RecorderState.Ready;
+        public RecorderState State => Current.State;
+
+        public RecorderStatusSnapshot Current => _statuses.Current;
 
         public RecorderState? NextStartStateOverride { get; init; }
 
@@ -704,6 +709,10 @@ public sealed class DesktopRecordingRuntimeTests
         { get; } = [];
 
         public int DisposeCallCount { get; private set; }
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
 
         public TaskCompletionSource<RecordingLifecycleStartResult> EnqueuePending()
         {
@@ -722,7 +731,7 @@ public sealed class DesktopRecordingRuntimeTests
             CancellationToken cancellationToken)
         {
             StartRequests.Add((selectedServiceId, command));
-            State = RecorderState.Arming;
+            SetState(RecorderState.Arming);
             _startRequested.TrySetResult();
             try
             {
@@ -730,21 +739,33 @@ public sealed class DesktopRecordingRuntimeTests
                     .Dequeue()
                     .Task
                     .WaitAsync(cancellationToken);
-                State = NextStartStateOverride ?? result.State;
+                SetState(NextStartStateOverride ?? result.State);
                 return result;
             }
             catch (OperationCanceledException)
             {
-                State = RecorderState.Ready;
+                SetState(RecorderState.Ready);
                 throw;
             }
         }
 
-        public void SetState(RecorderState state) => State = state;
+        public void SetState(RecorderState state)
+        {
+            if (Current.State != state)
+            {
+                _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                    ++_statusRevision,
+                    state));
+            }
+        }
 
         public Task WaitUntilStartRequestedAsync() => _startRequested.Task;
 
-        public void Dispose() => DisposeCallCount++;
+        public void Dispose()
+        {
+            DisposeCallCount++;
+            _statuses.Dispose();
+        }
     }
 
     private sealed class ControllableStopRequestSink(
