@@ -480,6 +480,44 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopProductionFactoryRecoversConfiguredStaleRecordingsBeforeMediaPreflight()
+    {
+        var factory = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+
+        foreach (var productionType in new[]
+                 {
+                     "JsonFileSettingsStore",
+                     "RecordingOutputPathResolver",
+                     "WindowsDownloadsOutputPathProvider",
+                     "StaleRecordingRecoveryUseCase",
+                     "FileSystemStaleRecordingCatalog",
+                     "FileSystemRecordingRecoveryStore",
+                 })
+        {
+            Assert.Contains(productionType, factory);
+        }
+
+        Assert.Contains("settings.Recording.OutputFolder", factory);
+        Assert.Contains("outputPath.FullPath", factory);
+        var recovery = factory.IndexOf(
+            "await RecoverStaleRecordingsAsync(",
+            StringComparison.Ordinal);
+        var mediaPreflight = factory.IndexOf(
+            "File.Exists(nativeLibraryPath)",
+            StringComparison.Ordinal);
+        Assert.True(
+            recovery >= 0,
+            "Production stale-recording recovery is missing.");
+        Assert.True(
+            mediaPreflight > recovery,
+            "Stale recordings must be quarantined before media preflight.");
+    }
+
+    [Fact]
     public void DesktopProductionFactoryComposesConcreteRecordingRuntime()
     {
         var appDirectory = Path.Combine(
