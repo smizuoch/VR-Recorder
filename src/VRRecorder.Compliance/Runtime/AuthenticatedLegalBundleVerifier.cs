@@ -48,6 +48,11 @@ public sealed class AuthenticatedLegalBundleVerifier
             return Reject("legal-bundle-missing", root);
         }
 
+        if (ContainsReparsePoint(root, ManifestFileName))
+        {
+            return Reject("legal-bundle-reparse-point", ManifestFileName);
+        }
+
         var manifestBytes = await File
             .ReadAllBytesAsync(manifestPath, cancellationToken)
             .ConfigureAwait(false);
@@ -162,6 +167,13 @@ public sealed class AuthenticatedLegalBundleVerifier
             {
                 return new ComplianceIssue(
                     "legal-bundle-payload-missing",
+                    entry.RelativePath);
+            }
+
+            if (ContainsReparsePoint(root, entry.RelativePath))
+            {
+                return new ComplianceIssue(
+                    "legal-bundle-reparse-point",
                     entry.RelativePath);
             }
 
@@ -285,6 +297,23 @@ public sealed class AuthenticatedLegalBundleVerifier
                 {
                     return true;
                 }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsReparsePoint(
+        string root,
+        string relativePath)
+    {
+        var current = root;
+        foreach (var segment in relativePath.Split('/'))
+        {
+            current = Path.Combine(current, segment);
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                return true;
             }
         }
 
