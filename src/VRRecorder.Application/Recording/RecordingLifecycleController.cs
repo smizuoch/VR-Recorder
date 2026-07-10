@@ -8,7 +8,7 @@ using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Recording;
 
-public sealed class RecordingLifecycleController : IDisposable
+public sealed class RecordingLifecycleController : IRecordingLifecycleController
 {
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _operationGate = new(1, 1);

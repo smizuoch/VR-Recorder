@@ -7,4 +7,5 @@ public enum RecordingStopReason
     SignalLost,
     DiskLow,
     EncoderFailure,
+    ApplicationShutdown,
 }
