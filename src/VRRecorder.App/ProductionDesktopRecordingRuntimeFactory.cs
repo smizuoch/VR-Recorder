@@ -31,6 +31,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
     {
         cancellationToken.ThrowIfCancellationRequested();
         await RecoverStaleCameraLeaseAsync(cancellationToken);
+        await RecoverStaleRecordingsAsync(cancellationToken);
 
         var nativeLibraryPath = Path.Combine(
             AppContext.BaseDirectory,
@@ -183,11 +184,28 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         EnsureRecoverySucceeded(result, warnings.Warning);
     }
 
+    private static async Task RecoverStaleRecordingsAsync(
+        CancellationToken cancellationToken)
+    {
+        var settings = await new JsonFileSettingsStore(SettingsPath())
+            .LoadAsync(cancellationToken);
+        var outputPath = new RecordingOutputPathResolver(
+                new WindowsDownloadsOutputPathProvider())
+            .Resolve(settings.Recording.OutputFolder);
+        await new StaleRecordingRecoveryUseCase(
+                new FileSystemStaleRecordingCatalog(),
+                new FileSystemRecordingRecoveryStore())
+            .ExecuteAsync(outputPath.FullPath, cancellationToken);
+    }
+
     private static string CameraLeasePath()
     {
-        var settingsPath = new WindowsSettingsPathProvider().GetPath();
+        var settingsPath = SettingsPath();
         return CameraLeasePath(settingsPath);
     }
+
+    private static string SettingsPath() =>
+        new WindowsSettingsPathProvider().GetPath();
 
     private static string CameraLeasePath(string settingsPath)
     {

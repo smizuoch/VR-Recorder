@@ -2,7 +2,6 @@ using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Encoding;
-using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
 
@@ -11,10 +10,8 @@ namespace VRRecorder.Application.Desktop;
 public sealed class SettingsDesktopRecordingStartRequestSource
     : IDesktopRecordingStartRequestSource
 {
-    private const string DownloadsKnownFolderToken = "knownfolder:Downloads";
-    private const string KnownFolderTokenPrefix = "knownfolder:";
     private readonly ISettingsStore _settings;
-    private readonly IDefaultOutputPathProvider _defaultOutputPaths;
+    private readonly RecordingOutputPathResolver _outputPaths;
 
     public SettingsDesktopRecordingStartRequestSource(
         ISettingsStore settings,
@@ -23,7 +20,7 @@ public sealed class SettingsDesktopRecordingStartRequestSource
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(defaultOutputPaths);
         _settings = settings;
-        _defaultOutputPaths = defaultOutputPaths;
+        _outputPaths = new RecordingOutputPathResolver(defaultOutputPaths);
     }
 
     public async Task<DesktopRecordingStartRequest> GetAsync(
@@ -66,7 +63,8 @@ public sealed class SettingsDesktopRecordingStartRequestSource
         var frameRate = new FrameRate(settings.Video.FrameRate);
         var media = MapMedia(settings);
         cancellationToken.ThrowIfCancellationRequested();
-        var outputPath = ResolveOutputPath(settings.Recording.OutputFolder);
+        var outputPath = _outputPaths.Resolve(
+            settings.Recording.OutputFolder);
         cancellationToken.ThrowIfCancellationRequested();
 
         return new DesktopRecordingStartRequest(
@@ -104,41 +102,4 @@ public sealed class SettingsDesktopRecordingStartRequestSource
             unidentifiedHardware.GpuIdentity);
     }
 
-    private OutputPath ResolveOutputPath(string configuredPath)
-    {
-        if (string.Equals(
-                configuredPath,
-                DownloadsKnownFolderToken,
-                StringComparison.Ordinal))
-        {
-            return _defaultOutputPaths.GetDefault() ??
-                   throw new InvalidDataException(
-                       "The Downloads known folder could not be resolved.");
-        }
-
-        if (configuredPath.StartsWith(
-                KnownFolderTokenPrefix,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException(
-                "The configured output known-folder token is not supported.");
-        }
-
-        if (configuredPath.Any(char.IsControl))
-        {
-            throw new InvalidDataException(
-                "The configured output path contains control characters.");
-        }
-
-        try
-        {
-            return new OutputPath(configuredPath);
-        }
-        catch (ArgumentException exception)
-        {
-            throw new InvalidDataException(
-                "The configured output path must be a safe absolute path.",
-                exception);
-        }
-    }
 }
