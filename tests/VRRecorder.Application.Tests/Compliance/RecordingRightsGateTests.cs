@@ -39,7 +39,14 @@ public sealed class RecordingRightsGateTests
         };
         var gate = new RecordingRightsGate(
             store,
-            new FixedWallClock(DateTimeOffset.UnixEpoch));
+            new FixedWallClock(new DateTimeOffset(
+                2026,
+                7,
+                11,
+                0,
+                0,
+                0,
+                TimeSpan.Zero)));
 
         Assert.True(await gate.IsAcknowledgedAsync(CancellationToken.None));
     }
