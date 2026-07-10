@@ -12,6 +12,29 @@ public sealed class AuthenticatedLegalBundleVerifier
         throwOnInvalidBytes: true);
     private const string ManifestFileName = "LEGAL-MANIFEST.sha256";
     private const string CatalogFileName = "THIRD-PARTY-COMPONENTS.json";
+    private static readonly HashSet<string> LegalOwnedDirectories = new(
+        [
+            "LICENSES",
+            "COPYRIGHTS",
+            "SBOM",
+            "SOURCE-OFFERS",
+            "SOURCES",
+            "RIGHTS",
+        ],
+        StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> CanonicalLegalRootFiles = new(
+        [
+            "THIRD-PARTY-NOTICES.txt",
+            "THIRD-PARTY-NOTICES.html",
+            CatalogFileName,
+            "MATERIAL-SYMBOLS-MANIFEST.json",
+            "M3-SOURCE-INVENTORY.json",
+            "M3-CONFORMANCE-REPORT.json",
+            "DESIGN-TOKENS.json",
+            "LOCALIZATION-CONTRACT.json",
+            ManifestFileName,
+        ],
+        StringComparer.OrdinalIgnoreCase);
     private readonly IAuthenticatedLegalBundleAnchorSource _anchors;
 
     public AuthenticatedLegalBundleVerifier(
@@ -23,9 +46,24 @@ public sealed class AuthenticatedLegalBundleVerifier
 
     public async Task<LegalBundleVerification> VerifyAsync(
         string bundleDirectory,
+        CancellationToken cancellationToken) =>
+        await VerifyAsync(
+                bundleDirectory,
+                LegalBundleVerificationScope.StrictIsolatedBundle,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<LegalBundleVerification> VerifyAsync(
+        string bundleDirectory,
+        LegalBundleVerificationScope verificationScope,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleDirectory);
+        if (!Enum.IsDefined(verificationScope))
+        {
+            throw new ArgumentOutOfRangeException(nameof(verificationScope));
+        }
+
         AuthenticatedLegalBundleAnchor anchor;
         try
         {
@@ -68,6 +106,7 @@ public sealed class AuthenticatedLegalBundleVerifier
         var payloadIssue = await VerifyPayloadsAsync(
                 root,
                 manifestBytes,
+                verificationScope,
                 cancellationToken)
             .ConfigureAwait(false);
         if (payloadIssue is not null)
@@ -143,6 +182,7 @@ public sealed class AuthenticatedLegalBundleVerifier
     private static async Task<ComplianceIssue?> VerifyPayloadsAsync(
         string root,
         byte[] manifestBytes,
+        LegalBundleVerificationScope verificationScope,
         CancellationToken cancellationToken)
     {
         List<ManifestEntry> entries;
@@ -211,6 +251,10 @@ public sealed class AuthenticatedLegalBundleVerifier
                 .Replace(Path.DirectorySeparatorChar, '/')
                 .Replace(Path.AltDirectorySeparatorChar, '/'))
             .Where(path => !expectedPaths.Contains(path))
+            .Where(path =>
+                verificationScope ==
+                    LegalBundleVerificationScope.StrictIsolatedBundle ||
+                IsLegalOwnedPath(path))
             .OrderBy(path => path, StringComparer.Ordinal)
             .FirstOrDefault();
         if (unexpectedPath is not null)
@@ -221,6 +265,17 @@ public sealed class AuthenticatedLegalBundleVerifier
         }
 
         return null;
+    }
+
+    private static bool IsLegalOwnedPath(string relativePath)
+    {
+        var separatorIndex = relativePath.IndexOf('/');
+        if (separatorIndex < 0)
+        {
+            return CanonicalLegalRootFiles.Contains(relativePath);
+        }
+
+        return LegalOwnedDirectories.Contains(relativePath[..separatorIndex]);
     }
 
     private static List<ManifestEntry> ParseManifest(

@@ -16,15 +16,33 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         throwOnInvalidBytes: true);
     private readonly string _bundleDirectory;
     private readonly AuthenticatedLegalBundleVerifier _verifier;
+    private readonly LegalBundleVerificationScope _verificationScope;
 
     public AuthenticatedLegalCatalogReader(
         string bundleDirectory,
         AuthenticatedLegalBundleVerifier verifier)
+        : this(
+            bundleDirectory,
+            verifier,
+            LegalBundleVerificationScope.StrictIsolatedBundle)
+    {
+    }
+
+    public AuthenticatedLegalCatalogReader(
+        string bundleDirectory,
+        AuthenticatedLegalBundleVerifier verifier,
+        LegalBundleVerificationScope verificationScope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleDirectory);
         ArgumentNullException.ThrowIfNull(verifier);
+        if (!Enum.IsDefined(verificationScope))
+        {
+            throw new ArgumentOutOfRangeException(nameof(verificationScope));
+        }
+
         _bundleDirectory = Path.GetFullPath(bundleDirectory);
         _verifier = verifier;
+        _verificationScope = verificationScope;
     }
 
     public async Task<LegalCatalogReadResult> ReadAsync(
@@ -106,7 +124,10 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         CancellationToken cancellationToken)
     {
         var verification = await _verifier
-            .VerifyAsync(_bundleDirectory, cancellationToken)
+            .VerifyAsync(
+                _bundleDirectory,
+                _verificationScope,
+                cancellationToken)
             .ConfigureAwait(false);
         if (verification is LegalBundleVerification.Rejected rejected)
         {

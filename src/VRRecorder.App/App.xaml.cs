@@ -25,12 +25,14 @@ public partial class App : System.Windows.Application, IDisposable
         _legalController = new DesktopLegalController(
             new AuthenticatedLegalCatalogReader(
                 AppContext.BaseDirectory,
-                _legalVerifier),
+                _legalVerifier,
+                LegalBundleVerificationScope.InstallRoot),
             new AuthenticatedLegalBundleFolderOpener(
                 AppContext.BaseDirectory,
                 AppContext.BaseDirectory,
                 _legalVerifier,
-                new WindowsLegalFolderShell()));
+                new WindowsLegalFolderShell(),
+                LegalBundleVerificationScope.InstallRoot));
         _recordingInputs = new RecordingInputDispatcher(
             new RecordingUiCommandDispatcher(
                 (_, cancellationToken) =>
@@ -83,7 +85,8 @@ public partial class App : System.Windows.Application, IDisposable
         {
             var gateway = new RuntimeLegalBundleVerificationGateway(
                 AppContext.BaseDirectory,
-                ((App)Current)._legalVerifier);
+                ((App)Current)._legalVerifier,
+                LegalBundleVerificationScope.InstallRoot);
             return await new RecorderStartupUseCase(gateway)
                 .ExecuteAsync(cancellationToken);
         }

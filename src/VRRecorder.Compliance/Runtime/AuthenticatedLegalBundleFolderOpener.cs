@@ -10,21 +10,43 @@ public sealed class AuthenticatedLegalBundleFolderOpener
     private readonly string _bundleDirectory;
     private readonly AuthenticatedLegalBundleVerifier _verifier;
     private readonly ILegalFolderShell _shell;
+    private readonly LegalBundleVerificationScope _verificationScope;
 
     public AuthenticatedLegalBundleFolderOpener(
         string installDirectory,
         string bundleDirectory,
         AuthenticatedLegalBundleVerifier verifier,
         ILegalFolderShell shell)
+        : this(
+            installDirectory,
+            bundleDirectory,
+            verifier,
+            shell,
+            LegalBundleVerificationScope.StrictIsolatedBundle)
+    {
+    }
+
+    public AuthenticatedLegalBundleFolderOpener(
+        string installDirectory,
+        string bundleDirectory,
+        AuthenticatedLegalBundleVerifier verifier,
+        ILegalFolderShell shell,
+        LegalBundleVerificationScope verificationScope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleDirectory);
         ArgumentNullException.ThrowIfNull(verifier);
         ArgumentNullException.ThrowIfNull(shell);
+        if (!Enum.IsDefined(verificationScope))
+        {
+            throw new ArgumentOutOfRangeException(nameof(verificationScope));
+        }
+
         _installDirectory = Normalize(installDirectory);
         _bundleDirectory = Normalize(bundleDirectory);
         _verifier = verifier;
         _shell = shell;
+        _verificationScope = verificationScope;
     }
 
     public async Task<LegalFolderOpenResult> OpenAsync(
@@ -54,7 +76,10 @@ public sealed class AuthenticatedLegalBundleFolderOpener
         try
         {
             verification = await _verifier
-                .VerifyAsync(_bundleDirectory, cancellationToken)
+                .VerifyAsync(
+                    _bundleDirectory,
+                    _verificationScope,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception exception) when (
