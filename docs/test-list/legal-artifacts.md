@@ -9,7 +9,7 @@
 - [x] final stagingの未登録native DLLがpackage生成を停止する
 - [x] MIT componentのcopyright notice欠落が生成を停止する
 - [x] 未承認componentが1件でもあればrelease artifact生成を拒否する
-- [ ] 同一入力からbyte-for-byte同一の成果物を生成する
+- [x] 同一入力からbyte-for-byte同一の成果物を生成する
 - [ ] 生成済みNoticesの手編集を再生成差分で検出する
 - [x] SBOMのUNKNOWN／NOASSERTION／NONEを拒否する
 
@@ -22,6 +22,6 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, the component manifes
 - [x] Block package generation for an unregistered native DLL in final staging
 - [x] Block generation when an MIT component lacks its copyright notice
 - [x] Reject release-artifact generation when any component is unapproved
-- [ ] Produce byte-for-byte identical artifacts from identical inputs
+- [x] Produce byte-for-byte identical artifacts from identical inputs
 - [ ] Detect manual edits to generated Notices through regeneration diff
 - [x] Reject UNKNOWN, NOASSERTION, and NONE in the SBOM
