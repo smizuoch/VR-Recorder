@@ -7,6 +7,68 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class SpdxSbomGeneratorTests
 {
     [Fact]
+    public void SbomPreservesDifferentDeclaredAndConcludedExpressions()
+    {
+        var graph = new NormalizedComponentGraph(
+            Dependencies:
+            [
+                new NuGetPackage(
+                    "Dual.License.Package",
+                    "3.0.0",
+                    NuGetDependencyKind.Direct),
+            ],
+            Components:
+            [
+                new NormalizedComponent(
+                    Id: "dual-license-package",
+                    DisplayName: "Dual License Package",
+                    Version: "3.0.0",
+                    License: new LicenseDecision(
+                        DeclaredExpression: "BSD-3-Clause OR MIT",
+                        ConcludedExpression: "MIT"),
+                    CopyrightNotice: "Copyright (c) Dual License Package",
+                    Usage: "runtime-feature",
+                    Linkage: "managed-library",
+                    Modified: false,
+                    SourceInformation:
+                        "https://example.invalid/dual-license@commit",
+                    LicenseText: "FULL SELECTED MIT LICENSE TEXT",
+                    Scope: NoticeScope.RuntimeBundled,
+                    ApprovalStatus: LegalApprovalStatus.Approved,
+                    Packages:
+                    [
+                        new NoticePackage("Dual.License.Package", "3.0.0"),
+                    ]),
+            ]);
+        var context = new SpdxGenerationContext(
+            ProductName: "VR-Recorder",
+            ProductVersion: "0.1.0",
+            DocumentNamespace: "https://example.invalid/spdx/license-decision",
+            CreatedAtUtc: new DateTimeOffset(
+                2026,
+                7,
+                10,
+                0,
+                0,
+                0,
+                TimeSpan.Zero),
+            Creator: "Organization: VR-Recorder Project");
+
+        var sbom = SpdxSbomGenerator.Generate(context, graph);
+
+        using var document = JsonDocument.Parse(sbom);
+        var package = Assert.Single(document.RootElement
+            .GetProperty("packages")
+            .EnumerateArray());
+        Assert.Equal(
+            "BSD-3-Clause OR MIT",
+            package.GetProperty("licenseDeclared").GetString());
+        Assert.Equal(
+            "MIT",
+            package.GetProperty("licenseConcluded").GetString());
+    }
+
+    [Fact]
     public void PackageSpdxIdentifiersAreCollisionFreeAndOrderIndependent()
     {
         NuGetPackage[] dependencies =
