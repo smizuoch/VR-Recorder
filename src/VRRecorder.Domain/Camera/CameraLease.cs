@@ -22,8 +22,7 @@ public sealed class CameraLease
 
         if (!_previousStreaming.IsKnown)
         {
-            throw new InvalidOperationException(
-                "Restoring an unknown camera state is not defined.");
+            return new CameraRestorePlan(false);
         }
 
         return new CameraRestorePlan(_previousStreaming.Value);

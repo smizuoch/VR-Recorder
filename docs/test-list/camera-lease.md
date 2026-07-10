@@ -6,7 +6,7 @@
 
 - [x] RecorderがStreamingをfalseからtrueへ変更した場合だけfalseへ復元する
 - [x] 以前からStreaming=trueなら停止時に変更しない
-- [ ] 前状態が不明でRecorderが変更した場合は既定policyでfalseへ復元する
+- [x] 前状態が不明でRecorderが変更した場合は既定policyでfalseへ復元する
 - [ ] 「不明時は変更しない」policyでは復元commandを送らない
 
 ## English
@@ -15,5 +15,5 @@ The CameraLease ownership rules from Basic Design v0.3 §§9.3 and 24 are implem
 
 - [x] Restore false only when the recorder changed Streaming from false to true
 - [x] Leave Streaming unchanged when it was already true
-- [ ] Restore false by default when the recorder changed an unknown prior state
+- [x] Restore false by default when the recorder changed an unknown prior state
 - [ ] Send no restore command under the leave-unknown-state policy
