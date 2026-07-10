@@ -466,6 +466,71 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopLegalDynamicValuesAndTypographyUseSemanticContracts()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var legalWindow = LoadRequiredXaml(appDirectory, "LegalWindow.xaml");
+
+        foreach (var name in new[]
+                 {
+                     "ProductVersionText",
+                     "BundleIdentityText",
+                     "ComponentDetailText",
+                 })
+        {
+            var dynamicValue = Assert.Single(
+                legalWindow.Descendants(Presentation + "TextBlock"),
+                element => element.Attribute(Xaml + "Name")?.Value == name);
+            Assert.Null(dynamicValue.Attribute("AutomationProperties.Name"));
+        }
+
+        var legalCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "LegalWindow.xaml.cs"));
+        Assert.Contains(
+            "ApplyAccessibleText(ProductVersionText,",
+            legalCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ApplyAccessibleText(BundleIdentityText,",
+            legalCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ApplyAccessibleText(ComponentDetailText,",
+            legalCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AutomationProperties.SetName(target, semantic.AutomationName);",
+            legalCode,
+            StringComparison.Ordinal);
+
+        Assert.All(
+            legalWindow.Descendants()
+                .Select(element => element.Attribute("FontSize")?.Value)
+                .Where(value => value is not null),
+            value => Assert.StartsWith("{", value, StringComparison.Ordinal));
+        var heading = Assert.Single(
+            legalWindow.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute("Text")?.Value ==
+                       "{DynamicResource Legal_Title}");
+        Assert.Equal(
+            "{StaticResource Typography.HeadlineMedium.FontSize}",
+            heading.Attribute("FontSize")?.Value);
+
+        var tokens = LoadRequiredXaml(
+            appDirectory,
+            "Resources/DesignTokens.xaml");
+        var typographyToken = Assert.Single(
+            tokens.Root!.Elements(),
+            element => element.Attribute(Xaml + "Key")?.Value ==
+                       "Typography.HeadlineMedium.FontSize");
+        Assert.Equal("22", typographyToken.Value);
+    }
+
+    [Fact]
     public void ReleaseBuildRequiresAuthenticatedLegalAnchorAndPayload()
     {
         var project = XDocument.Load(Path.Combine(
