@@ -63,4 +63,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Stopping, next);
     }
+
+    [Fact]
+    public void StopRequestedWhenStoppingKeepsStopping()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Stopping,
+            RecorderTrigger.StopRequested);
+
+        Assert.Equal(RecorderState.Stopping, next);
+    }
 }
