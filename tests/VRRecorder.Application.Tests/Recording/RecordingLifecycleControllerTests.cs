@@ -209,47 +209,83 @@ public sealed class RecordingLifecycleControllerTests
     }
 
     [Fact]
-    public async Task IncompleteSelectedSnapshotFailsBeforeLeaseOrRecordingWork()
+    public async Task UnknownSelectedSnapshotStartsAndRestoresWithoutGuessingMode()
     {
         var candidate = Candidate("selected-snapshot", 9000);
+        var events = new List<string>();
         var gateway = new SnapshotCameraGateway(new CameraSnapshot(
-            ObservedCameraValue.Known(CameraMode.Photo),
-            ObservedCameraValue.Unknown<bool>()));
+            ObservedCameraValue.Unknown<CameraMode>(),
+            ObservedCameraValue.Unknown<bool>()), events);
         var connections = new VrChatCameraConnectionUseCase(
             new VrChatTargetResolver(new StubDiscovery([candidate])),
             new FixedGatewayFactory(gateway));
-        var signal = new UnexpectedVideoSignalGateway();
+        var signal = new ControllableVideoSignalGateway();
         var reservation = new FakeRecordingFileReservation();
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "unknown.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "unknown.mp4"));
+        reservation.Complete(pending);
         var engine = new FakeRecordingEngine();
-        var leaseEvents = new List<string>();
+        var sessions = new CapturingRecordingSessionActivator();
+        var leases = new RecordingCameraLeaseStore(events);
         using var lifecycle = new RecordingLifecycleController(
             connections,
-            new RecordingCameraLeaseStore(leaseEvents),
-            CreateUnexpectedStartRecording(signal, reservation, engine),
+            leases,
+            CreateStartRecording(signal, reservation, engine, sessions),
             new FakeStopRequestSink(),
             new FakeCameraRestoreWarningSink());
 
-        var result = await lifecycle.StartAsync(
+        var starting = lifecycle.StartAsync(
             candidate.ServiceId,
             StartCommand(),
             CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(320, 180));
+        await engine.WaitUntilStartRequestedAsync();
+        var handle = new RecordingHandle(
+            "unknown-snapshot-session",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        engine.CommitFirstPacket(handle);
 
-        var failure = Assert.IsType<CameraSnapshotStartFailure>(
-            result.SnapshotFailure);
-        Assert.Equal(CameraSnapshotStartFailureKind.Incomplete, failure.Kind);
-        Assert.Equal(candidate.ServiceId, failure.VrChatServiceId);
-        Assert.Null(failure.Failure);
-        Assert.Equal(RecorderState.Ready, result.State);
-        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        var result = await starting;
+        Assert.Null(result.SnapshotFailure);
+        Assert.IsType<StartRecordingResult.Started>(result.Recording);
+        Assert.Equal(RecorderState.Recording, result.State);
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
         Assert.IsType<VrChatCameraConnectionResolution.Connected>(
             result.Connection);
-        Assert.Null(result.Recording);
         Assert.Equal(1, gateway.ReadCallCount);
-        Assert.Equal(0, gateway.WriteCallCount);
-        Assert.Empty(leaseEvents);
-        Assert.Equal(0, signal.CallCount);
-        Assert.Equal(0, reservation.CallCount);
-        Assert.Equal(0, engine.StartCallCount);
+        Assert.Equal(2, gateway.WriteCallCount);
+        var lease = Assert.IsType<CameraLease>(leases.SavedLease);
+        Assert.False(lease.PreviousMode.IsKnown);
+        Assert.False(lease.PreviousStreaming.IsKnown);
+        Assert.True(lease.ChangedModeByRecorder);
+        Assert.True(lease.ChangedStreamingByRecorder);
+        Assert.Equal(
+            ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
+            events);
+
+        await Assert.IsAssignableFrom<IRecordingSessionCompletionSink>(
+                sessions.CompletionSink)
+            .CompleteAsync(
+                new RecordingSessionCompletion(
+                    handle,
+                    RecordingStopReason.UserRequested,
+                    RecorderState.Ready),
+                CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "snapshot:read",
+                "lease:save",
+                "mode:Stream",
+                "streaming:true",
+                "streaming:false",
+                "lease:delete",
+            ],
+            events);
+        Assert.DoesNotContain("mode:Photo", events);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
     }
 
     [Fact]
@@ -268,7 +304,7 @@ public sealed class RecordingLifecycleControllerTests
         using var lifecycle = new RecordingLifecycleController(
             connections,
             new RecordingCameraLeaseStore(leaseEvents),
-            CreateUnexpectedStartRecording(signal, reservation, engine),
+            CreateStartRecording(signal, reservation, engine),
             new FakeStopRequestSink(),
             new FakeCameraRestoreWarningSink());
 
@@ -463,10 +499,11 @@ public sealed class RecordingLifecycleControllerTests
             new OutputPath(Path.GetTempPath()),
             new FrameRate(30));
 
-    private static StartRecordingUseCase CreateUnexpectedStartRecording(
+    private static StartRecordingUseCase CreateStartRecording(
         IVideoSignalGateway signal,
         IRecordingFileReservation reservation,
-        IRecordingEngine engine) =>
+        IRecordingEngine engine,
+        IRecordingSessionActivator? sessionActivator = null) =>
         new(
             signal,
             new ControllableCountdownTimer(),
@@ -485,7 +522,7 @@ public sealed class RecordingLifecycleControllerTests
                 (EncoderKind.MediaFoundationSoftware,
                     EncoderProbeResult.PacketProduced))),
             engine,
-            new FakeRecordingSessionActivator(),
+            sessionActivator ?? new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
             new AutoStopScheduler(
                 new ControllableMonotonicClock(
@@ -595,7 +632,9 @@ public sealed class RecordingLifecycleControllerTests
     {
     }
 
-    private sealed class SnapshotCameraGateway(CameraSnapshot snapshot)
+    private sealed class SnapshotCameraGateway(
+        CameraSnapshot snapshot,
+        List<string>? events = null)
         : IVrChatCameraGateway
     {
         public int ReadCallCount { get; private set; }
@@ -607,6 +646,7 @@ public sealed class RecordingLifecycleControllerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             ReadCallCount++;
+            events?.Add("snapshot:read");
             return Task.FromResult(snapshot);
         }
 
@@ -614,17 +654,33 @@ public sealed class RecordingLifecycleControllerTests
             CameraMode mode,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             WriteCallCount++;
-            throw new InvalidOperationException("Camera writes were not expected.");
+            events?.Add($"mode:{mode}");
+            return Task.CompletedTask;
         }
 
         public Task SetStreamingAsync(
             bool enabled,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             WriteCallCount++;
-            throw new InvalidOperationException("Camera writes were not expected.");
+            events?.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
+            return Task.CompletedTask;
         }
+    }
+
+    private sealed class CapturingRecordingSessionActivator
+        : IRecordingSessionActivator
+    {
+        public IRecordingSessionCompletionSink? CompletionSink { get; private set; }
+
+        public void Activate(
+            RecordingHandle handle,
+            CancellationToken sessionLifetimeToken,
+            IRecordingSessionCompletionSink? completionSink = null) =>
+            CompletionSink = completionSink;
     }
 
     private sealed class FailingSnapshotCameraGateway(Exception failure)
