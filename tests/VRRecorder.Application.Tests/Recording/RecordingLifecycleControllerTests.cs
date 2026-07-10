@@ -410,6 +410,71 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(0, engine.StartCallCount);
     }
 
+    [Theory]
+    [InlineData(false, RecorderState.Arming)]
+    [InlineData(true, RecorderState.Countdown)]
+    public async Task StartCancellationRestoresCameraAndDeletesLeaseEvidence(
+        bool cancelDuringCountdown,
+        RecorderState expectedCancelState)
+    {
+        var events = new List<string>();
+        var candidate = Candidate("cancel-selected", 9000);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(new RecordingCameraGateway(events)));
+        var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var restoreWarnings = new FakeCameraRestoreWarningSink();
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new RecordingCameraLeaseStore(events),
+            CreateStartRecording(
+                signal,
+                reservation,
+                engine,
+                countdown: countdown),
+            new FakeStopRequestSink(),
+            restoreWarnings);
+        using var cancellation = new CancellationTokenSource();
+        var start = lifecycle.StartAsync(
+            candidate.ServiceId,
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(cancelDuringCountdown ? 3 : 0),
+                RecordingDuration.Infinite,
+                new OutputPath(Path.GetTempPath()),
+                new FrameRate(30)),
+            cancellation.Token);
+        await signal.WaitUntilRequestedAsync();
+        if (cancelDuringCountdown)
+        {
+            signal.CompleteWithStableSignal(new StableVideoSignal(320, 180));
+            await countdown.WaitUntilRequestedAsync();
+        }
+
+        var stateAtCancel = lifecycle.State;
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start);
+        Assert.Equal(expectedCancelState, stateAtCancel);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Equal(
+            [
+                "snapshot:read",
+                "lease:save",
+                "mode:Stream",
+                "streaming:true",
+                "streaming:false",
+                "mode:Photo",
+                "lease:delete",
+            ],
+            events);
+        Assert.Empty(restoreWarnings.Warnings);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
     [Fact]
     public async Task RestoreFailurePreservesNoSignalResultAndWarns()
     {
@@ -556,10 +621,11 @@ public sealed class RecordingLifecycleControllerTests
         IVideoSignalGateway signal,
         IRecordingFileReservation reservation,
         IRecordingEngine engine,
-        IRecordingSessionActivator? sessionActivator = null) =>
+        IRecordingSessionActivator? sessionActivator = null,
+        ICountdownTimer? countdown = null) =>
         new(
             signal,
-            new ControllableCountdownTimer(),
+            countdown ?? new ControllableCountdownTimer(),
             reservation,
             new FixedWallClock(new DateTimeOffset(
                 2026,
