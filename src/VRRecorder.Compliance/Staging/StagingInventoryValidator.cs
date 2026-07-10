@@ -12,8 +12,28 @@ public static class StagingInventoryValidator
         var actual = actualFiles.ToArray();
         var registered = registeredArtifacts.ToArray();
         var issues = new List<ComplianceIssue>();
+        var duplicatePaths = actual
+            .GroupBy(item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .Concat(registered
+                .GroupBy(
+                    item => item.RelativePath,
+                    StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        var duplicatePathSet = duplicatePaths.ToHashSet(
+            StringComparer.OrdinalIgnoreCase);
+        issues.AddRange(duplicatePaths.Select(path => new ComplianceIssue(
+            "duplicate-staging-path",
+            path)));
 
-        foreach (var file in actual)
+        foreach (var file in actual.Where(file =>
+                     !duplicatePathSet.Contains(file.RelativePath)))
         {
             var matches = registered
                 .Where(item => string.Equals(
@@ -45,6 +65,7 @@ public static class StagingInventoryValidator
         }
 
         foreach (var artifact in registered.Where(artifact =>
+                     !duplicatePathSet.Contains(artifact.RelativePath) &&
                      !actual.Any(file => string.Equals(
                          file.RelativePath,
                          artifact.RelativePath,
