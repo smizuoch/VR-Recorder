@@ -91,7 +91,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
             status: 0,
             serviceId,
             hostName: "alpha-host.local.",
-            ipv4: [127, 0, 0, 1],
+            ipv4HostOrder: 0x7F000001,
             ipv6: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             port: 19001,
             textProperties: new Dictionary<string, string>(StringComparer.Ordinal)
@@ -208,7 +208,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
             uint status,
             string serviceId,
             string hostName,
-            byte[] ipv4,
+            uint ipv4HostOrder,
             byte[] ipv6,
             ushort port,
             IReadOnlyDictionary<string, string> textProperties)
@@ -216,7 +216,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
             var serviceInstance = CreateServiceInstance(
                 serviceId,
                 hostName,
-                ipv4,
+                ipv4HostOrder,
                 ipv6,
                 port,
                 textProperties);
@@ -259,14 +259,16 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
         private nint CreateServiceInstance(
             string serviceId,
             string hostName,
-            byte[] ipv4,
+            uint ipv4HostOrder,
             byte[] ipv6,
             ushort port,
             IReadOnlyDictionary<string, string> textProperties)
         {
             var instanceName = AllocateString(serviceId, _resolveAllocations);
             var nativeHostName = AllocateString(hostName, _resolveAllocations);
-            var ip4Address = AllocateBytes(ipv4, _resolveAllocations);
+            var ip4Address = AllocateIp4Address(
+                ipv4HostOrder,
+                _resolveAllocations);
             var ip6Address = AllocateBytes(ipv6, _resolveAllocations);
             var keys = AllocateStringPointerArray(
                 textProperties.Keys,
@@ -310,6 +312,16 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
             var pointer = Marshal.AllocHGlobal(value.Length);
             allocations.Add(pointer);
             Marshal.Copy(value, 0, pointer, value.Length);
+            return pointer;
+        }
+
+        private static nint AllocateIp4Address(
+            uint hostOrderAddress,
+            List<nint> allocations)
+        {
+            var pointer = Marshal.AllocHGlobal(sizeof(uint));
+            allocations.Add(pointer);
+            Marshal.WriteInt32(pointer, unchecked((int)hostOrderAddress));
             return pointer;
         }
 
