@@ -536,6 +536,15 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(pending, stopped.Recording);
         Assert.Equal(90, stopped.VideoPacketCount);
         Assert.Equal(142, stopped.AudioPacketCount);
+        Assert.Equal(
+            new RecordingMediaExpectation(
+                Width: 320,
+                Height: 180,
+                FramesPerSecond: 30,
+                AudioSampleRate: 48000,
+                AudioChannels: 2,
+                ExpectedDuration: TimeSpan.FromSeconds(3)),
+            stopped.MediaExpectation);
         Assert.False(unexpectedFault.Task.IsCompleted);
     }
 
