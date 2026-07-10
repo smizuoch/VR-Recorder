@@ -119,6 +119,34 @@ public sealed class DesktopRecordingSettingsWorkflowIntegrationTests
         Assert.Equal(VideoQualityPreset.Standard, media.QualityPreset);
     }
 
+    [Fact]
+    public async Task ValidNonMenuFrameRateSurvivesEditingAnotherOption()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var store = new JsonFileSettingsStore(
+            Path.Combine(directory.Path, "settings.json"));
+        var settings = VRRecorderSettings.CreateDefault();
+        await store.SaveAsync(
+            settings with
+            {
+                Video = settings.Video with { FrameRate = 45 },
+            },
+            CancellationToken.None);
+        var controller = new DesktopRecordingSettingsController(store);
+        var draft = await controller.LoadAsync(CancellationToken.None);
+
+        await controller.SaveAsync(
+            draft with { SelfTimerSeconds = 3 },
+            CancellationToken.None);
+
+        var persisted = await store.LoadAsync(CancellationToken.None);
+        Assert.Equal(45, persisted.Video.FrameRate);
+        Assert.Equal(3, persisted.Recording.SelfTimerSeconds);
+        Assert.DoesNotContain(
+            45,
+            DesktopRecordingSettingsController.SupportedFrameRates);
+    }
+
     private sealed class UnexpectedDefaultOutputPathProvider
         : IDefaultOutputPathProvider
     {
