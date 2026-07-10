@@ -23,6 +23,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Infrastructure.M
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Infrastructure.Osc", "src\VRRecorder.Infrastructure.Osc\VRRecorder.Infrastructure.Osc.csproj", "{1112252D-DB87-4799-BFA7-10EDE5CB6A70}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.DesignSystem", "src\VRRecorder.DesignSystem\VRRecorder.DesignSystem.csproj", "{AAC6BF42-F50D-48E2-9C43-B50A462CF74B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Presentation.Wrist", "src\VRRecorder.Presentation.Wrist\VRRecorder.Presentation.Wrist.csproj", "{BBEB063D-0F18-4F1D-8179-35FFFB89ED60}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Presentation.Tests", "tests\VRRecorder.Presentation.Tests\VRRecorder.Presentation.Tests.csproj", "{C8D6F784-ADCD-4C47-8403-76F0E04E833E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,5 +75,17 @@ Global
 		{1112252D-DB87-4799-BFA7-10EDE5CB6A70}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1112252D-DB87-4799-BFA7-10EDE5CB6A70}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1112252D-DB87-4799-BFA7-10EDE5CB6A70}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AAC6BF42-F50D-48E2-9C43-B50A462CF74B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AAC6BF42-F50D-48E2-9C43-B50A462CF74B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AAC6BF42-F50D-48E2-9C43-B50A462CF74B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AAC6BF42-F50D-48E2-9C43-B50A462CF74B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BBEB063D-0F18-4F1D-8179-35FFFB89ED60}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BBEB063D-0F18-4F1D-8179-35FFFB89ED60}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BBEB063D-0F18-4F1D-8179-35FFFB89ED60}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BBEB063D-0F18-4F1D-8179-35FFFB89ED60}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C8D6F784-ADCD-4C47-8403-76F0E04E833E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8D6F784-ADCD-4C47-8403-76F0E04E833E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8D6F784-ADCD-4C47-8403-76F0E04E833E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8D6F784-ADCD-4C47-8403-76F0E04E833E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
