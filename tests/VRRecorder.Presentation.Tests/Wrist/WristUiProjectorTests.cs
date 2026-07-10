@@ -131,4 +131,25 @@ public sealed class WristUiProjectorTests
         Assert.Equal("Start recording", action.Tooltip.Value);
         Assert.True(action.MinimumTargetDp >= 56);
     }
+
+    [Fact]
+    public void SignalLostKeepsAccessibleStopAvailable()
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = new RecorderStatusSnapshot(
+            Revision: 9,
+            State: RecorderState.SignalLost,
+            AvailableActions: RecorderAvailableActions.Stop);
+
+        var snapshot = projector.Project(status, WristPage.Legal);
+
+        var stop = Assert.Single(snapshot.Actions);
+        Assert.Equal(UiCommandId.ToggleRecording, stop.Command);
+        Assert.Equal("recording.stop", stop.SemanticId);
+        Assert.Equal(UiColorRole.Recording, stop.ColorRole);
+        Assert.True(stop.IsEnabled);
+        Assert.Equal("STOP", stop.VisibleLabel.Value);
+        Assert.Equal("Stop recording", stop.AccessibleName.Value);
+        Assert.True(stop.MinimumTargetDp >= 64);
+    }
 }
