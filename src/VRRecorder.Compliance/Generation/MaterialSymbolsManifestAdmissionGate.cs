@@ -128,7 +128,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
             return Order(issues);
         }
 
-        ManifestDocument? manifest;
+        MaterialSymbolsManifestDocument? manifest;
         try
         {
             using var json = JsonDocument.Parse(manifestFile.Utf8Content);
@@ -140,7 +140,8 @@ internal static class MaterialSymbolsManifestAdmissionGate
                 return Order(issues);
             }
 
-            manifest = json.RootElement.Deserialize<ManifestDocument>(
+            manifest = json.RootElement.Deserialize<
+                MaterialSymbolsManifestDocument>(
                 JsonOptions);
         }
         catch (JsonException)
@@ -176,7 +177,8 @@ internal static class MaterialSymbolsManifestAdmissionGate
         return Order(issues);
     }
 
-    private static bool HasValidStructure(ManifestDocument? manifest) =>
+    private static bool HasValidStructure(
+        MaterialSymbolsManifestDocument? manifest) =>
         manifest is not null &&
         manifest.SchemaVersion == 2 &&
         string.Equals(
@@ -196,7 +198,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
 
     private static void ValidateSource(
         NormalizedComponent component,
-        ManifestSource source,
+        MaterialSymbolsManifestSource source,
         List<ComplianceIssue> issues)
     {
         var validCommit = IsLowerHex(source.Commit, 40) ||
@@ -232,7 +234,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
 
     private static void ValidateLegalDocuments(
         NormalizedComponent component,
-        ManifestSource source,
+        MaterialSymbolsManifestSource source,
         List<ComplianceIssue> issues)
     {
         var licenseMatches = component.LegalFiles.Any(file =>
@@ -268,7 +270,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
     }
 
     private static void ValidateRightsPolicy(
-        ManifestRightsPolicy policy,
+        MaterialSymbolsManifestRightsPolicy policy,
         List<ComplianceIssue> issues)
     {
         var prohibited = policy.ProhibitedAssetClasses ?? [];
@@ -294,7 +296,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
     }
 
     private static void ValidateRendering(
-        ManifestRendering rendering,
+        MaterialSymbolsManifestRendering rendering,
         List<ComplianceIssue> issues)
     {
         if (!string.Equals(
@@ -318,7 +320,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
     }
 
     private static void ValidateValidationPolicy(
-        ManifestValidation validation,
+        MaterialSymbolsManifestValidation validation,
         List<ComplianceIssue> issues)
     {
         if (!validation.FailOnUnknownUpstreamName ||
@@ -337,12 +339,12 @@ internal static class MaterialSymbolsManifestAdmissionGate
     }
 
     private static void ValidateIcons(
-        IReadOnlyList<ManifestIcon> icons,
+        MaterialSymbolsManifestIcon[] icons,
         List<ComplianceIssue> issues)
     {
         var semanticIds = new HashSet<string>(StringComparer.Ordinal);
         var outputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var index = 0; index < icons.Count; index++)
+        for (var index = 0; index < icons.Length; index++)
         {
             var icon = icons[index];
             var subject = string.IsNullOrWhiteSpace(icon.SemanticId)
@@ -429,7 +431,8 @@ internal static class MaterialSymbolsManifestAdmissionGate
         }
     }
 
-    private static bool HasExactlyOneAxesContract(ManifestIcon icon)
+    private static bool HasExactlyOneAxesContract(
+        MaterialSymbolsManifestIcon icon)
     {
         if ((icon.Axes is null) == (icon.StateVariants is null))
         {
@@ -447,7 +450,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
                    IsValidAxes(variant.Value));
     }
 
-    private static bool IsValidAxes(ManifestAxes? axes) =>
+    private static bool IsValidAxes(MaterialSymbolsManifestAxes? axes) =>
         axes is not null &&
         axes.Fill is 0 or 1 &&
         axes.Weight is >= 100 and <= 700 &&
@@ -455,7 +458,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
         axes.OpticalSize is >= 20 and <= 48;
 
     private static bool HasNonInteractiveAccessibilityMetadata(
-        ManifestIcon icon) =>
+        MaterialSymbolsManifestIcon icon) =>
         !string.IsNullOrWhiteSpace(icon.AccessibleDescriptionKey) ||
         (!string.IsNullOrWhiteSpace(icon.VisibleLabelKey) &&
          icon.DecorativeWhenVisibleLabelPresent is true);
@@ -537,7 +540,8 @@ internal static class MaterialSymbolsManifestAdmissionGate
         }
     }
 
-    private static bool ContainsPlaceholder(ManifestDocument manifest)
+    private static bool ContainsPlaceholder(
+        MaterialSymbolsManifestDocument manifest)
     {
         IEnumerable<string?> values =
         [
@@ -605,167 +609,4 @@ internal static class MaterialSymbolsManifestAdmissionGate
             .OrderBy(issue => issue.Code, StringComparer.Ordinal)
             .ThenBy(issue => issue.Subject, StringComparer.Ordinal)
             .ToArray();
-
-    private sealed class ManifestDocument
-    {
-        public required int SchemaVersion { get; init; }
-
-        public required string ComponentId { get; init; }
-
-        public required string DisplayName { get; init; }
-
-        public required ManifestSource Source { get; init; }
-
-        public required ManifestRightsPolicy RightsPolicy { get; init; }
-
-        public required ManifestRendering Rendering { get; init; }
-
-        public required ManifestValidation Validation { get; init; }
-
-        public required ManifestIcon[] SelectedIcons { get; init; }
-    }
-
-    private sealed class ManifestSource
-    {
-        public required string Repository { get; init; }
-
-        public required string Browser { get; init; }
-
-        public required string Commit { get; init; }
-
-        public required string CodepointsFile { get; init; }
-
-        public required string LicenseExpression { get; init; }
-
-        public required string LicenseFile { get; init; }
-
-        public required string AttributionFile { get; init; }
-
-        public required string NoticeStatus { get; init; }
-
-        public required string AcquisitionMode { get; init; }
-
-        public required bool RuntimeNetworkAllowed { get; init; }
-    }
-
-    private sealed class ManifestRightsPolicy
-    {
-        public required string PermittedAssetClass { get; init; }
-
-        public required bool AttributionDisplayedInLegalUi { get; init; }
-
-        public required bool LicenseTextBundledOffline { get; init; }
-
-        public required bool SourceAndOutputHashesRequired { get; init; }
-
-        public required bool ModificationRecordRequired { get; init; }
-
-        public required bool ExclusiveTrademarkUseAllowed { get; init; }
-
-        public required bool ImplyGoogleAffiliationAllowed { get; init; }
-
-        public required string[] ProhibitedAssetClasses { get; init; }
-    }
-
-    private sealed class ManifestRendering
-    {
-        public required string Family { get; init; }
-
-        public required string SourceFormat { get; init; }
-
-        public required string OutputFormat { get; init; }
-
-        public required ManifestAxes DefaultAxes { get; init; }
-
-        public required int PrimaryActionOpticalSize { get; init; }
-
-        public required string ConversionTool { get; init; }
-
-        public required string ConversionRecipe { get; init; }
-
-        public required bool DeterministicOutputRequired { get; init; }
-
-        public required bool ExternalFontFileAtRuntime { get; init; }
-    }
-
-    private sealed class ManifestValidation
-    {
-        public required bool FailOnUnknownUpstreamName { get; init; }
-
-        public required bool FailOnCodepointMismatch { get; init; }
-
-        public required bool FailOnUnregisteredOutputAsset { get; init; }
-
-        public required bool FailOnMissingAccessibleNameForInteractiveIcon
-        {
-            get;
-            init;
-        }
-
-        public required bool FailOnMissingTooltipForAmbiguousIconOnlyControl
-        {
-            get;
-            init;
-        }
-
-        public required bool FailOnIncorrectRtlMirroring { get; init; }
-
-        public required bool FailOnSourceOrOutputHashMismatch { get; init; }
-
-        public required bool FailOnLicenseOrAttributionMismatch { get; init; }
-    }
-
-    private sealed class ManifestIcon
-    {
-        public required string SemanticId { get; init; }
-
-        public required string UpstreamName { get; init; }
-
-        public required string Codepoint { get; init; }
-
-        public required string Style { get; init; }
-
-        public ManifestAxes? Axes { get; init; }
-
-        public Dictionary<string, ManifestAxes>? StateVariants { get; init; }
-
-        public required bool RtlMirror { get; init; }
-
-        public required bool Interactive { get; init; }
-
-        public required string SourcePath { get; init; }
-
-        public required string SourceSha256 { get; init; }
-
-        public required string OutputPath { get; init; }
-
-        public required string OutputSha256 { get; init; }
-
-        public required bool Modified { get; init; }
-
-        public string? ModificationNotice { get; init; }
-
-        public string? VisibleLabelKey { get; init; }
-
-        public string? AccessibleNameKey { get; init; }
-
-        public string? TooltipKey { get; init; }
-
-        public string? AccessibleDescriptionKey { get; init; }
-
-        public bool? DecorativeWhenVisibleLabelPresent { get; init; }
-
-        public required string[] Surfaces { get; init; }
-    }
-
-    private sealed class ManifestAxes
-    {
-        public required int Fill { get; init; }
-
-        public required int Weight { get; init; }
-
-        public required int Grade { get; init; }
-
-        public required int OpticalSize { get; init; }
-    }
 }
