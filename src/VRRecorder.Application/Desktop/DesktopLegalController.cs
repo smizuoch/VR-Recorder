@@ -71,17 +71,10 @@ public sealed class DesktopLegalController
             return;
         }
 
-        State = new DesktopLegalState(
-            State.Revision + 1,
+        State = CreateCatalogState(
+            catalog,
             DesktopLegalView.ComponentList,
-            catalog.BundleId,
-            catalog.ProductVersion,
-            SortComponents(catalog.Components),
-            SelectedComponent: null,
-            FullLicenseText: null,
-            Issues: [],
-            catalog.ManifestSha256,
-            SelectedDocument: null);
+            selectedComponent: null);
     }
 
     private async Task ShowDetailCoreAsync(
@@ -108,17 +101,10 @@ public sealed class DesktopLegalController
             return;
         }
 
-        State = new DesktopLegalState(
-            State.Revision + 1,
+        State = CreateCatalogState(
+            catalog,
             DesktopLegalView.ComponentDetail,
-            catalog.BundleId,
-            catalog.ProductVersion,
-            SortComponents(catalog.Components),
-            component,
-            FullLicenseText: null,
-            Issues: [],
-            catalog.ManifestSha256,
-            SelectedDocument: null);
+            component);
     }
 
     private async Task ShowLicenseCoreAsync(
@@ -308,6 +294,22 @@ public sealed class DesktopLegalController
             FullLicenseText: null,
             issues,
             ManifestSha256: null,
+            SelectedDocument: null);
+
+    private DesktopLegalState CreateCatalogState(
+        LegalCatalogSnapshot catalog,
+        DesktopLegalView view,
+        LegalCatalogComponent? selectedComponent) =>
+        new(
+            State.Revision + 1,
+            view,
+            catalog.BundleId,
+            catalog.ProductVersion,
+            SortComponents(catalog.Components),
+            selectedComponent,
+            FullLicenseText: null,
+            Issues: [],
+            catalog.ManifestSha256,
             SelectedDocument: null);
 
     private static LegalCatalogComponent[] SortComponents(

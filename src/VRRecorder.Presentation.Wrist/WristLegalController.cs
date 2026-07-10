@@ -34,29 +34,17 @@ public sealed class WristLegalController
 
     public async Task OpenAsync(CancellationToken cancellationToken)
     {
-        var result = await _reader
-            .ReadAsync(cancellationToken)
+        var catalog = await ReadCatalogAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (result is LegalCatalogReadResult.Rejected rejected)
+        if (catalog is null)
         {
-            await FailClosedAsync(rejected.Issues).ConfigureAwait(false);
             return;
         }
 
-        var catalog = ((LegalCatalogReadResult.Available)result).Catalog;
-        State = new WristLegalState(
-            State.Revision + 1,
+        State = CreateCatalogState(
+            catalog,
             WristLegalView.ComponentList,
-            catalog.ProductVersion,
-            SortComponents(catalog.Components),
-            SelectedComponent: null,
-            FullLicenseText: null,
-            FirstVisibleLine: 0,
-            _linesPerPage,
-            Issues: [],
-            catalog.BundleId,
-            catalog.ManifestSha256,
-            SelectedDocument: null);
+            selectedComponent: null);
     }
 
     public async Task ShowDetailAsync(
@@ -64,16 +52,13 @@ public sealed class WristLegalController
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
-        var result = await _reader
-            .ReadAsync(cancellationToken)
+        var catalog = await ReadCatalogAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (result is LegalCatalogReadResult.Rejected rejected)
+        if (catalog is null)
         {
-            await FailClosedAsync(rejected.Issues).ConfigureAwait(false);
             return;
         }
 
-        var catalog = ((LegalCatalogReadResult.Available)result).Catalog;
         var component = catalog.Components.SingleOrDefault(item =>
             string.Equals(item.Id, componentId, StringComparison.Ordinal));
         if (component is null)
@@ -87,19 +72,10 @@ public sealed class WristLegalController
             return;
         }
 
-        State = new WristLegalState(
-            State.Revision + 1,
+        State = CreateCatalogState(
+            catalog,
             WristLegalView.ComponentDetail,
-            catalog.ProductVersion,
-            SortComponents(catalog.Components),
-            component,
-            FullLicenseText: null,
-            FirstVisibleLine: 0,
-            _linesPerPage,
-            Issues: [],
-            catalog.BundleId,
-            catalog.ManifestSha256,
-            SelectedDocument: null);
+            component);
     }
 
     public async Task ShowLicenseAsync(CancellationToken cancellationToken)
@@ -289,6 +265,23 @@ public sealed class WristLegalController
         }
     }
 
+    private async Task<LegalCatalogSnapshot?> ReadCatalogAsync(
+        CancellationToken cancellationToken)
+    {
+        var result = await _reader
+            .ReadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (result is LegalCatalogReadResult.Available available)
+        {
+            return available.Catalog;
+        }
+
+        await FailClosedAsync(
+                ((LegalCatalogReadResult.Rejected)result).Issues)
+            .ConfigureAwait(false);
+        return null;
+    }
+
     private WristLegalState EmptyState(
         WristLegalView view,
         long revision,
@@ -305,6 +298,24 @@ public sealed class WristLegalController
             issues,
             BundleId: null,
             ManifestSha256: null,
+            SelectedDocument: null);
+
+    private WristLegalState CreateCatalogState(
+        LegalCatalogSnapshot catalog,
+        WristLegalView view,
+        LegalCatalogComponent? selectedComponent) =>
+        new(
+            State.Revision + 1,
+            view,
+            catalog.ProductVersion,
+            SortComponents(catalog.Components),
+            selectedComponent,
+            FullLicenseText: null,
+            FirstVisibleLine: 0,
+            _linesPerPage,
+            Issues: [],
+            catalog.BundleId,
+            catalog.ManifestSha256,
             SelectedDocument: null);
 
     private static LegalCatalogComponent[] SortComponents(

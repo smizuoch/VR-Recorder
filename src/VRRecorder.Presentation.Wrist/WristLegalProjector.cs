@@ -43,8 +43,8 @@ public sealed class WristLegalProjector
                 .Select(ProjectDocument)
                 .ToArray()
             : [];
-        var page = state.View == WristLegalView.LicenseText
-            ? ProjectLicensePage(state)
+        var documentPage = state.View == WristLegalView.LicenseText
+            ? ProjectDocumentPage(state)
             : null;
         var fixedRecordingActions = _recorderProjector
             .Project(recorderStatus, WristPage.Legal)
@@ -72,8 +72,8 @@ public sealed class WristLegalProjector
             detail,
             documents,
             state.SelectedDocument,
-            page,
-            ProjectNavigation(state, page),
+            documentPage,
+            ProjectNavigation(state, documentPage),
             fixedRecordingActions,
             state.View == WristLegalView.Unavailable
                 ? _localizer.Resolve("legal.unavailable.label")
@@ -123,19 +123,7 @@ public sealed class WristLegalProjector
     private WristLegalDocumentSnapshot ProjectDocument(
         LegalDocumentReference reference)
     {
-        var kind = _localizer.Resolve(reference.Kind switch
-        {
-            LegalDocumentKind.License => "legal.document.license",
-            LegalDocumentKind.Notice => "legal.document.notice",
-            LegalDocumentKind.Copyright => "legal.document.copyright",
-            LegalDocumentKind.Attribution => "legal.document.attribution",
-            LegalDocumentKind.AssetManifest =>
-                "legal.document.asset-manifest",
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(reference),
-                reference.Kind,
-                "Unsupported legal document kind."),
-        });
+        var kind = _localizer.Resolve(DocumentKindResourceKey(reference));
         return new WristLegalDocumentSnapshot(
             reference,
             kind,
@@ -147,7 +135,7 @@ public sealed class WristLegalProjector
             MinimumTargetDp: 56);
     }
 
-    private WristLegalTextPageSnapshot? ProjectLicensePage(
+    private WristLegalTextPageSnapshot? ProjectDocumentPage(
         WristLegalState state)
     {
         if (state.FullLicenseText is null)
@@ -179,10 +167,26 @@ public sealed class WristLegalProjector
             Format("legal.page.format", pageNumber, pageCount));
     }
 
+    private static string DocumentKindResourceKey(
+        LegalDocumentReference reference) =>
+        reference.Kind switch
+        {
+            LegalDocumentKind.License => "legal.document.license",
+            LegalDocumentKind.Notice => "legal.document.notice",
+            LegalDocumentKind.Copyright => "legal.document.copyright",
+            LegalDocumentKind.Attribution => "legal.document.attribution",
+            LegalDocumentKind.AssetManifest =>
+                "legal.document.asset-manifest",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(reference),
+                reference.Kind,
+                "Unsupported legal document kind."),
+        };
+
     private IReadOnlyList<WristLegalNavigationActionSnapshot>
         ProjectNavigation(
             WristLegalState state,
-            WristLegalTextPageSnapshot? page) =>
+            WristLegalTextPageSnapshot? documentPage) =>
         state.View switch
         {
             WristLegalView.ComponentDetail =>
@@ -198,7 +202,7 @@ public sealed class WristLegalProjector
                     "legal.open-license.short",
                     "legal.open-license.accessible"),
             ],
-            WristLegalView.LicenseText when page is not null =>
+            WristLegalView.LicenseText when documentPage is not null =>
             [
                 Action(
                     "legal.back",
@@ -210,14 +214,14 @@ public sealed class WristLegalProjector
                     WristLegalAction.PreviousPage,
                     "legal.previous-page.short",
                     "legal.previous-page.accessible",
-                    page.FirstVisibleLine > 0),
+                    documentPage.FirstVisibleLine > 0),
                 Action(
                     "legal.next-page",
                     WristLegalAction.NextPage,
                     "legal.next-page.short",
                     "legal.next-page.accessible",
-                    page.FirstVisibleLine + state.LinesPerPage <
-                    page.TotalLines),
+                    documentPage.FirstVisibleLine + state.LinesPerPage <
+                    documentPage.TotalLines),
             ],
             _ => [],
         };
