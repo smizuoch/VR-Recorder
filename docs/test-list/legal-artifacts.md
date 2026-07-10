@@ -6,7 +6,7 @@
 
 - [x] direct NuGet追加を完全なmetadata／license全文とともにNoticesへ自動追記する
 - [x] transitive NuGet追加もNoticesとSPDX SBOMへ自動追記する
-- [ ] final stagingの未登録native DLLがpackage生成を停止する
+- [x] final stagingの未登録native DLLがpackage生成を停止する
 - [ ] MIT componentのcopyright notice欠落が生成を停止する
 - [ ] 未承認componentが1件でもあればrelease artifact生成を拒否する
 - [ ] 同一入力からbyte-for-byte同一の成果物を生成する
@@ -19,7 +19,7 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, the component manifes
 
 - [x] Add a direct NuGet dependency to Notices with complete metadata and full license text
 - [x] Add a transitive NuGet dependency to both Notices and the SPDX SBOM
-- [ ] Block package generation for an unregistered native DLL in final staging
+- [x] Block package generation for an unregistered native DLL in final staging
 - [ ] Block generation when an MIT component lacks its copyright notice
 - [ ] Reject release-artifact generation when any component is unapproved
 - [ ] Produce byte-for-byte identical artifacts from identical inputs
