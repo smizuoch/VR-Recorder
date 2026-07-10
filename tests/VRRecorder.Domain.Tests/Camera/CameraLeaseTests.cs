@@ -5,6 +5,51 @@ namespace VRRecorder.Domain.Tests.Camera;
 public sealed class CameraLeaseTests
 {
     [Fact]
+    public void ChangedModeAndStreamingAreBothRestored()
+    {
+        var lease = new CameraLease(
+            ObservedCameraValue.Known(CameraMode.Photo),
+            ObservedCameraValue.Known(false),
+            changedModeByRecorder: true,
+            changedStreamingByRecorder: true);
+
+        var plan = lease.CreateRestorePlan();
+
+        Assert.Equal(false, plan.Streaming);
+        Assert.Equal(CameraMode.Photo, plan.Mode);
+    }
+
+    [Fact]
+    public void ModeNotChangedByRecorderIsLeftUnchanged()
+    {
+        var lease = new CameraLease(
+            ObservedCameraValue.Known(CameraMode.Stream),
+            ObservedCameraValue.Known(true),
+            changedModeByRecorder: false,
+            changedStreamingByRecorder: false);
+
+        var plan = lease.CreateRestorePlan();
+
+        Assert.Null(plan.Streaming);
+        Assert.Null(plan.Mode);
+    }
+
+    [Fact]
+    public void UnknownChangedModeIsNotGuessedDuringRestore()
+    {
+        var lease = new CameraLease(
+            ObservedCameraValue.Unknown<CameraMode>(),
+            ObservedCameraValue.Unknown<bool>(),
+            changedModeByRecorder: true,
+            changedStreamingByRecorder: true);
+
+        var plan = lease.CreateRestorePlan();
+
+        Assert.Equal(false, plan.Streaming);
+        Assert.Null(plan.Mode);
+    }
+
+    [Fact]
     public void StreamingChangedFromFalseIsRestoredToFalse()
     {
         var lease = new CameraLease(
