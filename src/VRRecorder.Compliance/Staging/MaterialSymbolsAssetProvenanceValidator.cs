@@ -46,7 +46,7 @@ internal static class MaterialSymbolsAssetProvenanceValidator
             ];
         }
 
-        if (!TryGetCanonicalRepositoryRoot(
+        if (!RepositoryEvidenceRoot.TryResolve(
                 evidence.RepositoryRoot,
                 out var repositoryRoot))
         {
@@ -293,8 +293,7 @@ internal static class MaterialSymbolsAssetProvenanceValidator
             }
 
             var mapping = iconMappings[0];
-            if (
-                !string.Equals(
+            if (!string.Equals(
                     mapping.RightsLedgerEntryId,
                     rightsLedger.Id,
                     StringComparison.Ordinal) ||
@@ -346,63 +345,6 @@ internal static class MaterialSymbolsAssetProvenanceValidator
             issues.Add(Issue(
                 "material-symbols-staging-registration-mismatch",
                 ComponentId));
-        }
-    }
-
-    private static bool TryGetCanonicalRepositoryRoot(
-        string repositoryRoot,
-        out string canonicalRoot)
-    {
-        canonicalRoot = string.Empty;
-        if (string.IsNullOrWhiteSpace(repositoryRoot) ||
-            !Path.IsPathFullyQualified(repositoryRoot))
-        {
-            return false;
-        }
-
-        try
-        {
-            canonicalRoot = Path.TrimEndingDirectorySeparator(
-                Path.GetFullPath(repositoryRoot));
-            var suppliedRoot = Path.TrimEndingDirectorySeparator(
-                repositoryRoot);
-            var comparison = OperatingSystem.IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            if (!string.Equals(
-                    canonicalRoot,
-                    suppliedRoot,
-                    comparison) ||
-                !Directory.Exists(canonicalRoot))
-            {
-                return false;
-            }
-
-            for (var directory = new DirectoryInfo(canonicalRoot);
-                 directory is not null;
-                 directory = directory.Parent)
-            {
-                if (directory.LinkTarget is not null ||
-                    directory.Attributes.HasFlag(
-                        FileAttributes.ReparsePoint))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 
