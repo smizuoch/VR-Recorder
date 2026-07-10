@@ -1,4 +1,5 @@
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
@@ -15,6 +16,104 @@ namespace VRRecorder.Application.Tests.Recording;
 
 public sealed class RecordingLifecycleControllerTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SecondDesktopRecCancelsConnectionPreparation(
+        bool cancelDuringSnapshot)
+    {
+        var candidate = Candidate("connection-cancel", 9000);
+        var discovery = cancelDuringSnapshot
+            ? new ControllableDiscovery([candidate])
+            : new ControllableDiscovery();
+        var gateway = new ControllableSnapshotCameraGateway();
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(discovery),
+            new FixedGatewayFactory(gateway));
+        var signal = new UnexpectedVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var lifecycle = new RecordingLifecycleController(
+            connections,
+            new InMemoryCameraLeaseStore(),
+            CreateStartRecording(signal, reservation, engine),
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
+        await using var runtime = new DesktopRecordingRuntime(
+            new FixedStartRequestSource(new DesktopRecordingStartRequest(
+                candidate.ServiceId,
+                StartCommand())),
+            lifecycle,
+            new FakeStopRequestSink());
+
+        var first = runtime.ToggleAsync(CancellationToken.None);
+        if (cancelDuringSnapshot)
+        {
+            await gateway.WaitUntilSnapshotRequestedAsync();
+        }
+        else
+        {
+            await discovery.WaitUntilRequestedAsync();
+        }
+
+        var stateAtSecondRec = lifecycle.State;
+        var second = runtime.ToggleAsync(CancellationToken.None);
+
+        Assert.Same(first, second);
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.Equal(RecorderState.Arming, stateAtSecondRec);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.True(cancelDuringSnapshot
+            ? gateway.CancellationObserved
+            : discovery.CancellationObserved);
+        Assert.Equal(0, signal.CallCount);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
+    [Fact]
+    public async Task RetryCanceledDuringDiscoveryRestoresNoSignal()
+    {
+        var candidate = Candidate("retry-cancel", 9000);
+        var discovery = new RetryThenBlockingDiscovery(candidate);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(discovery),
+            new FixedGatewayFactory(new SnapshotCameraGateway(
+                KnownPhotoSnapshot())));
+        var signal = new ControllableVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new InMemoryCameraLeaseStore(),
+            CreateStartRecording(signal, reservation, engine),
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
+        var first = lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithTimeout();
+        await first;
+        using var cancellation = new CancellationTokenSource();
+
+        var retry = lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            cancellation.Token);
+        await discovery.WaitUntilRetryRequestedAsync();
+        var stateAtCancel = lifecycle.State;
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => retry);
+        Assert.Equal(RecorderState.Arming, stateAtCancel);
+        Assert.Equal(RecorderState.NoSignal, lifecycle.State);
+        Assert.True(discovery.RetryCancellationObserved);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
     [Fact]
     public async Task UserStopAndCompetingRequestRestoreOwnedCameraOnceAfterSaved()
     {
@@ -660,6 +759,79 @@ public sealed class RecordingLifecycleControllerTests
         }
     }
 
+    private sealed class ControllableDiscovery
+        : IVrChatInstanceDiscovery
+    {
+        private readonly TaskCompletionSource<IReadOnlyList<
+            VrChatInstanceCandidate>> _completion = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _requested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ControllableDiscovery(
+            IReadOnlyList<VrChatInstanceCandidate>? completed = null)
+        {
+            if (completed is not null)
+            {
+                _completion.SetResult(completed);
+            }
+        }
+
+        public bool CancellationObserved { get; private set; }
+
+        public async Task<IReadOnlyList<VrChatInstanceCandidate>> DiscoverAsync(
+            CancellationToken cancellationToken)
+        {
+            _requested.TrySetResult();
+            try
+            {
+                return await _completion.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                CancellationObserved = true;
+                throw;
+            }
+        }
+
+        public Task WaitUntilRequestedAsync() => _requested.Task;
+    }
+
+    private sealed class RetryThenBlockingDiscovery(
+        VrChatInstanceCandidate candidate) : IVrChatInstanceDiscovery
+    {
+        private readonly TaskCompletionSource _retryRequested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<IReadOnlyList<
+            VrChatInstanceCandidate>> _retry = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _callCount;
+
+        public bool RetryCancellationObserved { get; private set; }
+
+        public async Task<IReadOnlyList<VrChatInstanceCandidate>> DiscoverAsync(
+            CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _callCount) == 1)
+            {
+                return [candidate];
+            }
+
+            _retryRequested.TrySetResult();
+            try
+            {
+                return await _retry.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                RetryCancellationObserved = true;
+                throw;
+            }
+        }
+
+        public Task WaitUntilRetryRequestedAsync() => _retryRequested.Task;
+    }
+
     private sealed class CapturingGatewayFactory : IVrChatCameraGatewayFactory
     {
         public List<VrChatInstanceCandidate> CreatedFor { get; } = [];
@@ -676,6 +848,58 @@ public sealed class RecordingLifecycleControllerTests
     {
         public IVrChatCameraGateway Create(VrChatInstanceCandidate candidate) =>
             gateway;
+    }
+
+    private sealed class ControllableSnapshotCameraGateway
+        : IVrChatCameraGateway
+    {
+        private readonly TaskCompletionSource _requested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<CameraSnapshot> _snapshot = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool CancellationObserved { get; private set; }
+
+        public async Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken)
+        {
+            _requested.TrySetResult();
+            try
+            {
+                return await _snapshot.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                CancellationObserved = true;
+                throw;
+            }
+        }
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "Camera writes were not expected before snapshot completion.");
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "Camera writes were not expected before snapshot completion.");
+
+        public Task WaitUntilSnapshotRequestedAsync() => _requested.Task;
+    }
+
+    private sealed class FixedStartRequestSource(
+        DesktopRecordingStartRequest request)
+        : IDesktopRecordingStartRequestSource
+    {
+        public Task<DesktopRecordingStartRequest> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(request);
+        }
     }
 
     private sealed class FailingRestoreCameraGateway(List<string> events)
