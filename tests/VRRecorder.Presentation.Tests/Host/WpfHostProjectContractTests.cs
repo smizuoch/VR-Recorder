@@ -518,6 +518,8 @@ public sealed class WpfHostProjectContractTests
                      "RotatingJsonLinesDiagnosticLog",
                      "StructuredRecordingEventSink",
                      "RecorderStatusDiagnosticObserver",
+                     "JsonFileRecordingRightsAcknowledgementStore",
+                     "RightsAcknowledgedDesktopRecordingStartRequestSource",
                  })
         {
             Assert.Contains(productionType, factory);
