@@ -1,7 +1,9 @@
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Camera;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
@@ -11,6 +13,47 @@ namespace VRRecorder.Application.Tests.Desktop;
 
 public sealed class DesktopRecordingRuntimeTests
 {
+    [Fact]
+    public async Task RelaysLifecycleAndOwnsStoppingProjectionWithOneRevisionOrder()
+    {
+        var handle = Handle("session-live-status");
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-live-status"));
+        var lifecycle = new StatusRecordingLifecycle(handle);
+        var stops = new PassiveStopRequestSink(lifecycle);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops);
+        List<RecorderStatusSnapshot> statuses = [];
+        using var subscription = runtime.Subscribe(statuses.Add);
+
+        await runtime.ToggleAsync(CancellationToken.None);
+        var stopping = runtime.ToggleAsync(CancellationToken.None);
+        await stops.WaitUntilRequestedAsync();
+
+        Assert.Equal(RecorderState.Stopping, runtime.Current.State);
+        Assert.Equal(RecorderState.Stopping, statuses[^1].State);
+        stops.Complete();
+        await stopping;
+
+        Assert.Equal(
+            [
+                RecorderState.Ready,
+                RecorderState.Arming,
+                RecorderState.Recording,
+                RecorderState.Stopping,
+                RecorderState.Ready,
+            ],
+            statuses.Select(status => status.State));
+        Assert.Equal(
+            Enumerable.Range(0, statuses.Count).Select(value => (long)value),
+            statuses.Select(status => status.Revision));
+        Assert.All(statuses, status => Assert.Equal(
+            RecorderStatusSnapshot.Create(status.Revision, status.State),
+            status));
+    }
+
     [Fact]
     public async Task FirstToggleStartsAndSecondToggleStopsSameHandleThroughFinalization()
     {
@@ -548,6 +591,100 @@ public sealed class DesktopRecordingRuntimeTests
         }
 
         public Task WaitUntilRequestedAsync() => _requested.Task;
+    }
+
+    private sealed class StatusRecordingLifecycle(
+        RecordingHandle handle)
+        : IRecordingLifecycleController,
+          IRecorderStatusSource
+    {
+        private readonly RecorderStatusHub _statuses = new(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        private long _revision;
+
+        public RecorderState State => Current.State;
+
+        public RecorderStatusSnapshot Current => _statuses.Current;
+
+        public IDisposable Subscribe(
+            Action<RecorderStatusSnapshot> subscriber) =>
+            _statuses.Subscribe(subscriber);
+
+        public Task<RecordingLifecycleStartResult> StartAsync(
+            string? selectedServiceId,
+            StartRecordingCommand command,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Publish(RecorderState.Arming);
+            Publish(RecorderState.Recording);
+            return Task.FromResult(new RecordingLifecycleStartResult(
+                RecorderState.Recording,
+                new VrChatCameraConnectionResolution.Connected(
+                    new VrChatInstanceCandidate(
+                        selectedServiceId ?? "status-service",
+                        "VRChat status",
+                        new Uri("http://127.0.0.1:9100/"),
+                        "127.0.0.1",
+                        9000),
+                    new NoOpCameraGateway()),
+                new StartRecordingResult.Started(
+                    handle,
+                    Task.CompletedTask,
+                    Task.CompletedTask)));
+        }
+
+        public void Publish(RecorderState state) =>
+            _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                ++_revision,
+                state));
+
+        public void Dispose() => _statuses.Dispose();
+    }
+
+    private sealed class PassiveStopRequestSink(
+        StatusRecordingLifecycle lifecycle) : IStopRequestSink
+    {
+        private readonly TaskCompletionSource _requested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _completion = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task RequestStopAsync(
+            RecordingStopRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _requested.TrySetResult();
+            return _completion.Task;
+        }
+
+        public Task WaitUntilRequestedAsync() => _requested.Task;
+
+        public void Complete()
+        {
+            lifecycle.Publish(RecorderState.Ready);
+            _completion.TrySetResult();
+        }
+    }
+
+    private sealed class NoOpCameraGateway : IVrChatCameraGateway
+    {
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)));
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed class ControllableRecordingLifecycle
