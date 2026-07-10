@@ -10,6 +10,60 @@ namespace VRRecorder.IntegrationTests.Media;
 public sealed class PInvokeNativeRecordingBackendTests
 {
     [Fact]
+    public async Task ThrowingManagedFaultCallbackStillFaultsPendingStop()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "take.recording.mp4"),
+            Path.Combine(directory.Path, "take.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new FrameRate(30));
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(
+                () => { },
+                _ => throw new InvalidOperationException(
+                    "The managed fault callback failed.")),
+            CancellationToken.None);
+        var stopping = session.StopAsync(CancellationToken.None);
+
+        controls.Fail(
+            status: 6,
+            message: "encoder failed while stopping");
+
+        var completed = await Task.WhenAny(
+            stopping,
+            Task.Delay(TimeSpan.FromMilliseconds(250)));
+        if (!ReferenceEquals(stopping, completed))
+        {
+            await session.AbortAsync(CancellationToken.None);
+        }
+
+        Assert.Same(stopping, completed);
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => stopping);
+        Assert.Equal(6, exception.Fault.Status);
+        Assert.Equal("encoder failed while stopping", exception.Fault.Message);
+    }
+
+    [Fact]
     public async Task StopCompletesOnlyAfterNativeStoppedEventWithPacketCounts()
     {
         if (!OperatingSystem.IsLinux())
@@ -95,6 +149,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly nint _library;
         private readonly CommitDelegate _commit;
         private readonly CompleteDelegate _complete;
+        private readonly FailDelegate _fail;
 
         public NativeFixtureControls(string path)
         {
@@ -107,6 +162,10 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_complete_trailer_flush_close"));
+            _fail = Marshal.GetDelegateForFunctionPointer<FailDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_fail"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -115,6 +174,8 @@ public sealed class PInvokeNativeRecordingBackendTests
             ulong videoPacketCount,
             ulong audioPacketCount) =>
             _complete(videoPacketCount, audioPacketCount);
+
+        public void Fail(int status, string message) => _fail(status, message);
 
         public void Dispose() => NativeLibrary.Free(_library);
 
@@ -125,6 +186,11 @@ public sealed class PInvokeNativeRecordingBackendTests
         private delegate void CompleteDelegate(
             ulong videoPacketCount,
             ulong audioPacketCount);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void FailDelegate(
+            int status,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
     }
 
     private sealed class TemporaryDirectory : IDisposable
