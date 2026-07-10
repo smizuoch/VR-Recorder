@@ -6,6 +6,7 @@ public interface IReleasePackageWriter
 {
     Task WriteAsync(
         string packagePath,
+        string stagingDirectory,
         StagingInventory inventory,
         CancellationToken cancellationToken);
 }

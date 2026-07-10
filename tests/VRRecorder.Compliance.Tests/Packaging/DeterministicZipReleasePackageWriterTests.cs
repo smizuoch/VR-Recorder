@@ -64,17 +64,16 @@ public sealed class DeterministicZipReleasePackageWriterTests
             archive.Entries.Select(entry => entry.FullName));
         Assert.Equal(2, archive.Entries.Select(entry => entry.FullName).Distinct(
             StringComparer.OrdinalIgnoreCase).Count());
-        var timestamp = new DateTimeOffset(
+        var timestamp = new DateTime(
             1980,
             1,
             1,
             0,
             0,
-            0,
-            TimeSpan.Zero);
+            0);
         Assert.All(archive.Entries, entry => Assert.Equal(
             timestamp,
-            entry.LastWriteTime));
+            entry.LastWriteTime.DateTime));
         Assert.Equal(alpha, ReadEntry(archive, "nested/alpha.bin"));
         Assert.Equal(zeta, ReadEntry(archive, "zeta.txt"));
     }

@@ -87,6 +87,7 @@ public sealed class ReleasePackageGeneratorTests
 
         public async Task WriteAsync(
             string packagePath,
+            string stagingDirectory,
             StagingInventory inventory,
             CancellationToken cancellationToken)
         {

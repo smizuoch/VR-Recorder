@@ -38,7 +38,11 @@ public sealed class ReleasePackageGenerator
         }
 
         await _packageWriter
-            .WriteAsync(request.PackagePath, inventory, cancellationToken)
+            .WriteAsync(
+                request.PackagePath,
+                request.StagingDirectory,
+                inventory,
+                cancellationToken)
             .ConfigureAwait(false);
         return new PackageGenerationResult(true, []);
     }
