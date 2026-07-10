@@ -3,7 +3,7 @@
 #include "vrrecorder_native.h"
 
 #if UINTPTR_MAX == UINT64_MAX
-_Static_assert(sizeof(vrrec_session_config_v1) == 48, "config ABI drift");
+_Static_assert(sizeof(vrrec_session_config_v1) == 160, "config ABI drift");
 _Static_assert(sizeof(vrrec_event_v1) == 48, "event ABI drift");
 _Static_assert(sizeof(vrrec_callbacks_v1) == 24, "callback ABI drift");
 _Static_assert(

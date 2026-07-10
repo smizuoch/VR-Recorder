@@ -2,9 +2,33 @@
 #define VRRECORDER_NATIVE_TEST_FAKE_MEDIA_BACKEND_HPP
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace vrrecorder::native::testing {
+
+struct ObservedMediaSessionConfig {
+    std::uint32_t canvas_width;
+    std::uint32_t canvas_height;
+    std::uint32_t source_width;
+    std::uint32_t source_height;
+    std::uint32_t destination_x;
+    std::uint32_t destination_y;
+    std::uint32_t destination_width;
+    std::uint32_t destination_height;
+    std::uint32_t canvas_background;
+    std::uint32_t rotation;
+    std::uint32_t audio_routing;
+    std::uint32_t quality_preset;
+    std::string desktop_endpoint_id;
+    std::string microphone_endpoint_id;
+    double desktop_gain_db;
+    double microphone_gain_db;
+    std::string spout_sender_identity;
+    std::uint64_t spout_adapter_luid;
+    std::uint64_t encoder_adapter_luid;
+    std::string gpu_identity;
+};
 
 void CommitMuxedVideoPacket();
 void CompleteTrailerFlushClose(
@@ -12,6 +36,7 @@ void CompleteTrailerFlushClose(
     std::uint64_t audio_packet_count);
 void Fail(std::int32_t status, std::string_view message);
 std::uint32_t EncoderKind();
+const ObservedMediaSessionConfig &SessionConfig();
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed);
 std::string_view SteamVrManifestPath();
 std::string_view SteamVrActionSetPath();

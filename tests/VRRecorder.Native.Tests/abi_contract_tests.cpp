@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <limits>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -7,7 +8,7 @@
 #include "vrrecorder_native.h"
 
 static_assert(VRREC_ABI_V1 == 1);
-static_assert(sizeof(vrrec_session_config_v1) == 48);
+static_assert(sizeof(vrrec_session_config_v1) == 160);
 static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
@@ -55,6 +56,25 @@ vrrec_session_config_v1 ValidConfig()
         1,
         1'784'000'000'000,
         VRREC_ENCODER_AMF,
+        0,
+        1920,
+        1080,
+        240,
+        0,
+        1440,
+        1080,
+        VRREC_CANVAS_BACKGROUND_BLACK,
+        VRREC_VIDEO_ROTATION_NONE,
+        VRREC_AUDIO_ROUTING_MIXED,
+        VRREC_QUALITY_PRESET_HIGH,
+        "{0.0.0.00000000}.desktop-endpoint",
+        "{0.0.1.00000000}.microphone-endpoint",
+        -6.0,
+        -3.5,
+        "VRChat-Spout-Sender-42",
+        UINT64_C(0x00000001ABCDEF01),
+        UINT64_C(0x00000001ABCDEF01),
+        "pci\\ven_10de&dev_2684|driver-32.0.15.6094",
         0,
     };
 }
@@ -146,6 +166,182 @@ bool LegacySessionConfigDefaultsToSoftwareEncoder()
           VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE);
 
     vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool FullSessionConfigCrossesTheBackendBoundaryExactly()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    const auto &observed = vrrecorder::native::testing::SessionConfig();
+    CHECK(observed.canvas_width == 1920);
+    CHECK(observed.canvas_height == 1080);
+    CHECK(observed.source_width == 1920);
+    CHECK(observed.source_height == 1080);
+    CHECK(observed.destination_x == 240);
+    CHECK(observed.destination_y == 0);
+    CHECK(observed.destination_width == 1440);
+    CHECK(observed.destination_height == 1080);
+    CHECK(observed.canvas_background == VRREC_CANVAS_BACKGROUND_BLACK);
+    CHECK(observed.rotation == VRREC_VIDEO_ROTATION_NONE);
+    CHECK(observed.audio_routing == VRREC_AUDIO_ROUTING_MIXED);
+    CHECK(observed.quality_preset == VRREC_QUALITY_PRESET_HIGH);
+    CHECK(observed.desktop_endpoint_id ==
+          "{0.0.0.00000000}.desktop-endpoint");
+    CHECK(observed.microphone_endpoint_id ==
+          "{0.0.1.00000000}.microphone-endpoint");
+    CHECK(observed.desktop_gain_db == -6.0);
+    CHECK(observed.microphone_gain_db == -3.5);
+    CHECK(observed.spout_sender_identity == "VRChat-Spout-Sender-42");
+    CHECK(observed.spout_adapter_luid == UINT64_C(0x00000001ABCDEF01));
+    CHECK(observed.encoder_adapter_luid == UINT64_C(0x00000001ABCDEF01));
+    CHECK(observed.gpu_identity ==
+          "pci\\ven_10de&dev_2684|driver-32.0.15.6094");
+
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool LegacySessionConfigsReceiveDeterministicMediaDefaults()
+{
+    EventLog log;
+    auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+
+    config.struct_size = 40;
+    config.encoder_kind = UINT32_MAX;
+    config.source_width = UINT32_MAX;
+    config.audio_routing = UINT32_MAX;
+    config.desktop_gain_db = std::numeric_limits<double>::quiet_NaN();
+    config.spout_sender_identity_utf8 = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    auto observed = vrrecorder::native::testing::SessionConfig();
+    CHECK(vrrecorder::native::testing::EncoderKind() ==
+          VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE);
+    CHECK(observed.source_width == 1920);
+    CHECK(observed.source_height == 1080);
+    CHECK(observed.destination_x == 0);
+    CHECK(observed.destination_y == 0);
+    CHECK(observed.destination_width == 1920);
+    CHECK(observed.destination_height == 1080);
+    CHECK(observed.canvas_background == VRREC_CANVAS_BACKGROUND_BLACK);
+    CHECK(observed.rotation == VRREC_VIDEO_ROTATION_NONE);
+    CHECK(observed.audio_routing == VRREC_AUDIO_ROUTING_MIXED);
+    CHECK(observed.quality_preset == VRREC_QUALITY_PRESET_HIGH);
+    CHECK(observed.desktop_endpoint_id == "default-render");
+    CHECK(observed.microphone_endpoint_id == "default-capture");
+    CHECK(observed.desktop_gain_db == -6.0);
+    CHECK(observed.microphone_gain_db == -6.0);
+    CHECK(observed.spout_sender_identity == "legacy-unspecified");
+    CHECK(observed.spout_adapter_luid == 0);
+    CHECK(observed.encoder_adapter_luid == 0);
+    CHECK(observed.gpu_identity == "legacy-unspecified");
+    vrrec_session_destroy_v1(session);
+
+    config = ValidConfig();
+    config.struct_size = 48;
+    config.encoder_kind = VRREC_ENCODER_QSV;
+    config.source_width = UINT32_MAX;
+    config.audio_routing = UINT32_MAX;
+    config.desktop_gain_db = std::numeric_limits<double>::infinity();
+    config.spout_sender_identity_utf8 = nullptr;
+    session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    observed = vrrecorder::native::testing::SessionConfig();
+    CHECK(vrrecorder::native::testing::EncoderKind() == VRREC_ENCODER_QSV);
+    CHECK(observed.source_width == 1920);
+    CHECK(observed.destination_width == 1920);
+    CHECK(observed.audio_routing == VRREC_AUDIO_ROUTING_MIXED);
+    CHECK(observed.desktop_gain_db == -6.0);
+    CHECK(observed.spout_sender_identity == "legacy-unspecified");
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool RejectsTruncatedOrInvalidExtendedSessionConfig()
+{
+    EventLog log;
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    const auto rejected = [&](vrrec_session_config_v1 config) {
+        session = reinterpret_cast<vrrec_session_t *>(UINTPTR_MAX);
+        return vrrec_session_create_v1(&config, &callbacks, &session) ==
+                   VRREC_STATUS_INVALID_ARGUMENT &&
+            session == nullptr;
+    };
+
+    auto config = ValidConfig();
+    config.struct_size = 49;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.struct_size = sizeof(config) - 1;
+    CHECK(rejected(config));
+
+    config = ValidConfig();
+    config.width = 1919;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.source_width = 0;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.destination_width = 1439;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.destination_x = 481;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.canvas_background = UINT32_MAX;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.rotation = UINT32_MAX;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.audio_routing = UINT32_MAX;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.quality_preset = UINT32_MAX;
+    CHECK(rejected(config));
+
+    config = ValidConfig();
+    config.desktop_gain_db = std::numeric_limits<double>::quiet_NaN();
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.microphone_gain_db = std::numeric_limits<double>::infinity();
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.desktop_gain_db = -96.1;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.microphone_gain_db = 24.1;
+    CHECK(rejected(config));
+
+    constexpr char invalid_utf8[] = "\xC3\x28";
+    config = ValidConfig();
+    config.temporary_output_path_utf8 = "relative.recording.mp4";
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.desktop_endpoint_id_utf8 = nullptr;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.microphone_endpoint_id_utf8 = "   ";
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.spout_sender_identity_utf8 = invalid_utf8;
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.gpu_identity_utf8 = "";
+    CHECK(rejected(config));
+    config = ValidConfig();
+    config.reserved_v1 = 1;
+    CHECK(rejected(config));
     return true;
 }
 
@@ -305,6 +501,9 @@ int main()
     if (vrrec_abi_version() != VRREC_ABI_V1 ||
         !RejectsInvalidAbiInputs() ||
         !LegacySessionConfigDefaultsToSoftwareEncoder() ||
+        !FullSessionConfigCrossesTheBackendBoundaryExactly() ||
+        !LegacySessionConfigsReceiveDeterministicMediaDefaults() ||
+        !RejectsTruncatedOrInvalidExtendedSessionConfig() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
