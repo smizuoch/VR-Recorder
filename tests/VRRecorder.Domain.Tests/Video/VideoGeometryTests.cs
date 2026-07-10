@@ -36,4 +36,14 @@ public sealed class VideoGeometryTests
             new VideoGeometry(1922, 1082, VideoPixelFormat.Bgra8),
             padded);
     }
+
+    [Fact]
+    public void EvenDimensionsAreUnchangedForChroma420()
+    {
+        var geometry = new VideoGeometry(1920, 1080, VideoPixelFormat.Bgra8);
+
+        var padded = geometry.PadForChroma420();
+
+        Assert.Equal(geometry, padded);
+    }
 }

@@ -7,7 +7,7 @@
 - [x] `height > width`をPortraitと判定する
 - [x] `width >= height`をLandscapeと判定する
 - [x] 1921×1081を4:2:0用に1922×1082へ最大1 px padする
-- [ ] 偶数寸法にはpadしない
+- [x] 偶数寸法にはpadしない
 - [ ] SingleFileFitで1920×1080へ1080×1920を歪みなくContainする
 
 ## English
@@ -17,5 +17,5 @@ The resolution, orientation, and Contain rules from Basic Design v0.3 §§10.2, 
 - [x] Classify `height > width` as Portrait
 - [x] Classify `width >= height` as Landscape
 - [x] Pad 1921×1081 by at most one pixel to 1922×1082 for 4:2:0
-- [ ] Do not pad even dimensions
+- [x] Do not pad even dimensions
 - [ ] Contain 1080×1920 without distortion in a 1920×1080 SingleFileFit canvas
