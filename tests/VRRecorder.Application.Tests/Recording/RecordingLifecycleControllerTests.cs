@@ -2,6 +2,7 @@ using VRRecorder.Application.Camera;
 using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
 using VRRecorder.Domain.Camera;
 using VRRecorder.Domain.Encoding;
@@ -14,6 +15,128 @@ namespace VRRecorder.Application.Tests.Recording;
 
 public sealed class RecordingLifecycleControllerTests
 {
+    [Fact]
+    public async Task UserStopAndCompetingRequestRestoreOwnedCameraOnceAfterSaved()
+    {
+        var events = new List<string>();
+        var candidate = Candidate("selected", 9000);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(new RecordingCameraGateway(events)));
+        var signal = new ControllableVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "take.mp4"));
+        reservation.Complete(pending);
+        var engine = new FakeRecordingEngine();
+        var finalizer = new ControllableRecordingFileFinalizer();
+        var savedRecordings = new FakeSavedRecordingSink();
+        var sessions = new ActiveRecordingSessionCoordinator(
+            engine,
+            new RecordingFileFinalizationUseCase(
+                finalizer,
+                new StubRecordingFileValidator(RecordingFileValidation.Valid),
+                new FakeRecordingRecoveryStore(),
+                savedRecordings));
+        var startRecording = new StartRecordingUseCase(
+            signal,
+            new ControllableCountdownTimer(),
+            reservation,
+            new FixedWallClock(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new StubStorageSpaceProbe(new StorageSpace(
+                StorageCapacityPolicy.MinimumStartBytes)),
+            new EncoderSelector(new ScriptedEncoderProbe(
+                (EncoderKind.MediaFoundationSoftware,
+                    EncoderProbeResult.PacketProduced))),
+            engine,
+            sessions,
+            new FakeRecordingStorageMonitor(),
+            new AutoStopScheduler(
+                new ControllableMonotonicClock(
+                    MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+                sessions));
+        var restoreWarnings = new FakeCameraRestoreWarningSink();
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new RecordingCameraLeaseStore(events),
+            startRecording,
+            sessions,
+            restoreWarnings);
+        var starting = lifecycle.StartAsync(
+            candidate.ServiceId,
+            new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)),
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                new OutputPath(Path.GetTempPath()),
+                new FrameRate(30)),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(320, 180));
+        await engine.WaitUntilStartRequestedAsync();
+        var handle = new RecordingHandle(
+            "session-001",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        engine.CommitFirstPacket(handle);
+        var started = Assert.IsType<StartRecordingResult.Started>(
+            (await starting).Recording);
+
+        var userStop = sessions.RequestStopAsync(
+            new RecordingStopRequest(
+                started.Handle,
+                RecordingStopReason.UserRequested),
+            CancellationToken.None);
+        var competingDiskLow = sessions.RequestStopAsync(
+            new RecordingStopRequest(
+                started.Handle,
+                RecordingStopReason.DiskLow),
+            CancellationToken.None);
+
+        Assert.Equal(1, engine.StopCallCount);
+        Assert.Equal(RecordingStopReason.UserRequested, sessions.StopReason);
+        Assert.Equal(
+            ["lease:save", "mode:Stream", "streaming:true"],
+            events);
+        engine.CompleteStop(new RecordingStopResult(
+            pending,
+            VideoPacketCount: 90,
+            AudioPacketCount: 142));
+        await finalizer.WaitUntilRequestedAsync();
+        Assert.Equal(
+            ["lease:save", "mode:Stream", "streaming:true"],
+            events);
+
+        var finalized = new FinalizedRecording(pending.FinalPath);
+        finalizer.Complete(finalized);
+        await Task.WhenAll(userStop, competingDiskLow);
+
+        Assert.Equal(
+            [
+                "lease:save",
+                "mode:Stream",
+                "streaming:true",
+                "streaming:false",
+                "mode:Photo",
+                "lease:delete",
+            ],
+            events);
+        Assert.Equal(1, engine.StopCallCount);
+        Assert.Equal(finalized, Assert.Single(savedRecordings.Recordings));
+        Assert.Empty(restoreWarnings.Warnings);
+        Assert.Equal(RecorderState.Ready, sessions.State);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+    }
+
     [Fact]
     public async Task MultipleTargetsWithoutExactSelectionNeverStartRecording()
     {
@@ -302,6 +425,28 @@ public sealed class RecordingLifecycleControllerTests
                 throw new TestCameraRestoreException();
             }
 
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingCameraGateway(List<string> events)
+        : IVrChatCameraGateway
+    {
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add($"mode:{mode}");
+            return Task.CompletedTask;
+        }
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
             return Task.CompletedTask;
         }
     }
