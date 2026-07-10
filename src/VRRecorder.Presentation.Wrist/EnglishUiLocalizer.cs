@@ -11,6 +11,8 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
             ["recording.start.accessible"] = "Start recording",
             ["recording.stop.short"] = "STOP",
             ["recording.stop.accessible"] = "Stop recording",
+            ["camera.retry.short"] = "RETRY",
+            ["camera.retry.accessible"] = "Retry camera connection",
         };
 
     private EnglishUiLocalizer()

@@ -28,6 +28,11 @@ public sealed class WristUiProjector
         {
             actions = [CreateStopAction()];
         }
+        else if (status.State == RecorderState.NoSignal &&
+                 status.AvailableActions.HasFlag(RecorderAvailableActions.Retry))
+        {
+            actions = [CreateRetryAction()];
+        }
         else if (status.State == RecorderState.Ready &&
                  status.AvailableActions.HasFlag(RecorderAvailableActions.Start))
         {
@@ -75,5 +80,21 @@ public sealed class WristUiProjector
             AccessibleName: accessibleName,
             Tooltip: accessibleName,
             MinimumTargetDp: 64);
+    }
+
+    private UiActionSnapshot CreateRetryAction()
+    {
+        var accessibleName = _localizer.Resolve("camera.retry.accessible");
+        return new UiActionSnapshot(
+            SemanticId: "camera.retry",
+            Command: UiCommandId.Retry,
+            IconSemanticId: "camera.retry",
+            ComponentRole: UiComponentRole.FilledTonalButton,
+            ColorRole: UiColorRole.Error,
+            IsEnabled: true,
+            VisibleLabel: _localizer.Resolve("camera.retry.short"),
+            AccessibleName: accessibleName,
+            Tooltip: accessibleName,
+            MinimumTargetDp: 56);
     }
 }
