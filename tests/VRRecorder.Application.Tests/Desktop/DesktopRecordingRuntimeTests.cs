@@ -42,7 +42,7 @@ public sealed class DesktopRecordingRuntimeTests
         await stopping;
 
         Assert.Equal(RecorderState.Ready, lifecycle.State);
-        Assert.Equal(1, stops.Requests.Count);
+        Assert.Single(stops.Requests);
     }
 
     [Fact]
@@ -107,7 +107,30 @@ public sealed class DesktopRecordingRuntimeTests
     }
 
     [Fact]
-    public async Task ConcurrentTogglesJoinOneStartOperation()
+    public async Task StartedResultWithNoSignalLifecycleFailsClosed()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-inconsistent"));
+        var lifecycle = new ControllableRecordingLifecycle
+        {
+            NextStartStateOverride = RecorderState.NoSignal,
+        };
+        lifecycle.EnqueueCompleted(Started(Handle("session-inconsistent")));
+        var stops = new ControllableStopRequestSink(lifecycle);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops);
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            runtime.ToggleAsync(CancellationToken.None));
+
+        Assert.Contains("inconsistent", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
+    public async Task ConcurrentTransportDuplicateTogglesJoinOneStartOperation()
     {
         var requests = new ControllableStartRequestSource();
         var request = requests.EnqueuePending();
@@ -133,7 +156,7 @@ public sealed class DesktopRecordingRuntimeTests
         request.SetResult(Request("vrc-concurrent"));
         await Task.WhenAll(first, second);
 
-        Assert.Equal(1, lifecycle.StartRequests.Count);
+        Assert.Single(lifecycle.StartRequests);
     }
 
     [Fact]
@@ -189,6 +212,33 @@ public sealed class DesktopRecordingRuntimeTests
         stops.Complete();
         await disposal;
 
+        Assert.Single(stops.Requests);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+    }
+
+    [Fact]
+    public async Task FailedStopIsReusedByDisposeWithoutSecondStopRequest()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-stop-failure"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueCompleted(Started(Handle("session-stop-failure")));
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var runtime = new DesktopRecordingRuntime(requests, lifecycle, stops);
+        await runtime.ToggleAsync(CancellationToken.None);
+        var stopping = runtime.ToggleAsync(CancellationToken.None);
+        await stops.WaitUntilRequestedAsync();
+        var failure = new IOException("finalization failed");
+
+        stops.Fail(failure);
+
+        Assert.Same(
+            failure,
+            await Assert.ThrowsAsync<IOException>(() => stopping));
+        Assert.Same(
+            failure,
+            await Assert.ThrowsAsync<IOException>(async () =>
+                await runtime.DisposeAsync()));
         Assert.Single(stops.Requests);
         Assert.Equal(1, lifecycle.DisposeCallCount);
     }
@@ -288,6 +338,8 @@ public sealed class DesktopRecordingRuntimeTests
 
         public RecorderState State { get; private set; } = RecorderState.Ready;
 
+        public RecorderState? NextStartStateOverride { get; init; }
+
         public List<(string? ServiceId, StartRecordingCommand Command)>
             StartRequests { get; } = [];
 
@@ -318,7 +370,7 @@ public sealed class DesktopRecordingRuntimeTests
                     .Dequeue()
                     .Task
                     .WaitAsync(cancellationToken);
-                State = result.State;
+                State = NextStartStateOverride ?? result.State;
                 return result;
             }
             catch (OperationCanceledException)
@@ -365,6 +417,9 @@ public sealed class DesktopRecordingRuntimeTests
         }
 
         public void Complete() => _completed.TrySetResult();
+
+        public void Fail(Exception failure) =>
+            _completed.TrySetException(failure);
 
         public Task WaitUntilRequestedAsync() => _requested.Task;
 
