@@ -175,6 +175,24 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
     }
 
+    [Fact]
+    public async Task MissingAuthenticatedAnchorLocksRecorderInComplianceFault()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var gateway = new RuntimeLegalBundleVerificationGateway(
+            directory.Path,
+            new AuthenticatedLegalBundleVerifier(
+                new MissingAuthenticatedAnchorSource()));
+
+        var result = await new RecorderStartupUseCase(gateway)
+            .ExecuteAsync(CancellationToken.None);
+
+        Assert.Equal(RecorderState.ComplianceFault, result.State);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("LEGAL_BUNDLE_MISSING", issue.Code);
+        Assert.Equal("authenticated-manifest-anchor", issue.Subject);
+    }
+
     private static string CatalogJson() => $$"""
         {
           "schemaVersion": 2,
@@ -203,6 +221,16 @@ public sealed class AuthenticatedLegalBundleVerifierTests
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(anchor);
         }
+    }
+
+    private sealed class MissingAuthenticatedAnchorSource
+        : IAuthenticatedLegalBundleAnchorSource
+    {
+        public ValueTask<AuthenticatedLegalBundleAnchor> GetAsync(
+            CancellationToken cancellationToken) =>
+            ValueTask.FromException<AuthenticatedLegalBundleAnchor>(
+                new AuthenticatedLegalBundleAnchorUnavailableException(
+                    "The signed application resource is missing."));
     }
 
     private sealed class TemporaryDirectory : IDisposable
