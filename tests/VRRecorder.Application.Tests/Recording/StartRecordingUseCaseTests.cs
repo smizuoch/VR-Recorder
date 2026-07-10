@@ -24,4 +24,24 @@ public sealed class StartRecordingUseCaseTests
         await cancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
     }
+
+    [Fact]
+    public async Task SignalTimeoutReturnsNoSignalWithoutCreatingAFile()
+    {
+        var signal = new ControllableVideoSignalGateway();
+        var engine = new FakeRecordingEngine();
+        var useCase = new StartRecordingUseCase(signal, engine);
+
+        var execution = useCase.ExecuteAsync(
+            new StartRecordingCommand(),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithTimeout();
+
+        var result = await execution;
+
+        Assert.IsType<StartRecordingResult.NoSignal>(result);
+        Assert.Equal(0, engine.StartCallCount);
+        Assert.Empty(engine.CreatedFiles);
+    }
 }

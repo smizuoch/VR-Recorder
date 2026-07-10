@@ -19,4 +19,7 @@ internal sealed class ControllableVideoSignalGateway : IVideoSignalGateway
     }
 
     public Task WaitUntilRequestedAsync() => _requested.Task;
+
+    public void CompleteWithTimeout() =>
+        _signal.TrySetException(new TimeoutException("No stable video signal."));
 }
