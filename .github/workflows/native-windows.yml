@@ -1,0 +1,44 @@
+name: Native Windows ABI
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/native-windows.yml
+      - CMakeLists.txt
+      - src/VRRecorder.Native/**
+      - tests/VRRecorder.Native.Tests/**
+  push:
+    paths:
+      - .github/workflows/native-windows.yml
+      - CMakeLists.txt
+      - src/VRRecorder.Native/**
+      - tests/VRRecorder.Native.Tests/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact revision
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          $server = $env:GITHUB_SERVER_URL -replace '^https://', "https://x-access-token:$env:GH_TOKEN@"
+          git remote add origin "$server/$env:GITHUB_REPOSITORY.git"
+          git -c protocol.version=2 fetch --no-tags --prune --depth=1 origin "$env:GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+
+      - name: Configure Windows x64
+        run: cmake -S . -B build/native-windows -A x64 -DBUILD_TESTING=ON
+
+      - name: Build Release DLL and ABI tests
+        run: cmake --build build/native-windows --config Release --parallel
+
+      - name: Run C and C++ ABI contracts
+        run: ctest --test-dir build/native-windows -C Release --output-on-failure

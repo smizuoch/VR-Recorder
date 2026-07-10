@@ -71,10 +71,15 @@ vrrec_callbacks_v1 ValidCallbacks(EventLog &log)
 
 vrrec_steamvr_input_config_v1 ValidSteamVrConfig()
 {
+#if defined(_WIN32)
+    constexpr auto manifest_path = "C:\\VR Recorder\\OpenVr\\actions.json";
+#else
+    constexpr auto manifest_path = "/opt/VR Recorder/OpenVr/actions.json";
+#endif
     return vrrec_steamvr_input_config_v1 {
         sizeof(vrrec_steamvr_input_config_v1),
         VRREC_ABI_V1,
-        "/opt/VR Recorder/OpenVr/actions.json",
+        manifest_path,
         "/actions/vrrecorder",
         "/actions/vrrecorder/in/toggle_recording",
     };

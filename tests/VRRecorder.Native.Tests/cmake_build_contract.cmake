@@ -54,7 +54,7 @@ file(
     STRINGS
     "${repository_root}/tests/VRRecorder.Native.Tests/expected_exports.txt"
     expected_exports)
-list(FILTER expected_exports EXCLUDE REGEX "^[ \\t]*$")
+list(FILTER expected_exports EXCLUDE REGEX "^ *$")
 list(SORT expected_exports)
 
 file(
@@ -67,8 +67,7 @@ foreach(line IN LISTS definition_lines)
     if(line STREQUAL "" OR line MATCHES "^(LIBRARY|EXPORTS)([ \\t]|$)")
         continue()
     endif()
-    string(REGEX MATCH "^[^ \\t]+" export_name "${line}")
-    list(APPEND definition_exports "${export_name}")
+    list(APPEND definition_exports "${line}")
 endforeach()
 list(SORT definition_exports)
 
