@@ -7,8 +7,8 @@
 - [x] 未登録の推移NuGet依存を拒否する
 - [x] 登録versionとlock fileのversion差分を拒否する
 - [x] UNKNOWN／NOASSERTION／NONE licenseを拒否する
-- [ ] license全文またはcopyright表示の欠落を拒否する
-- [ ] license fileのSHA-256不一致を拒否する
+- [x] license全文またはcopyright表示の欠落を拒否する
+- [x] license fileのSHA-256不一致を拒否する
 - [ ] lock fileの直接・推移依存が全件登録済みなら成功する
 
 ## English
@@ -18,6 +18,6 @@ This fail-closed legal-gate test list is derived from Basic Design v0.3 §§17, 
 - [x] Reject an unregistered transitive NuGet dependency
 - [x] Reject a version mismatch between the registry and lock file
 - [x] Reject UNKNOWN, NOASSERTION, and NONE licenses
-- [ ] Reject a missing full license text or copyright notice
-- [ ] Reject a license-file SHA-256 mismatch
+- [x] Reject a missing full license text or copyright notice
+- [x] Reject a license-file SHA-256 mismatch
 - [ ] Accept a lock file only when every direct and transitive dependency is registered
