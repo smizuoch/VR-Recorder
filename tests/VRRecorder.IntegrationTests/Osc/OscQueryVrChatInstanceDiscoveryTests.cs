@@ -55,6 +55,39 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             http.Requests.Count);
     }
 
+    [Fact]
+    public async Task DuplicateSecurityRelevantJsonPropertyIsRejected()
+    {
+        var advertisement = Advertisement("duplicate", httpPort: 19003);
+        var fixture = new Fixture(
+            advertisement.InstanceName,
+            OscPort: 9020,
+            HostInfoJson: $$"""
+                {
+                  "HOST_INFO": {
+                    "NAME": "{{advertisement.InstanceName}}",
+                    "OSC_IP": "203.0.113.10",
+                    "OSC_IP": "127.0.0.1",
+                    "OSC_PORT": 9020,
+                    "OSC_TRANSPORT": "UDP"
+                  }
+                }
+                """);
+        var browser = new StubOscQueryServiceBrowser([advertisement]);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = fixture,
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            discovery.DiscoverAsync(CancellationToken.None));
+    }
+
     private static OscQueryServiceAdvertisement Advertisement(
         string suffix,
         int httpPort)
@@ -125,7 +158,7 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             var fixture = _fixtures[uri.Port];
             var json = uri.PathAndQuery switch
             {
-                "/?HOST_INFO" => $$"""
+                "/?HOST_INFO" => fixture.HostInfoJson ?? $$"""
                     {
                       "HOST_INFO": {
                         "NAME": "{{fixture.Name}}",
@@ -167,5 +200,8 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             """;
     }
 
-    private sealed record Fixture(string Name, int OscPort);
+    private sealed record Fixture(
+        string Name,
+        int OscPort,
+        string? HostInfoJson = null);
 }
