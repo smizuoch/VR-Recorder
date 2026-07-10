@@ -1,0 +1,457 @@
+schemaVersion: 2
+profileVersion: 2
+profileId: vr-recorder-m3
+specificationSnapshot:
+  reviewedAt: 2026-07-10
+  sourceInventory: ui-template/m3-source-inventory.example.yml
+  sourceInventoryDigest: <sha256>
+  officialRoots:
+    - https://m3.material.io/foundations/
+    - https://m3.material.io/styles/
+    - https://m3.material.io/components/
+  supportingStandards:
+    - https://www.w3.org/TR/WCAG22/
+    - https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html
+
+conformanceMeaning:
+  googleCertificationClaimed: false
+  googleEndorsementClaimed: false
+  appliesToAllDiscoveredApplicableEntries: true
+  platformSpecificImplementationDocsOutsideWpfOrOpenVrMayBeNotApplicable: true
+  everyNotApplicableDecisionRequiresRationaleAndAlternative: true
+  everyOpenVrAdaptationRequiresAdr: true
+
+releasePolicy:
+  failClosed: true
+  requiredSourceInventoryCoveragePercent: 100
+  maximumUnclassifiedSourceEntries: 0
+  maximumUnresolvedDeviations: 0
+  maximumDeferredEntriesForShippedFeatures: 0
+  directStyleLiteralsAllowed: false
+  undocumentedCustomComponentsAllowed: false
+  newOfficialSourceEntryRequiresReviewedProfileUpdate: true
+  removedOrRenamedOfficialSourceEntryRequiresReviewedProfileUpdate: true
+  signedPackageRequiresGeneratedConformanceReport: true
+
+surfaces:
+  desktop:
+    technology: WPF
+    usesSharedSemanticTokens: true
+    inputModalities: [mouse, keyboard, touch, accessibility-api]
+  wrist:
+    technology: OpenVR Overlay
+    usesSharedSemanticTokens: true
+    m3XrProfile: true
+    inputModalities: [controller-ray, trigger, steamvr-input-action, accessibility-api]
+    placementModes: [wrist-dock, world-pin]
+
+semanticTokens:
+  file: ui-template/design-tokens.example.json
+  requiredCategories: [color, typography, shape, spacing, elevation, motion, interaction]
+  projectExtendedColorRoles:
+    - recording
+    - onRecording
+    - recordingContainer
+    - onRecordingContainer
+  errorRoleReservedForActualFaults: true
+  recordingRoleMustNotAliasError: true
+
+accessibility:
+  minimumTargetDp: 48
+  primaryWristTargetDp: 56
+  recommendedPhysicalTargetMillimeters: [7, 10]
+  minimumBodyTextDpInXr: 14
+  normalTextContrastRatio: 4.5
+  largeTextAndImportantUiContrastRatio: 3.0
+  accessibleNameCoveragePercent: 100
+  iconOnlyTooltipRequiredWhenPurposeIsAmbiguous: true
+  colorOnlyStateAllowed: false
+  dragMovementAlternativeRequired: true
+  keyboardControllerAndRayOperationParityRequired: true
+  visibleFocusRequired: true
+  logicalFocusOrderRequired: true
+  reduceMotionRequired: true
+
+localization:
+  initialLocales: [ja-JP, en-US]
+  fallbackLocale: en-US
+  pseudoLocaleRequired: true
+  textExpansionPercent: 200
+  rtlRequired: true
+  readmeLanguages: [ja, en]
+  flagIconsForLanguageSelectionAllowed: false
+  userVisibleStringLiteralsAllowed: false
+
+foundations:
+  - id: foundation-accessibility
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - all-controls-have-programmatic-name
+      - critical-status-not-color-only
+      - focus-visible-and-logical
+      - target-size-and-spacing-verified
+      - drag-has-tap-or-action-alternative
+      - high-contrast-and-text-scaling-supported
+    evidenceIds: [A11Y-AUTO, A11Y-MANUAL-XR]
+
+  - id: foundation-design-tokens
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - all-visual-values-through-semantic-tokens
+      - generated-wpf-and-openvr-bindings
+      - token-change-impact-report
+    evidenceIds: [TOKEN-LINT, TOKEN-SNAPSHOT]
+
+  - id: foundation-layout
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - adaptive-desktop-layout
+      - wrist-safe-insets
+      - text-expansion-without-primary-action-loss
+      - ltr-and-rtl-layout
+      - seated-standing-left-right-hand-review
+    evidenceIds: [LAYOUT-GOLDEN, XR-LAYOUT-MANUAL]
+
+  - id: foundation-interaction
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - enabled-hovered-focused-pressed-disabled-selected-states
+      - controller-ray-and-trigger-feedback
+      - steamvr-action-command-equivalence
+      - deterministic-recording-state-machine
+    evidenceIds: [STATE-MATRIX, INPUT-CONTRACT]
+
+  - id: foundation-usability
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - record-and-stop-remain-one-action
+      - no-signal-prevents-empty-recording
+      - undo-or-safe-recovery-where-applicable
+      - concise-primary-surface
+    evidenceIds: [USABILITY-TEST, ACCEPTANCE-UI]
+
+  - id: foundation-customization
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - independent-vr-recorder-branding
+      - no-google-brand-imitation
+      - shared-semantic-system-across-surfaces
+    evidenceIds: [BRAND-REVIEW, TOKEN-SNAPSHOT]
+
+  - id: foundation-xr-design
+    status: Applicable
+    scope: [wrist]
+    requirements:
+      - spatial-panel-depth-and-legibility
+      - comfortable-viewing-angle-and-distance
+      - controller-ray-error-tolerance
+      - wrist-dock-and-world-pin-modes
+    evidenceIds: [XR-LAYOUT-MANUAL, XR-INPUT-MANUAL]
+
+  - id: foundation-xr-accessibility
+    status: Applicable
+    scope: [wrist]
+    requirements:
+      - text-and-target-size-for-xr
+      - non-drag-repositioning-path
+      - left-right-hand-parity
+      - haptics-never-sole-information-channel
+    evidenceIds: [A11Y-MANUAL-XR, DRAG-ALTERNATIVE-TEST]
+
+styles:
+  - id: style-color
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - m3-semantic-roles
+      - project-recording-custom-color-group
+      - error-reserved-for-fault
+      - contrast-verified-for-every-state
+    evidenceIds: [COLOR-LINT, CONTRAST-TEST]
+  - id: style-typography
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - mapped-m3-type-scale
+      - tabular-time-and-resolution
+      - cjk-and-mixed-script-rendering
+      - no-redistributed-font-without-rights-entry
+    evidenceIds: [TYPE-LINT, I18N-GOLDEN]
+  - id: style-icons
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - approved-material-symbols-only
+      - pinned-upstream-and-hashes
+      - purpose-specific-labels
+      - correct-rtl-mirroring
+      - no-logo-or-product-icon
+    evidenceIds: [ICON-MANIFEST, ICON-LINT, LEGAL-BUNDLE]
+  - id: style-shape
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements: [m3-shape-roles-only, state-shape-remains-recognizable]
+    evidenceIds: [SHAPE-LINT]
+  - id: style-elevation
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements: [hierarchy-only, no-decorative-unregistered-shadow]
+    evidenceIds: [ELEVATION-LINT, XR-LAYOUT-MANUAL]
+  - id: style-motion
+    status: Applicable
+    scope: [desktop, wrist]
+    requirements:
+      - registered-motion-tokens-only
+      - state-feedback-within-150ms
+      - reduce-motion-alternative
+      - no-flashing-record-cue
+    evidenceIds: [MOTION-LINT, REDUCE-MOTION-TEST]
+
+componentFamilies:
+  - id: component-app-bars
+    status: Applicable
+    usedBy: [wrist-secondary-pages, desktop-settings, legal-viewer]
+    requirements: [clear-title, back-or-close-action, persistent-stop-while-recording]
+    evidenceIds: [COMPONENT-GOLDEN, STOP-REACHABILITY]
+  - id: component-badges
+    status: NotApplicable
+    rationale: No unread-count or compact count-badge use case exists in the initial product.
+    alternative: Status is shown with icon, short label, and state description.
+  - id: component-bottom-sheets
+    status: NotApplicable
+    rationale: Bottom-edge mobile gestures do not map safely to the WPF desktop or floating wrist panel.
+    alternative: Use a dialog, menu, or dedicated secondary page.
+  - id: component-buttons
+    status: Applicable
+    usedBy: [record, stop, cancel-countdown, retry, open-folder]
+    requirements: [all-states, clear-label-for-critical-actions, minimum-target]
+    evidenceIds: [COMPONENT-GOLDEN, TARGET-TEST]
+  - id: component-button-groups
+    status: Applicable
+    usedBy: [self-timer-presets, auto-stop-presets]
+    requirements: [single-selection-semantics, selected-state-not-color-only]
+    evidenceIds: [TIMER-COMPONENT-TEST]
+  - id: component-cards
+    status: Applicable
+    usedBy: [signal-fault, encoder-status, legal-component-summary]
+    requirements: [clear-hierarchy, correct-container-role]
+    evidenceIds: [COMPONENT-GOLDEN]
+  - id: component-carousels
+    status: NotApplicable
+    rationale: VR-Recorder does not browse media collections on the primary recording surface.
+    alternative: Use a list or paged legal viewer.
+  - id: component-checkboxes
+    status: Applicable
+    usedBy: [desktop-advanced-settings]
+    requirements: [label-associated, indeterminate-only-when-semantic]
+    evidenceIds: [A11Y-AUTO]
+  - id: component-chips
+    status: Applicable
+    usedBy: [encoder-status, audio-status, active-mode-status]
+    requirements: [status-not-color-only, noninteractive-chip-not-focusable]
+    evidenceIds: [COMPONENT-GOLDEN, A11Y-AUTO]
+  - id: component-date-pickers
+    status: NotApplicable
+    rationale: No calendar-date input is required.
+    alternative: None.
+  - id: component-dialogs
+    status: Applicable
+    usedBy: [rights-confirmation, destructive-reset, compliance-fault-details]
+    requirements: [focus-trap, explicit-title, keyboard-controller-dismissal, stop-remains-reachable]
+    evidenceIds: [DIALOG-A11Y-TEST, STOP-REACHABILITY]
+  - id: component-dividers
+    status: Applicable
+    usedBy: [settings-sections, legal-list]
+    requirements: [decorative-divider-not-announced, sufficient-contrast]
+    evidenceIds: [COMPONENT-GOLDEN]
+  - id: component-fab
+    status: NotApplicable
+    rationale: A floating action button would compete with the fixed, safety-critical REC/STOP region.
+    alternative: Use the dedicated primary recording button.
+  - id: component-icon-buttons
+    status: Applicable
+    usedBy: [mic, mute, settings, info, pin, close, back, retry]
+    requirements: [accessible-name, tooltip-when-ambiguous, target-size, all-states]
+    evidenceIds: [ICON-BUTTON-A11Y, TARGET-TEST]
+  - id: component-lists
+    status: Applicable
+    usedBy: [settings, third-party-components, licenses]
+    requirements: [logical-reading-order, virtualization-does-not-break-accessibility]
+    evidenceIds: [LIST-A11Y-TEST]
+  - id: component-loading-indicators
+    status: Applicable
+    usedBy: [arming, encoder-probe, legal-load]
+    requirements: [state-description, no-indefinite-block-without-cancel-or-timeout]
+    evidenceIds: [LOADING-STATE-TEST]
+  - id: component-menus
+    status: Applicable
+    usedBy: [language, timer-overflow, advanced-options]
+    requirements: [keyboard-controller-navigation, selected-value-exposed]
+    evidenceIds: [MENU-A11Y-TEST]
+  - id: component-navigation-bar
+    status: NotApplicable
+    rationale: The wrist surface has a shallow page stack and the desktop surface uses a compact settings structure.
+    alternative: Use top app bars and lists with Back.
+  - id: component-navigation-drawer
+    status: NotApplicable
+    rationale: A hidden drawer adds discoverability and ray-target costs without enough destinations.
+    alternative: Use a visible settings list.
+  - id: component-navigation-rail
+    status: NotApplicable
+    rationale: The initial desktop information architecture does not require persistent multi-destination navigation.
+    alternative: Use a compact page stack; reconsider through an ADR if destinations grow.
+  - id: component-progress-indicators
+    status: Applicable
+    usedBy: [countdown, arming, finalize]
+    requirements: [determinate-when-progress-known, numeric-countdown-visible]
+    evidenceIds: [COUNTDOWN-TEST, COMPONENT-GOLDEN]
+  - id: component-radio-buttons
+    status: Applicable
+    usedBy: [encoder-preference, resolution-change-mode]
+    requirements: [group-name, one-selection, keyboard-controller-operation]
+    evidenceIds: [A11Y-AUTO]
+  - id: component-search
+    status: NotApplicable
+    rationale: Initial settings and legal lists remain small enough for direct navigation.
+    alternative: Add only after a measured usability need and profile update.
+  - id: component-segmented-buttons
+    status: Applicable
+    usedBy: [self-timer-presets, auto-stop-presets, wrist-dock-world-pin]
+    requirements: [selected-state, text-or-number-cue, minimum-target]
+    evidenceIds: [TIMER-COMPONENT-TEST, TARGET-TEST]
+  - id: component-side-sheets
+    status: NotApplicable
+    rationale: Secondary content is handled as a page or dialog to preserve a stable primary recording region.
+    alternative: Use a dedicated secondary page.
+  - id: component-sliders
+    status: NotApplicable
+    rationale: The initial release uses discrete safe presets rather than imprecise ray-controlled continuous values.
+    alternative: Use segmented presets or numeric stepper controls.
+  - id: component-snackbars
+    status: Applicable
+    usedBy: [saved-confirmation, nonblocking-device-warning]
+    requirements: [not-used-for-persistent-fault, accessible-live-region]
+    evidenceIds: [LIVE-REGION-TEST]
+  - id: component-switches
+    status: Applicable
+    usedBy: [mic-default, mute-default, reduce-motion, haptics]
+    requirements: [label-associated, state-programmatically-exposed]
+    evidenceIds: [A11Y-AUTO]
+  - id: component-tabs
+    status: NotApplicable
+    rationale: Tabs would add navigation density to a small set of hierarchical screens.
+    alternative: Use list navigation and Back.
+  - id: component-text-fields
+    status: Applicable
+    usedBy: [advanced-numeric-settings, diagnostic-filter]
+    requirements: [visible-label, validation-message, no-placeholder-only-label]
+    evidenceIds: [TEXT-FIELD-A11Y]
+  - id: component-time-pickers
+    status: NotApplicable
+    rationale: Recording durations are elapsed-time presets, not time-of-day values.
+    alternative: Use segmented buttons or a menu with seconds.
+  - id: component-toolbars
+    status: Applicable
+    usedBy: [desktop-main-actions, legal-viewer-actions]
+    requirements: [logical-order, critical-stop-not-overflowed]
+    evidenceIds: [STOP-REACHABILITY, COMPONENT-GOLDEN]
+  - id: component-tooltips
+    status: Applicable
+    usedBy: [all-ambiguous-icon-only-actions]
+    requirements: [localized-purpose-specific-text, not-sole-accessible-name-source]
+    evidenceIds: [TOOLTIP-TEST, A11Y-AUTO]
+
+xrMappings:
+  - id: xr-spatial-panel
+    status: Applicable
+    productElement: wrist-overlay-root
+    requirements: [comfortable-distance, scalable-size, stable-depth, safe-inset]
+    evidenceIds: [XR-LAYOUT-MANUAL]
+  - id: xr-app-bar
+    status: Applicable
+    productElement: wrist-secondary-top-bar
+    requirements: [back-close, page-title, persistent-recording-state]
+    evidenceIds: [COMPONENT-GOLDEN]
+  - id: xr-dialog
+    status: Applicable
+    productElement: rights-and-compliance-dialogs
+    requirements: [focus, readable-depth, stop-reachability]
+    evidenceIds: [DIALOG-A11Y-TEST, XR-INPUT-MANUAL]
+  - id: xr-navigation-bar
+    status: NotApplicable
+    rationale: The wrist surface has too few top-level destinations.
+    alternative: Use top app bar plus shallow page stack.
+  - id: xr-navigation-rail
+    status: NotApplicable
+    rationale: A rail consumes excessive width on the compact wrist panel.
+    alternative: Use a visible settings list.
+  - id: xr-toolbar
+    status: Applicable
+    productElement: wrist-legal-actions
+    requirements: [large-ray-targets, labels-or-tooltips, stop-not-hidden]
+    evidenceIds: [TARGET-TEST, STOP-REACHABILITY]
+
+productComponents:
+  - id: recording-primary
+    m3Pattern: filled-icon-button-with-project-large-size-token
+    semanticColorRole: recording
+    states: [enabled, hovered, focused, pressed, disabled, recording]
+    symbols: [recording.start, recording.stop]
+    requiredCues: [icon-shape, REC-or-STOP-label, elapsed-time, haptic-on-transition]
+  - id: microphone-toggle
+    m3Pattern: filled-tonal-icon-toggle-button
+    states: [enabled, hovered, focused, pressed, selected, disabled]
+    symbols: [audio.microphone.on, audio.microphone.off]
+  - id: mute-all-toggle
+    m3Pattern: icon-toggle-button
+    states: [enabled, hovered, focused, pressed, selected, disabled]
+    symbols: [audio.muteAll]
+  - id: timer-selector
+    m3Pattern: segmented-button-or-menu
+    states: [enabled, focused, selected, disabled]
+    symbols: [timer.self, timer.autoStop]
+  - id: no-signal-state
+    m3Pattern: persistent-fault-card-or-state-screen
+    semanticColorRole: error
+    states: [active, retrying, disabled]
+    symbols: [signal.none, common.retry]
+  - id: overlay-positioning
+    m3Pattern: drag-handle-plus-equivalent-button-controls
+    states: [enabled, focused, pressed, dragging, pinned]
+    symbols: [overlay.move, overlay.pin]
+    nonDragAlternatives: [nudge-up, nudge-down, nudge-left, nudge-right, recenter, wrist-dock, world-pin]
+  - id: legal-list
+    m3Pattern: top-app-bar-plus-list
+    states: [enabled, focused, scrolling]
+    symbols: [common.info, common.document, common.folder, common.openExternal]
+
+validation:
+  - source-inventory-coverage-100-percent
+  - no-unclassified-source-entry
+  - semantic-token-lint
+  - recording-role-not-error-alias
+  - component-role-lint
+  - all-interaction-states
+  - contrast-test
+  - target-geometry-test
+  - focus-visible-and-order-test
+  - drag-alternative-test
+  - keyboard-controller-ray-parity-test
+  - tooltip-test
+  - accessible-name-test
+  - icon-allowlist-and-codepoint-test
+  - japanese-english-golden-test
+  - pseudo-locale-golden-test
+  - rtl-golden-test
+  - high-contrast-golden-test
+  - reduce-motion-test
+  - stop-reachability-test
+  - manual-xr-review
+
+deviations: []

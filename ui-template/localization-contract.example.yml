@@ -1,0 +1,84 @@
+schemaVersion: 1
+initialLocales:
+- ja-JP
+- en-US
+fallbackLocale: en-US
+readmeLanguages:
+- ja
+- en
+resourceRules:
+  hardCodedUserVisibleTextAllowed: false
+  missingKeyBehavior: fail-build
+  exposeResourceKeyToUser: false
+  iconLigatureAsAccessibleNameAllowed: false
+  licenseOriginalTextIsAuthoritative: true
+layoutTests:
+- locale: ja-JP
+  scalePercent: 100
+  direction: ltr
+- locale: en-US
+  scalePercent: 100
+  direction: ltr
+- locale: qps-ploc
+  scalePercent: 200
+  direction: ltr
+- locale: qps-plocm
+  scalePercent: 200
+  direction: rtl
+iconRules:
+  directionalSemanticIds:
+  - common.back
+  - common.next
+  - common.openExternal
+  nonDirectionalSemanticIds:
+  - recording.start
+  - recording.stop
+  - audio.microphone.on
+  - audio.microphone.off
+  - audio.muteAll
+  - timer.self
+  - timer.autoStop
+  - signal.none
+  - overlay.move
+  - overlay.pin
+  - common.settings
+  - common.info
+  - common.warning
+  - common.folder
+  - common.document
+  - common.language
+  - common.close
+  - common.retry
+  - status.ready
+  useFlagForLanguageSelection: false
+criticalControls:
+- semanticId: recording.start
+  visibleShortLabelRequired: true
+  tooltipRequired: true
+  accessibleNameRequired: true
+- semanticId: recording.stop
+  visibleShortLabelRequired: true
+  tooltipRequired: true
+  accessibleNameRequired: true
+- semanticId: signal.none
+  visibleShortLabelRequired: true
+  accessibleDescriptionRequired: true
+resourceCatalogExamples:
+- ui-template/locales/ja-JP.example.json
+- ui-template/locales/en-US.example.json
+resourceParityRules:
+  sameKeySetRequired: true
+  placeholderParityRequired: true
+  emptyTranslationAllowed: false
+  readmeSectionParityRequired: true
+inputEquivalence:
+  dragOnlyOperationAllowed: false
+  overlayPositionCommands:
+  - nudge-up
+  - nudge-down
+  - nudge-left
+  - nudge-right
+  - recenter
+  - wrist-dock
+  - world-pin
+  keyboardControllerRayParityRequired: true

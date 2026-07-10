@@ -1,0 +1,38 @@
+VR-Recorder — FFmpeg Corresponding Source Information
+========================================================
+
+THIS FILE IS A RELEASE TEMPLATE. Replace every angle-bracket value during the
+release build. A release must fail while any placeholder remains.
+
+Component: FFmpeg libraries
+Binary release: <VR-RECORDER-PRODUCT-VERSION>
+FFmpeg version/tag: <EXACT-VERSION>
+FFmpeg commit: <FULL-COMMIT>
+License expression: LGPL-2.1-or-later
+Linkage: Dynamic libraries
+Modified by distributor: <YES/NO>
+
+Corresponding source included at:
+  ..\SOURCES\ffmpeg-<FULL-COMMIT>.tar.xz
+
+Source SHA-256:
+  <SHA256>
+
+Patch/diff, when modified:
+  changes.diff
+
+Build recipe:
+  build-recipes\ffmpeg-win-x64.md
+
+Configure/build log:
+  ffmpeg-configure.log
+
+The build gate verifies that prohibited options such as --enable-gpl and
+--enable-nonfree are absent and that the source, recipe, log, and distributed
+DLL hashes belong to the same approved build record.
+
+License text:
+  ..\LICENSES\LGPL-2.1-or-later\LICENSE.txt
+
+Contact for source-compliance questions:
+  <COMPLIANCE-CONTACT>

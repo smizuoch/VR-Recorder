@@ -1,0 +1,112 @@
+# DESIGN-TIME EXAMPLE — production values must be generated from pinned inputs.
+schemaVersion: 1
+registryVersion: 1
+components:
+  - id: ffmpeg
+    displayName: FFmpeg libraries
+    packageUrl: pkg:generic/ffmpeg@<exact-version-or-commit>
+    version: <exact-version>
+    commit: <full-commit>
+    scope: runtime-bundled
+    usage: video-audio-encoding-and-muxing
+    linkage: dynamic
+    licenseDeclared: LGPL-2.1-or-later
+    licenseConcluded: LGPL-2.1-or-later
+    copyrightFiles:
+      - COPYRIGHTS/ffmpeg-copyright.txt
+    licenseFiles:
+      - LICENSES/LGPL-2.1-or-later/LICENSE.txt
+    modified: false
+    sourceArchive: SOURCES/ffmpeg-<commit>.tar.xz
+    sourceSha256: <sha256>
+    buildRecipe: SOURCE-OFFERS/build-recipes/ffmpeg-win-x64.md
+    configureLog: SOURCE-OFFERS/ffmpeg-configure.log
+    forbiddenConfigureFlags:
+      - --enable-gpl
+      - --enable-nonfree
+    binaryNames:
+      - avcodec-*.dll
+      - avformat-*.dll
+      - avutil-*.dll
+      - swresample-*.dll
+      - swscale-*.dll
+    sourceProvisioning: bundled-corresponding-source
+    approvalId: <LEGAL-APPROVAL-ID>
+
+  - id: openvr
+    displayName: OpenVR SDK / openvr_api.dll
+    packageUrl: pkg:github/ValveSoftware/openvr@<commit>
+    version: <tag-or-commit>
+    commit: <full-commit>
+    scope: runtime-bundled
+    usage: steamvr-overlay-and-input
+    linkage: dynamic
+    licenseDeclared: BSD-3-Clause
+    licenseConcluded: BSD-3-Clause
+    licenseFiles:
+      - LICENSES/BSD-3-Clause/OpenVR-LICENSE.txt
+    modified: false
+    binaryNames:
+      - openvr_api.dll
+    approvalId: <LEGAL-APPROVAL-ID>
+
+  - id: spout2
+    displayName: Spout2
+    packageUrl: pkg:github/leadedge/Spout2@<commit>
+    version: <tag-or-commit>
+    commit: <full-commit>
+    scope: runtime-linked
+    usage: d3d11-shared-texture-receive
+    linkage: <dynamic-or-static-or-source-copy>
+    licenseDeclared: BSD-2-Clause
+    licenseConcluded: BSD-2-Clause
+    licenseFiles:
+      - LICENSES/BSD-2-Clause/Spout2-LICENSE.txt
+    modified: <true-or-false>
+    patchFiles: []
+    approvalId: <LEGAL-APPROVAL-ID>
+
+  - id: vrc-oscquery-lib
+    displayName: VRC OSCQuery Library
+    packageUrl: pkg:github/vrchat-community/vrc-oscquery-lib@<commit>
+    version: <tag-or-commit>
+    commit: <full-commit>
+    scope: runtime-linked
+    usage: oscquery-discovery
+    linkage: managed-library
+    licenseDeclared: MIT
+    licenseConcluded: MIT
+    licenseFiles:
+      - LICENSES/MIT/VRC-OSCQuery-LICENSE.txt
+    modified: <true-or-false>
+    patchFiles: []
+    approvalId: <LEGAL-APPROVAL-ID>
+
+  - id: material-symbols
+    displayName: Material Symbols (Material Design icons by Google)
+    packageUrl: pkg:github/google/material-design-icons@<commit>
+    version: <tag-or-commit>
+    commit: <full-commit>
+    scope: runtime-bundled-assets
+    usage: user-interface-icons
+    linkage: asset-copy
+    licenseDeclared: Apache-2.0
+    licenseConcluded: Apache-2.0
+    licenseFiles:
+      - LICENSES/Apache-2.0/Material-Symbols-LICENSE.txt
+    attributionFiles:
+      - LICENSES/Apache-2.0/Material-Symbols-ATTRIBUTION.txt
+    selectedAssetManifest: ui/material-symbols.yml
+    sourceSubpaths:
+      - <pinned-upstream-symbol-paths>
+    modified: <true-or-false>
+    conversionRecipe: ui/material-symbols-conversion.md
+    runtimeNetworkAllowed: false
+    prohibitedAssetClasses:
+      - google-logo
+      - google-product-icon
+      - third-party-logo
+    approvalId: <LEGAL-APPROVAL-ID>
+
+  # .NET runtime and all NuGet transitive dependencies are populated from the
+  # locked restore and final publish output; hand-maintained omissions are forbidden.

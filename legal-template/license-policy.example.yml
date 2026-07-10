@@ -1,0 +1,61 @@
+# Conservative project policy. Legal approval remains required for conditional items.
+schemaVersion: 1
+policyVersion: 1
+failClosed: true
+failOn:
+  - missing-component-registration
+  - missing-license-text
+  - missing-copyright-notice
+  - unknown-license
+  - noassertion-license
+  - none-license
+  - unapproved-license-expression
+  - staging-sbom-mismatch
+  - registry-notice-mismatch
+  - binary-source-mismatch
+  - unregistered-runtime-load
+  - unregistered-asset
+  - unpinned-material-symbol
+  - material-symbol-hash-mismatch
+  - unregistered-icon-glyph
+  - undocumented-modified-apache-asset
+  - runtime-remote-icon-or-font-request
+  - unresolved-m3-conformance-deviation
+  - pending-m3-applicability-item
+
+licenses:
+  allowedWithNotice:
+    - MIT
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - ISC
+    - Zlib
+  conditional:
+    - expression: Apache-2.0
+      approvals: [license-review, notice-review, patent-review]
+    - expression: LGPL-2.1-or-later
+      approvals: [license-review, linkage-review, corresponding-source-review, eula-review]
+    - expression: LGPL-3.0-or-later
+      approvals: [license-review, linkage-review, corresponding-source-review, eula-review]
+    - expression: MPL-2.0
+      approvals: [license-review, file-boundary-review]
+  prohibitedByDefault:
+    - GPL-1.0-only
+    - GPL-2.0-only
+    - GPL-3.0-only
+    - AGPL-3.0-only
+    - SSPL-1.0
+    - LicenseRef-NonCommercial
+    - LicenseRef-NoDerivatives
+    - LicenseRef-FieldOfUseRestriction
+
+reviewRules:
+  selfApprovalAllowed: false
+  requireExactSpdxExpression: true
+  requireLocalHashPinnedText: true
+  requireFinalStagingScan: true
+  requireSeparateSecurityAndLicenseApprovals: true
+  requireOfficialMaterialSymbolsUpstream: true
+  prohibitRuntimeGoogleFontsNetworkAccess: true
+  requireZeroUnresolvedM3Deviations: true
+  requireZeroUnclassifiedOrDeferredM3ItemsForShippedFeatures: true

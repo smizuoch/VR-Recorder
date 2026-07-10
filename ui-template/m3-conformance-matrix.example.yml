@@ -1,0 +1,913 @@
+# DESIGN-TIME EXAMPLE — generated from the source inventory and profile.
+# Every official source entry must be represented exactly once.
+schemaVersion: 2
+documentStatus: DESIGN-TIME EXAMPLE — regenerate from the reviewed official M3 source inventory for every release.
+snapshot:
+  designSystem: Material Design 3
+  reviewedAt: '2026-07-10'
+  sourceInventory: ui-template/m3-source-inventory.example.yml
+  sourceInventoryDigest: <sha256>
+  profile: ui-template/m3-conformance-profile.example.yml
+  profileDigest: <sha256>
+coveragePolicy:
+  requiredCoveragePercent: 100
+  maximumUnclassifiedSourceEntries: 0
+  maximumUnresolvedDeviations: 0
+  maximumDeferredEntriesForShippedFeatures: 0
+  everyNotApplicableRequiresRationaleAndAlternative: true
+  everyApplicableRequiresEvidenceIds: true
+  googleCertificationClaimAllowed: false
+  googleEndorsementClaimAllowed: false
+surfaces:
+  desktop:
+    technology: WPF
+    usesSharedSemanticTokens: true
+    inputModalities:
+    - mouse
+    - keyboard
+    - touch
+    - accessibility-api
+  wrist:
+    technology: OpenVR Overlay
+    usesSharedSemanticTokens: true
+    m3XrProfile: true
+    inputModalities:
+    - controller-ray
+    - trigger
+    - steamvr-input-action
+    - accessibility-api
+    placementModes:
+    - wrist-dock
+    - world-pin
+sourceEntries:
+- sourceId: foundations.accessibility
+  canonicalUrl: https://m3.material.io/foundations/accessible-design/overview
+  category: foundation
+  mappingId: foundation-accessibility
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - all-controls-have-programmatic-name
+  - critical-status-not-color-only
+  - focus-visible-and-logical
+  - target-size-and-spacing-verified
+  - drag-has-tap-or-action-alternative
+  - high-contrast-and-text-scaling-supported
+  evidenceIds:
+  - A11Y-AUTO
+  - A11Y-MANUAL-XR
+  status: specified
+- sourceId: foundations.design-tokens
+  canonicalUrl: https://m3.material.io/foundations/design-tokens/overview
+  category: foundation
+  mappingId: foundation-design-tokens
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - all-visual-values-through-semantic-tokens
+  - generated-wpf-and-openvr-bindings
+  - token-change-impact-report
+  evidenceIds:
+  - TOKEN-LINT
+  - TOKEN-SNAPSHOT
+  status: specified
+- sourceId: foundations.layout
+  canonicalUrl: https://m3.material.io/foundations/layout/understanding-layout/overview
+  category: foundation
+  mappingId: foundation-layout
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - adaptive-desktop-layout
+  - wrist-safe-insets
+  - text-expansion-without-primary-action-loss
+  - ltr-and-rtl-layout
+  - seated-standing-left-right-hand-review
+  evidenceIds:
+  - LAYOUT-GOLDEN
+  - XR-LAYOUT-MANUAL
+  status: specified
+- sourceId: foundations.interaction
+  canonicalUrl: https://m3.material.io/foundations/interaction/overview
+  category: foundation
+  mappingId: foundation-interaction
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - enabled-hovered-focused-pressed-disabled-selected-states
+  - controller-ray-and-trigger-feedback
+  - steamvr-action-command-equivalence
+  - deterministic-recording-state-machine
+  evidenceIds:
+  - STATE-MATRIX
+  - INPUT-CONTRACT
+  status: specified
+- sourceId: foundations.usability
+  canonicalUrl: https://m3.material.io/foundations/usability/overview
+  category: foundation
+  mappingId: foundation-usability
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - record-and-stop-remain-one-action
+  - no-signal-prevents-empty-recording
+  - undo-or-safe-recovery-where-applicable
+  - concise-primary-surface
+  evidenceIds:
+  - USABILITY-TEST
+  - ACCEPTANCE-UI
+  status: specified
+- sourceId: foundations.customization
+  canonicalUrl: https://m3.material.io/foundations/customization/overview
+  category: foundation
+  mappingId: foundation-customization
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - independent-vr-recorder-branding
+  - no-google-brand-imitation
+  - shared-semantic-system-across-surfaces
+  evidenceIds:
+  - BRAND-REVIEW
+  - TOKEN-SNAPSHOT
+  status: specified
+- sourceId: foundations.xr-design
+  canonicalUrl: https://m3.material.io/foundations/xr/design/overview
+  category: xr-foundation
+  mappingId: foundation-xr-design
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - wrist
+  requirements:
+  - spatial-panel-depth-and-legibility
+  - comfortable-viewing-angle-and-distance
+  - controller-ray-error-tolerance
+  - wrist-dock-and-world-pin-modes
+  evidenceIds:
+  - XR-LAYOUT-MANUAL
+  - XR-INPUT-MANUAL
+  status: specified
+- sourceId: foundations.xr-accessibility
+  canonicalUrl: https://m3.material.io/foundations/xr/design/accessibility
+  category: xr-foundation
+  mappingId: foundation-xr-accessibility
+  profileGroup: foundations
+  classification: Applicable
+  scope:
+  - wrist
+  requirements:
+  - text-and-target-size-for-xr
+  - non-drag-repositioning-path
+  - left-right-hand-parity
+  - haptics-never-sole-information-channel
+  evidenceIds:
+  - A11Y-MANUAL-XR
+  - DRAG-ALTERNATIVE-TEST
+  status: specified
+- sourceId: styles.color
+  canonicalUrl: https://m3.material.io/styles/color/overview
+  category: style
+  mappingId: style-color
+  profileGroup: styles
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - m3-semantic-roles
+  - project-recording-custom-color-group
+  - error-reserved-for-fault
+  - contrast-verified-for-every-state
+  evidenceIds:
+  - COLOR-LINT
+  - CONTRAST-TEST
+  status: specified
+- sourceId: styles.typography
+  canonicalUrl: https://m3.material.io/styles/typography/overview
+  category: style
+  mappingId: style-typography
+  profileGroup: styles
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - mapped-m3-type-scale
+  - tabular-time-and-resolution
+  - cjk-and-mixed-script-rendering
+  - no-redistributed-font-without-rights-entry
+  evidenceIds:
+  - TYPE-LINT
+  - I18N-GOLDEN
+  status: specified
+- sourceId: styles.icons
+  canonicalUrl: https://m3.material.io/styles/icons/overview
+  category: style
+  mappingId: style-icons
+  profileGroup: styles
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - approved-material-symbols-only
+  - pinned-upstream-and-hashes
+  - purpose-specific-labels
+  - correct-rtl-mirroring
+  - no-logo-or-product-icon
+  evidenceIds:
+  - ICON-MANIFEST
+  - ICON-LINT
+  - LEGAL-BUNDLE
+  status: specified
+- sourceId: styles.shape
+  canonicalUrl: https://m3.material.io/styles/shape/overview
+  category: style
+  mappingId: style-shape
+  profileGroup: styles
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - m3-shape-roles-only
+  - state-shape-remains-recognizable
+  evidenceIds:
+  - SHAPE-LINT
+  status: specified
+- sourceId: styles.elevation
+  canonicalUrl: https://m3.material.io/styles/elevation/overview
+  category: style
+  mappingId: style-elevation
+  profileGroup: styles
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - hierarchy-only
+  - no-decorative-unregistered-shadow
+  evidenceIds:
+  - ELEVATION-LINT
+  - XR-LAYOUT-MANUAL
+  status: specified
+- sourceId: styles.motion
+  canonicalUrl: https://m3.material.io/styles/motion/overview
+  category: style
+  mappingId: style-motion
+  profileGroup: styles
+  classification: Applicable
+  scope:
+  - desktop
+  - wrist
+  requirements:
+  - registered-motion-tokens-only
+  - state-feedback-within-150ms
+  - reduce-motion-alternative
+  - no-flashing-record-cue
+  evidenceIds:
+  - MOTION-LINT
+  - REDUCE-MOTION-TEST
+  status: specified
+- sourceId: components.app-bars
+  canonicalUrl: https://m3.material.io/components/app-bars/overview
+  category: component-family
+  mappingId: component-app-bars
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - wrist-secondary-pages
+  - desktop-settings
+  - legal-viewer
+  requirements:
+  - clear-title
+  - back-or-close-action
+  - persistent-stop-while-recording
+  evidenceIds:
+  - COMPONENT-GOLDEN
+  - STOP-REACHABILITY
+  status: specified
+- sourceId: components.badges
+  canonicalUrl: https://m3.material.io/components/badges/overview
+  category: component-family
+  mappingId: component-badges
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: No unread-count or compact count-badge use case exists in the initial product.
+  alternative: Status is shown with icon, short label, and state description.
+  status: specified
+- sourceId: components.bottom-sheets
+  canonicalUrl: https://m3.material.io/components/bottom-sheets/overview
+  category: component-family
+  mappingId: component-bottom-sheets
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: Bottom-edge mobile gestures do not map safely to the WPF desktop or floating wrist panel.
+  alternative: Use a dialog, menu, or dedicated secondary page.
+  status: specified
+- sourceId: components.buttons
+  canonicalUrl: https://m3.material.io/components/buttons/overview
+  category: component-family
+  mappingId: component-buttons
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - record
+  - stop
+  - cancel-countdown
+  - retry
+  - open-folder
+  requirements:
+  - all-states
+  - clear-label-for-critical-actions
+  - minimum-target
+  evidenceIds:
+  - COMPONENT-GOLDEN
+  - TARGET-TEST
+  status: specified
+- sourceId: components.button-groups
+  canonicalUrl: https://m3.material.io/components/button-groups/overview
+  category: component-family
+  mappingId: component-button-groups
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - self-timer-presets
+  - auto-stop-presets
+  requirements:
+  - single-selection-semantics
+  - selected-state-not-color-only
+  evidenceIds:
+  - TIMER-COMPONENT-TEST
+  status: specified
+- sourceId: components.cards
+  canonicalUrl: https://m3.material.io/components/cards/overview
+  category: component-family
+  mappingId: component-cards
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - signal-fault
+  - encoder-status
+  - legal-component-summary
+  requirements:
+  - clear-hierarchy
+  - correct-container-role
+  evidenceIds:
+  - COMPONENT-GOLDEN
+  status: specified
+- sourceId: components.carousels
+  canonicalUrl: https://m3.material.io/components/carousel/overview
+  category: component-family
+  mappingId: component-carousels
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: VR-Recorder does not browse media collections on the primary recording surface.
+  alternative: Use a list or paged legal viewer.
+  status: specified
+- sourceId: components.checkboxes
+  canonicalUrl: https://m3.material.io/components/checkbox/overview
+  category: component-family
+  mappingId: component-checkboxes
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - desktop-advanced-settings
+  requirements:
+  - label-associated
+  - indeterminate-only-when-semantic
+  evidenceIds:
+  - A11Y-AUTO
+  status: specified
+- sourceId: components.chips
+  canonicalUrl: https://m3.material.io/components/chips/overview
+  category: component-family
+  mappingId: component-chips
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - encoder-status
+  - audio-status
+  - active-mode-status
+  requirements:
+  - status-not-color-only
+  - noninteractive-chip-not-focusable
+  evidenceIds:
+  - COMPONENT-GOLDEN
+  - A11Y-AUTO
+  status: specified
+- sourceId: components.date-pickers
+  canonicalUrl: https://m3.material.io/components/date-pickers/overview
+  category: component-family
+  mappingId: component-date-pickers
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: No calendar-date input is required.
+  alternative: None.
+  status: specified
+- sourceId: components.dialogs
+  canonicalUrl: https://m3.material.io/components/dialogs/overview
+  category: component-family
+  mappingId: component-dialogs
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - rights-confirmation
+  - destructive-reset
+  - compliance-fault-details
+  requirements:
+  - focus-trap
+  - explicit-title
+  - keyboard-controller-dismissal
+  - stop-remains-reachable
+  evidenceIds:
+  - DIALOG-A11Y-TEST
+  - STOP-REACHABILITY
+  status: specified
+- sourceId: components.dividers
+  canonicalUrl: https://m3.material.io/components/divider/overview
+  category: component-family
+  mappingId: component-dividers
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - settings-sections
+  - legal-list
+  requirements:
+  - decorative-divider-not-announced
+  - sufficient-contrast
+  evidenceIds:
+  - COMPONENT-GOLDEN
+  status: specified
+- sourceId: components.floating-action-buttons
+  canonicalUrl: https://m3.material.io/components/floating-action-button/overview
+  category: component-family
+  mappingId: component-fab
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: A floating action button would compete with the fixed, safety-critical REC/STOP region.
+  alternative: Use the dedicated primary recording button.
+  status: specified
+- sourceId: components.icon-buttons
+  canonicalUrl: https://m3.material.io/components/icon-buttons/overview
+  category: component-family
+  mappingId: component-icon-buttons
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - mic
+  - mute
+  - settings
+  - info
+  - pin
+  - close
+  - back
+  - retry
+  requirements:
+  - accessible-name
+  - tooltip-when-ambiguous
+  - target-size
+  - all-states
+  evidenceIds:
+  - ICON-BUTTON-A11Y
+  - TARGET-TEST
+  status: specified
+- sourceId: components.lists
+  canonicalUrl: https://m3.material.io/components/lists/overview
+  category: component-family
+  mappingId: component-lists
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - settings
+  - third-party-components
+  - licenses
+  requirements:
+  - logical-reading-order
+  - virtualization-does-not-break-accessibility
+  evidenceIds:
+  - LIST-A11Y-TEST
+  status: specified
+- sourceId: components.loading-indicators
+  canonicalUrl: https://m3.material.io/components/loading-indicator/overview
+  category: component-family
+  mappingId: component-loading-indicators
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - arming
+  - encoder-probe
+  - legal-load
+  requirements:
+  - state-description
+  - no-indefinite-block-without-cancel-or-timeout
+  evidenceIds:
+  - LOADING-STATE-TEST
+  status: specified
+- sourceId: components.menus
+  canonicalUrl: https://m3.material.io/components/menus/overview
+  category: component-family
+  mappingId: component-menus
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - language
+  - timer-overflow
+  - advanced-options
+  requirements:
+  - keyboard-controller-navigation
+  - selected-value-exposed
+  evidenceIds:
+  - MENU-A11Y-TEST
+  status: specified
+- sourceId: components.navigation-bar
+  canonicalUrl: https://m3.material.io/components/navigation-bar/overview
+  category: component-family
+  mappingId: component-navigation-bar
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: The wrist surface has a shallow page stack and the desktop surface uses a compact settings structure.
+  alternative: Use top app bars and lists with Back.
+  status: specified
+- sourceId: components.navigation-drawer
+  canonicalUrl: https://m3.material.io/components/navigation-drawer/overview
+  category: component-family
+  mappingId: component-navigation-drawer
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: A hidden drawer adds discoverability and ray-target costs without enough destinations.
+  alternative: Use a visible settings list.
+  status: specified
+- sourceId: components.navigation-rail
+  canonicalUrl: https://m3.material.io/components/navigation-rail/overview
+  category: component-family
+  mappingId: component-navigation-rail
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: The initial desktop information architecture does not require persistent multi-destination navigation.
+  alternative: Use a compact page stack; reconsider through an ADR if destinations grow.
+  status: specified
+- sourceId: components.progress-indicators
+  canonicalUrl: https://m3.material.io/components/progress-indicators/overview
+  category: component-family
+  mappingId: component-progress-indicators
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - countdown
+  - arming
+  - finalize
+  requirements:
+  - determinate-when-progress-known
+  - numeric-countdown-visible
+  evidenceIds:
+  - COUNTDOWN-TEST
+  - COMPONENT-GOLDEN
+  status: specified
+- sourceId: components.radio-buttons
+  canonicalUrl: https://m3.material.io/components/radio-button/overview
+  category: component-family
+  mappingId: component-radio-buttons
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - encoder-preference
+  - resolution-change-mode
+  requirements:
+  - group-name
+  - one-selection
+  - keyboard-controller-operation
+  evidenceIds:
+  - A11Y-AUTO
+  status: specified
+- sourceId: components.search
+  canonicalUrl: https://m3.material.io/components/search/overview
+  category: component-family
+  mappingId: component-search
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: Initial settings and legal lists remain small enough for direct navigation.
+  alternative: Add only after a measured usability need and profile update.
+  status: specified
+- sourceId: components.segmented-buttons
+  canonicalUrl: https://m3.material.io/components/segmented-buttons/overview
+  category: component-family
+  mappingId: component-segmented-buttons
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - self-timer-presets
+  - auto-stop-presets
+  - wrist-dock-world-pin
+  requirements:
+  - selected-state
+  - text-or-number-cue
+  - minimum-target
+  evidenceIds:
+  - TIMER-COMPONENT-TEST
+  - TARGET-TEST
+  status: specified
+- sourceId: components.side-sheets
+  canonicalUrl: https://m3.material.io/components/side-sheets/overview
+  category: component-family
+  mappingId: component-side-sheets
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: Secondary content is handled as a page or dialog to preserve a stable primary recording region.
+  alternative: Use a dedicated secondary page.
+  status: specified
+- sourceId: components.sliders
+  canonicalUrl: https://m3.material.io/components/sliders/overview
+  category: component-family
+  mappingId: component-sliders
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: The initial release uses discrete safe presets rather than imprecise ray-controlled continuous values.
+  alternative: Use segmented presets or numeric stepper controls.
+  status: specified
+- sourceId: components.snackbars
+  canonicalUrl: https://m3.material.io/components/snackbar/overview
+  category: component-family
+  mappingId: component-snackbars
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - saved-confirmation
+  - nonblocking-device-warning
+  requirements:
+  - not-used-for-persistent-fault
+  - accessible-live-region
+  evidenceIds:
+  - LIVE-REGION-TEST
+  status: specified
+- sourceId: components.switches
+  canonicalUrl: https://m3.material.io/components/switch/overview
+  category: component-family
+  mappingId: component-switches
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - mic-default
+  - mute-default
+  - reduce-motion
+  - haptics
+  requirements:
+  - label-associated
+  - state-programmatically-exposed
+  evidenceIds:
+  - A11Y-AUTO
+  status: specified
+- sourceId: components.tabs
+  canonicalUrl: https://m3.material.io/components/tabs/overview
+  category: component-family
+  mappingId: component-tabs
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: Tabs would add navigation density to a small set of hierarchical screens.
+  alternative: Use list navigation and Back.
+  status: specified
+- sourceId: components.text-fields
+  canonicalUrl: https://m3.material.io/components/text-fields/overview
+  category: component-family
+  mappingId: component-text-fields
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - advanced-numeric-settings
+  - diagnostic-filter
+  requirements:
+  - visible-label
+  - validation-message
+  - no-placeholder-only-label
+  evidenceIds:
+  - TEXT-FIELD-A11Y
+  status: specified
+- sourceId: components.time-pickers
+  canonicalUrl: https://m3.material.io/components/time-pickers/overview
+  category: component-family
+  mappingId: component-time-pickers
+  profileGroup: componentFamilies
+  classification: NotApplicable
+  rationale: Recording durations are elapsed-time presets, not time-of-day values.
+  alternative: Use segmented buttons or a menu with seconds.
+  status: specified
+- sourceId: components.toolbars
+  canonicalUrl: https://m3.material.io/components/toolbars/overview
+  category: component-family
+  mappingId: component-toolbars
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - desktop-main-actions
+  - legal-viewer-actions
+  requirements:
+  - logical-order
+  - critical-stop-not-overflowed
+  evidenceIds:
+  - STOP-REACHABILITY
+  - COMPONENT-GOLDEN
+  status: specified
+- sourceId: components.tooltips
+  canonicalUrl: https://m3.material.io/components/tooltips/overview
+  category: component-family
+  mappingId: component-tooltips
+  profileGroup: componentFamilies
+  classification: Applicable
+  usedBy:
+  - all-ambiguous-icon-only-actions
+  requirements:
+  - localized-purpose-specific-text
+  - not-sole-accessible-name-source
+  evidenceIds:
+  - TOOLTIP-TEST
+  - A11Y-AUTO
+  status: specified
+openVrMappings:
+- id: xr-spatial-panel
+  status: Applicable
+  productElement: wrist-overlay-root
+  requirements:
+  - comfortable-distance
+  - scalable-size
+  - stable-depth
+  - safe-inset
+  evidenceIds:
+  - XR-LAYOUT-MANUAL
+- id: xr-app-bar
+  status: Applicable
+  productElement: wrist-secondary-top-bar
+  requirements:
+  - back-close
+  - page-title
+  - persistent-recording-state
+  evidenceIds:
+  - COMPONENT-GOLDEN
+- id: xr-dialog
+  status: Applicable
+  productElement: rights-and-compliance-dialogs
+  requirements:
+  - focus
+  - readable-depth
+  - stop-reachability
+  evidenceIds:
+  - DIALOG-A11Y-TEST
+  - XR-INPUT-MANUAL
+- id: xr-navigation-bar
+  status: NotApplicable
+  rationale: The wrist surface has too few top-level destinations.
+  alternative: Use top app bar plus shallow page stack.
+- id: xr-navigation-rail
+  status: NotApplicable
+  rationale: A rail consumes excessive width on the compact wrist panel.
+  alternative: Use a visible settings list.
+- id: xr-toolbar
+  status: Applicable
+  productElement: wrist-legal-actions
+  requirements:
+  - large-ray-targets
+  - labels-or-tooltips
+  - stop-not-hidden
+  evidenceIds:
+  - TARGET-TEST
+  - STOP-REACHABILITY
+productComponents:
+- id: recording-primary
+  m3Pattern: filled-icon-button-with-project-large-size-token
+  semanticColorRole: recording
+  states:
+  - enabled
+  - hovered
+  - focused
+  - pressed
+  - disabled
+  - recording
+  symbols:
+  - recording.start
+  - recording.stop
+  requiredCues:
+  - icon-shape
+  - REC-or-STOP-label
+  - elapsed-time
+  - haptic-on-transition
+- id: microphone-toggle
+  m3Pattern: filled-tonal-icon-toggle-button
+  states:
+  - enabled
+  - hovered
+  - focused
+  - pressed
+  - selected
+  - disabled
+  symbols:
+  - audio.microphone.on
+  - audio.microphone.off
+- id: mute-all-toggle
+  m3Pattern: icon-toggle-button
+  states:
+  - enabled
+  - hovered
+  - focused
+  - pressed
+  - selected
+  - disabled
+  symbols:
+  - audio.muteAll
+- id: timer-selector
+  m3Pattern: segmented-button-or-menu
+  states:
+  - enabled
+  - focused
+  - selected
+  - disabled
+  symbols:
+  - timer.self
+  - timer.autoStop
+- id: no-signal-state
+  m3Pattern: persistent-fault-card-or-state-screen
+  semanticColorRole: error
+  states:
+  - active
+  - retrying
+  - disabled
+  symbols:
+  - signal.none
+  - common.retry
+- id: overlay-positioning
+  m3Pattern: drag-handle-plus-equivalent-button-controls
+  states:
+  - enabled
+  - focused
+  - pressed
+  - dragging
+  - pinned
+  symbols:
+  - overlay.move
+  - overlay.pin
+  nonDragAlternatives:
+  - nudge-up
+  - nudge-down
+  - nudge-left
+  - nudge-right
+  - recenter
+  - wrist-dock
+  - world-pin
+- id: legal-list
+  m3Pattern: top-app-bar-plus-list
+  states:
+  - enabled
+  - focused
+  - scrolling
+  symbols:
+  - common.info
+  - common.document
+  - common.folder
+  - common.openExternal
+releaseReport:
+  output: M3-CONFORMANCE-REPORT.json
+  requiredChecks:
+  - source-inventory-coverage-100-percent
+  - no-unclassified-source-entry
+  - semantic-token-lint
+  - recording-role-not-error-alias
+  - component-role-lint
+  - all-interaction-states
+  - contrast-test
+  - target-geometry-test
+  - focus-visible-and-order-test
+  - drag-alternative-test
+  - keyboard-controller-ray-parity-test
+  - tooltip-test
+  - accessible-name-test
+  - icon-allowlist-and-codepoint-test
+  - japanese-english-golden-test
+  - pseudo-locale-golden-test
+  - rtl-golden-test
+  - high-contrast-golden-test
+  - reduce-motion-test
+  - stop-reachability-test
+  - manual-xr-review
+  releaseReadyWhen:
+  - sourceInventoryCoveragePercent == 100
+  - unclassifiedSourceEntries == 0
+  - deferredEntriesForShippedFeatures == 0
+  - unverifiedApplicableItems == 0
+  - unresolvedDeviations == 0

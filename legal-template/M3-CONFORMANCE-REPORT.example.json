@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "documentStatus": "DESIGN-TIME EXAMPLE — NOT A RELEASE REPORT",
+  "profileId": "vr-recorder-m3",
+  "profileVersion": 2,
+  "specificationSnapshot": {
+    "reviewedAt": "2026-07-10",
+    "sourceInventory": "ui-template/m3-source-inventory.example.yml",
+    "sourceInventoryDigest": "<sha256>",
+    "profileDigest": "<sha256>",
+    "humanReadableMatrixDigest": "<sha256>"
+  },
+  "evaluated": false,
+  "releaseEligible": false,
+  "releasePolicy": {
+    "failClosed": true,
+    "requiredSourceInventoryCoveragePercent": 100,
+    "maximumUnclassifiedSourceEntries": 0,
+    "maximumUnresolvedDeviations": 0,
+    "maximumDeferredEntriesForShippedFeatures": 0,
+    "directStyleLiteralsAllowed": false,
+    "undocumentedCustomComponentsAllowed": false,
+    "newOfficialSourceEntryRequiresReviewedProfileUpdate": true,
+    "removedOrRenamedOfficialSourceEntryRequiresReviewedProfileUpdate": true,
+    "signedPackageRequiresGeneratedConformanceReport": true
+  },
+  "summary": {
+    "sourceInventoryCoveragePercent": null,
+    "unclassifiedSourceEntries": null,
+    "deferredEntriesForShippedFeatures": null,
+    "applicableItems": null,
+    "verifiedApplicableItems": null,
+    "notApplicableItemsWithRationaleAndAlternative": null,
+    "accessibleNameCoveragePercent": null,
+    "unresolvedDeviations": null,
+    "recordingRoleAliasesError": null,
+    "dragAlternativesVerified": null
+  },
+  "requiredChecks": [
+    "source-inventory-coverage-100-percent",
+    "no-unclassified-source-entry",
+    "semantic-token-lint",
+    "recording-role-not-error-alias",
+    "component-role-lint",
+    "all-interaction-states",
+    "contrast-test",
+    "target-geometry-test",
+    "focus-visible-and-order-test",
+    "drag-alternative-test",
+    "keyboard-controller-ray-parity-test",
+    "tooltip-test",
+    "accessible-name-test",
+    "icon-allowlist-and-codepoint-test",
+    "japanese-english-golden-test",
+    "pseudo-locale-golden-test",
+    "rtl-golden-test",
+    "high-contrast-golden-test",
+    "reduce-motion-test",
+    "stop-reachability-test",
+    "manual-xr-review"
+  ],
+  "thresholds": {
+    "minimumTargetDp": 48,
+    "primaryWristTargetDp": 56,
+    "recommendedPhysicalTargetMillimeters": [
+      7,
+      10
+    ],
+    "minimumBodyTextDpInXr": 14,
+    "normalTextContrastRatio": 4.5,
+    "largeTextAndImportantUiContrastRatio": 3.0,
+    "accessibleNameCoveragePercent": 100,
+    "iconOnlyTooltipRequiredWhenPurposeIsAmbiguous": true,
+    "colorOnlyStateAllowed": false,
+    "dragMovementAlternativeRequired": true,
+    "keyboardControllerAndRayOperationParityRequired": true,
+    "visibleFocusRequired": true,
+    "logicalFocusOrderRequired": true,
+    "reduceMotionRequired": true
+  },
+  "requiredArtifacts": [
+    "M3-SOURCE-INVENTORY.json",
+    "M3-CONFORMANCE-PROFILE.json",
+    "M3-APPLICABILITY-MATRIX.md",
+    "DESIGN-TOKENS.json",
+    "MATERIAL-SYMBOLS-MANIFEST.json",
+    "LOCALIZATION-CONTRACT.json"
+  ],
+  "results": [],
+  "deviations": []
+}

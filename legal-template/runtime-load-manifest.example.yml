@@ -1,0 +1,19 @@
+# Libraries loaded by name at runtime are invisible to ordinary linker analysis.
+schemaVersion: 1
+entries:
+  - componentId: ffmpeg
+    loader: LoadLibraryExW
+    allowedFilePatterns:
+      - avcodec-*.dll
+      - avformat-*.dll
+      - avutil-*.dll
+      - swresample-*.dll
+      - swscale-*.dll
+    requireAuthenticode: false
+    requireRegistryHashMatch: true
+
+  - componentId: openvr
+    loader: LoadLibraryExW
+    allowedFilePatterns:
+      - openvr_api.dll
+    requireRegistryHashMatch: true

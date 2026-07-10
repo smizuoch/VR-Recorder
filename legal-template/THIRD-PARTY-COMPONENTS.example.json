@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "documentStatus": "DESIGN-TIME EXAMPLE — NOT A RELEASE INVENTORY",
+  "bundleId": "example-only",
+  "productVersion": "<product-version>",
+  "generatedAtUtc": "<generated-at-utc>",
+  "manifestSha256": "<legal-manifest-sha256>",
+  "components": [
+    {
+      "id": "ffmpeg",
+      "displayName": "FFmpeg libraries",
+      "version": "<exact-version>",
+      "licenseExpression": "LGPL-2.1-or-later",
+      "licenseBadge": "LGPL-2.1+",
+      "usage": "映像・音声のエンコードおよびMP4多重化",
+      "linkage": "dynamic",
+      "modified": false,
+      "licenseText": "LICENSES/LGPL-2.1-or-later/LICENSE.txt",
+      "sourceInfo": "SOURCE-OFFERS/FFmpeg-SOURCE-INFO.txt"
+    },
+    {
+      "id": "openvr",
+      "displayName": "OpenVR SDK / openvr_api.dll",
+      "version": "<tag-or-commit>",
+      "licenseExpression": "BSD-3-Clause",
+      "licenseBadge": "BSD-3-Clause",
+      "usage": "SteamVRオーバーレイおよび入力",
+      "linkage": "dynamic",
+      "modified": false,
+      "licenseText": "LICENSES/BSD-3-Clause/OpenVR-LICENSE.txt"
+    },
+    {
+      "id": "spout2",
+      "displayName": "Spout2",
+      "version": "<tag-or-commit>",
+      "licenseExpression": "BSD-2-Clause",
+      "licenseBadge": "BSD-2-Clause",
+      "usage": "D3D11共有テクスチャ受信",
+      "linkage": "<dynamic-or-static-or-source-copy>",
+      "modified": "<true-or-false>",
+      "licenseText": "LICENSES/BSD-2-Clause/Spout2-LICENSE.txt"
+    },
+    {
+      "id": "vrc-oscquery-lib",
+      "displayName": "VRC OSCQuery Library",
+      "version": "<tag-or-commit>",
+      "licenseExpression": "MIT",
+      "licenseBadge": "MIT",
+      "usage": "OSCQuery探索",
+      "linkage": "managed-library",
+      "modified": "<true-or-false>",
+      "licenseText": "LICENSES/MIT/VRC-OSCQuery-LICENSE.txt"
+    },
+    {
+      "id": "material-symbols",
+      "displayName": "Material Symbols (Material Design icons by Google)",
+      "version": "<tag-or-commit>",
+      "licenseExpression": "Apache-2.0",
+      "licenseBadge": "Apache-2.0",
+      "usage": "デスクトップUIおよびSteamVR手首UIのアイコン",
+      "linkage": "runtime-bundled-assets",
+      "modified": "<true-or-false>",
+      "licenseText": "LICENSES/Apache-2.0/Material-Symbols-LICENSE.txt",
+      "attributionText": "LICENSES/Apache-2.0/Material-Symbols-ATTRIBUTION.txt",
+      "assetManifest": "MATERIAL-SYMBOLS-MANIFEST.json",
+      "runtimeNetworkAllowed": false
+    }
+  ]
+}

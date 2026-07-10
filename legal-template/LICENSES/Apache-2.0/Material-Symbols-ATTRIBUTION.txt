@@ -1,0 +1,17 @@
+Material Symbols (Material Design icons by Google)
+
+Source repository: https://github.com/google/material-design-icons
+License: Apache License 2.0
+Pinned commit: <FULL-COMMIT>
+Selected asset manifest: MATERIAL-SYMBOLS-MANIFEST.json
+Modified: <YES/NO>
+
+This attribution is included to make the source and license easy to identify.
+The Material Symbols repository states that attribution in an application's
+About screen is appreciated but not required. This product does not use the
+Google logo or Google product icons and does not imply affiliation, sponsorship,
+or endorsement by Google.
+
+Any upstream copyright, patent, trademark, or attribution notices present in
+the pinned source must be retained. If the pinned source contains a NOTICE file,
+its applicable contents must be included in the release Legal Bundle.

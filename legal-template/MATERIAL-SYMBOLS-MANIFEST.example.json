@@ -1,0 +1,638 @@
+{
+  "schemaVersion": 2,
+  "documentStatus": "DESIGN-TIME EXAMPLE — NOT A RELEASE MANIFEST",
+  "componentId": "material-symbols",
+  "displayName": "Material Symbols (Material Design icons by Google)",
+  "source": {
+    "repository": "https://github.com/google/material-design-icons",
+    "browser": "https://fonts.google.com/icons",
+    "commit": "<full-commit>",
+    "codepointsFile": "<pinned-official-codepoints-path>",
+    "licenseExpression": "Apache-2.0",
+    "licenseFile": "legal-template/LICENSES/Apache-2.0/Material-Symbols-LICENSE.txt",
+    "attributionFile": "legal-template/LICENSES/Apache-2.0/Material-Symbols-ATTRIBUTION.txt",
+    "noticeStatus": "<present-or-absent-in-pinned-source>",
+    "acquisitionMode": "approved-update-pr-only",
+    "runtimeNetworkAllowed": false
+  },
+  "rightsPolicy": {
+    "permittedAssetClass": "general-user-interface-symbol",
+    "attributionDisplayedInLegalUi": true,
+    "licenseTextBundledOffline": true,
+    "sourceAndOutputHashesRequired": true,
+    "modificationRecordRequired": true,
+    "exclusiveTrademarkUseAllowed": false,
+    "implyGoogleAffiliationAllowed": false,
+    "prohibitedAssetClasses": [
+      "google-logo",
+      "google-g",
+      "google-product-icon",
+      "third-party-logo",
+      "trademark-or-brand-mark",
+      "unregistered-symbol",
+      "runtime-cdn-font"
+    ]
+  },
+  "rendering": {
+    "family": "Material Symbols Rounded",
+    "sourceFormat": "svg",
+    "outputFormat": "optimized-svg-or-project-glyph-atlas",
+    "defaultAxes": {
+      "fill": 0,
+      "weight": 500,
+      "grade": 0,
+      "opticalSize": 24
+    },
+    "primaryActionOpticalSize": 48,
+    "conversionTool": "<tool-and-version>",
+    "conversionRecipe": "<path-to-reproducible-recipe>",
+    "deterministicOutputRequired": true,
+    "externalFontFileAtRuntime": false
+  },
+  "validation": {
+    "failOnUnknownUpstreamName": true,
+    "failOnCodepointMismatch": true,
+    "failOnUnregisteredOutputAsset": true,
+    "failOnMissingAccessibleNameForInteractiveIcon": true,
+    "failOnMissingTooltipForAmbiguousIconOnlyControl": true,
+    "failOnIncorrectRtlMirroring": true,
+    "failOnSourceOrOutputHashMismatch": true,
+    "failOnLicenseOrAttributionMismatch": true
+  },
+  "selectedIcons": [
+    {
+      "semanticId": "recording.start",
+      "upstreamName": "fiber_manual_record",
+      "codepoint": "e061",
+      "style": "rounded",
+      "stateVariants": {
+        "ready": {
+          "fill": 0,
+          "weight": 500,
+          "grade": 0,
+          "opticalSize": 48
+        },
+        "recording": {
+          "fill": 1,
+          "weight": 500,
+          "grade": 0,
+          "opticalSize": 48
+        }
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/fiber_manual_record.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/recording-start.svg",
+      "outputSha256": "<sha256>",
+      "modified": "<true-or-false>",
+      "modificationNotice": "<required-when-modified>",
+      "visibleLabelKey": "Recording_Start_Short",
+      "accessibleNameKey": "Recording_Start_AccessibleName",
+      "tooltipKey": "Recording_Start_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "recording.stop",
+      "upstreamName": "stop",
+      "codepoint": "e047",
+      "style": "rounded",
+      "axes": {
+        "fill": 1,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 48
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/stop.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/recording-stop.svg",
+      "outputSha256": "<sha256>",
+      "modified": "<true-or-false>",
+      "modificationNotice": "<required-when-modified>",
+      "visibleLabelKey": "Recording_Stop_Short",
+      "accessibleNameKey": "Recording_Stop_AccessibleName",
+      "tooltipKey": "Recording_Stop_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "audio.microphone.on",
+      "upstreamName": "mic",
+      "codepoint": "e31d",
+      "style": "rounded",
+      "axes": {
+        "fill": 1,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/mic.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/mic-on.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Microphone_On_AccessibleName",
+      "tooltipKey": "Microphone_On_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "audio.microphone.off",
+      "upstreamName": "mic_off",
+      "codepoint": "e02b",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/mic_off.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/mic-off.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Microphone_Off_AccessibleName",
+      "tooltipKey": "Microphone_Off_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "audio.muteAll",
+      "upstreamName": "volume_off",
+      "codepoint": "e04f",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/volume_off.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/audio-mute-all.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Audio_MuteAll_Short",
+      "accessibleNameKey": "Audio_MuteAll_AccessibleName",
+      "tooltipKey": "Audio_MuteAll_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "timer.self",
+      "upstreamName": "timer",
+      "codepoint": "e425",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/timer.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/self-timer.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "SelfTimer_AccessibleName",
+      "tooltipKey": "SelfTimer_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "timer.autoStop",
+      "upstreamName": "schedule",
+      "codepoint": "efd6",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/schedule.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/auto-stop.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "AutoStop_AccessibleName",
+      "tooltipKey": "AutoStop_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "signal.none",
+      "upstreamName": "signal_disconnected",
+      "codepoint": "f239",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": false,
+      "decorativeWhenVisibleLabelPresent": true,
+      "sourcePath": "<pinned-upstream-path>/signal_disconnected.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/no-signal.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Signal_NoSignal_Short",
+      "accessibleDescriptionKey": "Signal_NoSignal_AccessibleDescription",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "overlay.move",
+      "upstreamName": "drag_indicator",
+      "codepoint": "e945",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/drag_indicator.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/overlay-move.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Overlay_Move_AccessibleName",
+      "tooltipKey": "Overlay_Move_Tooltip",
+      "surfaces": [
+        "wrist"
+      ]
+    },
+    {
+      "semanticId": "overlay.pin",
+      "upstreamName": "keep",
+      "codepoint": "f027",
+      "style": "rounded",
+      "stateVariants": {
+        "wristDock": {
+          "fill": 0,
+          "weight": 500,
+          "grade": 0,
+          "opticalSize": 24
+        },
+        "worldPin": {
+          "fill": 1,
+          "weight": 500,
+          "grade": 0,
+          "opticalSize": 24
+        }
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/keep.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/overlay-pin.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Overlay_Pin_AccessibleName",
+      "tooltipKey": "Overlay_Pin_Tooltip",
+      "surfaces": [
+        "wrist"
+      ]
+    },
+    {
+      "semanticId": "common.settings",
+      "upstreamName": "settings",
+      "codepoint": "e8b8",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/settings.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/settings.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Common_Settings_AccessibleName",
+      "tooltipKey": "Common_Settings_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.info",
+      "upstreamName": "info",
+      "codepoint": "e88e",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/info.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/info.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Common_Info_AccessibleName",
+      "tooltipKey": "Common_Info_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.warning",
+      "upstreamName": "warning",
+      "codepoint": "f083",
+      "style": "rounded",
+      "axes": {
+        "fill": 1,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": false,
+      "decorativeWhenVisibleLabelPresent": true,
+      "sourcePath": "<pinned-upstream-path>/warning.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/warning.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleDescriptionKey": "Common_Warning_AccessibleDescription",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.folder",
+      "upstreamName": "folder_open",
+      "codepoint": "e2c8",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/folder_open.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/folder-open.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Common_OpenFolder_Short",
+      "accessibleNameKey": "Common_OpenFolder_AccessibleName",
+      "tooltipKey": "Common_OpenFolder_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.document",
+      "upstreamName": "description",
+      "codepoint": "e873",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/description.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/document.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Common_Document_Short",
+      "accessibleNameKey": "Common_Document_AccessibleName",
+      "tooltipKey": "Common_Document_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.language",
+      "upstreamName": "language",
+      "codepoint": "ea07",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/language.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/language.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Common_Language_Short",
+      "accessibleNameKey": "Common_Language_AccessibleName",
+      "tooltipKey": "Common_Language_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.back",
+      "upstreamName": "arrow_back",
+      "codepoint": "e5c4",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": true,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/arrow_back.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/back.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Common_Back_AccessibleName",
+      "tooltipKey": "Common_Back_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.next",
+      "upstreamName": "arrow_forward",
+      "codepoint": "e5c8",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": true,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/arrow_forward.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/next.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Common_Next_AccessibleName",
+      "tooltipKey": "Common_Next_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.close",
+      "upstreamName": "close",
+      "codepoint": "e5cd",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/close.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/close.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleNameKey": "Common_Close_AccessibleName",
+      "tooltipKey": "Common_Close_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.retry",
+      "upstreamName": "refresh",
+      "codepoint": "e5d5",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/refresh.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/retry.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Common_Retry_Short",
+      "accessibleNameKey": "Common_Retry_AccessibleName",
+      "tooltipKey": "Common_Retry_Tooltip",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    },
+    {
+      "semanticId": "common.openExternal",
+      "upstreamName": "open_in_new",
+      "codepoint": "e89e",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": true,
+      "interactive": true,
+      "sourcePath": "<pinned-upstream-path>/open_in_new.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/open-external.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "visibleLabelKey": "Common_OpenOnDesktop_Short",
+      "accessibleNameKey": "Common_OpenOnDesktop_AccessibleName",
+      "tooltipKey": "Common_OpenOnDesktop_Tooltip",
+      "surfaces": [
+        "wrist"
+      ]
+    },
+    {
+      "semanticId": "status.ready",
+      "upstreamName": "check",
+      "codepoint": "e668",
+      "style": "rounded",
+      "axes": {
+        "fill": 0,
+        "weight": 500,
+        "grade": 0,
+        "opticalSize": 24
+      },
+      "rtlMirror": false,
+      "interactive": false,
+      "decorativeWhenVisibleLabelPresent": true,
+      "sourcePath": "<pinned-upstream-path>/check.svg",
+      "sourceSha256": "<sha256>",
+      "outputPath": "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/status-ready.svg",
+      "outputSha256": "<sha256>",
+      "modified": false,
+      "accessibleDescriptionKey": "Status_Ready_AccessibleDescription",
+      "surfaces": [
+        "wrist",
+        "desktop"
+      ]
+    }
+  ]
+}

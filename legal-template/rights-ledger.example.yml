@@ -1,0 +1,38 @@
+# Every non-code asset entering the product or installer must appear here.
+schemaVersion: 1
+ledgerVersion: 1
+assets:
+  - id: material-symbols-ui-icons
+    pathGlob: src/VRRecorder.DesignSystem/Assets/MaterialSymbols/**/*
+    origin: third-party-open-source
+    componentRef: material-symbols
+    upstream: https://github.com/google/material-design-icons
+    commit: <full-commit>
+    selectedAssetManifest: ui/material-symbols.yml
+    license: Apache-2.0
+    evidence: docs/legal-review/assets/material-symbols.md
+    trademarkUse: false
+    productLogoUse: false
+    runtimeNetworkAllowed: false
+    redistributionApproved: <true-after-review>
+    approvalId: <RIGHTS-APPROVAL-ID>
+
+  - id: ui-font
+    path: system-font:Segoe UI
+    origin: operating-system
+    redistributionMode: reference-only-not-bundled
+    license: LicenseRef-Windows-System-Font
+    evidence: docs/legal-review/assets/system-font-policy.md
+    trademarkUse: false
+    redistributionApproved: true
+    approvalId: <RIGHTS-APPROVAL-ID>
+
+forbiddenPatterns:
+  - unregistered-font-file
+  - copied-third-party-logo
+  - unknown-audio-file
+  - unknown-image-file
+  - undocumented-ai-generated-asset
+  - unregistered-material-symbol
+  - google-logo-or-product-icon
+  - runtime-remote-font

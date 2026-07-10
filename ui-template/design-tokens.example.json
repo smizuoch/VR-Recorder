@@ -1,0 +1,177 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "schemaVersion": 1,
+  "profileId": "vr-recorder-m3",
+  "description": "Project semantic-token contract mapped to applicable Material Design 3 roles. Presentation code may reference these tokens but may not use unregistered literals.",
+  "policy": {
+    "directColorLiteralsAllowedInPresentationCode": false,
+    "directTypographyLiteralsAllowedInPresentationCode": false,
+    "directCornerRadiusLiteralsAllowedInPresentationCode": false,
+    "directElevationLiteralsAllowedInPresentationCode": false,
+    "directMotionLiteralsAllowedInPresentationCode": false,
+    "desktopAndWristShareSemanticMeaning": true,
+    "generatedPlatformBindingsRequired": true
+  },
+  "color": {
+    "m3Roles": [
+      "primary",
+      "onPrimary",
+      "primaryContainer",
+      "onPrimaryContainer",
+      "secondary",
+      "onSecondary",
+      "secondaryContainer",
+      "onSecondaryContainer",
+      "tertiary",
+      "onTertiary",
+      "tertiaryContainer",
+      "onTertiaryContainer",
+      "error",
+      "onError",
+      "errorContainer",
+      "onErrorContainer",
+      "surface",
+      "onSurface",
+      "surfaceVariant",
+      "onSurfaceVariant",
+      "surfaceContainerLowest",
+      "surfaceContainerLow",
+      "surfaceContainer",
+      "surfaceContainerHigh",
+      "surfaceContainerHighest",
+      "outline",
+      "outlineVariant",
+      "inverseSurface",
+      "inverseOnSurface",
+      "inversePrimary",
+      "scrim",
+      "shadow"
+    ],
+    "projectExtendedRoles": {
+      "recording": {
+        "mappedAs": "M3 custom-color semantic group",
+        "purpose": "Active recording status and recording-related primary action only",
+        "requiredCompanionRoles": [
+          "onRecording",
+          "recordingContainer",
+          "onRecordingContainer"
+        ],
+        "mustNotAlias": "error",
+        "nonColorCuesRequired": [
+          "record-symbol",
+          "REC-or-STOP-label",
+          "elapsed-time",
+          "state-description",
+          "haptic-on-transition"
+        ]
+      }
+    },
+    "themeModes": [
+      "light",
+      "dark",
+      "windows-high-contrast"
+    ]
+  },
+  "typography": {
+    "m3ScaleRoles": [
+      "displayLarge",
+      "displayMedium",
+      "displaySmall",
+      "headlineLarge",
+      "headlineMedium",
+      "headlineSmall",
+      "titleLarge",
+      "titleMedium",
+      "titleSmall",
+      "bodyLarge",
+      "bodyMedium",
+      "bodySmall",
+      "labelLarge",
+      "labelMedium",
+      "labelSmall"
+    ],
+    "projectRoles": {
+      "elapsedTime": "titleLarge-tabular-numerals",
+      "resolutionStatus": "labelMedium-tabular-numerals",
+      "legalBody": "bodyLarge",
+      "wristPrimaryLabel": "labelLarge"
+    },
+    "minimumXrBodyDpEquivalent": 14,
+    "supportsTextScalePercent": [
+      100,
+      125,
+      150,
+      200
+    ],
+    "fontDistribution": "Reference Windows system fonts; do not redistribute font binaries without a separate rights entry."
+  },
+  "shape": {
+    "roles": [
+      "none",
+      "extraSmall",
+      "small",
+      "medium",
+      "large",
+      "extraLarge",
+      "full"
+    ]
+  },
+  "spacing": {
+    "baseGridDp": 4,
+    "preferredLayoutGridDp": 8,
+    "safeInsetTokenRequired": true,
+    "raySelectionSeparationTokenRequired": true
+  },
+  "elevation": {
+    "roles": [
+      "level0",
+      "level1",
+      "level2",
+      "level3",
+      "level4",
+      "level5"
+    ],
+    "allowedPurposes": [
+      "spatial-panel-hierarchy",
+      "modal-hierarchy",
+      "tooltip-hierarchy"
+    ]
+  },
+  "motion": {
+    "m3EasingAndDurationTokensOnly": true,
+    "reduceMotionMode": "Replace nonessential movement with immediate state change or short opacity transition.",
+    "flashingRecordingCueAllowed": false,
+    "stateFeedbackMaximumMilliseconds": 150
+  },
+  "interaction": {
+    "states": [
+      "enabled",
+      "hovered",
+      "focused",
+      "pressed",
+      "disabled",
+      "selected",
+      "dragging",
+      "loading",
+      "recording",
+      "fault"
+    ],
+    "minimumTargetDp": 48,
+    "primaryWristTargetDp": 56,
+    "recommendedPhysicalTargetMillimeters": [
+      7,
+      10
+    ],
+    "dragAlternativeRequired": true,
+    "focusIndicatorRequired": true
+  },
+  "accessibility": {
+    "normalTextContrastRatio": 4.5,
+    "largeTextAndImportantUiContrastRatio": 3.0,
+    "accessibleNameCoveragePercent": 100,
+    "colorOnlyStateAllowed": false,
+    "iconOnlyTooltipRequiredWhenPurposeIsNotImmediatelyObvious": true,
+    "keyboardAndControllerEquivalentOperationRequired": true,
+    "rtlAndPseudoLocaleTestsRequired": true
+  }
+}

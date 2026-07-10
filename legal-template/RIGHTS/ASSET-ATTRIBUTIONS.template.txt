@@ -1,0 +1,8 @@
+VR-Recorder Asset Attributions
+==============================
+
+This file is generated from rights-ledger.yml. Do not edit the generated copy.
+Every shipped icon, image, audio file, font file, shader, sample, translation,
+and third-party trademark use must have a ledger record and approval evidence.
+
+<GENERATED-ASSET-ATTRIBUTIONS>
