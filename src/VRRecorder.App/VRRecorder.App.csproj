@@ -42,5 +42,15 @@
            Text="Release requires LegalBundleDirectory containing LEGAL-MANIFEST.sha256." />
     <Error Condition="'$(LegalBundleDirectory)' == '' or !Exists('$(LegalBundleDirectory)/THIRD-PARTY-COMPONENTS.json')"
            Text="Release requires LegalBundleDirectory containing THIRD-PARTY-COMPONENTS.json." />
+    <GetFileHash Files="$(LegalBundleDirectory)/LEGAL-MANIFEST.sha256"
+                 Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_LegalManifestHash" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_ComputedLegalManifestSha256>@(_LegalManifestHash->'%(FileHash)')</_ComputedLegalManifestSha256>
+      <_ComputedLegalManifestSha256>$([System.String]::Copy('$(_ComputedLegalManifestSha256)').ToLowerInvariant())</_ComputedLegalManifestSha256>
+    </PropertyGroup>
+    <Error Condition="'$(_ComputedLegalManifestSha256)' != '$(LegalManifestSha256)'"
+           Text="The LegalManifestSha256 digest does not match LEGAL-MANIFEST.sha256." />
   </Target>
 </Project>
