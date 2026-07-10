@@ -16,25 +16,39 @@ public sealed class FileSystemStaleRecordingCatalog : IStaleRecordingCatalog
 
         var root = Path.GetFullPath(outputDirectory);
         var recordings = new List<RecoverableRecording>();
-        foreach (var path in Directory
-                     .EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
-                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(path => path, StringComparer.Ordinal))
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!path.EndsWith(StaleSuffix, StringComparison.OrdinalIgnoreCase))
+            foreach (var path in Directory
+                         .EnumerateFiles(
+                             root,
+                             "*",
+                             SearchOption.TopDirectoryOnly)
+                         .OrderBy(
+                             path => path,
+                             StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(path => path, StringComparer.Ordinal))
             {
-                continue;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!path.EndsWith(
+                        StaleSuffix,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
 
-            var file = new FileInfo(path);
-            if (file.LinkTarget is not null ||
-                file.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            {
-                continue;
-            }
+                var file = new FileInfo(path);
+                if (file.LinkTarget is not null ||
+                    file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
 
-            recordings.Add(new RecoverableRecording(file.FullName));
+                recordings.Add(new RecoverableRecording(file.FullName));
+            }
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // A removed output folder contains no recoverable recording.
         }
 
         return Task.FromResult<IReadOnlyList<RecoverableRecording>>(recordings);
