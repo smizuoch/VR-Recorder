@@ -7,6 +7,45 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 
 public sealed class WristUiProjectorTests
 {
+    [Fact]
+    public void NoSignalSuppressesStartAndProjectsAccessibleRetry()
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = new RecorderStatusSnapshot(
+            Revision: 3,
+            State: RecorderState.NoSignal,
+            AvailableActions:
+                RecorderAvailableActions.Start | RecorderAvailableActions.Retry);
+
+        var snapshot = projector.Project(status);
+
+        Assert.DoesNotContain(snapshot.Actions, action =>
+            action.Command == UiCommandId.StartRecording);
+        var retry = Assert.Single(snapshot.Actions);
+        Assert.Equal(UiCommandId.Retry, retry.Command);
+        Assert.Equal(UiComponentRole.FilledTonalButton, retry.ComponentRole);
+        Assert.Equal(UiColorRole.Error, retry.ColorRole);
+        Assert.Equal("RETRY", retry.VisibleLabel.Value);
+        Assert.Equal("Retry camera connection", retry.AccessibleName.Value);
+    }
+
+    [Theory]
+    [InlineData(RecorderState.Faulted)]
+    [InlineData(RecorderState.ComplianceFault)]
+    public void FaultStatesNeverProjectStart(RecorderState state)
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = new RecorderStatusSnapshot(
+            Revision: 4,
+            State: state,
+            AvailableActions: RecorderAvailableActions.Start);
+
+        var snapshot = projector.Project(status);
+
+        Assert.DoesNotContain(snapshot.Actions, action =>
+            action.Command == UiCommandId.StartRecording);
+    }
+
     [Theory]
     [InlineData(WristPage.Main)]
     [InlineData(WristPage.Settings)]
