@@ -312,6 +312,107 @@ public sealed class DesktopRecordingRuntimeTests
     }
 
     [Fact]
+    public async Task ComplianceFaultStopsActiveSessionWithTypedReasonAndJoinsDispose()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-compliance-fault"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueCompleted(Started(Handle("session-compliance-fault")));
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var runtime = new DesktopRecordingRuntime(requests, lifecycle, stops);
+        await runtime.ToggleAsync(CancellationToken.None);
+
+        var complianceShutdown = runtime.ShutdownAsync(
+            RecordingStopReason.ComplianceFault);
+        var disposal = runtime.DisposeAsync().AsTask();
+        await stops.WaitUntilRequestedAsync();
+
+        Assert.Same(complianceShutdown, disposal);
+        Assert.Single(stops.Requests);
+        Assert.Equal(
+            RecordingStopReason.ComplianceFault,
+            stops.Requests.Single().Request.Reason);
+        Assert.Equal(CancellationToken.None, stops.Requests.Single().Token);
+
+        stops.Complete();
+        await Task.WhenAll(complianceShutdown, disposal);
+
+        Assert.Single(stops.Requests);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+    }
+
+    [Fact]
+    public async Task DisposeWinsConcurrentLaterComplianceShutdownExactlyOnce()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-dispose-race"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueCompleted(Started(Handle("session-dispose-race")));
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var runtime = new DesktopRecordingRuntime(requests, lifecycle, stops);
+        await runtime.ToggleAsync(CancellationToken.None);
+
+        var disposal = runtime.DisposeAsync().AsTask();
+        var laterComplianceShutdown = runtime.ShutdownAsync(
+            RecordingStopReason.ComplianceFault);
+        await stops.WaitUntilRequestedAsync();
+
+        Assert.Same(disposal, laterComplianceShutdown);
+        Assert.Single(stops.Requests);
+        Assert.Equal(
+            RecordingStopReason.ApplicationShutdown,
+            stops.Requests.Single().Request.Reason);
+
+        stops.Complete();
+        await Task.WhenAll(disposal, laterComplianceShutdown);
+
+        Assert.Single(stops.Requests);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+    }
+
+    [Theory]
+    [InlineData(RecorderState.Arming)]
+    [InlineData(RecorderState.Countdown)]
+    public async Task ComplianceFaultCancelsStartPhaseWithoutCreatingStopRequest(
+        RecorderState startPhase)
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-compliance-start"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueuePending();
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var runtime = new DesktopRecordingRuntime(requests, lifecycle, stops);
+        var starting = runtime.ToggleAsync(CancellationToken.None);
+        await lifecycle.WaitUntilStartRequestedAsync();
+        lifecycle.SetState(startPhase);
+
+        var shutdown = runtime.ShutdownAsync(
+            RecordingStopReason.ComplianceFault);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starting);
+        await shutdown;
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Empty(stops.Requests);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+    }
+
+    [Fact]
+    public async Task ShutdownRejectsNonTerminalStopReasonWithoutTakingOwnership()
+    {
+        var requests = new ControllableStartRequestSource();
+        var lifecycle = new ControllableRecordingLifecycle();
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var runtime = new DesktopRecordingRuntime(requests, lifecycle, stops);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            runtime.ShutdownAsync(RecordingStopReason.UserRequested));
+        await runtime.DisposeAsync();
+
+        Assert.Empty(stops.Requests);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+    }
+
+    [Fact]
     public async Task DisposeJoinsInflightStopWithoutSecondStopRequest()
     {
         var requests = new ControllableStartRequestSource();
