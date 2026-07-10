@@ -14,9 +14,23 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly DesktopRecordingCommandHost _recordingHost = new(
         new ProductionDesktopRecordingRuntimeFactory());
     private readonly RecordingInputDispatcher _recordingInputs;
+    private readonly AuthenticatedLegalBundleVerifier _legalVerifier;
+    private readonly DesktopLegalController _legalController;
 
     public App()
     {
+        _legalVerifier = new AuthenticatedLegalBundleVerifier(
+            new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
+                typeof(App).Assembly));
+        _legalController = new DesktopLegalController(
+            new AuthenticatedLegalCatalogReader(
+                AppContext.BaseDirectory,
+                _legalVerifier),
+            new AuthenticatedLegalBundleFolderOpener(
+                AppContext.BaseDirectory,
+                AppContext.BaseDirectory,
+                _legalVerifier,
+                new WindowsLegalFolderShell()));
         _recordingInputs = new RecordingInputDispatcher(
             new RecordingUiCommandDispatcher(
                 (_, cancellationToken) =>
@@ -25,6 +39,9 @@ public partial class App : System.Windows.Application, IDisposable
 
     internal static RecordingInputDispatcher RecordingInputs =>
         ((App)Current)._recordingInputs;
+
+    internal static DesktopLegalController LegalController =>
+        ((App)Current)._legalController;
 
     internal static Task<DesktopRecordingHostActivation>
         ActivateRecordingHostAsync(
@@ -64,13 +81,9 @@ public partial class App : System.Windows.Application, IDisposable
     {
         try
         {
-            var anchorSource =
-                new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
-                    typeof(App).Assembly);
-            var verifier = new AuthenticatedLegalBundleVerifier(anchorSource);
             var gateway = new RuntimeLegalBundleVerificationGateway(
                 AppContext.BaseDirectory,
-                verifier);
+                ((App)Current)._legalVerifier);
             return await new RecorderStartupUseCase(gateway)
                 .ExecuteAsync(cancellationToken);
         }

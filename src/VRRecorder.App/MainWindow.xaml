@@ -14,6 +14,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="RecordingStatusText"
@@ -33,5 +34,16 @@
                 ToolTip="{DynamicResource Recording_Start_Tooltip}"
                 IsEnabled="False"
                 Click="OnRecordingToggleClick" />
+
+        <Button x:Name="AboutLegalButton"
+                Grid.Row="2"
+                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                MinHeight="{StaticResource Interaction.MinimumTarget}"
+                MinWidth="{StaticResource Interaction.MinimumTarget}"
+                Content="{DynamicResource Legal_Open_Label}"
+                AutomationProperties.Name="{DynamicResource Legal_Open_AccessibleName}"
+                AutomationProperties.HelpText="{DynamicResource Legal_Open_Tooltip}"
+                ToolTip="{DynamicResource Legal_Open_Tooltip}"
+                Click="OnAboutLegalClick" />
     </Grid>
 </Window>

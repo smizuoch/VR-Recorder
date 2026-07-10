@@ -1,0 +1,136 @@
+<Window x:Class="VRRecorder.App.LegalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Legal_Title}"
+        AutomationProperties.Name="{DynamicResource Legal_Window_AccessibleName}"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        FlowDirection="{DynamicResource Layout.FlowDirection}"
+        Loaded="OnLoaded"
+        Width="900"
+        Height="720"
+        MinWidth="520"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+    <ScrollViewer x:Name="LegalContentScrollViewer"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto">
+        <Grid Margin="{StaticResource Spacing.LayoutGrid}"
+              MinWidth="480">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       FontSize="22"
+                       FontWeight="SemiBold"
+                       Text="{DynamicResource Legal_Title}"
+                       TextWrapping="Wrap" />
+
+            <StackPanel Grid.Row="1"
+                        Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                <TextBlock x:Name="ProductVersionText"
+                           Text="{DynamicResource Legal_ProductVersion_Label}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.Name="{DynamicResource Legal_ProductVersion_AccessibleName}" />
+                <TextBlock x:Name="BundleIdentityText"
+                           Text="{DynamicResource Legal_BundleIdentity_Label}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.Name="{DynamicResource Legal_BundleIdentity_AccessibleName}" />
+                <TextBlock Text="{DynamicResource Legal_NoAffiliation}"
+                           Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <TextBlock x:Name="LegalUnavailableText"
+                       Grid.Row="2"
+                       Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                       Text="{DynamicResource Legal_State_Loading}"
+                       TextWrapping="Wrap"
+                       AutomationProperties.Name="{DynamicResource Legal_State_Loading}"
+                       AutomationProperties.LiveSetting="Assertive" />
+
+            <GroupBox Grid.Row="3"
+                      Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Legal_ThirdPartyComponents}">
+                <ListBox x:Name="LegalComponentList"
+                         MinHeight="144"
+                         DisplayMemberPath="Label"
+                         SelectionChanged="OnComponentSelectionChanged"
+                         AutomationProperties.Name="{DynamicResource Legal_ComponentList_AccessibleName}"
+                         AutomationProperties.HelpText="{DynamicResource Legal_ComponentList_Tooltip}"
+                         ToolTip="{DynamicResource Legal_ComponentList_Tooltip}" />
+            </GroupBox>
+
+            <StackPanel Grid.Row="4"
+                        Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                <TextBlock x:Name="ComponentDetailText"
+                           TextWrapping="Wrap"
+                           AutomationProperties.Name="{DynamicResource Legal_ComponentDetail_AccessibleName}" />
+                <Button x:Name="ShowLicenseButton"
+                        Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        HorizontalAlignment="Left"
+                        Content="{DynamicResource Legal_ShowLicense_Label}"
+                        AutomationProperties.Name="{DynamicResource Legal_ShowLicense_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Legal_ShowLicense_Tooltip}"
+                        ToolTip="{DynamicResource Legal_ShowLicense_Tooltip}"
+                        IsEnabled="False"
+                        Click="OnShowLicenseClick" />
+                <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                           FontWeight="SemiBold"
+                           Text="{DynamicResource Legal_FullLicense}"
+                           TextWrapping="Wrap" />
+                <TextBox x:Name="FullLicenseText"
+                         Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                         MinHeight="192"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         AutomationProperties.Name="{DynamicResource Legal_FullLicense_AccessibleName}"
+                         AutomationProperties.HelpText="{DynamicResource Legal_FullLicense_Tooltip}"
+                         ToolTip="{DynamicResource Legal_FullLicense_Tooltip}" />
+            </StackPanel>
+
+            <WrapPanel Grid.Row="5"
+                       Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                <Button x:Name="OpenLicenseFolderButton"
+                        Margin="0,0,{StaticResource Spacing.LayoutGrid},{StaticResource Spacing.LayoutGrid}"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        Content="{DynamicResource Legal_OpenFolder_Label}"
+                        AutomationProperties.Name="{DynamicResource Legal_OpenFolder_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Legal_OpenFolder_Tooltip}"
+                        ToolTip="{DynamicResource Legal_OpenFolder_Tooltip}"
+                        IsEnabled="False"
+                        Click="OnOpenLicenseFolderClick" />
+                <Button x:Name="RefreshLegalButton"
+                        Margin="0,0,{StaticResource Spacing.LayoutGrid},{StaticResource Spacing.LayoutGrid}"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        Content="{DynamicResource Legal_Refresh_Label}"
+                        AutomationProperties.Name="{DynamicResource Legal_Refresh_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Legal_Refresh_Tooltip}"
+                        ToolTip="{DynamicResource Legal_Refresh_Tooltip}"
+                        Click="OnRefreshLegalClick" />
+                <Button x:Name="CloseLegalButton"
+                        Margin="0,0,0,{StaticResource Spacing.LayoutGrid}"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        Content="{DynamicResource Legal_Close_Label}"
+                        AutomationProperties.Name="{DynamicResource Legal_Close_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Legal_Close_Tooltip}"
+                        ToolTip="{DynamicResource Legal_Close_Tooltip}"
+                        Click="OnCloseLegalClick" />
+            </WrapPanel>
+        </Grid>
+    </ScrollViewer>
+</Window>

@@ -13,6 +13,7 @@ public partial class MainWindow : Window
 {
     private readonly RecordingInputDispatcher _recordingInputs;
     private bool _startupApplied;
+    private LegalWindow? _legalWindow;
 
     public MainWindow()
         : this(App.RecordingInputs)
@@ -97,6 +98,23 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e) =>
         await DispatchRecordingAsync(UiActivationKind.DesktopClick);
+
+    private void OnAboutLegalClick(object sender, RoutedEventArgs e)
+    {
+        if (_legalWindow is { IsVisible: true })
+        {
+            _legalWindow.Activate();
+            return;
+        }
+
+        var legalWindow = new LegalWindow(App.LegalController)
+        {
+            Owner = this,
+        };
+        legalWindow.Closed += (_, _) => _legalWindow = null;
+        _legalWindow = legalWindow;
+        legalWindow.Show();
+    }
 
     private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
