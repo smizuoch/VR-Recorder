@@ -7,6 +7,40 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 
 public sealed class WristUiProjectorTests
 {
+    [Theory]
+    [InlineData(RecorderState.Booting, UiColorRole.Surface)]
+    [InlineData(RecorderState.ComplianceFault, UiColorRole.Error)]
+    [InlineData(RecorderState.Ready, UiColorRole.Surface)]
+    [InlineData(RecorderState.Arming, UiColorRole.Surface)]
+    [InlineData(RecorderState.Countdown, UiColorRole.Surface)]
+    [InlineData(RecorderState.Starting, UiColorRole.Surface)]
+    [InlineData(RecorderState.Recording, UiColorRole.Recording)]
+    [InlineData(RecorderState.SignalLost, UiColorRole.Error)]
+    [InlineData(RecorderState.Stopping, UiColorRole.Surface)]
+    [InlineData(RecorderState.NoSignal, UiColorRole.Error)]
+    [InlineData(RecorderState.Faulted, UiColorRole.Error)]
+    public void EveryRecorderStateHasNonColorSemanticCue(
+        RecorderState state,
+        UiColorRole expectedColorRole)
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = new RecorderStatusSnapshot(
+            Revision: 5,
+            State: state,
+            AvailableActions: RecorderAvailableActions.None);
+
+        var snapshot = projector.Project(status);
+
+        Assert.Equal(expectedColorRole, snapshot.StateCue.ColorRole);
+        Assert.False(string.IsNullOrWhiteSpace(snapshot.StateCue.IconSemanticId));
+        Assert.False(string.IsNullOrWhiteSpace(snapshot.StateCue.Label.Value));
+        Assert.StartsWith(
+            "state.",
+            snapshot.StateCue.Label.ResourceKey,
+            StringComparison.Ordinal);
+        Assert.NotEqual(UiColorRole.Error, UiColorRole.Recording);
+    }
+
     [Fact]
     public void NoSignalSuppressesStartAndProjectsAccessibleRetry()
     {
