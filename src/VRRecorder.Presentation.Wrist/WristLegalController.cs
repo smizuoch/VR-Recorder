@@ -114,6 +114,20 @@ public sealed class WristLegalController
             checked(State.FirstVisibleLine + lineDelta),
             cancellationToken);
 
+    public Task RefreshAsync(CancellationToken cancellationToken) =>
+        State.View switch
+        {
+            WristLegalView.ComponentDetail when
+                State.SelectedComponent is not null =>
+                ShowDetailAsync(
+                    State.SelectedComponent.Id,
+                    cancellationToken),
+            WristLegalView.LicenseText => RefreshCurrentLicenseAsync(
+                State.FirstVisibleLine,
+                cancellationToken),
+            _ => OpenAsync(cancellationToken),
+        };
+
     public void Back()
     {
         if (State.View == WristLegalView.LicenseText &&
