@@ -8,6 +8,14 @@ namespace VRRecorder.IntegrationTests.Osc;
 
 public sealed class OscQueryVrChatInstanceDiscoveryTests
 {
+    private static readonly string[] ExpectedCapabilityPaths =
+    [
+        "/?HOST_INFO",
+        "/usercamera/Mode",
+        "/usercamera/OrientationIsLandscape",
+        "/usercamera/Streaming",
+    ];
+
     [Fact]
     public async Task MultipleValidLoopbackServicesRequireSelectionAfterCapabilityProbe()
     {
@@ -37,13 +45,7 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             candidate => AssertCandidate(candidate, first, oscPort: 9000),
             candidate => AssertCandidate(candidate, second, oscPort: 9010));
         Assert.Equal(
-            new[]
-            {
-                "/?HOST_INFO",
-                "/usercamera/Mode",
-                "/usercamera/OrientationIsLandscape",
-                "/usercamera/Streaming",
-            },
+            ExpectedCapabilityPaths,
             http.Requests
                 .Where(request => request.Port == first.HttpPort)
                 .Select(request => request.PathAndQuery)
@@ -59,10 +61,10 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
     {
         var instanceName = $"VRChat-Client-{suffix}";
         return new OscQueryServiceAdvertisement(
-            ServiceId: $"{instanceName}._oscjson._tcp.local.",
-            InstanceName: instanceName,
-            Address: IPAddress.Loopback,
-            HttpPort: httpPort);
+            serviceId: $"{instanceName}._oscjson._tcp.local.",
+            instanceName: instanceName,
+            address: IPAddress.Loopback,
+            httpPort: httpPort);
     }
 
     private static void AssertCandidate(
