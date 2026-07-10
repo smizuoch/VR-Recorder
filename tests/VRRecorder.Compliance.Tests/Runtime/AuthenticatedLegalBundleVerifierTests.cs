@@ -1,9 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Reflection;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.Domain.Recording;
 using RecorderStartupUseCase =
     VRRecorder.Application.Compliance.RecorderStartupUseCase;
+
+[assembly: AssemblyMetadata(
+    "VRRecorder.LegalBundleId",
+    "https://example.invalid/spdx/vr-recorder-assembly-metadata")]
+[assembly: AssemblyMetadata(
+    "VRRecorder.LegalManifestSha256",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
 
 namespace VRRecorder.Compliance.Tests.Runtime;
 
@@ -191,6 +199,20 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         var issue = Assert.Single(result.Issues);
         Assert.Equal("LEGAL_BUNDLE_MISSING", issue.Code);
         Assert.Equal("authenticated-manifest-anchor", issue.Subject);
+    }
+
+    [Fact]
+    public async Task ReadsAuthenticatedAnchorFromSignedAssemblyMetadata()
+    {
+        var source = new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
+            typeof(AuthenticatedLegalBundleVerifierTests).Assembly);
+
+        var anchor = await source.GetAsync(CancellationToken.None);
+
+        Assert.Equal(
+            "https://example.invalid/spdx/vr-recorder-assembly-metadata",
+            anchor.BundleId);
+        Assert.Equal(new string('a', 64), anchor.ManifestSha256);
     }
 
     private static string CatalogJson() => $$"""
