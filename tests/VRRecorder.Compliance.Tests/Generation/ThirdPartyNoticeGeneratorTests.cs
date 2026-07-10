@@ -6,6 +6,45 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class ThirdPartyNoticeGeneratorTests
 {
     [Fact]
+    public void MitComponentWithoutCopyrightNoticeStopsGeneration()
+    {
+        NuGetPackage[] dependencies =
+        [
+            new("Missing.Copyright", "1.0.0", NuGetDependencyKind.Direct),
+        ];
+        NoticeComponent[] components =
+        [
+            new(
+                Id: "missing-copyright",
+                DisplayName: "Missing Copyright",
+                Version: "1.0.0",
+                LicenseExpression: "MIT",
+                CopyrightNotice: string.Empty,
+                Usage: "runtime-feature",
+                Linkage: "managed-library",
+                Modified: false,
+                SourceInformation: "https://example.invalid/source@commit",
+                LicenseText: "FULL MIT LICENSE TEXT",
+                Scope: NoticeScope.RuntimeBundled,
+                ApprovalStatus: LegalApprovalStatus.Approved,
+                Packages:
+                [
+                    new NoticePackage("Missing.Copyright", "1.0.0"),
+                ]),
+        ];
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ThirdPartyNoticeGenerator.Generate(
+                "VR-Recorder",
+                dependencies,
+                components));
+
+        Assert.Equal(
+            "Component missing-copyright is missing its copyright notice.",
+            exception.Message);
+    }
+
+    [Fact]
     public void DirectDependencyIsAddedWithFullLegalMetadataAndLicenseText()
     {
         NuGetPackage[] dependencies =
