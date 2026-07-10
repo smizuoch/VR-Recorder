@@ -706,8 +706,14 @@ public sealed class WpfHostProjectContractTests
             StringComparison.Ordinal);
         Assert.True(rightsCheck >= 0, "The recording-rights gate is missing.");
         Assert.True(
-            activation > rightsCheck,
-            "Recording host activation must follow rights acknowledgement.");
+            activation >= 0 && activation < rightsCheck,
+            "Host initialization must recover a stale CameraLease before the rights dialog.");
+        var applyStartup = windowCode.IndexOf(
+            "ApplyStartupResult(startup, activation)",
+            StringComparison.Ordinal);
+        Assert.True(
+            applyStartup > rightsCheck,
+            "Recording controls must remain unavailable until rights acknowledgement.");
 
         foreach (var resourcePath in new[]
                  {
