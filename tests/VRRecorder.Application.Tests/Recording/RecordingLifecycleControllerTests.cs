@@ -50,7 +50,7 @@ public sealed class RecordingLifecycleControllerTests
                 new ControllableMonotonicClock(
                     MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
                 new FakeStopRequestSink()));
-        var lifecycle = new RecordingLifecycleController(
+        using var lifecycle = new RecordingLifecycleController(
             connections,
             new InMemoryCameraLeaseStore(),
             startRecording);
