@@ -146,7 +146,17 @@ public sealed class ShellWindowsDnsServiceNativeApi
 
         public void Cancel()
         {
+            if (Volatile.Read(ref _terminal) != 0)
+            {
+                return;
+            }
+
             if (Interlocked.Exchange(ref _cancelled, 1) != 0)
+            {
+                return;
+            }
+
+            if (Volatile.Read(ref _terminal) != 0)
             {
                 return;
             }
@@ -156,6 +166,11 @@ public sealed class ShellWindowsDnsServiceNativeApi
             {
                 Interlocked.Exchange(ref _cancelled, 0);
                 throw CreateFailure("cancel", status);
+            }
+
+            if (CancellationCompletesOperation)
+            {
+                MarkTerminal();
             }
         }
 
@@ -172,6 +187,8 @@ public sealed class ShellWindowsDnsServiceNativeApi
 
         protected void MarkTerminal() =>
             Interlocked.Exchange(ref _terminal, 1);
+
+        protected virtual bool CancellationCompletesOperation => false;
 
         protected void ThrowIfStartFailed(uint status, string operation)
         {
@@ -357,6 +374,8 @@ public sealed class ShellWindowsDnsServiceNativeApi
 
         protected override uint CancelCore(nint cancelHandle) =>
             _interop.ResolveCancel(cancelHandle);
+
+        protected override bool CancellationCompletesOperation => true;
 
         private static WindowsDnsSdResolvedService? TryReadServiceInstance(
             nint serviceInstance)
