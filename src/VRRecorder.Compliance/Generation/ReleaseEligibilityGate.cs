@@ -152,6 +152,33 @@ public static class ReleaseEligibilityGate
             }
         }
 
+        foreach (var collision in graph.Components
+                     .SelectMany(component => component.LegalFiles.Select(file =>
+                         new ComponentLegalPath(
+                             component.Id,
+                             file.RelativePath)))
+                     .GroupBy(
+                         item => item.RelativePath,
+                         StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group
+                         .Select(item => item.ComponentId)
+                         .Distinct(StringComparer.Ordinal)
+                         .Skip(1)
+                         .Any()))
+        {
+            var componentIds = collision
+                .Select(item => item.ComponentId)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal);
+            var canonicalPath = collision
+                .Select(item => item.RelativePath)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .First();
+            issues.Add(new ComplianceIssue(
+                "duplicate-legal-document-path",
+                $"{string.Join(',', componentIds)}:{canonicalPath}"));
+        }
+
         var orderedIssues = issues
             .OrderBy(issue => issue.Code, StringComparer.Ordinal)
             .ThenBy(issue => issue.Subject, StringComparer.Ordinal)
@@ -171,4 +198,8 @@ public static class ReleaseEligibilityGate
             "NOASSERTION",
             StringComparison.OrdinalIgnoreCase) ||
         string.Equals(expression, "NONE", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record ComponentLegalPath(
+        string ComponentId,
+        string RelativePath);
 }
