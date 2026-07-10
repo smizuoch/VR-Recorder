@@ -7,6 +7,32 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 
 public sealed class WristUiProjectorTests
 {
+    [Theory]
+    [InlineData(WristPage.Main)]
+    [InlineData(WristPage.Settings)]
+    [InlineData(WristPage.Legal)]
+    [InlineData(WristPage.Positioning)]
+    public void RecordingKeepsCriticalStopReachableFromEveryPage(WristPage page)
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = new RecorderStatusSnapshot(
+            Revision: 2,
+            State: RecorderState.Recording,
+            AvailableActions: RecorderAvailableActions.Stop);
+
+        var snapshot = projector.Project(status, page);
+
+        var action = Assert.Single(snapshot.Actions, item =>
+            item.SemanticId == "recording.stop");
+        Assert.Equal(UiCommandId.StopRecording, action.Command);
+        Assert.True(action.IsEnabled);
+        Assert.Equal("STOP", action.VisibleLabel.Value);
+        Assert.Equal("Stop recording", action.AccessibleName.Value);
+        Assert.Equal("Stop recording", action.Tooltip.Value);
+        Assert.True(action.MinimumTargetDp >= 64);
+        Assert.Equal(page, snapshot.Page);
+    }
+
     [Fact]
     public void ReadyProjectsOneEnabledAccessibleRecordAction()
     {
