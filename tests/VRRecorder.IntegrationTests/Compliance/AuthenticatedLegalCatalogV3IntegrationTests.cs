@@ -39,7 +39,10 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
             ["COPYRIGHTS/example.txt"] = "copyright document\n",
             ["RIGHTS/example-attribution.txt"] = "attribution text\n",
             ["MATERIAL-SYMBOLS-MANIFEST.json"] =
-                "{\"schemaVersion\":2,\"icons\":[]}\n",
+                MaterialSymbolsManifestTestFixture.Create(
+                    "LICENSES/example/LICENSE.txt",
+                    "RIGHTS/example-attribution.txt",
+                    "present"),
         };
         var graph = new NormalizedComponentGraph(
             [new NuGetPackage(
@@ -207,15 +210,18 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
     private static NormalizedComponent Component(
         Dictionary<string, string> texts) =>
         new(
-            Id: "example",
-            DisplayName: "Example",
-            Version: "1.0.0",
-            License: new LicenseDecision("MIT", "MIT"),
+            Id: "material-symbols",
+            DisplayName:
+                "Material Symbols (Material Design icons by Google)",
+            Version: MaterialSymbolsManifestTestFixture.Commit,
+            License: new LicenseDecision("Apache-2.0", "Apache-2.0"),
             CopyrightNotice: "Copyright Example",
             Usage: "runtime",
             Linkage: "managed-library",
-            Modified: false,
-            SourceInformation: "offline source@example",
+            Modified: true,
+            SourceInformation:
+                "https://github.com/google/material-design-icons@" +
+                MaterialSymbolsManifestTestFixture.Commit,
             LicenseText: texts["LICENSES/example/LICENSE.txt"],
             LegalFiles:
             [

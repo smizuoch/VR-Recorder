@@ -7,11 +7,23 @@ public static class ReleaseEligibilityGate
 {
     public static ReleaseEligibilityResult Evaluate(
         NormalizedComponentGraph graph)
+        => EvaluateCore(graph, materialComponentRequired: false);
+
+    internal static ReleaseEligibilityResult EvaluateProductRelease(
+        NormalizedComponentGraph graph)
+        => EvaluateCore(graph, materialComponentRequired: true);
+
+    private static ReleaseEligibilityResult EvaluateCore(
+        NormalizedComponentGraph graph,
+        bool materialComponentRequired)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(graph.Components);
 
-        var issues = new List<ComplianceIssue>();
+        var issues = new List<ComplianceIssue>(
+            MaterialSymbolsManifestAdmissionGate.Validate(
+                graph.Components,
+                materialComponentRequired));
         foreach (var component in graph.Components)
         {
             ArgumentNullException.ThrowIfNull(component.License);

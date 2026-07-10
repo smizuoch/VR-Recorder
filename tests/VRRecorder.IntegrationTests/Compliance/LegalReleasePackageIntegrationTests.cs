@@ -259,6 +259,10 @@ public sealed class LegalReleasePackageIntegrationTests
         [
             Component("direct", "Package.Direct", "1.0.0"),
             Component("transitive", "Package.Transitive", "2.0.0"),
+            MaterialSymbolsComponent(MaterialSymbolsManifestTestFixture.Create(
+                "LICENSES/material-symbols/LICENSE.txt",
+                "RIGHTS/material-symbols-attribution.txt",
+                "absent")),
         ]);
 
     private static NormalizedComponent Component(
@@ -302,7 +306,7 @@ public sealed class LegalReleasePackageIntegrationTests
         return new NormalizedComponent(
             Id: "material-symbols",
             DisplayName: "Material Symbols (Material Design icons by Google)",
-            Version: "0123456789abcdef0123456789abcdef01234567",
+            Version: MaterialSymbolsManifestTestFixture.Commit,
             License: new LicenseDecision("Apache-2.0", "Apache-2.0"),
             CopyrightNotice: "Copyright Google LLC",
             Usage: "user-interface-icons",
@@ -310,7 +314,7 @@ public sealed class LegalReleasePackageIntegrationTests
             Modified: true,
             SourceInformation:
                 "https://github.com/google/material-design-icons@" +
-                "0123456789abcdef0123456789abcdef01234567",
+                MaterialSymbolsManifestTestFixture.Commit,
             LicenseText: license,
             LegalFiles:
             [

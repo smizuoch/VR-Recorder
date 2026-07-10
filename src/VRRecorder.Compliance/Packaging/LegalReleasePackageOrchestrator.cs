@@ -32,7 +32,7 @@ public sealed class LegalReleasePackageOrchestrator
 
         var legalBundleRelativePath = ResolveLegalBundleRelativePath(
             request.GenerationContext.ProductVersion);
-        var eligibility = ReleaseEligibilityGate.Evaluate(
+        var eligibility = ReleaseEligibilityGate.EvaluateProductRelease(
             request.ComponentGraph);
         if (!eligibility.IsApproved)
         {
