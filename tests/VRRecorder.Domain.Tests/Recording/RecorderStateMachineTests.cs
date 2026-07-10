@@ -43,4 +43,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Recording, next);
     }
+
+    [Fact]
+    public void DurationElapsedWhenRecordingTransitionsToStopping()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Recording,
+            RecorderTrigger.DurationElapsed);
+
+        Assert.Equal(RecorderState.Stopping, next);
+    }
 }
