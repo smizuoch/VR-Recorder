@@ -1,3 +1,5 @@
+using VRRecorder.Domain.Storage;
+
 namespace VRRecorder.Application.Recording;
 
 public abstract record StartRecordingResult
@@ -11,4 +13,7 @@ public abstract record StartRecordingResult
         Task AutoStopCompletion) : StartRecordingResult;
 
     public sealed record NoSignal : StartRecordingResult;
+
+    public sealed record InsufficientStorage(StorageSpace AvailableSpace)
+        : StartRecordingResult;
 }

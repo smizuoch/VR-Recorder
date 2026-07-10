@@ -10,6 +10,7 @@ public sealed class StartRecordingUseCase
     private readonly ICountdownTimer _countdownTimer;
     private readonly IRecordingFileReservation _fileReservation;
     private readonly IWallClock _wallClock;
+    private readonly IStorageSpaceProbe _storageSpaceProbe;
     private readonly IRecordingEngine _recordingEngine;
     private readonly AutoStopScheduler _autoStopScheduler;
 
@@ -18,6 +19,7 @@ public sealed class StartRecordingUseCase
         ICountdownTimer countdownTimer,
         IRecordingFileReservation fileReservation,
         IWallClock wallClock,
+        IStorageSpaceProbe storageSpaceProbe,
         IRecordingEngine recordingEngine,
         AutoStopScheduler autoStopScheduler)
     {
@@ -25,6 +27,7 @@ public sealed class StartRecordingUseCase
         ArgumentNullException.ThrowIfNull(countdownTimer);
         ArgumentNullException.ThrowIfNull(fileReservation);
         ArgumentNullException.ThrowIfNull(wallClock);
+        ArgumentNullException.ThrowIfNull(storageSpaceProbe);
         ArgumentNullException.ThrowIfNull(recordingEngine);
         ArgumentNullException.ThrowIfNull(autoStopScheduler);
 
@@ -32,6 +35,7 @@ public sealed class StartRecordingUseCase
         _countdownTimer = countdownTimer;
         _fileReservation = fileReservation;
         _wallClock = wallClock;
+        _storageSpaceProbe = storageSpaceProbe;
         _recordingEngine = recordingEngine;
         _autoStopScheduler = autoStopScheduler;
     }
@@ -59,6 +63,14 @@ public sealed class StartRecordingUseCase
             await _countdownTimer
                 .WaitAsync(command.SelfTimer, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        var availableSpace = await _storageSpaceProbe
+            .MeasureAsync(command.OutputPath, cancellationToken)
+            .ConfigureAwait(false);
+        if (!StorageCapacityPolicy.CanStart(availableSpace))
+        {
+            return new StartRecordingResult.InsufficientStorage(availableSpace);
         }
 
         var startedAt = new RecordingSessionTimestamp(_wallClock.LocalNow);
