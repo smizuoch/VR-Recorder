@@ -16,7 +16,7 @@ public static class SpdxSbomGenerator
     {
         ArgumentNullException.ThrowIfNull(dependencies);
         ArgumentNullException.ThrowIfNull(components);
-        return Generate(
+        return GenerateCore(
             context,
             new NormalizedComponentGraph(
                 dependencies.ToArray(),
@@ -24,6 +24,14 @@ public static class SpdxSbomGenerator
     }
 
     public static string Generate(
+        SpdxGenerationContext context,
+        ApprovedReleaseGraph approvedGraph)
+    {
+        ArgumentNullException.ThrowIfNull(approvedGraph);
+        return GenerateCore(context, approvedGraph.Graph);
+    }
+
+    private static string GenerateCore(
         SpdxGenerationContext context,
         NormalizedComponentGraph graph)
     {
