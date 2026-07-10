@@ -123,6 +123,46 @@ public sealed class DesktopRecordingRuntimeTests
     }
 
     [Fact]
+    public async Task MultipleVrChatTargetsPromptForExactSelectionBeforeRecordingStarts()
+    {
+        var first = Candidate("service-a", "VRChat A", 9000);
+        var second = Candidate("service-b", "VRChat B", 9010);
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(new DesktopRecordingStartRequest(
+            selectedServiceId: null,
+            Command()));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueCompleted(new RecordingLifecycleStartResult(
+            RecorderState.Ready,
+            new VrChatCameraConnectionResolution.SelectionRequired(
+                [first, second]),
+            Recording: null));
+        lifecycle.EnqueueCompleted(Started(Handle("session-selected")));
+        var selector = new StubVrChatInstanceSelectionPrompt(
+            second.ServiceId);
+        var stops = new ControllableStopRequestSink(lifecycle);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops,
+            selector);
+
+        await runtime.ToggleAsync(CancellationToken.None);
+
+        var prompt = Assert.Single(selector.Prompts);
+        Assert.Equal([first, second], prompt);
+        Assert.Equal(1, requests.GetCallCount);
+        Assert.Equal(2, lifecycle.StartRequests.Count);
+        Assert.Null(lifecycle.StartRequests[0].ServiceId);
+        Assert.Equal(second.ServiceId, lifecycle.StartRequests[1].ServiceId);
+        Assert.Same(
+            lifecycle.StartRequests[0].Command,
+            lifecycle.StartRequests[1].Command);
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
     public async Task CompletedExternalStopDoesNotSendStaleStopBeforeNextStart()
     {
         var requests = new ControllableStartRequestSource();
@@ -573,6 +613,17 @@ public sealed class DesktopRecordingRuntimeTests
     private static RecordingHandle Handle(string id) =>
         new(id, MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
 
+    private static VrChatInstanceCandidate Candidate(
+        string serviceId,
+        string displayName,
+        int oscPort) =>
+        new(
+            serviceId,
+            displayName,
+            new Uri($"http://127.0.0.1:{oscPort + 100}/"),
+            "127.0.0.1",
+            oscPort);
+
     private static RecordingLifecycleStartResult Started(RecordingHandle handle) =>
         Result(
             RecorderState.Recording,
@@ -622,6 +673,22 @@ public sealed class DesktopRecordingRuntimeTests
         }
 
         public Task WaitUntilRequestedAsync() => _requested.Task;
+    }
+
+    private sealed class StubVrChatInstanceSelectionPrompt(
+        string? selectedServiceId) : IVrChatInstanceSelectionPrompt
+    {
+        public List<IReadOnlyList<VrChatInstanceCandidate>> Prompts { get; } =
+            [];
+
+        public Task<string?> SelectAsync(
+            IReadOnlyList<VrChatInstanceCandidate> candidates,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Prompts.Add(candidates.ToArray());
+            return Task.FromResult(selectedServiceId);
+        }
     }
 
     private sealed class StatusRecordingLifecycle(
