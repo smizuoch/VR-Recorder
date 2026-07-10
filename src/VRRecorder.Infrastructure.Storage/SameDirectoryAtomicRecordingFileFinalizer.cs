@@ -18,6 +18,30 @@ public sealed class SameDirectoryAtomicRecordingFileFinalizer
         var finalPath = Path.GetFullPath(recording.FinalPath);
         EnsureSameDirectory(temporaryPath, finalPath);
 
+        try
+        {
+            return await FinalizeCoreAsync(
+                    temporaryPath,
+                    finalPath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (IOException exception) when (File.Exists(temporaryPath))
+        {
+            throw CreateFinalizationException(temporaryPath, exception);
+        }
+        catch (UnauthorizedAccessException exception)
+            when (File.Exists(temporaryPath))
+        {
+            throw CreateFinalizationException(temporaryPath, exception);
+        }
+    }
+
+    private static async Task<FinalizedRecording> FinalizeCoreAsync(
+        string temporaryPath,
+        string finalPath,
+        CancellationToken cancellationToken)
+    {
         await using (var stream = new FileStream(
                          temporaryPath,
                          FileMode.Open,
@@ -50,6 +74,14 @@ public sealed class SameDirectoryAtomicRecordingFileFinalizer
             }
         }
     }
+
+    private static RecordingFileFinalizationException CreateFinalizationException(
+        string temporaryPath,
+        Exception innerException) =>
+        new(
+            "The recording file could not be finalized.",
+            new RecoverableRecording(temporaryPath),
+            innerException);
 
     private static void EnsureSameDirectory(
         string temporaryPath,
