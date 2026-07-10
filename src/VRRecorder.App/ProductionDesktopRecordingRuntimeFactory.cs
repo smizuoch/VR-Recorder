@@ -2,7 +2,12 @@ using System.IO;
 using System.Net.Http;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
+using VRRecorder.Application.Storage;
+using VRRecorder.Compliance.Runtime;
+using VRRecorder.Infrastructure.Media;
 using VRRecorder.Infrastructure.Osc;
 using VRRecorder.Infrastructure.Storage;
 
@@ -12,7 +17,9 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
     : IDesktopRecordingRuntimeFactory
 {
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
+    private const string FfprobeFileName = "ffprobe.exe";
     private const string CameraLeaseFileName = "camera-lease.json";
+    private const long MaximumEstimatedBytesPerSecond = 11_000_000;
     private static readonly TimeSpan OscQueryConnectTimeout =
         TimeSpan.FromSeconds(1);
     private static readonly TimeSpan OscQueryDiscoveryTimeout =
@@ -27,17 +34,120 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         var nativeLibraryPath = Path.Combine(
             AppContext.BaseDirectory,
             NativeLibraryFileName);
-        var failure = File.Exists(nativeLibraryPath)
-            ? new DesktopRecordingInitializationException(
-                "RECORDING_SERVICE_COMPOSITION_UNAVAILABLE",
-                "The installed native media library cannot be activated " +
-                "until the production Spout, audio, and encoder services " +
-                "are composed.")
-            : new DesktopRecordingInitializationException(
+        if (!File.Exists(nativeLibraryPath))
+        {
+            throw new DesktopRecordingInitializationException(
                 "NATIVE_MEDIA_LIBRARY_MISSING",
                 $"The required native media library {NativeLibraryFileName} " +
                 "is not installed.");
-        throw failure;
+        }
+
+        var ffprobePath = Path.Combine(
+            AppContext.BaseDirectory,
+            FfprobeFileName);
+        if (!File.Exists(ffprobePath))
+        {
+            throw new DesktopRecordingInitializationException(
+                "FFPROBE_EXECUTABLE_MISSING",
+                $"The required media validator {FfprobeFileName} is not installed.");
+        }
+
+        return ComposeRuntime(nativeLibraryPath, ffprobePath);
+    }
+
+    private static DesktopRecordingRuntime ComposeRuntime(
+        string nativeLibraryPath,
+        string ffprobePath)
+    {
+        var resources = new List<IDisposable>();
+        try
+        {
+            var settingsPath = new WindowsSettingsPathProvider().GetPath();
+            var cameraLeasePath = CameraLeasePath(settingsPath);
+            var http = CreateLoopbackHttpInvoker();
+            resources.Add(http);
+            var cameraLeases = new FileSystemCameraLeaseStore(cameraLeasePath);
+            resources.Add(cameraLeases);
+            var cameraConnections = CreateCameraConnections(http);
+
+            var spoutSource = new PInvokeSpoutVideoSource(nativeLibraryPath);
+            resources.Add(spoutSource);
+            var encoderProbe = new PInvokeEncoderProbe(nativeLibraryPath);
+            resources.Add(encoderProbe);
+            var nativeBackend = new PInvokeNativeRecordingBackend(
+                nativeLibraryPath);
+            resources.Add(nativeBackend);
+
+            var clock = new SystemMonotonicClock();
+            var wallClock = SystemWallClock.Instance;
+            var faultStops = new NativeRecordingFaultStopSink();
+            var recordingEngine = new NativeRecordingEngine(
+                nativeBackend,
+                clock,
+                faultStops);
+            var events = new ProductionRecordingEventSink();
+            var finalization = new RecordingFileFinalizationUseCase(
+                new SameDirectoryAtomicRecordingFileFinalizer(),
+                new FfprobeRecordingFileValidator(ffprobePath),
+                new FileSystemRecordingRecoveryStore(),
+                events);
+            var sessions = new ActiveRecordingSessionCoordinator(
+                recordingEngine,
+                finalization);
+            faultStops.Bind(sessions);
+
+            var storage = new FileSystemStorageSpaceProbe();
+            var storageMonitor = new RecordingStorageMonitor(
+                MaximumEstimatedBytesPerSecond,
+                clock,
+                storage,
+                events,
+                sessions);
+            var startRecording = new StartRecordingUseCase(
+                new SpoutVideoSignalGateway(spoutSource),
+                new MonotonicCountdownTimer(clock),
+                new FileSystemRecordingFileReservation(),
+                wallClock,
+                storage,
+                new EncoderSelector(encoderProbe),
+                recordingEngine,
+                sessions,
+                storageMonitor,
+                new AutoStopScheduler(clock, sessions));
+            var lifecycle = new RecordingLifecycleController(
+                cameraConnections,
+                cameraLeases,
+                startRecording,
+                sessions,
+                events,
+                new SystemCameraLeaseIdentitySource(wallClock));
+
+            var legalVerifier = new AuthenticatedLegalBundleVerifier(
+                new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
+                    typeof(ProductionDesktopRecordingRuntimeFactory).Assembly));
+            IDesktopRecordingStartRequestSource requests =
+                new SettingsDesktopRecordingStartRequestSource(
+                    new JsonFileSettingsStore(settingsPath, wallClock),
+                    new WindowsDownloadsOutputPathProvider());
+            requests = new LegalBundleMirroringDesktopRecordingStartRequestSource(
+                requests,
+                new AuthenticatedLegalBundleOutputMirror(
+                    AppContext.BaseDirectory,
+                    ProductVersion(),
+                    legalVerifier));
+            var ownedLifetime = new RecordingRuntimeResourceLifetime(
+                [.. resources]);
+            return new DesktopRecordingRuntime(
+                requests,
+                lifecycle,
+                sessions,
+                ownedLifetime);
+        }
+        catch
+        {
+            DisposeResourcesBestEffort(resources);
+            throw;
+        }
     }
 
     private static async Task RecoverStaleCameraLeaseAsync(
@@ -58,10 +168,38 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
     private static string CameraLeasePath()
     {
         var settingsPath = new WindowsSettingsPathProvider().GetPath();
+        return CameraLeasePath(settingsPath);
+    }
+
+    private static string CameraLeasePath(string settingsPath)
+    {
         var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
                                        throw new InvalidOperationException(
                                            "The settings path has no parent directory.");
         return Path.Combine(applicationDataDirectory, CameraLeaseFileName);
+    }
+
+    private static string ProductVersion() =>
+        typeof(ProductionDesktopRecordingRuntimeFactory)
+            .Assembly
+            .GetName()
+            .Version?
+            .ToString() ?? "0.0.0.0";
+
+    private static void DisposeResourcesBestEffort(
+        List<IDisposable> resources)
+    {
+        for (var index = resources.Count - 1; index >= 0; index--)
+        {
+            try
+            {
+                resources[index].Dispose();
+            }
+            catch (Exception)
+            {
+                // Preserve the initialization failure that owns this cleanup.
+            }
+        }
     }
 
     private static HttpMessageInvoker CreateLoopbackHttpInvoker() =>
@@ -122,6 +260,51 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             ArgumentNullException.ThrowIfNull(warning);
             cancellationToken.ThrowIfCancellationRequested();
             Warning = warning;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ProductionRecordingEventSink
+        : IRecordingStorageStatusSink,
+          ISavedRecordingSink,
+          ICameraRestoreWarningSink
+    {
+        public Task PublishAsync(
+            RecordingStorageSnapshot snapshot,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(snapshot);
+            cancellationToken.ThrowIfCancellationRequested();
+            System.Diagnostics.Trace.TraceInformation(
+                "Recording storage: {0} bytes, {1}, remaining {2}.",
+                snapshot.AvailableSpace.AvailableBytes,
+                snapshot.State,
+                snapshot.EstimatedRemaining);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(recording);
+            cancellationToken.ThrowIfCancellationRequested();
+            System.Diagnostics.Trace.TraceInformation(
+                "Recording saved: {0}",
+                recording.FinalPath);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishAsync(
+            CameraRestoreWarning warning,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(warning);
+            cancellationToken.ThrowIfCancellationRequested();
+            System.Diagnostics.Trace.TraceWarning(
+                "Camera restoration warning {0}: {1}",
+                warning.Reason,
+                warning.Failure.Message);
             return Task.CompletedTask;
         }
     }
