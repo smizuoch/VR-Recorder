@@ -169,11 +169,4 @@ public sealed class JsonFileSettingsStore : ISettingsStore
             InvalidDataException or
             ArgumentException or
             NotSupportedException;
-
-    private sealed class SystemWallClock : IWallClock
-    {
-        public static SystemWallClock Instance { get; } = new();
-
-        public DateTimeOffset LocalNow => DateTimeOffset.Now;
-    }
 }
