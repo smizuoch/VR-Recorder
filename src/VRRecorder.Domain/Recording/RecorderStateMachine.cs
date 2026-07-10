@@ -10,6 +10,8 @@ public static class RecorderStateMachine
             (RecorderState.Arming, RecorderTrigger.SignalTimeout) => RecorderState.NoSignal,
             (RecorderState.Starting, RecorderTrigger.FirstPacketCommitted) =>
                 RecorderState.Recording,
+            (RecorderState.Recording, RecorderTrigger.DurationElapsed) =>
+                RecorderState.Stopping,
             _ => throw new InvalidOperationException(
                 $"Transition from {state} by {trigger} is not defined."),
         };
