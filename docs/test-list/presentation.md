@@ -10,6 +10,8 @@
 - [x] desktop click・keyboardを共通のcancellation-aware dispatcherへ送る
 - [x] wrist rayのenabled actionを共通dispatcherへ送る
 - [x] desktop click・keyboard・wrist ray・SteamVR actionが同じcommand IDになる
+- [x] lifecycle→runtime→hostのrevisioned状態をWPF Dispatcher経由で順序を保って表示する
+- [x] Arming／CountdownはCANCEL、SignalLostはSTOP、NoSignalは再試行、terminal stateは無効として表示する
 - [x] x64 WPF hostをLinuxからcross-buildする
 - [x] 認証済みLegal Bundleを手首UIの一覧・詳細・全文pageとしてoffline表示する
 - [x] Legal全文のpage移動ごとに再検証し、改ざん時は表示済みtextを消去する
@@ -26,6 +28,8 @@
 - [x] Route desktop click and keyboard through one cancellation-aware dispatcher
 - [x] Route enabled wrist-ray actions through the shared dispatcher
 - [x] Map desktop click, keyboard, wrist ray, and SteamVR action to one command ID
+- [x] Render revisioned lifecycle→runtime→host state in order through the WPF Dispatcher
+- [x] Show CANCEL for Arming/Countdown, STOP for SignalLost, Retry for NoSignal, and disable terminal states
 - [x] Cross-build the x64 WPF host on Linux
 - [x] Show an authenticated Legal Bundle offline as wrist list, detail, and full-text pages
 - [x] Reverify each legal-text navigation and clear previously visible text after tampering
