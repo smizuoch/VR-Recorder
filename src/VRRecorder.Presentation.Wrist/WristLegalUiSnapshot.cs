@@ -1,0 +1,51 @@
+using VRRecorder.DesignSystem;
+
+namespace VRRecorder.Presentation.Wrist;
+
+public enum WristLegalAction
+{
+    Back,
+    OpenLicense,
+    PreviousPage,
+    NextPage,
+}
+
+public sealed record WristLegalComponentSnapshot(
+    string Id,
+    string DisplayName,
+    string Version,
+    string LicenseExpression,
+    LocalizedText AccessibleName);
+
+public sealed record WristLegalDetailFieldSnapshot(
+    LocalizedText Label,
+    string Value);
+
+public sealed record WristLegalTextPageSnapshot(
+    string Text,
+    int PageNumber,
+    int PageCount,
+    int FirstVisibleLine,
+    int TotalLines,
+    LocalizedText AccessiblePageLabel);
+
+public sealed record WristLegalNavigationActionSnapshot(
+    string SemanticId,
+    WristLegalAction Action,
+    bool IsEnabled,
+    LocalizedText VisibleLabel,
+    LocalizedText AccessibleName,
+    LocalizedText Tooltip,
+    int MinimumTargetDp);
+
+public sealed record WristLegalUiSnapshot(
+    long Revision,
+    WristLegalView View,
+    LocalizedText Title,
+    LocalizedText VersionLabel,
+    IReadOnlyList<WristLegalComponentSnapshot> Components,
+    IReadOnlyList<WristLegalDetailFieldSnapshot> DetailFields,
+    WristLegalTextPageSnapshot? LicensePage,
+    IReadOnlyList<WristLegalNavigationActionSnapshot> NavigationActions,
+    IReadOnlyList<UiActionSnapshot> FixedRecordingActions,
+    LocalizedText? StatusMessage);

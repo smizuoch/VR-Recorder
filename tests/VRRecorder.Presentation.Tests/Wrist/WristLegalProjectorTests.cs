@@ -8,6 +8,27 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 
 public sealed class WristLegalProjectorTests
 {
+    private static readonly string[] ExpectedDetailLabels =
+    [
+        "Name",
+        "Version",
+        "License",
+        "Usage",
+        "Linkage",
+        "Modified",
+        "Source information",
+    ];
+    private static readonly string[] ExpectedDetailValues =
+    [
+        "Component a",
+        "a.0.0",
+        "MIT",
+        "runtime-feature",
+        "managed-library",
+        "Yes",
+        "offline source a@commit",
+    ];
+
     [Fact]
     public void ListProjectsDeterministicAccessibleComponentsAndVersion()
     {
@@ -44,28 +65,10 @@ public sealed class WristLegalProjectorTests
         var snapshot = projector.Project(state, ReadyStatus());
 
         Assert.Equal(
-            new[]
-            {
-                "Name",
-                "Version",
-                "License",
-                "Usage",
-                "Linkage",
-                "Modified",
-                "Source information",
-            },
+            ExpectedDetailLabels,
             snapshot.DetailFields.Select(field => field.Label.Value));
         Assert.Equal(
-            new[]
-            {
-                "Component a",
-                "a.0.0",
-                "MIT",
-                "runtime-feature",
-                "managed-library",
-                "Yes",
-                "offline source a@commit",
-            },
+            ExpectedDetailValues,
             snapshot.DetailFields.Select(field => field.Value));
         var openLicense = Assert.Single(snapshot.NavigationActions, action =>
             action.Action == WristLegalAction.OpenLicense);
@@ -83,13 +86,13 @@ public sealed class WristLegalProjectorTests
             components: [component],
             selected: component,
             fullText: "line 1\nline 2\nline 3\nline 4\n",
-            firstVisibleLine: 1,
+            firstVisibleLine: 2,
             linesPerPage: 2);
 
         var snapshot = projector.Project(state, ReadyStatus());
 
         Assert.NotNull(snapshot.LicensePage);
-        Assert.Equal("line 2\nline 3", snapshot.LicensePage.Text);
+        Assert.Equal("line 3\nline 4", snapshot.LicensePage.Text);
         Assert.Equal(2, snapshot.LicensePage.PageNumber);
         Assert.Equal(2, snapshot.LicensePage.PageCount);
         Assert.Equal("Page 2 of 2", snapshot.LicensePage.AccessiblePageLabel.Value);
