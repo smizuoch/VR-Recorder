@@ -6,7 +6,9 @@ public abstract record StartRecordingResult
     {
     }
 
-    public sealed record Started(RecordingHandle Handle) : StartRecordingResult;
+    public sealed record Started(
+        RecordingHandle Handle,
+        Task AutoStopCompletion) : StartRecordingResult;
 
     public sealed record NoSignal : StartRecordingResult;
 }

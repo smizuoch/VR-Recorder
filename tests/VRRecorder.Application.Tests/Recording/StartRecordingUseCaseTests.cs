@@ -12,11 +12,13 @@ public sealed class StartRecordingUseCaseTests
         var signal = new ControllableVideoSignalGateway();
         var countdown = new ControllableCountdownTimer();
         var engine = new FakeRecordingEngine();
-        var useCase = new StartRecordingUseCase(signal, countdown, engine);
+        var useCase = CreateUseCase(signal, countdown, engine);
         using var cancellation = new CancellationTokenSource();
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(SelfTimer.FromSeconds(0)),
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite),
             cancellation.Token);
         await signal.WaitUntilRequestedAsync();
 
@@ -33,10 +35,12 @@ public sealed class StartRecordingUseCaseTests
         var signal = new ControllableVideoSignalGateway();
         var countdown = new ControllableCountdownTimer();
         var engine = new FakeRecordingEngine();
-        var useCase = new StartRecordingUseCase(signal, countdown, engine);
+        var useCase = CreateUseCase(signal, countdown, engine);
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(SelfTimer.FromSeconds(0)),
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite),
             CancellationToken.None);
         await signal.WaitUntilRequestedAsync();
         signal.CompleteWithTimeout();
@@ -54,11 +58,13 @@ public sealed class StartRecordingUseCaseTests
         var signal = new ControllableVideoSignalGateway();
         var countdown = new ControllableCountdownTimer();
         var engine = new FakeRecordingEngine();
-        var useCase = new StartRecordingUseCase(signal, countdown, engine);
+        var useCase = CreateUseCase(signal, countdown, engine);
         using var cancellation = new CancellationTokenSource();
 
         var execution = useCase.ExecuteAsync(
-            new StartRecordingCommand(SelfTimer.FromSeconds(3)),
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(3),
+                RecordingDuration.Infinite),
             cancellation.Token);
         await signal.WaitUntilRequestedAsync();
         signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
@@ -122,5 +128,19 @@ public sealed class StartRecordingUseCaseTests
         clock.AdvanceBy(TimeSpan.FromMilliseconds(1));
         await started.AutoStopCompletion;
         Assert.Single(stopRequests.RequestedHandles);
+    }
+
+    private static StartRecordingUseCase CreateUseCase(
+        ControllableVideoSignalGateway signal,
+        ControllableCountdownTimer countdown,
+        FakeRecordingEngine engine)
+    {
+        var clock = new ControllableMonotonicClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        return new StartRecordingUseCase(
+            signal,
+            countdown,
+            engine,
+            new AutoStopScheduler(clock, new FakeStopRequestSink()));
     }
 }

@@ -1,6 +1,5 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
-using VRRecorder.Domain.Timing;
 
 namespace VRRecorder.Application.Tests.TestDoubles;
 

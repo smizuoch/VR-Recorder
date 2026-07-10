@@ -8,19 +8,23 @@ public sealed class StartRecordingUseCase
     private readonly IVideoSignalGateway _videoSignalGateway;
     private readonly ICountdownTimer _countdownTimer;
     private readonly IRecordingEngine _recordingEngine;
+    private readonly AutoStopScheduler _autoStopScheduler;
 
     public StartRecordingUseCase(
         IVideoSignalGateway videoSignalGateway,
         ICountdownTimer countdownTimer,
-        IRecordingEngine recordingEngine)
+        IRecordingEngine recordingEngine,
+        AutoStopScheduler autoStopScheduler)
     {
         ArgumentNullException.ThrowIfNull(videoSignalGateway);
         ArgumentNullException.ThrowIfNull(countdownTimer);
         ArgumentNullException.ThrowIfNull(recordingEngine);
+        ArgumentNullException.ThrowIfNull(autoStopScheduler);
 
         _videoSignalGateway = videoSignalGateway;
         _countdownTimer = countdownTimer;
         _recordingEngine = recordingEngine;
+        _autoStopScheduler = autoStopScheduler;
     }
 
     public async Task<StartRecordingResult> ExecuteAsync(
@@ -51,7 +55,11 @@ public sealed class StartRecordingUseCase
         var handle = await _recordingEngine
             .StartAsync(new RecordingPlan(signal), cancellationToken)
             .ConfigureAwait(false);
+        var autoStopCompletion = _autoStopScheduler.OnFirstPacketCommittedAsync(
+            handle,
+            command.AutoStop,
+            cancellationToken);
 
-        return new StartRecordingResult.Started(handle);
+        return new StartRecordingResult.Started(handle, autoStopCompletion);
     }
 }
