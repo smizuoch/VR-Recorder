@@ -80,6 +80,8 @@ public sealed class PInvokeNativeRecordingBackend
                 FramesPerSecondDenominator = 1,
                 StartedAtUnixMillisecondsUtc = plan.StartedAt.UtcStartedAt
                     .ToUnixTimeMilliseconds(),
+                Encoder = ToNativeEncoder(plan.Encoder),
+                Reserved = 0,
             };
             var nativeCallbacks = new NativeCallbacksV1
             {
@@ -181,4 +183,18 @@ public sealed class PInvokeNativeRecordingBackend
         new(new NativeRecordingFault(
             (int)status,
             $"Native recording {operation} failed with status {(int)status}."));
+
+    private static NativeEncoderKind ToNativeEncoder(
+        Domain.Encoding.EncoderKind encoder) => encoder switch
+        {
+            Domain.Encoding.EncoderKind.Nvenc => NativeEncoderKind.Nvenc,
+            Domain.Encoding.EncoderKind.Amf => NativeEncoderKind.Amf,
+            Domain.Encoding.EncoderKind.Qsv => NativeEncoderKind.Qsv,
+            Domain.Encoding.EncoderKind.MediaFoundationSoftware =>
+                NativeEncoderKind.MediaFoundationSoftware,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(encoder),
+                encoder,
+                "The selected encoder kind is unsupported by the native ABI."),
+        };
 }

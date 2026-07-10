@@ -10,8 +10,14 @@ namespace VRRecorder.IntegrationTests.Media;
 
 public sealed class PInvokeNativeRecordingBackendTests
 {
-    [Fact]
-    public async Task SelectedEncoderKindCrossesManagedNativeAbi()
+    [Theory]
+    [InlineData(EncoderKind.Nvenc, 1u)]
+    [InlineData(EncoderKind.Amf, 2u)]
+    [InlineData(EncoderKind.Qsv, 3u)]
+    [InlineData(EncoderKind.MediaFoundationSoftware, 4u)]
+    public async Task SelectedEncoderKindCrossesManagedNativeAbi(
+        EncoderKind encoder,
+        uint expectedNativeEncoder)
     {
         if (!OperatingSystem.IsLinux())
         {
@@ -34,7 +40,7 @@ public sealed class PInvokeNativeRecordingBackendTests
                 56,
                 TimeSpan.Zero)),
             new FrameRate(60),
-            EncoderKind.Amf);
+            encoder);
         using var controls = new NativeFixtureControls(FixturePath());
         using var backend = new PInvokeNativeRecordingBackend(FixturePath());
 
@@ -43,7 +49,7 @@ public sealed class PInvokeNativeRecordingBackendTests
             new NativeRecordingCallbacks(() => { }, _ => { }),
             CancellationToken.None);
 
-        Assert.Equal(2u, controls.EncoderKind());
+        Assert.Equal(expectedNativeEncoder, controls.EncoderKind());
         await session.AbortAsync(CancellationToken.None);
     }
 

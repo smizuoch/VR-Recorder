@@ -20,6 +20,14 @@ internal enum NativeEventKind : uint
     Faulted = 3,
 }
 
+internal enum NativeEncoderKind : uint
+{
+    Nvenc = 1,
+    Amf = 2,
+    Qsv = 3,
+    MediaFoundationSoftware = 4,
+}
+
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeSessionConfigV1
 {
@@ -31,6 +39,8 @@ internal struct NativeSessionConfigV1
     public uint FramesPerSecondNumerator;
     public uint FramesPerSecondDenominator;
     public long StartedAtUnixMillisecondsUtc;
+    public NativeEncoderKind Encoder;
+    public uint Reserved;
 }
 
 [StructLayout(LayoutKind.Sequential)]

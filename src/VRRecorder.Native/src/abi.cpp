@@ -1,5 +1,6 @@
 #include "vrrecorder_native.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -289,6 +290,39 @@ bool IsAbsoluteActionPath(const char *path) noexcept
     return path != nullptr && path[0] == '/' && path[1] != '\0';
 }
 
+bool IsEncoderKindSupported(vrrec_encoder_kind_t encoder_kind) noexcept
+{
+    return encoder_kind == VRREC_ENCODER_NVENC ||
+        encoder_kind == VRREC_ENCODER_AMF ||
+        encoder_kind == VRREC_ENCODER_QSV ||
+        encoder_kind == VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE;
+}
+
+constexpr std::size_t SessionConfigBaseSize =
+    offsetof(vrrec_session_config_v1, encoder_kind);
+constexpr std::size_t SessionConfigExtendedSize =
+    sizeof(vrrec_session_config_v1);
+
+vrrec_session_config_v1 NormalizeSessionConfig(
+    const vrrec_session_config_v1 &config) noexcept
+{
+    const auto encoder_kind = config.struct_size >= SessionConfigExtendedSize
+        ? config.encoder_kind
+        : VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE;
+    return vrrec_session_config_v1 {
+        sizeof(vrrec_session_config_v1),
+        VRREC_ABI_V1,
+        config.temporary_output_path_utf8,
+        config.width,
+        config.height,
+        config.fps_numerator,
+        config.fps_denominator,
+        config.started_at_unix_milliseconds_utc,
+        encoder_kind,
+        0,
+    };
+}
+
 vrrec_status_t ValidateCreateArguments(
     const vrrec_session_config_v1 *config,
     const vrrec_callbacks_v1 *callbacks,
@@ -303,7 +337,9 @@ vrrec_status_t ValidateCreateArguments(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (config->struct_size < sizeof(vrrec_session_config_v1) ||
+    if (config->struct_size < SessionConfigBaseSize ||
+        (config->struct_size != SessionConfigBaseSize &&
+         config->struct_size < SessionConfigExtendedSize) ||
         callbacks->struct_size < sizeof(vrrec_callbacks_v1)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
@@ -320,6 +356,11 @@ vrrec_status_t ValidateCreateArguments(
         config->fps_numerator == 0 ||
         config->fps_denominator == 0 ||
         callbacks->on_event == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (config->struct_size >= SessionConfigExtendedSize &&
+        !IsEncoderKindSupported(config->encoder_kind)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -376,7 +417,10 @@ extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
     }
 
     try {
-        auto session = std::make_unique<vrrec_session>(*config, *callbacks);
+        const auto normalized_config = NormalizeSessionConfig(*config);
+        auto session = std::make_unique<vrrec_session>(
+            normalized_config,
+            *callbacks);
         const auto status = session->InitializeBackend();
         if (status != VRREC_STATUS_OK) {
             return status;

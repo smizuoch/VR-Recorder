@@ -25,6 +25,7 @@ typedef struct vrrec_session vrrec_session_t;
 typedef struct vrrec_steamvr_input vrrec_steamvr_input_t;
 typedef int32_t vrrec_status_t;
 typedef uint32_t vrrec_event_kind_t;
+typedef uint32_t vrrec_encoder_kind_t;
 
 #define VRREC_STATUS_OK INT32_C(0)
 #define VRREC_STATUS_INVALID_ARGUMENT INT32_C(1)
@@ -38,6 +39,11 @@ typedef uint32_t vrrec_event_kind_t;
 #define VRREC_EVENT_STOPPED UINT32_C(2)
 #define VRREC_EVENT_FAULTED UINT32_C(3)
 
+#define VRREC_ENCODER_NVENC UINT32_C(1)
+#define VRREC_ENCODER_AMF UINT32_C(2)
+#define VRREC_ENCODER_QSV UINT32_C(3)
+#define VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE UINT32_C(4)
+
 typedef struct vrrec_session_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -47,6 +53,8 @@ typedef struct vrrec_session_config_v1 {
     uint32_t fps_numerator;
     uint32_t fps_denominator;
     int64_t started_at_unix_milliseconds_utc;
+    vrrec_encoder_kind_t encoder_kind;
+    uint32_t reserved;
 } vrrec_session_config_v1;
 
 typedef struct vrrec_event_v1 {

@@ -112,10 +112,35 @@ bool RejectsInvalidAbiInputs()
     CHECK(session == nullptr);
 
     config = ValidConfig();
+    config.encoder_kind = UINT32_MAX;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(session == nullptr);
+
+    config = ValidConfig();
     callbacks.struct_size = sizeof(callbacks) - 1;
     CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(session == nullptr);
+    return true;
+}
+
+bool LegacySessionConfigDefaultsToSoftwareEncoder()
+{
+    EventLog log;
+    auto config = ValidConfig();
+    config.struct_size = 40;
+    config.encoder_kind = UINT32_MAX;
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(session != nullptr);
+    CHECK(vrrecorder::native::testing::EncoderKind() ==
+          VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE);
+
+    vrrec_session_destroy_v1(session);
     return true;
 }
 
@@ -274,6 +299,7 @@ int main()
 {
     if (vrrec_abi_version() != VRREC_ABI_V1 ||
         !RejectsInvalidAbiInputs() ||
+        !LegacySessionConfigDefaultsToSoftwareEncoder() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
