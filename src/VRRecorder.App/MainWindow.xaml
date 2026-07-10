@@ -5,6 +5,7 @@
         AutomationProperties.Name="{DynamicResource App_Window_AccessibleName}"
         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
         Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        FlowDirection="{DynamicResource Layout.FlowDirection}"
         Loaded="OnLoaded"
         PreviewKeyDown="OnPreviewKeyDown"
         SizeToContent="WidthAndHeight"

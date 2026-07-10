@@ -9,6 +9,7 @@ namespace VRRecorder.App;
 
 public partial class App : System.Windows.Application
 {
+    private const string LocaleArgumentPrefix = "--ui-locale=";
     private readonly RecordingInputDispatcher _recordingInputs = new(
         new UnavailableUiCommandDispatcher());
 
@@ -17,7 +18,14 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
-        SelectLocalizedResources(CultureInfo.CurrentUICulture);
+        var localeName = e.Args.FirstOrDefault(argument =>
+            argument.StartsWith(
+                LocaleArgumentPrefix,
+                StringComparison.OrdinalIgnoreCase));
+        SelectLocalizedResources(
+            localeName is null
+                ? CultureInfo.CurrentUICulture.Name
+                : localeName[LocaleArgumentPrefix.Length..]);
         base.OnStartup(e);
     }
 
@@ -45,19 +53,30 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void SelectLocalizedResources(CultureInfo culture)
+    private void SelectLocalizedResources(string localeName)
     {
-        var resourcePath = string.Equals(
-            culture.TwoLetterISOLanguageName,
-            "ja",
-            StringComparison.OrdinalIgnoreCase)
-            ? "Resources/Strings.ja-JP.xaml"
-            : "Resources/Strings.en-US.xaml";
-        var strings = Resources.MergedDictionaries.Single(dictionary =>
-            dictionary.Source?.OriginalString.EndsWith(
-                "Strings.en-US.xaml",
-                StringComparison.Ordinal) == true);
-        strings.Source = new Uri(resourcePath, UriKind.Relative);
+        var (stringsPath, layoutPath) = localeName.ToLowerInvariant() switch
+        {
+            "qps-ploc" => (
+                "Resources/Strings.qps-ploc.xaml",
+                "Resources/Layout.ltr.xaml"),
+            "qps-plocm" => (
+                "Resources/Strings.qps-plocm.xaml",
+                "Resources/Layout.rtl.xaml"),
+            var name when name == "ja" || name.StartsWith("ja-", StringComparison.Ordinal) =>
+                ("Resources/Strings.ja-JP.xaml", "Resources/Layout.ltr.xaml"),
+            _ => ("Resources/Strings.en-US.xaml", "Resources/Layout.ltr.xaml"),
+        };
+        ReplaceMergedResource("Strings.", stringsPath);
+        ReplaceMergedResource("Layout.", layoutPath);
+    }
+
+    private void ReplaceMergedResource(string filePrefix, string resourcePath)
+    {
+        var resource = Resources.MergedDictionaries.Single(dictionary =>
+            Path.GetFileName(dictionary.Source?.OriginalString ?? string.Empty)
+                .StartsWith(filePrefix, StringComparison.Ordinal));
+        resource.Source = new Uri(resourcePath, UriKind.Relative);
     }
 
     private sealed class UnavailableUiCommandDispatcher : IUiCommandDispatcher
