@@ -13,7 +13,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private readonly CancellationTokenSource _lifetime = new();
     private RecordingHandle? _activeHandle;
     private Task? _sessionStopTask;
-    private Task? _toggleTask;
+    private Task? _transportToggleTask;
     private Task? _disposeTask;
     private bool _disposed;
 
@@ -37,17 +37,17 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_toggleTask is null || _toggleTask.IsCompleted)
+            // Coalesce duplicate delivery of one in-flight transport command.
+            // Arming cancellation remains a separate future semantic command.
+            if (_transportToggleTask is null || _transportToggleTask.IsCompleted)
             {
-                _toggleTask = RunToggleAsync(cancellationToken);
+                _transportToggleTask = RunTransportToggleAsync(cancellationToken);
             }
 
-            operation = _toggleTask;
+            operation = _transportToggleTask;
         }
 
-        return cancellationToken.CanBeCanceled
-            ? operation.WaitAsync(cancellationToken)
-            : operation;
+        return WaitForCallerAsync(operation, cancellationToken);
     }
 
     public ValueTask DisposeAsync()
@@ -60,7 +60,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             {
                 _disposed = true;
                 cancelLifetime = true;
-                _disposeTask = DisposeCoreAsync(_toggleTask);
+                _disposeTask = DisposeCoreAsync(_transportToggleTask);
             }
 
             disposal = _disposeTask;
@@ -74,7 +74,8 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         return new ValueTask(disposal);
     }
 
-    private async Task RunToggleAsync(CancellationToken cancellationToken)
+    private async Task RunTransportToggleAsync(
+        CancellationToken cancellationToken)
     {
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -167,16 +168,8 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             CancellationToken.None);
         try
         {
-            if (cancellationToken.CanBeCanceled)
-            {
-                await _sessionStopTask
-                    .WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                await _sessionStopTask.ConfigureAwait(false);
-            }
+            await WaitForCallerAsync(_sessionStopTask, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -249,6 +242,13 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         new(
             $"The recording start result {result.Recording?.GetType().Name ?? "None"} " +
             $"is inconsistent with lifecycle state {lifecycleState}.");
+
+    private static Task WaitForCallerAsync(
+        Task operation,
+        CancellationToken cancellationToken) =>
+        cancellationToken.CanBeCanceled
+            ? operation.WaitAsync(cancellationToken)
+            : operation;
 
     private static async Task ObserveWithoutInterruptingShutdownAsync(
         Task? operation)
