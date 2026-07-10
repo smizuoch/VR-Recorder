@@ -34,6 +34,13 @@ public static class ReleaseEligibilityGate
                     "missing-approval-ticket",
                     component.Id));
             }
+
+            if (string.IsNullOrWhiteSpace(component.Approval.Reviewer))
+            {
+                issues.Add(new ComplianceIssue(
+                    "missing-approval-reviewer",
+                    component.Id));
+            }
         }
 
         var orderedIssues = issues
