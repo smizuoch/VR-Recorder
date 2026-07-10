@@ -22,4 +22,7 @@ internal sealed class ControllableVideoSignalGateway : IVideoSignalGateway
 
     public void CompleteWithTimeout() =>
         _signal.TrySetException(new TimeoutException("No stable video signal."));
+
+    public void CompleteWithStableSignal(StableVideoSignal signal) =>
+        _signal.TrySetResult(signal);
 }
