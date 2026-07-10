@@ -8,6 +8,41 @@ public sealed class RecordingFileFinalizationIntegrationTests
 {
     [Fact]
     [Trait("Scenario", "IT-018")]
+    public async Task StartupRecoveryQuarantinesOnlyTopLevelStaleRecording()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var stalePath = Path.Combine(directory.Path, "stale.recording.mp4");
+        var finalPath = Path.Combine(directory.Path, "keep.mp4");
+        var nestedDirectory = Path.Combine(directory.Path, "nested");
+        var nestedStalePath = Path.Combine(
+            nestedDirectory,
+            "nested.recording.mp4");
+        Directory.CreateDirectory(nestedDirectory);
+        await File.WriteAllBytesAsync(stalePath, [0x01]);
+        await File.WriteAllBytesAsync(finalPath, [0x02]);
+        await File.WriteAllBytesAsync(nestedStalePath, [0x03]);
+        var useCase = new StaleRecordingRecoveryUseCase(
+            new FileSystemStaleRecordingCatalog(),
+            new FileSystemRecordingRecoveryStore());
+
+        var recovered = await useCase.ExecuteAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var quarantine = Assert.Single(recovered);
+        Assert.Equal(
+            Path.Combine(
+                directory.Path,
+                "VR-Recorder-Recovery",
+                "stale.recording.mp4"),
+            quarantine.QuarantinePath);
+        Assert.False(File.Exists(stalePath));
+        Assert.True(File.Exists(finalPath));
+        Assert.True(File.Exists(nestedStalePath));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-018")]
     public async Task RenameFailureMovesPendingFileToRecovery()
     {
         using var directory = TemporaryDirectory.Create();
