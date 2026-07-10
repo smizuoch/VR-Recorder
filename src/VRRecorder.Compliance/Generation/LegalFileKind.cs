@@ -6,4 +6,5 @@ public enum LegalFileKind
     Copyright,
     Notice,
     Attribution,
+    AssetManifest,
 }

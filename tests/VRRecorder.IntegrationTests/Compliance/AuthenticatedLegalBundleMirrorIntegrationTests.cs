@@ -252,12 +252,15 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
     {
         var catalog = Encoding.UTF8.GetBytes($$"""
             {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "bundleId": "{{bundleId}}",
+              "productVersion": "0.1.0",
+              "generatedAtUtc": "2026-07-10T00:00:00Z",
               "integrityManifest": {
                 "path": "LEGAL-MANIFEST.sha256",
                 "algorithm": "SHA-256"
-              }
+              },
+              "components": []
             }
             """);
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal)

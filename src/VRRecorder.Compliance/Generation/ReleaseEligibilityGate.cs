@@ -15,6 +15,7 @@ public static class ReleaseEligibilityGate
         foreach (var component in graph.Components)
         {
             ArgumentNullException.ThrowIfNull(component.License);
+            ArgumentNullException.ThrowIfNull(component.LegalFiles);
             if (IsUnresolved(component.License.DeclaredExpression) ||
                 IsUnresolved(component.License.ConcludedExpression))
             {
@@ -23,8 +24,68 @@ public static class ReleaseEligibilityGate
                     component.Id));
             }
 
-            foreach (var legalFile in component.LegalFiles)
+            if (string.IsNullOrWhiteSpace(component.CopyrightNotice))
             {
+                issues.Add(new ComplianceIssue(
+                    "missing-copyright-notice",
+                    component.Id));
+            }
+
+            var legalFiles = component.LegalFiles.ToArray();
+            var licenseCount = legalFiles.Count(file =>
+                file.Kind == LegalFileKind.License);
+            if (licenseCount != 1)
+            {
+                issues.Add(new ComplianceIssue(
+                    "invalid-license-document-count",
+                    component.Id));
+            }
+
+            foreach (var duplicatePath in legalFiles
+                         .GroupBy(
+                             file => file.RelativePath,
+                             StringComparer.OrdinalIgnoreCase)
+                         .Where(group => group.Skip(1).Any()))
+            {
+                issues.Add(new ComplianceIssue(
+                    "duplicate-legal-document-path",
+                    $"{component.Id}:{duplicatePath.Key}"));
+            }
+
+            foreach (var legalFile in legalFiles)
+            {
+                if (!Enum.IsDefined(legalFile.Kind))
+                {
+                    issues.Add(new ComplianceIssue(
+                        "unknown-legal-document-kind",
+                        $"{component.Id}:{(int)legalFile.Kind}"));
+                    continue;
+                }
+
+                try
+                {
+                    _ = LegalArtifactPath.Resolve(
+                        Path.GetTempPath(),
+                        legalFile.RelativePath);
+                }
+                catch (ArgumentException)
+                {
+                    issues.Add(new ComplianceIssue(
+                        "invalid-legal-document-path",
+                        $"{component.Id}:{legalFile.RelativePath}"));
+                }
+
+                if (legalFile.Kind == LegalFileKind.AssetManifest &&
+                    !string.Equals(
+                        legalFile.RelativePath,
+                        "MATERIAL-SYMBOLS-MANIFEST.json",
+                        StringComparison.Ordinal))
+                {
+                    issues.Add(new ComplianceIssue(
+                        "invalid-asset-manifest-path",
+                        $"{component.Id}:{legalFile.RelativePath}"));
+                }
+
                 var actualHash = Convert
                     .ToHexString(SHA256.HashData(
                         Encoding.UTF8.GetBytes(legalFile.Utf8Content)))

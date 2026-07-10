@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using VRRecorder.Compliance.Generation;
 
 namespace VRRecorder.Compliance.Runtime;
@@ -116,54 +115,23 @@ public sealed class AuthenticatedLegalBundleVerifier
 
         try
         {
-            await using var catalog = new FileStream(
-                catalogPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            using var document = await JsonDocument
-                .ParseAsync(
-                    catalog,
-                    new JsonDocumentOptions
-                    {
-                        AllowTrailingCommas = false,
-                        CommentHandling = JsonCommentHandling.Disallow,
-                        MaxDepth = 16,
-                    },
-                    cancellationToken)
+            var pathComparer = OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            var manifestPaths = ParseManifest(manifestBytes, root)
+                .Select(entry => entry.RelativePath)
+                .ToHashSet(pathComparer);
+            var catalogBytes = await File
+                .ReadAllBytesAsync(catalogPath, cancellationToken)
                 .ConfigureAwait(false);
-            var catalogRoot = document.RootElement;
-            if (HasDuplicateProperties(catalogRoot))
-            {
-                return Reject("legal-bundle-catalog-invalid", CatalogFileName);
-            }
-
-            var schemaVersion = catalogRoot
-                .GetProperty("schemaVersion")
-                .GetInt32();
-            var bundleId = catalogRoot
-                .GetProperty("bundleId")
-                .GetString();
-            var integrity = catalogRoot.GetProperty("integrityManifest");
-            var manifestReference = integrity.GetProperty("path").GetString();
-            var algorithm = integrity.GetProperty("algorithm").GetString();
-            if (schemaVersion != 2 ||
-                !string.Equals(bundleId, anchor.BundleId, StringComparison.Ordinal) ||
-                !string.Equals(
-                    manifestReference,
-                    ManifestFileName,
-                    StringComparison.Ordinal) ||
-                !string.Equals(algorithm, "SHA-256", StringComparison.Ordinal))
-            {
-                return Reject("legal-bundle-identity-mismatch", CatalogFileName);
-            }
+            _ = LegalCatalogV3Parser.Parse(
+                catalogBytes,
+                anchor.BundleId,
+                manifestPaths,
+                root);
         }
         catch (Exception exception) when (
-            exception is JsonException or
-                InvalidOperationException or
-                KeyNotFoundException)
+            exception is InvalidDataException or DecoderFallbackException)
         {
             return Reject("legal-bundle-catalog-invalid", CatalogFileName);
         }
@@ -328,34 +296,6 @@ public sealed class AuthenticatedLegalBundleVerifier
         }
 
         return entries;
-    }
-
-    private static bool HasDuplicateProperties(JsonElement element)
-    {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            var propertyNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var property in element.EnumerateObject())
-            {
-                if (!propertyNames.Add(property.Name) ||
-                    HasDuplicateProperties(property.Value))
-                {
-                    return true;
-                }
-            }
-        }
-        else if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in element.EnumerateArray())
-            {
-                if (HasDuplicateProperties(item))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     private static bool ContainsReparsePoint(

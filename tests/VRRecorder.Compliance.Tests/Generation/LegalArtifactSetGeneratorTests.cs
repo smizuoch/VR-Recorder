@@ -347,7 +347,7 @@ public sealed class LegalArtifactSetGeneratorTests
             .GetProperty("legalDocuments")
             .EnumerateArray()
             .Where(item => item.GetProperty("kind").GetString() == "notice")
-            .Select(item => item.GetProperty("path").GetString())
+            .Select(item => item.GetProperty("path").GetString()!)
             .ToArray();
 
         Assert.Equal(

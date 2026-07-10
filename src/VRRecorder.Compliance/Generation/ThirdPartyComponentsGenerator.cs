@@ -64,14 +64,45 @@ public static class ThirdPartyComponentsGenerator
         ArgumentException.ThrowIfNullOrWhiteSpace(component.Usage);
         ArgumentException.ThrowIfNullOrWhiteSpace(component.Linkage);
         ArgumentException.ThrowIfNullOrWhiteSpace(component.SourceInformation);
+        ArgumentException.ThrowIfNullOrWhiteSpace(component.CopyrightNotice);
         ArgumentNullException.ThrowIfNull(component.LegalFiles);
-        var licenses = component.LegalFiles
+        var legalFiles = component.LegalFiles.ToArray();
+        if (legalFiles.Any(file => !Enum.IsDefined(file.Kind)))
+        {
+            throw new InvalidOperationException(
+                $"Component {component.Id} contains an unknown legal-document kind.");
+        }
+
+        var duplicatePath = legalFiles
+            .GroupBy(file => file.RelativePath, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Skip(1).Any());
+        if (duplicatePath is not null)
+        {
+            throw new InvalidOperationException(
+                $"Component {component.Id} references legal-document path {duplicatePath.Key} more than once.");
+        }
+
+        var licenses = legalFiles
             .Where(file => file.Kind == LegalFileKind.License)
             .ToArray();
         if (licenses.Length != 1)
         {
             throw new InvalidOperationException(
                 $"Component {component.Id} must reference exactly one verified license file.");
+        }
+
+        foreach (var file in legalFiles)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(file.RelativePath);
+            if (file.Kind == LegalFileKind.AssetManifest &&
+                !string.Equals(
+                    file.RelativePath,
+                    "MATERIAL-SYMBOLS-MANIFEST.json",
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Component {component.Id} has a non-canonical asset-manifest reference.");
+            }
         }
 
         return new CatalogComponent(
@@ -82,8 +113,15 @@ public static class ThirdPartyComponentsGenerator
             component.Usage,
             component.Linkage,
             component.Modified,
-            licenses[0].RelativePath,
-            component.SourceInformation);
+            component.SourceInformation,
+            component.CopyrightNotice,
+            legalFiles
+                .OrderBy(file => KindRank(file.Kind))
+                .ThenBy(file => file.RelativePath, StringComparer.Ordinal)
+                .Select(file => new CatalogDocument(
+                    KindName(file.Kind),
+                    file.RelativePath))
+                .ToArray());
     }
 
     private static void WriteDocument(
@@ -92,7 +130,7 @@ public static class ThirdPartyComponentsGenerator
         IReadOnlyList<CatalogComponent> components)
     {
         writer.WriteStartObject();
-        writer.WriteNumber("schemaVersion", 2);
+        writer.WriteNumber("schemaVersion", 3);
         writer.WriteString("bundleId", context.DocumentNamespace);
         writer.WriteString("productVersion", context.ProductVersion);
         writer.WriteString(
@@ -119,8 +157,21 @@ public static class ThirdPartyComponentsGenerator
             writer.WriteString("usage", component.Usage);
             writer.WriteString("linkage", component.Linkage);
             writer.WriteBoolean("modified", component.Modified);
-            writer.WriteString("licenseText", component.LicenseText);
             writer.WriteString("sourceInfo", component.SourceInfo);
+            writer.WriteString(
+                "copyrightNotice",
+                component.CopyrightNotice);
+            writer.WritePropertyName("legalDocuments");
+            writer.WriteStartArray();
+            foreach (var document in component.LegalDocuments)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("kind", document.Kind);
+                writer.WriteString("path", document.Path);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
             writer.WriteEndObject();
         }
 
@@ -136,6 +187,29 @@ public static class ThirdPartyComponentsGenerator
         string Usage,
         string Linkage,
         bool Modified,
-        string LicenseText,
-        string SourceInfo);
+        string SourceInfo,
+        string CopyrightNotice,
+        IReadOnlyList<CatalogDocument> LegalDocuments);
+
+    private sealed record CatalogDocument(string Kind, string Path);
+
+    private static string KindName(LegalFileKind kind) => kind switch
+    {
+        LegalFileKind.License => "license",
+        LegalFileKind.Notice => "notice",
+        LegalFileKind.Copyright => "copyright",
+        LegalFileKind.Attribution => "attribution",
+        LegalFileKind.AssetManifest => "asset-manifest",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    private static int KindRank(LegalFileKind kind) => kind switch
+    {
+        LegalFileKind.License => 0,
+        LegalFileKind.Notice => 1,
+        LegalFileKind.Copyright => 2,
+        LegalFileKind.Attribution => 3,
+        LegalFileKind.AssetManifest => 4,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

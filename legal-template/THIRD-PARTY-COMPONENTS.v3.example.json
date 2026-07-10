@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 3,
+  "bundleId": "https://example.invalid/spdx/design-time-component-catalog-v3",
+  "productVersion": "<product-version>",
+  "generatedAtUtc": "2026-07-10T00:00:00Z",
+  "integrityManifest": {
+    "path": "LEGAL-MANIFEST.sha256",
+    "algorithm": "SHA-256"
+  },
+  "components": [
+    {
+      "id": "ffmpeg",
+      "displayName": "FFmpeg libraries",
+      "version": "<exact-version>",
+      "licenseExpression": "LGPL-2.1-or-later",
+      "usage": "video-audio-encoding-and-muxing",
+      "linkage": "dynamic",
+      "modified": false,
+      "sourceInfo": "SOURCE-OFFERS/FFmpeg-SOURCE-INFO.txt",
+      "copyrightNotice": "<component-specific-copyright-notice>",
+      "legalDocuments": [
+        {
+          "kind": "license",
+          "path": "LICENSES/LGPL-2.1-or-later/LICENSE.txt"
+        }
+      ]
+    }
+  ]
+}

@@ -24,12 +24,15 @@ public sealed class RuntimeLegalBundleIntegrationTests
             "THIRD-PARTY-COMPONENTS.json");
         var catalog = Encoding.UTF8.GetBytes($$"""
             {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "bundleId": "{{BundleId}}",
+              "productVersion": "0.1.0",
+              "generatedAtUtc": "2026-07-10T00:00:00Z",
               "integrityManifest": {
                 "path": "LEGAL-MANIFEST.sha256",
                 "algorithm": "SHA-256"
-              }
+              },
+              "components": []
             }
             """);
         var manifest = Encoding.UTF8.GetBytes(

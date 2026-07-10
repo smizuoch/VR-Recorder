@@ -217,7 +217,7 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         using var directory = TemporaryDirectory.Create();
         var catalog = Encoding.UTF8.GetBytes($$"""
             {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "bundleId": "{{BundleId}}",
               "bundleId": "{{BundleId}}",
               "integrityManifest": {
@@ -248,6 +248,63 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         var issue = Assert.Single(rejected.Issues);
         Assert.Equal("legal-bundle-catalog-invalid", issue.Code);
         Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task RejectsLegacyAndUnknownCatalogSchemas(
+        int schemaVersion)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson().Replace(
+            "\"schemaVersion\": 3",
+            $"\"schemaVersion\": {schemaVersion}",
+            StringComparison.Ordinal));
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+
+        var result = await CreateVerifier(manifest).VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-catalog-invalid", issue.Code);
+        Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
+    }
+
+    [Fact]
+    public async Task RejectsAuthenticatedCatalogWithUnknownRootProperty()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson().Replace(
+            "\"components\": []",
+            "\"components\": [],\n  \"unexpected\": true",
+            StringComparison.Ordinal));
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+
+        var result = await CreateVerifier(manifest).VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-catalog-invalid", issue.Code);
     }
 
     [Fact]
@@ -321,9 +378,8 @@ public sealed class AuthenticatedLegalBundleVerifierTests
 
     private static string CatalogJson() => $$"""
         {
-          "schemaVersion": 2,
+          "schemaVersion": 3,
           "bundleId": "{{BundleId}}",
-          "productName": "VR-Recorder",
           "productVersion": "0.1.0",
           "generatedAtUtc": "2026-07-10T00:00:00Z",
           "integrityManifest": {

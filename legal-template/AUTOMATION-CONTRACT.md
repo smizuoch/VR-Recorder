@@ -35,7 +35,7 @@
 - `M3-CONFORMANCE-REPORT.json`
 - `LEGAL-MANIFEST.sha256`
 
-`THIRD-PARTY-COMPONENTS.json` release出力はschema v2とし、`bundleId`をSPDX `documentNamespace`と一致させます。catalogはmanifestのpathとalgorithmのみを指し、catalog自体はmanifestのhash対象に含めます。manifest bytesの期待SHA-256は署名済みresourceまたは認証済みrelease metadataでout-of-bandに保持し、schema v1と未知schemaはreleaseで拒否します。
+`THIRD-PARTY-COMPONENTS.json` release出力はschema v3とし、`bundleId`をSPDX `documentNamespace`と一致させます。component固有copyrightと、manifest登録済みの`license`／`notice`／`copyright`／`attribution`／`asset-manifest`参照を生成します。licenseはcomponentごとにexactly one、同一path衝突は禁止し、`asset-manifest`は`MATERIAL-SYMBOLS-MANIFEST.json`だけを指します。catalog自体もmanifestのhash対象に含めます。manifest bytesの期待SHA-256は署名済みresourceまたは認証済みrelease metadataでout-of-bandに保持し、schema v1、v2、未知schemaはreleaseで拒否します。
 
 ## CIゲート
 
