@@ -7,224 +7,325 @@ namespace VRRecorder.IntegrationTests.Audio;
 public sealed class AudioSessionIntegrationTests
 {
     private const int SampleRate = AudioSessionService.RequiredSampleRate;
+    private const int ChannelCount = AudioSessionService.RequiredChannelCount;
 
     [Fact]
-    public void MixedRoutingContributesDesktopAndMicrophoneAt48Khz()
+    public void MixedRoutingContributesTwoInterleavedStereoInputsAt48Khz()
     {
-        const int sampleCount = AudioSessionService.MaxScheduledSampleCount;
-        var desktop = GenerateSine(440, startSample: 0, sampleCount, amplitude: 0.25);
-        var microphone = GenerateSine(880, startSample: 0, sampleCount, amplitude: 0.25);
+        const int frameCount = AudioSessionService.MaxScheduledFrameCount;
+        var desktop = GenerateStereoSine(
+            440,
+            startFrame: 0,
+            frameCount,
+            amplitude: 0.25);
+        var microphone = GenerateStereoSine(
+            880,
+            startFrame: 0,
+            frameCount,
+            amplitude: 0.25);
         var session = CreateSession(AudioRouting.Mixed);
 
-        var mixed = session.Process(new ScheduledAudioBuffer(
-            StartSample: 0,
+        var mixed = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: 0,
             SampleRate,
-            sampleCount,
+            frameCount,
             desktop,
             microphone,
             AudioInputAvailability.All));
 
-        Assert.Equal(0, mixed.StartSample);
+        Assert.Equal(0, mixed.StartFrame);
         Assert.Equal(SampleRate, mixed.SampleRate);
-        Assert.Equal(sampleCount, mixed.Samples.Length);
-        Assert.True(ProjectionMagnitude(mixed.Samples, 440) > 0.2);
-        Assert.True(ProjectionMagnitude(mixed.Samples, 880) > 0.2);
+        Assert.Equal(ChannelCount, mixed.ChannelCount);
+        Assert.Equal(frameCount * ChannelCount, mixed.InterleavedSamples.Length);
+        Assert.True(LeftChannelProjectionMagnitude(
+            mixed.InterleavedSamples,
+            440) > 0.2);
+        Assert.True(LeftChannelProjectionMagnitude(
+            mixed.InterleavedSamples,
+            880) > 0.2);
         AssertSamples(
             desktop.Zip(microphone, (left, right) => left + right).ToArray(),
-            mixed.Samples);
+            mixed.InterleavedSamples);
+        AssertInterleavedStereoPairs(mixed.InterleavedSamples);
     }
 
     [Fact]
-    public void MicOffAndOnRampOnlyMicrophoneContributionOverTenMilliseconds()
+    public void MicOffAndOnRampBothChannelsOverTenMilliseconds()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var session = CreateSession(AudioRouting.Mixed);
-        ProcessSines(session, startSample: 0, blockSize);
+        ProcessSines(session, startFrame: 0, blockFrames);
 
         session.SetRouting(AudioRouting.DesktopOnly);
-        var micOff = ProcessSines(session, startSample: blockSize, blockSize);
-        var offDesktop = GenerateSine(440, blockSize, blockSize, amplitude: 0.25);
-        var offMicrophone = GenerateSine(880, blockSize, blockSize, amplitude: 0.25);
-        AssertRamp(micOff.Samples, offDesktop, offMicrophone, gainAt: index =>
-            1 - ((double)index / blockSize));
+        var micOff = ProcessSines(
+            session,
+            startFrame: blockFrames,
+            blockFrames);
+        var offDesktop = GenerateStereoSine(
+            440,
+            blockFrames,
+            blockFrames,
+            amplitude: 0.25);
+        var offMicrophone = GenerateStereoSine(
+            880,
+            blockFrames,
+            blockFrames,
+            amplitude: 0.25);
+        AssertRamp(
+            micOff.InterleavedSamples,
+            offDesktop,
+            offMicrophone,
+            gainAtFrame: frame => 1 - ((double)frame / blockFrames));
 
-        var desktopOnly = ProcessSines(session, startSample: blockSize * 2, blockSize);
+        var desktopOnly = ProcessSines(
+            session,
+            startFrame: blockFrames * 2,
+            blockFrames);
         AssertSamples(
-            GenerateSine(440, blockSize * 2, blockSize, amplitude: 0.25),
-            desktopOnly.Samples);
+            GenerateStereoSine(
+                440,
+                blockFrames * 2,
+                blockFrames,
+                amplitude: 0.25),
+            desktopOnly.InterleavedSamples);
 
         session.SetRouting(AudioRouting.Mixed);
-        var micOn = ProcessSines(session, startSample: blockSize * 3, blockSize);
-        var onDesktop = GenerateSine(440, blockSize * 3, blockSize, amplitude: 0.25);
-        var onMicrophone = GenerateSine(880, blockSize * 3, blockSize, amplitude: 0.25);
-        AssertRamp(micOn.Samples, onDesktop, onMicrophone, gainAt: index =>
-            (double)index / blockSize);
+        var micOn = ProcessSines(
+            session,
+            startFrame: blockFrames * 3,
+            blockFrames);
+        var onDesktop = GenerateStereoSine(
+            440,
+            blockFrames * 3,
+            blockFrames,
+            amplitude: 0.25);
+        var onMicrophone = GenerateStereoSine(
+            880,
+            blockFrames * 3,
+            blockFrames,
+            amplitude: 0.25);
+        AssertRamp(
+            micOn.InterleavedSamples,
+            onDesktop,
+            onMicrophone,
+            gainAtFrame: frame => (double)frame / blockFrames);
 
-        var mixed = ProcessSines(session, startSample: blockSize * 4, blockSize);
+        var mixed = ProcessSines(
+            session,
+            startFrame: blockFrames * 4,
+            blockFrames);
         AssertSamples(
-            GenerateSine(440, blockSize * 4, blockSize, amplitude: 0.25)
+            GenerateStereoSine(
+                440,
+                blockFrames * 4,
+                blockFrames,
+                amplitude: 0.25)
                 .Zip(
-                    GenerateSine(880, blockSize * 4, blockSize, amplitude: 0.25),
+                    GenerateStereoSine(
+                        880,
+                        blockFrames * 4,
+                        blockFrames,
+                        amplitude: 0.25),
                     (left, right) => left + right)
                 .ToArray(),
-            mixed.Samples);
+            mixed.InterleavedSamples);
     }
 
     [Fact]
-    public void MutedRoutingKeepsTheScheduledTimelineWithSilence()
+    public void MutedRoutingKeepsTheScheduledFrameTimelineWithStereoSilence()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var session = CreateSession(AudioRouting.Mixed);
         session.SetRouting(AudioRouting.Muted);
 
-        var transition = ProcessSines(session, startSample: 0, blockSize);
-        var muted = ProcessSines(session, startSample: blockSize, blockSize);
+        var transition = ProcessSines(session, startFrame: 0, blockFrames);
+        var muted = ProcessSines(
+            session,
+            startFrame: blockFrames,
+            blockFrames);
 
-        Assert.Equal(blockSize, transition.Samples.Length);
-        Assert.Equal(blockSize, muted.StartSample);
-        Assert.Equal(blockSize, muted.Samples.Length);
-        Assert.All(muted.Samples, sample => Assert.Equal(0, sample));
+        Assert.Equal(
+            blockFrames * ChannelCount,
+            transition.InterleavedSamples.Length);
+        Assert.Equal(blockFrames, muted.StartFrame);
+        Assert.Equal(
+            blockFrames * ChannelCount,
+            muted.InterleavedSamples.Length);
+        Assert.All(muted.InterleavedSamples, sample => Assert.Equal(0, sample));
     }
 
     [Fact]
     public void LostMicrophoneContinuesDesktopAndEmitsTypedWarning()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var events = new RecordingAudioSessionEventSink();
         var rediscovery = new RecordingRediscoveryScheduler();
         var session = new AudioSessionService(
             AudioRouting.Mixed,
             rediscovery,
             events);
-        var desktop = GenerateSine(440, startSample: 0, blockSize, amplitude: 0.25);
+        var desktop = GenerateStereoSine(
+            440,
+            startFrame: 0,
+            blockFrames,
+            amplitude: 0.25);
 
-        var mixed = session.Process(new ScheduledAudioBuffer(
-            StartSample: 0,
+        var mixed = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: 0,
             SampleRate,
-            blockSize,
+            blockFrames,
             desktop,
-            MicrophoneSamples: [],
+            MicrophoneInterleavedSamples: [],
             AudioInputAvailability.Desktop));
 
-        AssertSamples(desktop, mixed.Samples);
+        AssertSamples(desktop, mixed.InterleavedSamples);
         var warning = Assert.Single(events.Warnings);
         Assert.Equal(AudioSessionWarningKind.InputUnavailable, warning.Kind);
         Assert.Equal(AudioInput.Microphone, warning.Input);
-        Assert.Equal(0, warning.SamplePosition);
+        Assert.Equal(0, warning.FramePosition);
         Assert.Empty(rediscovery.Requests);
     }
 
     [Fact]
     public void LostDesktopSchedulesBoundedRediscoveryOnceThenUsesSilenceAndFadesRecovery()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var events = new RecordingAudioSessionEventSink();
         var rediscovery = new RecordingRediscoveryScheduler();
         var session = new AudioSessionService(
             AudioRouting.DesktopOnly,
             rediscovery,
             events);
-        ProcessSines(session, startSample: 0, blockSize);
+        ProcessSines(session, startFrame: 0, blockFrames);
 
-        var lost = session.Process(new ScheduledAudioBuffer(
-            StartSample: blockSize,
+        var lost = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: blockFrames,
             SampleRate,
-            blockSize,
-            DesktopSamples: [],
-            GenerateSine(880, blockSize, blockSize, amplitude: 0.25),
+            blockFrames,
+            DesktopInterleavedSamples: [],
+            GenerateStereoSine(
+                880,
+                blockFrames,
+                blockFrames,
+                amplitude: 0.25),
             AudioInputAvailability.Microphone));
-        var stillLost = session.Process(new ScheduledAudioBuffer(
-            StartSample: blockSize * 2,
+        var stillLost = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: blockFrames * 2,
             SampleRate,
-            blockSize,
-            DesktopSamples: [],
-            GenerateSine(880, blockSize * 2, blockSize, amplitude: 0.25),
+            blockFrames,
+            DesktopInterleavedSamples: [],
+            GenerateStereoSine(
+                880,
+                blockFrames * 2,
+                blockFrames,
+                amplitude: 0.25),
             AudioInputAvailability.Microphone));
 
-        Assert.All(lost.Samples, sample => Assert.Equal(0, sample));
-        Assert.All(stillLost.Samples, sample => Assert.Equal(0, sample));
+        Assert.All(lost.InterleavedSamples, sample => Assert.Equal(0, sample));
+        Assert.All(
+            stillLost.InterleavedSamples,
+            sample => Assert.Equal(0, sample));
         var request = Assert.Single(rediscovery.Requests);
         Assert.Equal(AudioDeviceRecoveryPolicy.ForDesktopLoss(), request);
         Assert.Equal(TimeSpan.FromSeconds(5), request.Budget);
         Assert.Contains(events.Statuses, status =>
             status.Kind == AudioSessionStatusKind.EndpointRediscoveryScheduled &&
             status.Input == AudioInput.Desktop &&
-            status.SamplePosition == blockSize);
+            status.FramePosition == blockFrames);
 
-        var recoveredDesktop = GenerateSine(
+        var recoveredDesktop = GenerateStereoSine(
             440,
-            blockSize * 3,
-            blockSize,
+            blockFrames * 3,
+            blockFrames,
             amplitude: 0.25);
-        var recovered = session.Process(new ScheduledAudioBuffer(
-            StartSample: blockSize * 3,
+        var recovered = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: blockFrames * 3,
             SampleRate,
-            blockSize,
+            blockFrames,
             recoveredDesktop,
-            GenerateSine(880, blockSize * 3, blockSize, amplitude: 0.25),
+            GenerateStereoSine(
+                880,
+                blockFrames * 3,
+                blockFrames,
+                amplitude: 0.25),
             AudioInputAvailability.All));
         AssertRamp(
-            recovered.Samples,
-            new float[blockSize],
+            recovered.InterleavedSamples,
+            new float[blockFrames * ChannelCount],
             recoveredDesktop,
-            gainAt: index => (double)index / blockSize);
+            gainAtFrame: frame => (double)frame / blockFrames);
         Assert.Contains(events.Statuses, status =>
             status.Kind == AudioSessionStatusKind.InputRecovered &&
             status.Input == AudioInput.Desktop &&
-            status.SamplePosition == blockSize * 3);
+            status.FramePosition == blockFrames * 3);
 
         var steady = ProcessSines(
             session,
-            startSample: blockSize * 4,
-            blockSize);
+            startFrame: blockFrames * 4,
+            blockFrames);
         AssertSamples(
-            GenerateSine(440, blockSize * 4, blockSize, amplitude: 0.25),
-            steady.Samples);
+            GenerateStereoSine(
+                440,
+                blockFrames * 4,
+                blockFrames,
+                amplitude: 0.25),
+            steady.InterleavedSamples);
     }
 
     [Fact]
     public void RediscoveryFailureWarnsAndStillReturnsScheduledSilence()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var events = new RecordingAudioSessionEventSink();
         var session = new AudioSessionService(
             AudioRouting.DesktopOnly,
             new ThrowingRediscoveryScheduler(),
             events);
 
-        var mixed = session.Process(new ScheduledAudioBuffer(
-            StartSample: 0,
+        var mixed = session.Process(new ScheduledStereoAudioBuffer(
+            StartFrame: 0,
             SampleRate,
-            blockSize,
-            DesktopSamples: [],
-            GenerateSine(880, startSample: 0, blockSize, amplitude: 0.25),
+            blockFrames,
+            DesktopInterleavedSamples: [],
+            GenerateStereoSine(
+                880,
+                startFrame: 0,
+                blockFrames,
+                amplitude: 0.25),
             AudioInputAvailability.Microphone));
 
-        Assert.Equal(blockSize, mixed.Samples.Length);
-        Assert.All(mixed.Samples, sample => Assert.Equal(0, sample));
+        Assert.Equal(
+            blockFrames * ChannelCount,
+            mixed.InterleavedSamples.Length);
+        Assert.All(mixed.InterleavedSamples, sample => Assert.Equal(0, sample));
         Assert.Contains(events.Warnings, warning =>
             warning.Kind == AudioSessionWarningKind.EndpointRediscoveryFailed &&
             warning.Input == AudioInput.Desktop);
     }
 
     [Fact]
-    public void InvalidBufferDoesNotAdvanceTheSessionTimeline()
+    public void InvalidBufferDoesNotAdvanceTheSessionFrameTimeline()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var session = CreateSession(AudioRouting.Mixed);
-        ProcessSines(session, startSample: 0, blockSize);
+        ProcessSines(session, startFrame: 0, blockFrames);
 
-        var mismatch = new ScheduledAudioBuffer(
-            StartSample: blockSize,
+        var mismatch = new ScheduledStereoAudioBuffer(
+            StartFrame: blockFrames,
             SampleRate,
-            blockSize,
-            DesktopSamples: new float[blockSize - 1],
-            MicrophoneSamples: new float[blockSize],
+            blockFrames,
+            DesktopInterleavedSamples:
+                new float[(blockFrames * ChannelCount) - 1],
+            MicrophoneInterleavedSamples:
+                new float[blockFrames * ChannelCount],
             AudioInputAvailability.All);
         Assert.Throws<ArgumentException>(() => session.Process(mismatch));
 
-        var valid = ProcessSines(session, startSample: blockSize, blockSize);
-        Assert.Equal(blockSize, valid.StartSample);
+        var valid = ProcessSines(
+            session,
+            startFrame: blockFrames,
+            blockFrames);
+        Assert.Equal(blockFrames, valid.StartFrame);
     }
 
     [Theory]
@@ -232,15 +333,15 @@ public sealed class AudioSessionIntegrationTests
     [InlineData(SampleRate, 4_801)]
     public void UnsupportedOrOversizedBuffersFailClosed(
         int sampleRate,
-        int sampleCount)
+        int frameCount)
     {
         var session = CreateSession(AudioRouting.Mixed);
-        var buffer = new ScheduledAudioBuffer(
-            StartSample: 0,
+        var buffer = new ScheduledStereoAudioBuffer(
+            StartFrame: 0,
             sampleRate,
-            sampleCount,
-            new float[sampleCount],
-            new float[sampleCount],
+            frameCount,
+            new float[frameCount * ChannelCount],
+            new float[frameCount * ChannelCount],
             AudioInputAvailability.All);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => session.Process(buffer));
@@ -249,23 +350,23 @@ public sealed class AudioSessionIntegrationTests
     [Fact]
     public void ContradictoryAvailabilityAndNonFiniteSamplesFailClosed()
     {
-        const int blockSize = 480;
+        const int blockFrames = 480;
         var session = CreateSession(AudioRouting.Mixed);
-        var contradictory = new ScheduledAudioBuffer(
-            StartSample: 0,
+        var contradictory = new ScheduledStereoAudioBuffer(
+            StartFrame: 0,
             SampleRate,
-            blockSize,
-            new float[blockSize],
-            new float[blockSize],
+            blockFrames,
+            new float[blockFrames * ChannelCount],
+            new float[blockFrames * ChannelCount],
             AudioInputAvailability.Desktop);
         Assert.Throws<ArgumentException>(() => session.Process(contradictory));
 
-        var desktop = new float[blockSize];
+        var desktop = new float[blockFrames * ChannelCount];
         desktop[20] = float.NaN;
         var nonFinite = contradictory with
         {
-            DesktopSamples = desktop,
-            MicrophoneSamples = [],
+            DesktopInterleavedSamples = desktop,
+            MicrophoneInterleavedSamples = [],
         };
         Assert.Throws<ArgumentException>(() => session.Process(nonFinite));
     }
@@ -276,58 +377,79 @@ public sealed class AudioSessionIntegrationTests
             new RecordingRediscoveryScheduler(),
             new RecordingAudioSessionEventSink());
 
-    private static MixedAudioBuffer ProcessSines(
+    private static MixedStereoAudioBuffer ProcessSines(
         AudioSessionService session,
-        long startSample,
-        int sampleCount) =>
-        session.Process(new ScheduledAudioBuffer(
-            startSample,
+        long startFrame,
+        int frameCount) =>
+        session.Process(new ScheduledStereoAudioBuffer(
+            startFrame,
             SampleRate,
-            sampleCount,
-            GenerateSine(440, startSample, sampleCount, amplitude: 0.25),
-            GenerateSine(880, startSample, sampleCount, amplitude: 0.25),
+            frameCount,
+            GenerateStereoSine(440, startFrame, frameCount, amplitude: 0.25),
+            GenerateStereoSine(880, startFrame, frameCount, amplitude: 0.25),
             AudioInputAvailability.All));
 
-    private static float[] GenerateSine(
+    private static float[] GenerateStereoSine(
         double frequency,
-        long startSample,
-        int sampleCount,
-        double amplitude) =>
-        Enumerable.Range(0, sampleCount)
-            .Select(index => (float)(amplitude * Math.Sin(
-                2 * Math.PI * frequency * (startSample + index) / SampleRate)))
-            .ToArray();
+        long startFrame,
+        int frameCount,
+        double amplitude)
+    {
+        var output = new float[frameCount * ChannelCount];
+        for (var frame = 0; frame < frameCount; frame++)
+        {
+            var sample = (float)(amplitude * Math.Sin(
+                2 * Math.PI * frequency * (startFrame + frame) / SampleRate));
+            output[frame * ChannelCount] = sample;
+            output[(frame * ChannelCount) + 1] = sample;
+        }
 
-    private static double ProjectionMagnitude(
-        IReadOnlyList<float> samples,
+        return output;
+    }
+
+    private static double LeftChannelProjectionMagnitude(
+        IReadOnlyList<float> interleavedSamples,
         double frequency)
     {
+        var frameCount = interleavedSamples.Count / ChannelCount;
         var sine = 0d;
         var cosine = 0d;
-        for (var index = 0; index < samples.Count; index++)
+        for (var frame = 0; frame < frameCount; frame++)
         {
-            var angle = 2 * Math.PI * frequency * index / SampleRate;
-            sine += samples[index] * Math.Sin(angle);
-            cosine += samples[index] * Math.Cos(angle);
+            var angle = 2 * Math.PI * frequency * frame / SampleRate;
+            var sample = interleavedSamples[frame * ChannelCount];
+            sine += sample * Math.Sin(angle);
+            cosine += sample * Math.Cos(angle);
         }
 
         return 2 * Math.Sqrt((sine * sine) + (cosine * cosine)) /
-               samples.Count;
+               frameCount;
     }
 
     private static void AssertRamp(
         IReadOnlyList<float> actual,
         IReadOnlyList<float> constantContribution,
         IReadOnlyList<float> rampedContribution,
-        Func<int, double> gainAt)
+        Func<int, double> gainAtFrame)
     {
         Assert.Equal(constantContribution.Count, actual.Count);
         Assert.Equal(rampedContribution.Count, actual.Count);
         for (var index = 0; index < actual.Count; index++)
         {
             var expected = constantContribution[index] +
-                           (rampedContribution[index] * gainAt(index));
+                           (rampedContribution[index] *
+                            gainAtFrame(index / ChannelCount));
             Assert.Equal(expected, actual[index], precision: 6);
+        }
+    }
+
+    private static void AssertInterleavedStereoPairs(
+        IReadOnlyList<float> samples)
+    {
+        Assert.Equal(0, samples.Count % ChannelCount);
+        for (var index = 0; index < samples.Count; index += ChannelCount)
+        {
+            Assert.Equal(samples[index], samples[index + 1]);
         }
     }
 
