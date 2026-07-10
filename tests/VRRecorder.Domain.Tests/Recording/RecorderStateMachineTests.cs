@@ -121,11 +121,14 @@ public sealed class RecorderStateMachineTests
         Assert.Equal(RecorderState.Stopping, next);
     }
 
-    [Fact]
-    public void StopRequestedWhenRecordingTransitionsToStopping()
+    [Theory]
+    [InlineData(RecorderState.Recording)]
+    [InlineData(RecorderState.SignalLost)]
+    public void StopRequestedFromActiveRecordingTransitionsToStopping(
+        RecorderState activeState)
     {
         var next = RecorderStateMachine.Transition(
-            RecorderState.Recording,
+            activeState,
             RecorderTrigger.StopRequested);
 
         Assert.Equal(RecorderState.Stopping, next);
