@@ -433,7 +433,9 @@ public sealed class RecordingLifecycleIntegrationTests
     private sealed class UnexpectedRuntimeFaultSink
         : INativeRecordingRuntimeFaultSink
     {
-        public void Report(NativeRecordingFault fault) =>
+        public void Report(
+            RecordingHandle handle,
+            NativeRecordingFault fault) =>
             throw new InvalidOperationException(
                 $"Unexpected native runtime fault: {fault.Message}");
     }

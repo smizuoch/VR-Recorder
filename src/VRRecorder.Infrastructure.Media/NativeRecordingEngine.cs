@@ -33,6 +33,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         ArgumentNullException.ThrowIfNull(plan);
         var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var runtimeFaultContext = new RuntimeFaultContext(_runtimeFaults);
         var callbacks = new NativeRecordingCallbacks(
             FirstVideoPacketMuxed: () =>
                 firstPacket.TrySetResult(_clock.Now),
@@ -41,7 +42,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 if (!firstPacket.TrySetException(
                         new NativeRecordingException(fault)))
                 {
-                    _runtimeFaults.Report(fault);
+                    runtimeFaultContext.Report(fault);
                 }
             });
         var session = await _backend
@@ -66,7 +67,9 @@ public sealed class NativeRecordingEngine : IRecordingEngine
             var committedAt = await firstPacket.Task
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
-            return new RecordingHandle(session.Id, committedAt);
+            var handle = new RecordingHandle(session.Id, committedAt);
+            runtimeFaultContext.Activate(handle);
+            return handle;
         }
         catch
         {
@@ -123,5 +126,60 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         public INativeRecordingSession Session { get; }
 
         public SemaphoreSlim StopGate { get; } = new(1, 1);
+    }
+
+    private sealed class RuntimeFaultContext(
+        INativeRecordingRuntimeFaultSink sink)
+    {
+        private readonly object _gate = new();
+        private RecordingHandle? _handle;
+        private NativeRecordingFault? _pendingFault;
+
+        public void Activate(RecordingHandle handle)
+        {
+            NativeRecordingFault? pending;
+            lock (_gate)
+            {
+                _handle = handle;
+                pending = _pendingFault;
+                _pendingFault = null;
+            }
+
+            if (pending is not null)
+            {
+                ReportBestEffort(handle, pending);
+            }
+        }
+
+        public void Report(NativeRecordingFault fault)
+        {
+            RecordingHandle? handle;
+            lock (_gate)
+            {
+                handle = _handle;
+                if (handle is null)
+                {
+                    _pendingFault ??= fault;
+                    return;
+                }
+            }
+
+            ReportBestEffort(handle, fault);
+        }
+
+        private void ReportBestEffort(
+            RecordingHandle handle,
+            NativeRecordingFault fault)
+        {
+            try
+            {
+                sink.Report(handle, fault);
+            }
+            catch (Exception)
+            {
+                // A callback observer must not escape through the native ABI
+                // or replace the encoder failure that owns this session.
+            }
+        }
     }
 }

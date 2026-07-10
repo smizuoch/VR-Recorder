@@ -1,6 +1,10 @@
+using VRRecorder.Application.Recording;
+
 namespace VRRecorder.Infrastructure.Media;
 
 public interface INativeRecordingRuntimeFaultSink
 {
-    void Report(NativeRecordingFault fault);
+    void Report(
+        RecordingHandle handle,
+        NativeRecordingFault fault);
 }
