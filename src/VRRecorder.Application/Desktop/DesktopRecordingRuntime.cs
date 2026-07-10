@@ -16,7 +16,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private Task? _transportToggleTask;
     private CancellationTokenSource? _startCancellation;
     private bool _semanticStartCancellationRequested;
-    private Task? _disposeTask;
+    private Task? _shutdownTask;
     private bool _disposed;
 
     public DesktopRecordingRuntime(
@@ -76,18 +76,35 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
 
     public ValueTask DisposeAsync()
     {
+        return new ValueTask(ShutdownAsync(
+            RecordingStopReason.ApplicationShutdown));
+    }
+
+    public Task ShutdownAsync(RecordingStopReason reason)
+    {
         bool cancelLifetime = false;
-        Task disposal;
+        Task shutdown;
+        if (reason is not RecordingStopReason.ApplicationShutdown and
+            not RecordingStopReason.ComplianceFault)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(reason),
+                reason,
+                "A desktop runtime shutdown requires a terminal application reason.");
+        }
+
         lock (_gate)
         {
-            if (_disposeTask is null)
+            if (_shutdownTask is null)
             {
                 _disposed = true;
                 cancelLifetime = true;
-                _disposeTask = DisposeCoreAsync(_transportToggleTask);
+                _shutdownTask = ShutdownCoreAsync(
+                    _transportToggleTask,
+                    reason);
             }
 
-            disposal = _disposeTask;
+            shutdown = _shutdownTask;
         }
 
         if (cancelLifetime)
@@ -95,7 +112,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             CancelLifetime();
         }
 
-        return new ValueTask(disposal);
+        return shutdown;
     }
 
     private async Task RunTransportToggleAsync(
@@ -227,7 +244,9 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         }
     }
 
-    private async Task DisposeCoreAsync(Task? operation)
+    private async Task ShutdownCoreAsync(
+        Task? operation,
+        RecordingStopReason reason)
     {
         await Task.Yield();
         await ObserveWithoutInterruptingShutdownAsync(operation)
@@ -237,7 +256,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             if (HasActiveOrStoppingSession(_lifecycle.State))
             {
                 await StopActiveSessionAsync(
-                        RecordingStopReason.ApplicationShutdown,
+                        reason,
                         CancellationToken.None)
                     .ConfigureAwait(false);
             }

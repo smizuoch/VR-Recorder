@@ -5,6 +5,7 @@ using System.Text;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 using VRRecorder.Compliance.Dependencies;
 using VRRecorder.Compliance.Generation;
 using VRRecorder.Compliance.Runtime;
@@ -396,6 +397,9 @@ public sealed class DesktopLegalViewerIntegrationTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
+
+        public Task ShutdownAsync(RecordingStopReason reason) =>
+            DisposeAsync().AsTask();
 
         public ValueTask DisposeAsync()
         {

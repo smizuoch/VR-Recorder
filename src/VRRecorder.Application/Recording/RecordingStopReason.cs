@@ -8,5 +8,6 @@ public enum RecordingStopReason
     DiskLow,
     EncoderFailure,
     ApplicationShutdown,
+    ComplianceFault,
     InvariantViolation,
 }

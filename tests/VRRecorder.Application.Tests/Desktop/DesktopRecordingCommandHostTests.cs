@@ -1,6 +1,7 @@
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Tests.Desktop;
@@ -241,6 +242,9 @@ public sealed class DesktopRecordingCommandHostTests
             return _toggleCompletion.Task.WaitAsync(cancellationToken);
         }
 
+        public Task ShutdownAsync(RecordingStopReason reason) =>
+            DisposeAsync().AsTask();
+
         public Task WaitUntilToggleRequestedAsync() => _toggleRequested.Task;
 
         public void CompleteToggle() => _toggleCompletion.TrySetResult();
@@ -281,6 +285,9 @@ public sealed class DesktopRecordingCommandHostTests
 
         public Task ToggleAsync(CancellationToken cancellationToken) =>
             Task.CompletedTask;
+
+        public Task ShutdownAsync(RecordingStopReason reason) =>
+            DisposeAsync().AsTask();
 
         public ValueTask DisposeAsync()
         {
