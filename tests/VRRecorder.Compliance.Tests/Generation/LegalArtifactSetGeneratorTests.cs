@@ -8,6 +8,38 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class LegalArtifactSetGeneratorTests
 {
     [Fact]
+    public void ArtifactSetIncludesDeterministicManifestForEveryPayloadFile()
+    {
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var generated = LegalArtifactSetGenerator.Generate(
+            Context("manifest"),
+            eligibility.ApprovedGraph!);
+
+        var manifest = Assert.Single(
+            generated.Artifacts,
+            artifact => artifact.RelativePath == "LEGAL-MANIFEST.sha256");
+        var payloads = generated.Artifacts
+            .Where(artifact => artifact.RelativePath != manifest.RelativePath)
+            .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+        var expected = string.Concat(payloads.Select(artifact =>
+            $"{Hash(artifact.Content.Span)}  {artifact.RelativePath}\n"));
+        var actual = Encoding.UTF8.GetString(manifest.Content.Span);
+
+        Assert.Equal(expected, actual);
+        Assert.DoesNotContain(manifest.RelativePath, actual, StringComparison.Ordinal);
+        var lines = actual.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(payloads.Length, lines.Length);
+        Assert.All(lines, line =>
+        {
+            Assert.Equal(' ', line[64]);
+            Assert.Equal(' ', line[65]);
+            Assert.All(line[..64], character => Assert.True(
+                character is >= '0' and <= '9' or >= 'a' and <= 'f'));
+        });
+    }
+
+    [Fact]
     public async Task ManualNoticeEditIsDetectedByRegenerationDiff()
     {
         using var directory = TemporaryDirectory.Create();
@@ -60,6 +92,9 @@ public sealed class LegalArtifactSetGeneratorTests
         Assert.Contains(
             first.Artifacts,
             artifact => artifact.RelativePath == "SBOM/manifest.spdx.json");
+        Assert.Contains(
+            first.Artifacts,
+            artifact => artifact.RelativePath == "LEGAL-MANIFEST.sha256");
         Assert.All(first.Artifacts.Zip(second.Artifacts), pair =>
         {
             Assert.Equal(pair.First.Sha256, pair.Second.Sha256);
