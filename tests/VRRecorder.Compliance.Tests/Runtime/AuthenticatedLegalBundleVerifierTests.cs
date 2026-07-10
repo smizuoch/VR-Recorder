@@ -215,6 +215,43 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         Assert.Equal(new string('a', 64), anchor.ManifestSha256);
     }
 
+    [Fact]
+    public async Task RejectsListedPayloadThatIsASymbolicLink()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        using var outside = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var outsideCatalog = Path.Combine(outside.Path, "catalog.json");
+        await File.WriteAllBytesAsync(outsideCatalog, catalog);
+        File.CreateSymbolicLink(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            outsideCatalog);
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new StubAuthenticatedAnchorSource(
+                new AuthenticatedLegalBundleAnchor(
+                    BundleId,
+                    Hash(manifest))));
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-reparse-point", issue.Code);
+        Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
+    }
+
     private static string CatalogJson() => $$"""
         {
           "schemaVersion": 2,
