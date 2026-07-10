@@ -5,13 +5,16 @@ namespace VRRecorder.Application.Tests.TestDoubles;
 
 internal sealed class FakeStopRequestSink : IStopRequestSink
 {
-    public List<RecordingHandle> RequestedHandles { get; } = [];
+    public List<RecordingStopRequest> Requests { get; } = [];
+
+    public IEnumerable<RecordingHandle> RequestedHandles =>
+        Requests.Select(request => request.Handle);
 
     public Task RequestStopAsync(
-        RecordingHandle handle,
+        RecordingStopRequest request,
         CancellationToken cancellationToken)
     {
-        RequestedHandles.Add(handle);
+        Requests.Add(request);
         return Task.CompletedTask;
     }
 }

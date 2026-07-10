@@ -38,5 +38,8 @@ public sealed class VideoSignalSupervisorTests
 
         var requestedHandle = Assert.Single(stopRequests.RequestedHandles);
         Assert.Equal(handle, requestedHandle);
+        Assert.Equal(
+            RecordingStopReason.SignalLost,
+            Assert.Single(stopRequests.Requests).Reason);
     }
 }

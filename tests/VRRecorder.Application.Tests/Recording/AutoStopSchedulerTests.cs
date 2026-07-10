@@ -35,6 +35,9 @@ public sealed class AutoStopSchedulerTests
 
         var requestedHandle = Assert.Single(stopRequests.RequestedHandles);
         Assert.Equal(handle, requestedHandle);
+        Assert.Equal(
+            RecordingStopReason.AutoStop,
+            Assert.Single(stopRequests.Requests).Reason);
 
         clock.AdvanceBy(TimeSpan.FromSeconds(10));
         Assert.Single(stopRequests.RequestedHandles);
