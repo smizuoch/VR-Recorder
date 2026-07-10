@@ -26,9 +26,20 @@ public sealed class AuthenticatedLegalBundleVerifier
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleDirectory);
-        var anchor = await _anchors
-            .GetAsync(cancellationToken)
-            .ConfigureAwait(false);
+        AuthenticatedLegalBundleAnchor anchor;
+        try
+        {
+            anchor = await _anchors
+                .GetAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (AuthenticatedLegalBundleAnchorUnavailableException)
+        {
+            return Reject(
+                "legal-bundle-authenticated-anchor-missing",
+                "authenticated-manifest-anchor");
+        }
+
         var root = Path.GetFullPath(bundleDirectory);
         var manifestPath = Path.Combine(root, ManifestFileName);
         var catalogPath = Path.Combine(root, CatalogFileName);

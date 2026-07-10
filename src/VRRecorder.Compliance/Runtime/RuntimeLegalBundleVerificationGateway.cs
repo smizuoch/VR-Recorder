@@ -47,6 +47,7 @@ public sealed class RuntimeLegalBundleVerificationGateway
         code switch
         {
             "legal-bundle-missing" or
+            "legal-bundle-authenticated-anchor-missing" or
             "legal-bundle-payload-missing" => "LEGAL_BUNDLE_MISSING",
             "legal-bundle-payload-unexpected" => "UNAPPROVED_COMPONENT",
             _ => "LEGAL_BUNDLE_HASH_MISMATCH",
