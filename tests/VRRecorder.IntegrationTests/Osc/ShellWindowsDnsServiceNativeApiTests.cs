@@ -200,7 +200,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
         {
             var records = CreatePtrRecordList(serviceIds);
             var callback = Marshal.GetDelegateForFunctionPointer<
-                TestBrowseCallback>(BrowseRequest.Callback);
+                WindowsDnsServiceBrowseNativeCallback>(BrowseRequest.Callback);
             callback(status, BrowseRequest.QueryContext, records);
         }
 
@@ -221,7 +221,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
                 port,
                 textProperties);
             var callback = Marshal.GetDelegateForFunctionPointer<
-                TestResolveCallback>(ResolveRequest.Callback);
+                WindowsDnsServiceResolveNativeCallback>(ResolveRequest.Callback);
             callback(status, ResolveRequest.QueryContext, serviceInstance);
         }
 
@@ -296,7 +296,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
 
         private static nint AllocateString(
             string value,
-            ICollection<nint> allocations)
+            List<nint> allocations)
         {
             var pointer = Marshal.StringToHGlobalUni(value);
             allocations.Add(pointer);
@@ -305,7 +305,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
 
         private static nint AllocateBytes(
             byte[] value,
-            ICollection<nint> allocations)
+            List<nint> allocations)
         {
             var pointer = Marshal.AllocHGlobal(value.Length);
             allocations.Add(pointer);
@@ -315,7 +315,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
 
         private static nint AllocateStringPointerArray(
             IEnumerable<string> values,
-            ICollection<nint> allocations)
+            List<nint> allocations)
         {
             var strings = values
                 .Select(value => AllocateString(value, allocations))
@@ -326,7 +326,7 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
             return array;
         }
 
-        private static void FreeAll(ICollection<nint> allocations)
+        private static void FreeAll(List<nint> allocations)
         {
             foreach (var allocation in allocations)
             {
@@ -392,15 +392,4 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
         public uint InterfaceIndex;
     }
 
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate void TestBrowseCallback(
-        uint status,
-        nint queryContext,
-        nint records);
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate void TestResolveCallback(
-        uint status,
-        nint queryContext,
-        nint serviceInstance);
 }
