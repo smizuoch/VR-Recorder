@@ -8,7 +8,7 @@ public sealed class CameraLeaseTests
     public void StreamingChangedFromFalseIsRestoredToFalse()
     {
         var lease = new CameraLease(
-            ObservedCameraValue<bool>.Known(false),
+            ObservedCameraValue.Known(false),
             changedStreamingByRecorder: true);
 
         var plan = lease.CreateRestorePlan();
@@ -20,7 +20,7 @@ public sealed class CameraLeaseTests
     public void StreamingAlreadyTrueIsLeftUnchanged()
     {
         var lease = new CameraLease(
-            ObservedCameraValue<bool>.Known(true),
+            ObservedCameraValue.Known(true),
             changedStreamingByRecorder: false);
 
         var plan = lease.CreateRestorePlan();
