@@ -12,6 +12,8 @@ namespace VRRecorder.IntegrationTests.Compliance;
 
 public sealed class LegalReleasePackageIntegrationTests
 {
+    private static readonly string[] ExpectedPackageNames =
+        ["Package.Direct", "Package.Transitive"];
     private const string BundleId =
         "https://example.invalid/spdx/vr-recorder-release-0.1.0";
 
@@ -71,9 +73,9 @@ public sealed class LegalReleasePackageIntegrationTests
         var packageNames = sbom.RootElement
             .GetProperty("packages")
             .EnumerateArray()
-            .Select(package => package.GetProperty("name").GetString())
+            .Select(package => package.GetProperty("name").GetString()!)
             .ToArray();
-        Assert.Equal(["Package.Direct", "Package.Transitive"], packageNames);
+        Assert.Equal(ExpectedPackageNames, packageNames);
     }
 
     [Theory]
