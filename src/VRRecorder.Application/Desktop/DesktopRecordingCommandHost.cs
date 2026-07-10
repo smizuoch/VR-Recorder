@@ -90,6 +90,7 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         IDesktopRecordingRuntime? runtime;
+        Task<DesktopRecordingHostActivation>? activationTask;
         Task? toggleTask;
         lock (_gate)
         {
@@ -100,9 +101,22 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
 
             _disposed = true;
             _state = DesktopRecordingHostState.Disposed;
-            _lifetime.Cancel();
             runtime = _runtime;
+            activationTask = _activationTask;
             toggleTask = _toggleTask;
+        }
+
+        _lifetime.Cancel();
+        if (activationTask is not null)
+        {
+            try
+            {
+                await activationTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (
+                _lifetime.IsCancellationRequested)
+            {
+            }
         }
 
         if (toggleTask is not null)
@@ -134,27 +148,13 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
 
     private async Task<DesktopRecordingHostActivation> InitializeAsync()
     {
+        IDesktopRecordingRuntime runtime;
         try
         {
-            var runtime = await _runtimeFactory
+            runtime = await _runtimeFactory
                 .InitializeAsync(_lifetime.Token)
                 .ConfigureAwait(false);
             ArgumentNullException.ThrowIfNull(runtime);
-            lock (_gate)
-            {
-                if (_disposed)
-                {
-                    return new DesktopRecordingHostActivation(
-                        DesktopRecordingHostState.Disposed,
-                        Failure: null);
-                }
-
-                _runtime = runtime;
-                _state = DesktopRecordingHostState.Ready;
-                return new DesktopRecordingHostActivation(
-                    _state,
-                    Failure: null);
-            }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -167,6 +167,13 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
                 : UnexpectedInitializationFailureCode;
             lock (_gate)
             {
+                if (_disposed)
+                {
+                    return new DesktopRecordingHostActivation(
+                        DesktopRecordingHostState.Disposed,
+                        Failure: null);
+                }
+
                 _failure = new DesktopRecordingInitializationFailure(
                     code,
                     exception.Message);
@@ -174,5 +181,22 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
                 return new DesktopRecordingHostActivation(_state, _failure);
             }
         }
+
+        lock (_gate)
+        {
+            if (!_disposed)
+            {
+                _runtime = runtime;
+                _state = DesktopRecordingHostState.Ready;
+                return new DesktopRecordingHostActivation(
+                    _state,
+                    Failure: null);
+            }
+        }
+
+        await runtime.DisposeAsync().ConfigureAwait(false);
+        return new DesktopRecordingHostActivation(
+            DesktopRecordingHostState.Disposed,
+            Failure: null);
     }
 }
