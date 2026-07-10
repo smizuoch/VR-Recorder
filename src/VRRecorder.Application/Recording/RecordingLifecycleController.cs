@@ -81,36 +81,54 @@ public sealed class RecordingLifecycleController : IDisposable
             var camera = new CameraSessionController(
                 connected.Gateway,
                 _cameraLeases);
-            await camera
+            var lease = await camera
                 .AcquireAsync(cameraSnapshot, cancellationToken)
                 .ConfigureAwait(false);
-            var recording = await _startRecording
-                .ExecuteAsync(command, cancellationToken)
-                .ConfigureAwait(false);
-            var state = recording switch
+            try
             {
-                StartRecordingResult.Started => RecorderStateMachine.Transition(
-                    RecorderState.Starting,
-                    RecorderTrigger.FirstPacketCommitted),
-                StartRecordingResult.NoSignal => RecorderStateMachine.Transition(
-                    RecorderState.Arming,
-                    RecorderTrigger.SignalTimeout),
-                StartRecordingResult.InsufficientStorage => RecorderState.Ready,
-                _ => throw new InvalidOperationException(
-                    $"Unknown recording start result {recording.GetType().Name}."),
-            };
-            if (recording is StartRecordingResult.Started started)
-            {
-                _videoSignal = new VideoSignalSupervisor(
-                    started.Handle,
-                    _stopRequests);
-            }
+                var recording = await _startRecording
+                    .ExecuteAsync(command, cancellationToken)
+                    .ConfigureAwait(false);
+                var state = recording switch
+                {
+                    StartRecordingResult.Started => RecorderStateMachine.Transition(
+                        RecorderState.Starting,
+                        RecorderTrigger.FirstPacketCommitted),
+                    StartRecordingResult.NoSignal => RecorderStateMachine.Transition(
+                        RecorderState.Arming,
+                        RecorderTrigger.SignalTimeout),
+                    StartRecordingResult.InsufficientStorage => RecorderState.Ready,
+                    _ => throw new InvalidOperationException(
+                        $"Unknown recording start result {recording.GetType().Name}."),
+                };
+                if (recording is StartRecordingResult.Started started)
+                {
+                    _videoSignal = new VideoSignalSupervisor(
+                        started.Handle,
+                        _stopRequests);
+                }
 
-            SetState(state);
-            return new RecordingLifecycleStartResult(
-                state,
-                connection,
-                recording);
+                SetState(state);
+                return new RecordingLifecycleStartResult(
+                    state,
+                    connection,
+                    recording);
+            }
+            catch
+            {
+                try
+                {
+                    await camera
+                        .RestoreAsync(lease, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    SetState(RecorderState.Ready);
+                }
+
+                throw;
+            }
         }
         finally
         {
