@@ -627,24 +627,24 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
                     "failOnSourceOrOutputHashMismatch"] = false;
                 break;
             case "duplicate-semantic-id":
-            {
-                var duplicate = Icon();
-                duplicate["outputPath"] =
-                    "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/" +
-                    "recording-start-copy.svg";
-                icons.Add(duplicate);
-                break;
-            }
+                {
+                    var duplicate = Icon();
+                    duplicate["outputPath"] =
+                        "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/" +
+                        "recording-start-copy.svg";
+                    icons.Add(duplicate);
+                    break;
+                }
             case "duplicate-output-path":
-            {
-                var duplicate = Icon();
-                duplicate["semanticId"] = "recording.stop";
-                duplicate["outputPath"] =
-                    "SRC/VRRecorder.DesignSystem/Assets/MaterialSymbols/" +
-                    "RECORDING-START.SVG";
-                icons.Add(duplicate);
-                break;
-            }
+                {
+                    var duplicate = Icon();
+                    duplicate["semanticId"] = "recording.stop";
+                    duplicate["outputPath"] =
+                        "SRC/VRRecorder.DesignSystem/Assets/MaterialSymbols/" +
+                        "RECORDING-START.SVG";
+                    icons.Add(duplicate);
+                    break;
+                }
             case "invalid-source-hash":
                 first["sourceSha256"] = "not-a-hash";
                 break;
