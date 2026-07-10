@@ -8,6 +8,43 @@ public sealed class RecordingFileFinalizationIntegrationTests
 {
     [Fact]
     [Trait("Scenario", "IT-018")]
+    public async Task RenameFailureMovesPendingFileToRecovery()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var temporaryPath = Path.Combine(directory.Path, "take.recording.mp4");
+        var finalPath = Path.Combine(directory.Path, "take.mp4");
+        var recoveryPath = Path.Combine(
+            directory.Path,
+            "VR-Recorder-Recovery",
+            "take.recording.mp4");
+        byte[] pendingContent = [0x10, 0x20, 0x30];
+        await File.WriteAllBytesAsync(temporaryPath, pendingContent);
+        Directory.CreateDirectory(finalPath);
+        var useCase = new RecordingFileFinalizationUseCase(
+            new SameDirectoryAtomicRecordingFileFinalizer(),
+            new UnexpectedRecordingFileValidator(),
+            new FileSystemRecordingRecoveryStore(),
+            new UnexpectedSavedSink());
+
+        var result = await useCase.ExecuteAsync(
+            new PendingRecording(temporaryPath, finalPath),
+            CancellationToken.None);
+
+        var recovery =
+            Assert.IsType<RecordingFinalizationResult.RecoveryRequired>(result);
+        Assert.Equal(RecordingRecoveryReason.FinalizationFailed, recovery.Reason);
+        Assert.Equal(
+            Path.GetFullPath(recoveryPath),
+            recovery.Quarantine.QuarantinePath);
+        Assert.False(File.Exists(temporaryPath));
+        Assert.True(Directory.Exists(finalPath));
+        Assert.Equal(
+            pendingContent,
+            await File.ReadAllBytesAsync(recoveryPath));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-018")]
     public async Task InvalidFinalIsMovedToRecoveryAndNeverPublished()
     {
         using var directory = TemporaryDirectory.Create();
@@ -128,6 +165,15 @@ public sealed class RecordingFileFinalizationIntegrationTests
             FinalizedRecording recording,
             CancellationToken cancellationToken) =>
             Task.FromResult(RecordingFileValidation.Invalid);
+    }
+
+    private sealed class UnexpectedRecordingFileValidator
+        : IRecordingFileValidator
+    {
+        public Task<RecordingFileValidation> ValidateAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Validation was not expected.");
     }
 
     private sealed class ReopeningSavedSink : ISavedRecordingSink
