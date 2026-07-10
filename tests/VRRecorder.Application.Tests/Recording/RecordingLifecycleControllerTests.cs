@@ -66,6 +66,7 @@ public sealed class RecordingLifecycleControllerTests
         Assert.True(cancelDuringSnapshot
             ? gateway.CancellationObserved
             : discovery.CancellationObserved);
+        Assert.Equal(cancelDuringSnapshot ? 1 : 0, gateway.DisposeCallCount);
         Assert.Equal(0, signal.CallCount);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);
@@ -233,6 +234,7 @@ public sealed class RecordingLifecycleControllerTests
                 "streaming:false",
                 "mode:Photo",
                 "lease:delete",
+                "gateway:dispose",
             ],
             events);
         Assert.Equal(1, engine.StopCallCount);
@@ -383,6 +385,7 @@ public sealed class RecordingLifecycleControllerTests
                 "lease:delete",
             ],
             events);
+        Assert.Equal(1, gateway.DisposeCallCount);
         Assert.DoesNotContain("mode:Photo", events);
         Assert.Equal(RecorderState.Ready, lifecycle.State);
     }
@@ -422,6 +425,7 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Null(result.Recording);
         Assert.Equal(1, gateway.ReadCallCount);
         Assert.Equal(0, gateway.WriteCallCount);
+        Assert.Equal(1, gateway.DisposeCallCount);
         Assert.Empty(leaseEvents);
         Assert.Equal(0, signal.CallCount);
         Assert.Equal(0, reservation.CallCount);
@@ -498,6 +502,7 @@ public sealed class RecordingLifecycleControllerTests
                 "mode:Stream",
                 "streaming:true",
                 "streaming:false",
+                "gateway:dispose",
             ],
             events);
         var warning = Assert.Single(restoreWarnings.Warnings);
@@ -567,6 +572,7 @@ public sealed class RecordingLifecycleControllerTests
                 "streaming:false",
                 "mode:Photo",
                 "lease:delete",
+                "gateway:dispose",
             ],
             events);
         Assert.Empty(restoreWarnings.Warnings);
@@ -639,6 +645,7 @@ public sealed class RecordingLifecycleControllerTests
                 "mode:Stream",
                 "streaming:true",
                 "streaming:false",
+                "gateway:dispose",
             ],
             events);
         var warning = Assert.Single(restoreWarnings.Warnings);
@@ -851,7 +858,7 @@ public sealed class RecordingLifecycleControllerTests
     }
 
     private sealed class ControllableSnapshotCameraGateway
-        : IVrChatCameraGateway
+        : IVrChatCameraGateway, IAsyncDisposable
     {
         private readonly TaskCompletionSource _requested = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -859,6 +866,8 @@ public sealed class RecordingLifecycleControllerTests
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool CancellationObserved { get; private set; }
+
+        public int DisposeCallCount { get; private set; }
 
         public async Task<CameraSnapshot> ReadSnapshotAsync(
             CancellationToken cancellationToken)
@@ -888,6 +897,12 @@ public sealed class RecordingLifecycleControllerTests
                 "Camera writes were not expected before snapshot completion.");
 
         public Task WaitUntilSnapshotRequestedAsync() => _requested.Task;
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class FixedStartRequestSource(
@@ -903,7 +918,7 @@ public sealed class RecordingLifecycleControllerTests
     }
 
     private sealed class FailingRestoreCameraGateway(List<string> events)
-        : IVrChatCameraGateway
+        : IVrChatCameraGateway, IAsyncDisposable
     {
         public Task<CameraSnapshot> ReadSnapshotAsync(
             CancellationToken cancellationToken)
@@ -935,10 +950,16 @@ public sealed class RecordingLifecycleControllerTests
 
             return Task.CompletedTask;
         }
+
+        public ValueTask DisposeAsync()
+        {
+            events.Add("gateway:dispose");
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class RecordingCameraGateway(List<string> events)
-        : IVrChatCameraGateway
+        : IVrChatCameraGateway, IAsyncDisposable
     {
         public Task<CameraSnapshot> ReadSnapshotAsync(
             CancellationToken cancellationToken)
@@ -965,6 +986,12 @@ public sealed class RecordingLifecycleControllerTests
             events.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
             return Task.CompletedTask;
         }
+
+        public ValueTask DisposeAsync()
+        {
+            events.Add("gateway:dispose");
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class TestCameraRestoreException : Exception
@@ -978,11 +1005,13 @@ public sealed class RecordingLifecycleControllerTests
     private sealed class SnapshotCameraGateway(
         CameraSnapshot snapshot,
         List<string>? events = null)
-        : IVrChatCameraGateway
+        : IVrChatCameraGateway, IAsyncDisposable
     {
         public int ReadCallCount { get; private set; }
 
         public int WriteCallCount { get; private set; }
+
+        public int DisposeCallCount { get; private set; }
 
         public Task<CameraSnapshot> ReadSnapshotAsync(
             CancellationToken cancellationToken)
@@ -1012,6 +1041,12 @@ public sealed class RecordingLifecycleControllerTests
             events?.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
             return Task.CompletedTask;
         }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class CapturingRecordingSessionActivator
@@ -1027,11 +1062,13 @@ public sealed class RecordingLifecycleControllerTests
     }
 
     private sealed class FailingSnapshotCameraGateway(Exception failure)
-        : IVrChatCameraGateway
+        : IVrChatCameraGateway, IAsyncDisposable
     {
         public int ReadCallCount { get; private set; }
 
         public int WriteCallCount { get; private set; }
+
+        public int DisposeCallCount { get; private set; }
 
         public Task<CameraSnapshot> ReadSnapshotAsync(
             CancellationToken cancellationToken)
@@ -1055,6 +1092,12 @@ public sealed class RecordingLifecycleControllerTests
         {
             WriteCallCount++;
             throw new InvalidOperationException("Camera writes were not expected.");
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            return ValueTask.CompletedTask;
         }
     }
 
