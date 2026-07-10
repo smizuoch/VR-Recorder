@@ -64,10 +64,12 @@ public sealed class RecordingLifecycleController : IDisposable
             .ConfigureAwait(false);
         try
         {
-            if (State != RecorderState.Ready)
+            var startState = State;
+            if (startState is not (
+                    RecorderState.Ready or RecorderState.NoSignal))
             {
                 throw new InvalidOperationException(
-                    $"Recording cannot start while the lifecycle is {State}.");
+                    $"Recording cannot start while the lifecycle is {startState}.");
             }
 
             var connection = await _cameraConnections
@@ -113,7 +115,7 @@ public sealed class RecordingLifecycleController : IDisposable
             }
 
             SetState(RecorderStateMachine.Transition(
-                RecorderState.Ready,
+                startState,
                 RecorderTrigger.StartRequested));
             var camera = _cameraLeaseIdentities is null
                 ? new CameraSessionController(
