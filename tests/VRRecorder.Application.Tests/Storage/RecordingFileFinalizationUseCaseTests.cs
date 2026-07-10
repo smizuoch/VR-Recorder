@@ -1,3 +1,4 @@
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
 
@@ -5,6 +6,38 @@ namespace VRRecorder.Application.Tests.Storage;
 
 public sealed class RecordingFileFinalizationUseCaseTests
 {
+    [Fact]
+    public async Task FinalizationFailureQuarantinesPendingWithoutValidationOrSaved()
+    {
+        var recovery = new FakeRecordingRecoveryStore();
+        var savedRecordings = new FakeSavedRecordingSink();
+        var useCase = new RecordingFileFinalizationUseCase(
+            new FailingRecordingFileFinalizer(),
+            new UnexpectedRecordingFileValidator(),
+            recovery,
+            savedRecordings);
+        var pending = new PendingRecording(
+            "recording.recording.mp4",
+            "recording.mp4");
+
+        var result = await useCase.ExecuteAsync(
+            pending,
+            CancellationToken.None);
+
+        var recoveryRequired =
+            Assert.IsType<RecordingFinalizationResult.RecoveryRequired>(result);
+        Assert.Equal(
+            RecordingRecoveryReason.FinalizationFailed,
+            recoveryRequired.Reason);
+        Assert.Equal(
+            recovery.QuarantinedRecording,
+            recoveryRequired.Quarantine);
+        Assert.Equal(
+            new RecoverableRecording(pending.TemporaryPath),
+            Assert.Single(recovery.Recordings));
+        Assert.Empty(savedRecordings.Recordings);
+    }
+
     [Fact]
     public async Task SavedIsNotPublishedBeforeFinalRenameCompletes()
     {
@@ -73,5 +106,26 @@ public sealed class RecordingFileFinalizationUseCaseTests
             new RecoverableRecording(finalized.FinalPath),
             Assert.Single(recovery.Recordings));
         Assert.Empty(savedRecordings.Recordings);
+    }
+
+    private sealed class FailingRecordingFileFinalizer : IRecordingFileFinalizer
+    {
+        public Task<FinalizedRecording> FinalizeAsync(
+            PendingRecording recording,
+            CancellationToken cancellationToken) =>
+            Task.FromException<FinalizedRecording>(
+                new RecordingFileFinalizationException(
+                    "The recording could not be finalized.",
+                    new RecoverableRecording(recording.TemporaryPath),
+                    new IOException("Synthetic rename failure.")));
+    }
+
+    private sealed class UnexpectedRecordingFileValidator
+        : IRecordingFileValidator
+    {
+        public Task<RecordingFileValidation> ValidateAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Validation was not expected.");
     }
 }
