@@ -480,6 +480,53 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopProductionFactoryComposesConcreteRecordingRuntime()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var project = XDocument.Load(Path.Combine(
+            appDirectory,
+            "VRRecorder.App.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(reference => reference.Attribute("Include")?.Value)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Contains(
+            "../VRRecorder.Infrastructure.Media/VRRecorder.Infrastructure.Media.csproj",
+            references);
+
+        var factory = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+        foreach (var productionType in new[]
+                 {
+                     "PInvokeSpoutVideoSource",
+                     "PInvokeEncoderProbe",
+                     "PInvokeNativeRecordingBackend",
+                     "NativeRecordingFaultStopSink",
+                     "NativeRecordingEngine",
+                     "ActiveRecordingSessionCoordinator",
+                     "RecordingStorageMonitor",
+                     "StartRecordingUseCase",
+                     "RecordingLifecycleController",
+                     "DesktopRecordingRuntime",
+                     "RecordingRuntimeResourceLifetime",
+                     "LegalBundleMirroringDesktopRecordingStartRequestSource",
+                     "AuthenticatedLegalBundleOutputMirror",
+                     "FfprobeRecordingFileValidator",
+                 })
+        {
+            Assert.Contains(productionType, factory);
+        }
+
+        Assert.Contains("faultStops.Bind(sessions)", factory);
+        Assert.DoesNotContain(
+            "RECORDING_SERVICE_COMPOSITION_UNAVAILABLE",
+            factory);
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
