@@ -37,6 +37,12 @@ public static class LegalArtifactSetGenerator
                 Encoding.UTF8.GetBytes(legalFile.Utf8Content));
         }
 
+        AddArtifact(
+            artifacts,
+            "LEGAL-MANIFEST.sha256",
+            Encoding.UTF8.GetBytes(
+                LegalManifestGenerator.Generate(artifacts.Values)));
+
         return new GeneratedLegalArtifactSet(artifacts.Values
             .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
             .ToArray());
