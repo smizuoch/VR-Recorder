@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Presentation;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
 
@@ -12,19 +13,26 @@ namespace VRRecorder.App;
 public partial class MainWindow : Window
 {
     private readonly RecordingInputDispatcher _recordingInputs;
+    private readonly DesktopRecordingUiController _recordingUi = new();
+    private readonly IDisposable _recordingStatusSubscription;
     private bool _startupApplied;
     private LegalWindow? _legalWindow;
 
     public MainWindow()
-        : this(App.RecordingInputs)
+        : this(App.RecordingInputs, App.RecordingStatuses)
     {
     }
 
-    internal MainWindow(RecordingInputDispatcher recordingInputs)
+    internal MainWindow(
+        RecordingInputDispatcher recordingInputs,
+        IRecorderStatusSource recordingStatuses)
     {
         ArgumentNullException.ThrowIfNull(recordingInputs);
+        ArgumentNullException.ThrowIfNull(recordingStatuses);
         _recordingInputs = recordingInputs;
         InitializeComponent();
+        _recordingStatusSubscription = recordingStatuses.Subscribe(
+            OnRecordingStatusChanged);
     }
 
     internal void ApplyStartupResult(
@@ -92,6 +100,52 @@ public partial class MainWindow : Window
             startup,
             CancellationToken.None);
         ApplyStartupResult(startup, activation);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _recordingStatusSubscription.Dispose();
+        base.OnClosed(e);
+    }
+
+    private void OnRecordingStatusChanged(RecorderStatusSnapshot status)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            ApplyRecordingStatus(status);
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(() => ApplyRecordingStatus(status));
+    }
+
+    private void ApplyRecordingStatus(RecorderStatusSnapshot status)
+    {
+        var update = _recordingUi.Apply(status);
+        if (update is null)
+        {
+            return;
+        }
+
+        RecordingStatusText.SetResourceReference(
+            TextBlock.TextProperty,
+            update.StatusTextResourceKey);
+        RecordingStatusText.SetResourceReference(
+            AutomationProperties.NameProperty,
+            update.StatusAccessibleDescriptionResourceKey);
+        RecordingToggleButton.SetResourceReference(
+            ContentControl.ContentProperty,
+            update.ActionLabelResourceKey);
+        RecordingToggleButton.SetResourceReference(
+            AutomationProperties.NameProperty,
+            update.ActionAccessibleNameResourceKey);
+        RecordingToggleButton.SetResourceReference(
+            AutomationProperties.HelpTextProperty,
+            update.ActionHelpResourceKey);
+        RecordingToggleButton.SetResourceReference(
+            FrameworkElement.ToolTipProperty,
+            update.ActionHelpResourceKey);
+        RecordingToggleButton.IsEnabled = update.IsActionEnabled;
     }
 
     private async void OnRecordingToggleClick(

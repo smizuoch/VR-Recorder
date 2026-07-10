@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
@@ -45,6 +46,9 @@ public partial class App : System.Windows.Application, IDisposable
 
     internal static DesktopLegalController LegalController =>
         ((App)Current)._legalController;
+
+    internal static IRecorderStatusSource RecordingStatuses =>
+        ((App)Current)._recordingHost;
 
     internal static Task<DesktopRecordingHostActivation>
         ActivateRecordingHostAsync(
