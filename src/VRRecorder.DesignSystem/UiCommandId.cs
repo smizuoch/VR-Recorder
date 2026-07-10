@@ -2,8 +2,7 @@ namespace VRRecorder.DesignSystem;
 
 public enum UiCommandId
 {
-    StartRecording,
-    StopRecording,
+    ToggleRecording,
     Cancel,
     Retry,
 }

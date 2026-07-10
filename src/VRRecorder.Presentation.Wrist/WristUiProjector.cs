@@ -56,7 +56,7 @@ public sealed class WristUiProjector
         var accessibleName = _localizer.Resolve("recording.start.accessible");
         return new UiActionSnapshot(
             SemanticId: "recording.start",
-            Command: UiCommandId.StartRecording,
+            Command: UiCommandId.ToggleRecording,
             IconSemanticId: "recording.start",
             ComponentRole: UiComponentRole.LargeFilledIconButton,
             ColorRole: UiColorRole.Recording,
@@ -72,7 +72,7 @@ public sealed class WristUiProjector
         var accessibleName = _localizer.Resolve("recording.stop.accessible");
         return new UiActionSnapshot(
             SemanticId: "recording.stop",
-            Command: UiCommandId.StopRecording,
+            Command: UiCommandId.ToggleRecording,
             IconSemanticId: "recording.stop",
             ComponentRole: UiComponentRole.LargeFilledIconButton,
             ColorRole: UiColorRole.Recording,
