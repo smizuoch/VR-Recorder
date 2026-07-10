@@ -12,6 +12,7 @@ public sealed class StartRecordingUseCase
     private readonly IWallClock _wallClock;
     private readonly IStorageSpaceProbe _storageSpaceProbe;
     private readonly IRecordingEngine _recordingEngine;
+    private readonly IRecordingStorageMonitor _storageMonitor;
     private readonly AutoStopScheduler _autoStopScheduler;
 
     public StartRecordingUseCase(
@@ -21,6 +22,7 @@ public sealed class StartRecordingUseCase
         IWallClock wallClock,
         IStorageSpaceProbe storageSpaceProbe,
         IRecordingEngine recordingEngine,
+        IRecordingStorageMonitor storageMonitor,
         AutoStopScheduler autoStopScheduler)
     {
         ArgumentNullException.ThrowIfNull(videoSignalGateway);
@@ -29,6 +31,7 @@ public sealed class StartRecordingUseCase
         ArgumentNullException.ThrowIfNull(wallClock);
         ArgumentNullException.ThrowIfNull(storageSpaceProbe);
         ArgumentNullException.ThrowIfNull(recordingEngine);
+        ArgumentNullException.ThrowIfNull(storageMonitor);
         ArgumentNullException.ThrowIfNull(autoStopScheduler);
 
         _videoSignalGateway = videoSignalGateway;
@@ -37,6 +40,7 @@ public sealed class StartRecordingUseCase
         _wallClock = wallClock;
         _storageSpaceProbe = storageSpaceProbe;
         _recordingEngine = recordingEngine;
+        _storageMonitor = storageMonitor;
         _autoStopScheduler = autoStopScheduler;
     }
 
@@ -98,7 +102,14 @@ public sealed class StartRecordingUseCase
             handle,
             command.AutoStop,
             cancellationToken);
+        var storageMonitoringCompletion = _storageMonitor.RunAsync(
+            handle,
+            command.OutputPath,
+            cancellationToken);
 
-        return new StartRecordingResult.Started(handle, autoStopCompletion);
+        return new StartRecordingResult.Started(
+            handle,
+            autoStopCompletion,
+            storageMonitoringCompletion);
     }
 }

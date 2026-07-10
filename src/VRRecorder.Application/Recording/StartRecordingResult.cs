@@ -10,7 +10,8 @@ public abstract record StartRecordingResult
 
     public sealed record Started(
         RecordingHandle Handle,
-        Task AutoStopCompletion) : StartRecordingResult;
+        Task AutoStopCompletion,
+        Task StorageMonitoringCompletion) : StartRecordingResult;
 
     public sealed record NoSignal : StartRecordingResult;
 

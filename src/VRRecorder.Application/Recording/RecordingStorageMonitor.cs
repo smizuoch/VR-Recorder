@@ -3,10 +3,8 @@ using VRRecorder.Domain.Storage;
 
 namespace VRRecorder.Application.Recording;
 
-public sealed class RecordingStorageMonitor
+public sealed class RecordingStorageMonitor : IRecordingStorageMonitor
 {
-    private readonly RecordingHandle _handle;
-    private readonly OutputPath _outputPath;
     private readonly long _estimatedBytesPerSecond;
     private readonly IMonotonicClock _clock;
     private readonly IStorageSpaceProbe _storageSpaceProbe;
@@ -14,16 +12,12 @@ public sealed class RecordingStorageMonitor
     private readonly IStopRequestSink _stopRequests;
 
     public RecordingStorageMonitor(
-        RecordingHandle handle,
-        OutputPath outputPath,
         long estimatedBytesPerSecond,
         IMonotonicClock clock,
         IStorageSpaceProbe storageSpaceProbe,
         IRecordingStorageStatusSink statusSink,
         IStopRequestSink stopRequests)
     {
-        ArgumentNullException.ThrowIfNull(handle);
-        ArgumentNullException.ThrowIfNull(outputPath);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(
             estimatedBytesPerSecond);
         ArgumentNullException.ThrowIfNull(clock);
@@ -31,8 +25,6 @@ public sealed class RecordingStorageMonitor
         ArgumentNullException.ThrowIfNull(statusSink);
         ArgumentNullException.ThrowIfNull(stopRequests);
 
-        _handle = handle;
-        _outputPath = outputPath;
         _estimatedBytesPerSecond = estimatedBytesPerSecond;
         _clock = clock;
         _storageSpaceProbe = storageSpaceProbe;
@@ -40,9 +32,15 @@ public sealed class RecordingStorageMonitor
         _stopRequests = stopRequests;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    public async Task RunAsync(
+        RecordingHandle handle,
+        OutputPath outputPath,
+        CancellationToken cancellationToken)
     {
-        var deadline = _handle.FirstPacketCommittedAt;
+        ArgumentNullException.ThrowIfNull(handle);
+        ArgumentNullException.ThrowIfNull(outputPath);
+
+        var deadline = handle.FirstPacketCommittedAt;
         while (true)
         {
             deadline = deadline.Add(StorageCapacityPolicy.MonitorInterval);
@@ -50,7 +48,7 @@ public sealed class RecordingStorageMonitor
                 .DelayUntilAsync(deadline, cancellationToken)
                 .ConfigureAwait(false);
             var availableSpace = await _storageSpaceProbe
-                .MeasureAsync(_outputPath, cancellationToken)
+                .MeasureAsync(outputPath, cancellationToken)
                 .ConfigureAwait(false);
             var state = StorageCapacityPolicy.Classify(availableSpace);
             var snapshot = new RecordingStorageSnapshot(
@@ -71,7 +69,7 @@ public sealed class RecordingStorageMonitor
             await _stopRequests
                 .RequestStopAsync(
                     new RecordingStopRequest(
-                        _handle,
+                        handle,
                         RecordingStopReason.DiskLow),
                     cancellationToken)
                 .ConfigureAwait(false);
