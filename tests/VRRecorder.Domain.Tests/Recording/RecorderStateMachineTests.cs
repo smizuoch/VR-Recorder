@@ -93,4 +93,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Recording, next);
     }
+
+    [Fact]
+    public void GraceExpiredWhenSignalLostTransitionsToStopping()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.SignalLost,
+            RecorderTrigger.GraceExpired);
+
+        Assert.Equal(RecorderState.Stopping, next);
+    }
 }
