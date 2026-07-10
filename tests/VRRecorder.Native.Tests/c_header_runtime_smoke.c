@@ -82,6 +82,36 @@ int main(void)
               &callbacks,
               &session) == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(session == NULL);
+    vrrec_video_layout_v1 layout = {
+        sizeof(vrrec_video_layout_v1),
+        VRREC_ABI_V1,
+        1920,
+        1080,
+        1920,
+        1080,
+        0,
+        0,
+        1920,
+        1080,
+        VRREC_CANVAS_BACKGROUND_BLACK,
+        VRREC_VIDEO_ROTATION_NONE,
+    };
+    CHECK(vrrec_session_update_video_layout_v1(NULL, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_session_statistics_v1 statistics = {
+        sizeof(vrrec_session_statistics_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    };
+    CHECK(vrrec_session_get_statistics_v1(NULL, &statistics) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
 
     vrrec_steamvr_input_config_v1 input_config = {
         sizeof(vrrec_steamvr_input_config_v1),

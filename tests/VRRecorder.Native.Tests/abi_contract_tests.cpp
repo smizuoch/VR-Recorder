@@ -9,6 +9,8 @@
 
 static_assert(VRREC_ABI_V1 == 1);
 static_assert(sizeof(vrrec_session_config_v1) == 160);
+static_assert(sizeof(vrrec_video_layout_v1) == 48);
+static_assert(sizeof(vrrec_session_statistics_v1) == 72);
 static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
@@ -86,6 +88,40 @@ vrrec_callbacks_v1 ValidCallbacks(EventLog &log)
         VRREC_ABI_V1,
         CaptureEvent,
         &log,
+    };
+}
+
+vrrec_video_layout_v1 ValidRuntimeLayout()
+{
+    return vrrec_video_layout_v1 {
+        sizeof(vrrec_video_layout_v1),
+        VRREC_ABI_V1,
+        1080,
+        1920,
+        1920,
+        1080,
+        656,
+        0,
+        608,
+        1080,
+        VRREC_CANVAS_BACKGROUND_BLACK,
+        VRREC_VIDEO_ROTATION_NONE,
+    };
+}
+
+vrrec_session_statistics_v1 ValidStatisticsOutput()
+{
+    return vrrec_session_statistics_v1 {
+        sizeof(vrrec_session_statistics_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     };
 }
 
@@ -382,6 +418,154 @@ bool EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones()
     return true;
 }
 
+bool UpdatesStableLayoutWithoutChangingTheOutputCanvas()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+
+    auto layout = ValidRuntimeLayout();
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrecorder::native::testing::VideoLayoutUpdateCount() == 1);
+    const auto observed = vrrecorder::native::testing::VideoLayout();
+    CHECK(observed.source_width == 1080);
+    CHECK(observed.source_height == 1920);
+    CHECK(observed.canvas_width == 1920);
+    CHECK(observed.canvas_height == 1080);
+    CHECK(observed.destination_x == 656);
+    CHECK(observed.destination_y == 0);
+    CHECK(observed.destination_width == 608);
+    CHECK(observed.destination_height == 1080);
+    CHECK(observed.canvas_background == VRREC_CANVAS_BACKGROUND_BLACK);
+    CHECK(observed.rotation == VRREC_VIDEO_ROTATION_NONE);
+
+    layout.canvas_width = 1922;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrecorder::native::testing::VideoLayoutUpdateCount() == 1);
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    layout.canvas_width = 1920;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_STATE);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool RejectsInvalidRuntimeLayoutAbiInputs()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    auto layout = ValidRuntimeLayout();
+
+    CHECK(vrrec_session_update_video_layout_v1(nullptr, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_session_update_video_layout_v1(session, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout.struct_size = sizeof(layout) - 1;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    layout = ValidRuntimeLayout();
+    layout.source_width = 0;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.canvas_height = 1079;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_width = 607;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_x = 1313;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.canvas_background = UINT32_MAX;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.rotation = UINT32_MAX;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrecorder::native::testing::VideoLayoutUpdateCount() == 0);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool QueriesVersionedSessionStatistics()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::SetStatistics(
+        vrrec_session_statistics_v1 {
+            sizeof(vrrec_session_statistics_v1),
+            VRREC_ABI_V1,
+            120,
+            90,
+            142,
+            30,
+            4,
+            2400,
+            8000,
+            -15000,
+        });
+    auto statistics = ValidStatisticsOutput();
+
+    CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
+          VRREC_STATUS_OK);
+    CHECK(statistics.struct_size == sizeof(vrrec_session_statistics_v1));
+    CHECK(statistics.abi_version == VRREC_ABI_V1);
+    CHECK(statistics.source_video_frame_count == 120);
+    CHECK(statistics.muxed_video_packet_count == 90);
+    CHECK(statistics.muxed_audio_packet_count == 142);
+    CHECK(statistics.dropped_source_video_frame_count == 30);
+    CHECK(statistics.duplicated_output_video_frame_count == 4);
+    CHECK(statistics.latest_encode_latency_microseconds == 2400);
+    CHECK(statistics.maximum_encode_latency_microseconds == 8000);
+    CHECK(statistics.audio_video_offset_microseconds == -15000);
+
+    CHECK(vrrec_session_get_statistics_v1(nullptr, &statistics) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_session_get_statistics_v1(session, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    statistics = ValidStatisticsOutput();
+    statistics.struct_size = sizeof(statistics) - 1;
+    CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    statistics = ValidStatisticsOutput();
+    statistics.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    CHECK(vrrec_session_abort_v1(session) == VRREC_STATUS_OK);
+    statistics = ValidStatisticsOutput();
+    CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
+          VRREC_STATUS_INVALID_STATE);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool FaultIsTerminalAndAbortQuiescesCallbacks()
 {
     EventLog fault_log;
@@ -504,6 +688,9 @@ int main()
         !FullSessionConfigCrossesTheBackendBoundaryExactly() ||
         !LegacySessionConfigsReceiveDeterministicMediaDefaults() ||
         !RejectsTruncatedOrInvalidExtendedSessionConfig() ||
+        !UpdatesStableLayoutWithoutChangingTheOutputCanvas() ||
+        !RejectsInvalidRuntimeLayoutAbiInputs() ||
+        !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||

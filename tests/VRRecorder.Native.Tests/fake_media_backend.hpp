@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#include "vrrecorder_native.h"
+
 namespace vrrecorder::native::testing {
 
 struct ObservedMediaSessionConfig {
@@ -37,6 +39,9 @@ void CompleteTrailerFlushClose(
 void Fail(std::int32_t status, std::string_view message);
 std::uint32_t EncoderKind();
 const ObservedMediaSessionConfig &SessionConfig();
+const vrrec_video_layout_v1 &VideoLayout();
+std::uint32_t VideoLayoutUpdateCount();
+void SetStatistics(const vrrec_session_statistics_v1 &statistics);
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed);
 std::string_view SteamVrManifestPath();
 std::string_view SteamVrActionSetPath();
