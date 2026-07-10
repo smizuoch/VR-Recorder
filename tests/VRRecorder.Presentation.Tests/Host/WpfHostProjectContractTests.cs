@@ -4,6 +4,11 @@ namespace VRRecorder.Presentation.Tests.Host;
 
 public sealed class WpfHostProjectContractTests
 {
+    private static readonly XNamespace Presentation =
+        "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+    private static readonly XNamespace Xaml =
+        "http://schemas.microsoft.com/winfx/2006/xaml";
+
     [Fact]
     public void WindowsHostHasRequiredBuildContract()
     {
@@ -64,6 +69,157 @@ public sealed class WpfHostProjectContractTests
         Assert.Equal(
             "PreserveNewest",
             openVrPayload.Attribute("CopyToPublishDirectory")?.Value);
+    }
+
+    [Fact]
+    public void DesktopShellUsesLocalizedAccessibleSharedRecordingContract()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var app = LoadRequiredXaml(appDirectory, "App.xaml");
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var codeBehindPath = Path.Combine(appDirectory, "MainWindow.xaml.cs");
+        Assert.True(
+            File.Exists(codeBehindPath),
+            $"The desktop shell code-behind is missing: {codeBehindPath}");
+
+        Assert.Equal("MainWindow.xaml", app.Root?.Attribute("StartupUri")?.Value);
+        var mergedResources = app
+            .Descendants(Presentation + "ResourceDictionary")
+            .Select(dictionary => dictionary.Attribute("Source")?.Value)
+            .Where(source => source is not null)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Contains("Resources/DesignTokens.xaml", mergedResources);
+        Assert.Contains("Resources/Strings.en-US.xaml", mergedResources);
+
+        Assert.Equal(
+            "VRRecorder.App.MainWindow",
+            window.Root?.Attribute(Xaml + "Class")?.Value);
+        var recordingButton = Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "RecordingToggleButton");
+        Assert.Equal(
+            "{DynamicResource Recording_Start_Short}",
+            recordingButton.Attribute("Content")?.Value);
+        Assert.Equal(
+            "{DynamicResource Recording_Start_AccessibleName}",
+            recordingButton.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Recording_Start_Tooltip}",
+            recordingButton.Attribute("ToolTip")?.Value);
+        Assert.Equal(
+            "{StaticResource Interaction.MinimumTarget}",
+            recordingButton.Attribute("MinHeight")?.Value);
+        Assert.Equal(
+            "{StaticResource Interaction.MinimumTarget}",
+            recordingButton.Attribute("MinWidth")?.Value);
+        Assert.Equal(
+            "OnRecordingToggleClick",
+            recordingButton.Attribute("Click")?.Value);
+
+        var status = Assert.Single(
+            window.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "RecordingStatusText");
+        Assert.Equal(
+            "{DynamicResource Recording_State_Ready}",
+            status.Attribute("Text")?.Value);
+        Assert.Equal(
+            "{DynamicResource Status_Ready_AccessibleDescription}",
+            status.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "Polite",
+            status.Attribute("AutomationProperties.LiveSetting")?.Value);
+        Assert.Equal(
+            "{StaticResource Spacing.LayoutGrid}",
+            window.Descendants(Presentation + "Grid")
+                .First()
+                .Attribute("Margin")?.Value);
+        Assert.Empty(window.Descendants(Presentation + "Image"));
+        Assert.Empty(window.Descendants(Presentation + "Path"));
+
+        var english = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.en-US.xaml");
+        var japanese = ReadStringResources(
+            appDirectory,
+            "Resources/Strings.ja-JP.xaml");
+        Assert.Equal(english.Keys, japanese.Keys);
+        AssertResources(
+            english,
+            ready: "Ready to record",
+            startAccessibleName: "Start recording",
+            stopAccessibleName: "Stop recording",
+            readyDescription: "The connection and video signal are ready");
+        AssertResources(
+            japanese,
+            ready: "録画準備完了",
+            startAccessibleName: "録画を開始",
+            stopAccessibleName: "録画を停止",
+            readyDescription: "接続と映像信号は正常です");
+
+        var codeBehind = File.ReadAllText(codeBehindPath);
+        Assert.Contains("RecordingInputDispatcher", codeBehind);
+        Assert.Contains("_recordingInputs.DispatchAsync(", codeBehind);
+        Assert.Contains("UiActivationKind.DesktopClick", codeBehind);
+        Assert.Contains("UiActivationKind.DesktopKeyboard", codeBehind);
+        Assert.DoesNotContain("UiCommandId.ToggleRecording", codeBehind);
+
+        var appCode = File.ReadAllText(Path.Combine(appDirectory, "App.xaml.cs"));
+        Assert.Contains("Strings.en-US.xaml", appCode);
+        Assert.Contains("Strings.ja-JP.xaml", appCode);
+    }
+
+    private static XDocument LoadRequiredXaml(
+        string appDirectory,
+        string relativePath)
+    {
+        var path = Path.Combine(appDirectory, relativePath);
+        Assert.True(File.Exists(path), $"Required WPF XAML is missing: {path}");
+        return XDocument.Load(path);
+    }
+
+    private static SortedDictionary<string, string> ReadStringResources(
+        string appDirectory,
+        string relativePath)
+    {
+        var document = LoadRequiredXaml(appDirectory, relativePath);
+        var resources = new SortedDictionary<string, string>(
+            StringComparer.Ordinal);
+        foreach (var element in document.Root!.Elements())
+        {
+            var key = element.Attribute(Xaml + "Key")?.Value ??
+                      throw new InvalidDataException(
+                          $"A resource in {relativePath} has no x:Key.");
+            resources.Add(key, element.Value);
+        }
+
+        return resources;
+    }
+
+    private static void AssertResources(
+        SortedDictionary<string, string> resources,
+        string ready,
+        string startAccessibleName,
+        string stopAccessibleName,
+        string readyDescription)
+    {
+        Assert.Equal("VR-Recorder", resources["App_Title"]);
+        Assert.Equal("REC", resources["Recording_Start_Short"]);
+        Assert.Equal("STOP", resources["Recording_Stop_Short"]);
+        Assert.Equal(ready, resources["Recording_State_Ready"]);
+        Assert.Equal(
+            startAccessibleName,
+            resources["Recording_Start_AccessibleName"]);
+        Assert.Equal(
+            stopAccessibleName,
+            resources["Recording_Stop_AccessibleName"]);
+        Assert.Equal(
+            readyDescription,
+            resources["Status_Ready_AccessibleDescription"]);
     }
 
     private static void AssertProperty(
