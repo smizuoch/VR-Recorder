@@ -239,7 +239,7 @@ public sealed class OscQueryVrChatInstanceDiscovery
                 "OSCQuery response exceeds the 64 KiB limit.");
         }
 
-        return JsonDocument.Parse(
+        var document = JsonDocument.Parse(
             buffer.AsMemory(0, length),
             new JsonDocumentOptions
             {
@@ -247,6 +247,39 @@ public sealed class OscQueryVrChatInstanceDiscovery
                 CommentHandling = JsonCommentHandling.Disallow,
                 MaxDepth = MaximumJsonDepth,
             });
+        if (HasDuplicateProperties(document.RootElement))
+        {
+            document.Dispose();
+            throw new InvalidDataException(
+                "OSCQuery JSON contains duplicate properties.");
+        }
+
+        return document;
+    }
+
+    private static bool HasDuplicateProperties(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            return element.EnumerateArray().Any(HasDuplicateProperties);
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!names.Add(property.Name) ||
+                HasDuplicateProperties(property.Value))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryReadString(
