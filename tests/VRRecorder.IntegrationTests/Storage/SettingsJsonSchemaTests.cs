@@ -24,6 +24,9 @@ public sealed class SettingsJsonSchemaTests
         Assert.True(
             File.Exists(schemaPath),
             $"The packaged settings schema was not found at {schemaPath}.");
+        Assert.Contains(
+            "VRRecorder.Settings.v1.schema.json",
+            typeof(JsonFileSettingsStore).Assembly.GetManifestResourceNames());
         using var schema = JsonDocument.Parse(
             await File.ReadAllBytesAsync(schemaPath));
         using var settings = JsonDocument.Parse(
@@ -234,18 +237,18 @@ public sealed class SettingsJsonSchemaTests
         private static bool MatchesType(
             string? type,
             JsonElement instance) => type switch
-        {
-            "object" => instance.ValueKind == JsonValueKind.Object,
-            "array" => instance.ValueKind == JsonValueKind.Array,
-            "string" => instance.ValueKind == JsonValueKind.String,
-            "integer" => instance.ValueKind == JsonValueKind.Number &&
-                         instance.TryGetInt64(out _),
-            "number" => instance.ValueKind == JsonValueKind.Number,
-            "boolean" => instance.ValueKind is JsonValueKind.True or
-                JsonValueKind.False,
-            "null" => instance.ValueKind == JsonValueKind.Null,
-            _ => false,
-        };
+            {
+                "object" => instance.ValueKind == JsonValueKind.Object,
+                "array" => instance.ValueKind == JsonValueKind.Array,
+                "string" => instance.ValueKind == JsonValueKind.String,
+                "integer" => instance.ValueKind == JsonValueKind.Number &&
+                             instance.TryGetInt64(out _),
+                "number" => instance.ValueKind == JsonValueKind.Number,
+                "boolean" => instance.ValueKind is JsonValueKind.True or
+                    JsonValueKind.False,
+                "null" => instance.ValueKind == JsonValueKind.Null,
+                _ => false,
+            };
     }
 
     private sealed class TemporaryDirectory : IDisposable

@@ -7,7 +7,8 @@
 - [x] frame rate、timer、enum、gain、transform、loopback OSC endpointをload時に検証する
 - [x] 破損documentをbackupへ退避して既定値で起動する
 - [ ] 旧schemaを起動時にmigrationする
-- [ ] JSON Schemaを同梱し保存documentを検証する
+- [x] schema v1のJSON Schemaをembedded resourceとoffline fileで同梱する
+- [ ] 承認済みのJSON Schema準拠validatorで保存documentを検証する
 - [x] `%LocalAppData%\VR-Recorder\settings.json`をWindows Known Folder経由で解決する
 
 ## English
@@ -17,5 +18,6 @@
 - [x] Validate frame rate, timers, enums, gains, transforms, and loopback OSC endpoints on load
 - [x] Move a corrupt document to backup and start with defaults
 - [ ] Migrate older schemas at startup
-- [ ] Ship a JSON Schema and validate saved documents
+- [x] Ship the schema-v1 JSON Schema as an embedded resource and offline file
+- [ ] Validate saved documents with an approved conforming JSON Schema validator
 - [x] Resolve `%LocalAppData%\VR-Recorder\settings.json` through the Windows Known Folder API

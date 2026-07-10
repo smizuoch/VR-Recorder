@@ -8,4 +8,13 @@
   <ItemGroup>
     <ProjectReference Include="../VRRecorder.Application/VRRecorder.Application.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Schemas/vr-recorder-settings-v1.schema.json" />
+    <Content Include="Schemas/vr-recorder-settings-v1.schema.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Schemas/vr-recorder-settings-v1.schema.json"
+                      LogicalName="VRRecorder.Settings.v1.schema.json" />
+  </ItemGroup>
 </Project>
