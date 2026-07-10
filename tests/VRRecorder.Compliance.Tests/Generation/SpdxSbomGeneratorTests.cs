@@ -7,6 +7,58 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class SpdxSbomGeneratorTests
 {
     [Fact]
+    public void PackageSpdxIdentifiersAreCollisionFreeAndOrderIndependent()
+    {
+        NuGetPackage[] dependencies =
+        [
+            new("A-B", "1.0.0", NuGetDependencyKind.Direct),
+            new("A_B", "1.0.0", NuGetDependencyKind.Transitive),
+        ];
+        NoticeComponent[] components =
+        [
+            Component(
+                "hyphen-package",
+                "Hyphen Package",
+                [new NoticePackage("A-B", "1.0.0")]),
+            Component(
+                "underscore-package",
+                "Underscore Package",
+                [new NoticePackage("A_B", "1.0.0")]),
+        ];
+        var context = new SpdxGenerationContext(
+            ProductName: "VR-Recorder",
+            ProductVersion: "0.1.0",
+            DocumentNamespace: "https://example.invalid/spdx/order-test",
+            CreatedAtUtc: new DateTimeOffset(
+                2026,
+                7,
+                10,
+                0,
+                0,
+                0,
+                TimeSpan.Zero),
+            Creator: "Organization: VR-Recorder Project");
+
+        var forward = SpdxSbomGenerator.Generate(
+            context,
+            dependencies,
+            components);
+        var reverse = SpdxSbomGenerator.Generate(
+            context,
+            dependencies.Reverse(),
+            components.Reverse());
+
+        Assert.Equal(forward, reverse);
+        using var document = JsonDocument.Parse(forward);
+        var spdxIds = document.RootElement
+            .GetProperty("packages")
+            .EnumerateArray()
+            .Select(package => package.GetProperty("SPDXID").GetString())
+            .ToArray();
+        Assert.Equal(spdxIds.Length, spdxIds.Distinct().Count());
+    }
+
+    [Fact]
     public void TransitiveDependencyIsAddedToNoticeAndSbom()
     {
         NuGetPackage[] dependencies =
