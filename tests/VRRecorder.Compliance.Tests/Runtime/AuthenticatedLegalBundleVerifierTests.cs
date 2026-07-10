@@ -68,6 +68,38 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
     }
 
+    [Fact]
+    public async Task RejectsPayloadFileNotListedByAuthenticatedManifest()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes(CatalogJson());
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        await File.WriteAllTextAsync(
+            Path.Combine(directory.Path, "UNREGISTERED.txt"),
+            "not in the manifest");
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new StubAuthenticatedAnchorSource(
+                new AuthenticatedLegalBundleAnchor(
+                    BundleId,
+                    Hash(manifest))));
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-payload-unexpected", issue.Code);
+        Assert.Equal("UNREGISTERED.txt", issue.Subject);
+    }
+
     private static string CatalogJson() => $$"""
         {
           "schemaVersion": 2,
