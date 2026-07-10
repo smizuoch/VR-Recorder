@@ -212,5 +212,10 @@ std::uint32_t SteamVrPollCount()
     return FakeSteamVrInputBackend::Active()->PollCount();
 }
 
+bool HasActiveSteamVrInput()
+{
+    return FakeSteamVrInputBackend::Active() != nullptr;
+}
+
 }
 }

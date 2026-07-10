@@ -16,6 +16,7 @@ std::string_view SteamVrManifestPath();
 std::string_view SteamVrActionSetPath();
 std::string_view SteamVrDigitalActionPath();
 std::uint32_t SteamVrPollCount();
+bool HasActiveSteamVrInput();
 
 }
 

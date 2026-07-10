@@ -30,3 +30,39 @@ extern "C" VRREC_TEST_API void vrrec_test_fail(
         status,
         message_utf8 == nullptr ? "" : message_utf8);
 }
+
+extern "C" VRREC_TEST_API void vrrec_test_set_steamvr_digital_state(
+    std::uint8_t is_active,
+    std::uint8_t state,
+    std::uint8_t changed)
+{
+    vrrecorder::native::testing::SetSteamVrDigitalState(
+        is_active != 0,
+        state != 0,
+        changed != 0);
+}
+
+extern "C" VRREC_TEST_API std::uint8_t vrrec_test_steamvr_input_active(void)
+{
+    return vrrecorder::native::testing::HasActiveSteamVrInput() ? 1 : 0;
+}
+
+extern "C" VRREC_TEST_API const char *vrrec_test_steamvr_manifest_path(void)
+{
+    return vrrecorder::native::testing::SteamVrManifestPath().data();
+}
+
+extern "C" VRREC_TEST_API const char *vrrec_test_steamvr_action_set_path(void)
+{
+    return vrrecorder::native::testing::SteamVrActionSetPath().data();
+}
+
+extern "C" VRREC_TEST_API const char *vrrec_test_steamvr_action_path(void)
+{
+    return vrrecorder::native::testing::SteamVrDigitalActionPath().data();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t vrrec_test_steamvr_poll_count(void)
+{
+    return vrrecorder::native::testing::SteamVrPollCount();
+}
