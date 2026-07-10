@@ -187,6 +187,12 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(1u, observed.CanvasBackground);
         Assert.Equal(1u, observed.Rotation);
         await session.AbortAsync(CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            session.UpdateVideoLayoutAsync(
+                landscape,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            session.GetStatisticsAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -230,6 +236,10 @@ public sealed class PInvokeNativeRecordingBackendTests
 
         Assert.Equal(expected, active);
         Assert.Equal(expected, terminal);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            session.UpdateVideoLayoutAsync(
+                plan.VideoLayout.CurrentLayout,
+                CancellationToken.None));
     }
 
     [Fact]
@@ -267,6 +277,49 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(90, stopped.VideoPacketCount);
         Assert.Equal(142, stopped.AudioPacketCount);
         Assert.Equal(6, exception.Fault.Status);
+    }
+
+    [Fact]
+    public async Task InvalidNativeStatisticRangeIsReportedWithoutBreakingStop()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            new PendingRecording(
+                Path.Combine(directory.Path, "take.recording.mp4"),
+                Path.Combine(directory.Path, "take.mp4")),
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        controls.SetRawStatistics(
+            latestEncodeLatencyMicroseconds: ulong.MaxValue,
+            maximumEncodeLatencyMicroseconds: ulong.MaxValue,
+            audioVideoOffsetMicroseconds: long.MaxValue);
+
+        var activeFailure = await Record.ExceptionAsync(
+            () => session.GetStatisticsAsync(CancellationToken.None));
+        var stopping = session.StopAsync(CancellationToken.None);
+        controls.CompleteTrailerFlushClose(90, 142);
+        var stopped = await stopping;
+        var terminalException = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => session.GetStatisticsAsync(CancellationToken.None));
+
+        var activeException = Assert.IsType<NativeRecordingException>(
+            activeFailure);
+        Assert.Equal(6, activeException.Fault.Status);
+        Assert.Equal(6, terminalException.Fault.Status);
+        Assert.Equal(90, stopped.VideoPacketCount);
+        Assert.Equal(142, stopped.AudioPacketCount);
     }
 
     [Theory]
@@ -616,6 +669,20 @@ public sealed class PInvokeNativeRecordingBackendTests
 
         public void SetStatisticsStatus(int status) =>
             _setStatisticsStatus(status);
+
+        public void SetRawStatistics(
+            ulong latestEncodeLatencyMicroseconds,
+            ulong maximumEncodeLatencyMicroseconds,
+            long audioVideoOffsetMicroseconds) =>
+            _setStatistics(
+                sourceVideoFrameCount: 120,
+                muxedVideoPacketCount: 90,
+                muxedAudioPacketCount: 142,
+                droppedSourceVideoFrameCount: 30,
+                duplicatedOutputVideoFrameCount: 4,
+                latestEncodeLatencyMicroseconds,
+                maximumEncodeLatencyMicroseconds,
+                audioVideoOffsetMicroseconds);
 
         public void Dispose() => NativeLibrary.Free(_library);
 
