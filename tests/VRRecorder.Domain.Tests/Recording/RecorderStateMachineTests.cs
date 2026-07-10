@@ -63,6 +63,16 @@ public sealed class RecorderStateMachineTests
     }
 
     [Fact]
+    public void StartRequestedWhenNoSignalRetriesArming()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.NoSignal,
+            RecorderTrigger.StartRequested);
+
+        Assert.Equal(RecorderState.Arming, next);
+    }
+
+    [Fact]
     public void FirstPacketCommittedWhenStartingTransitionsToRecording()
     {
         var next = RecorderStateMachine.Transition(

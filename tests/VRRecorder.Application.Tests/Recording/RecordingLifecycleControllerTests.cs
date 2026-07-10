@@ -482,6 +482,57 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(0, engine.StartCallCount);
     }
 
+    [Fact]
+    public async Task NoSignalCanRetryAndStartWithoutRestartingTheProcess()
+    {
+        var candidate = Candidate("retry-selected", 9000);
+        var camera = new SnapshotCameraGateway(KnownPhotoSnapshot());
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(camera));
+        var signal = new RetryVideoSignalGateway();
+        var reservation = new FakeRecordingFileReservation();
+        reservation.Complete(new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "retry.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "retry.mp4")));
+        var engine = new FakeRecordingEngine();
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new InMemoryCameraLeaseStore(),
+            CreateStartRecording(signal, reservation, engine),
+            new FakeStopRequestSink(),
+            new FakeCameraRestoreWarningSink());
+
+        var timedOut = await lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            CancellationToken.None);
+
+        Assert.IsType<StartRecordingResult.NoSignal>(timedOut.Recording);
+        Assert.Equal(RecorderState.NoSignal, lifecycle.State);
+
+        using var retryTimeout = new CancellationTokenSource(
+            TimeSpan.FromSeconds(2));
+        var retrying = lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            retryTimeout.Token);
+        var engineRequested = engine.WaitUntilStartRequestedAsync();
+        Assert.Same(
+            engineRequested,
+            await Task.WhenAny(retrying, engineRequested));
+        engine.CommitFirstPacket(new RecordingHandle(
+            "retry-session",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+
+        var retried = await retrying;
+        Assert.IsType<StartRecordingResult.Started>(retried.Recording);
+        Assert.Equal(RecorderState.Recording, retried.State);
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
+        Assert.Equal(2, signal.CallCount);
+        Assert.Equal(1, engine.StartCallCount);
+    }
+
     private static VrChatInstanceCandidate Candidate(
         string serviceId,
         int oscPort) =>
@@ -777,6 +828,22 @@ public sealed class RecordingLifecycleControllerTests
         {
             CallCount++;
             throw new InvalidOperationException("Signal wait was not expected.");
+        }
+    }
+
+    private sealed class RetryVideoSignalGateway : IVideoSignalGateway
+    {
+        public int CallCount { get; private set; }
+
+        public Task<StableVideoSignal> WaitForStableSignalAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CallCount++;
+            return CallCount == 1
+                ? Task.FromException<StableVideoSignal>(new TimeoutException())
+                : Task.FromResult(new StableVideoSignal(320, 180));
         }
     }
 
