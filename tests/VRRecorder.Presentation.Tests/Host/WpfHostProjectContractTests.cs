@@ -355,6 +355,18 @@ public sealed class WpfHostProjectContractTests
             text!.Contains("LegalManifestSha256", StringComparison.Ordinal));
         Assert.Contains(errors, text =>
             text!.Contains("LEGAL-MANIFEST.sha256", StringComparison.Ordinal));
+        var manifestHash = Assert.Single(gate.Elements("GetFileHash"));
+        Assert.Equal(
+            "$(LegalBundleDirectory)/LEGAL-MANIFEST.sha256",
+            manifestHash.Attribute("Files")?.Value);
+        Assert.Equal("SHA256", manifestHash.Attribute("Algorithm")?.Value);
+        var hashOutput = Assert.Single(manifestHash.Elements("Output"));
+        Assert.Equal("Items", hashOutput.Attribute("TaskParameter")?.Value);
+        Assert.Equal(
+            "_LegalManifestHash",
+            hashOutput.Attribute("ItemName")?.Value);
+        Assert.Contains(errors, text =>
+            text!.Contains("digest does not match", StringComparison.Ordinal));
     }
 
     private static XDocument LoadRequiredXaml(
