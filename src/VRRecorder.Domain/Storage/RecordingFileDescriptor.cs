@@ -1,3 +1,5 @@
+using VRRecorder.Domain.Video;
+
 namespace VRRecorder.Domain.Storage;
 
 public sealed record RecordingFileDescriptor
@@ -6,13 +8,13 @@ public sealed record RecordingFileDescriptor
         RecordingSessionTimestamp Timestamp,
         int Width,
         int Height,
-        int FramesPerSecond,
+        FrameRate FrameRate,
         int SegmentNumber)
     {
         this.Timestamp = Timestamp;
         this.Width = Width;
         this.Height = Height;
-        this.FramesPerSecond = FramesPerSecond;
+        this.FrameRate = FrameRate;
         this.SegmentNumber = SegmentNumber;
     }
 
@@ -22,7 +24,7 @@ public sealed record RecordingFileDescriptor
 
     public int Height { get; }
 
-    public int FramesPerSecond { get; }
+    public FrameRate FrameRate { get; }
 
     public int SegmentNumber { get; }
 }

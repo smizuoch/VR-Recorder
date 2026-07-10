@@ -1,4 +1,5 @@
 using VRRecorder.Domain.Storage;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Domain.Tests.Storage;
 
@@ -19,7 +20,7 @@ public sealed class RecordingFileNamePolicyTests
             timestamp,
             Width: 1920,
             Height: 1080,
-            FramesPerSecond: 30,
+            FrameRate: new FrameRate(30),
             SegmentNumber: 1);
 
         var names = RecordingFileNamePolicy.Create(
@@ -58,7 +59,7 @@ public sealed class RecordingFileNamePolicyTests
                 TimeSpan.Zero)),
             Width: 1080,
             Height: 1920,
-            FramesPerSecond: 60,
+            FrameRate: new FrameRate(60),
             SegmentNumber: 2);
 
         var names = RecordingFileNamePolicy.Create(

@@ -13,7 +13,7 @@ public static class RecordingFileNamePolicy
             CultureInfo.InvariantCulture);
         var stem = string.Create(
             CultureInfo.InvariantCulture,
-            $"VR-Recorder_{timestamp}_{descriptor.Width}x{descriptor.Height}_{descriptor.FramesPerSecond}fps");
+            $"VR-Recorder_{timestamp}_{descriptor.Width}x{descriptor.Height}_{descriptor.FrameRate.Value}fps");
 
         if (descriptor.SegmentNumber > 1)
         {
