@@ -11,13 +11,6 @@ public sealed class WristLegalController
 
     public WristLegalController(
         ILegalCatalogReader reader,
-        int linesPerPage = 20)
-        : this(reader, NoOpComplianceFaultSink.Instance, linesPerPage)
-    {
-    }
-
-    public WristLegalController(
-        ILegalCatalogReader reader,
         IComplianceFaultSink complianceFaultSink,
         int linesPerPage = 20)
     {
@@ -324,15 +317,4 @@ public sealed class WristLegalController
             .OrderBy(component => component.Id, StringComparer.Ordinal)
             .ToArray();
 
-    private sealed class NoOpComplianceFaultSink : IComplianceFaultSink
-    {
-        private NoOpComplianceFaultSink()
-        {
-        }
-
-        public static NoOpComplianceFaultSink Instance { get; } = new();
-
-        public ValueTask EnterComplianceFaultAsync() =>
-            ValueTask.CompletedTask;
-    }
 }

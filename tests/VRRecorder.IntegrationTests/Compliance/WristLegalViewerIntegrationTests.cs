@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using VRRecorder.Application.Compliance;
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Compliance.Dependencies;
 using VRRecorder.Compliance.Generation;
@@ -34,8 +35,10 @@ public sealed class WristLegalViewerIntegrationTests
                 directory.Path,
                 new AuthenticatedLegalBundleVerifier(
                     new FixedAuthenticatedAnchorSource(fixture.Anchor)));
+            var sink = new CapturingComplianceFaultSink();
             var controller = new WristLegalController(
                 reader,
+                sink,
                 linesPerPage: 2);
             var projector = new WristLegalProjector(
                 EnglishUiLocalizer.Instance);
@@ -105,6 +108,7 @@ public sealed class WristLegalViewerIntegrationTests
                 rejected.StatusMessage?.Value ?? string.Empty,
                 StringComparison.Ordinal);
             AssertCanonicalStop(rejected);
+            Assert.Equal(1, sink.CallCount);
             Assert.False(networkProbe.Pending());
         }
         finally
@@ -235,6 +239,17 @@ public sealed class WristLegalViewerIntegrationTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(anchor);
+        }
+    }
+
+    private sealed class CapturingComplianceFaultSink : IComplianceFaultSink
+    {
+        public int CallCount { get; private set; }
+
+        public ValueTask EnterComplianceFaultAsync()
+        {
+            CallCount++;
+            return ValueTask.CompletedTask;
         }
     }
 

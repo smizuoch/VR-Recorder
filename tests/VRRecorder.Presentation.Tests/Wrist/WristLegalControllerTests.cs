@@ -10,7 +10,10 @@ public sealed class WristLegalControllerTests
     public async Task NavigatesAuthenticatedListDetailAndPagedLicenseText()
     {
         var reader = new StubLegalCatalogReader(Catalog());
-        var controller = new WristLegalController(reader, linesPerPage: 2);
+        var controller = new WristLegalController(
+            reader,
+            new CapturingComplianceFaultSink(),
+            linesPerPage: 2);
 
         await controller.OpenAsync(CancellationToken.None);
 
@@ -48,7 +51,11 @@ public sealed class WristLegalControllerTests
     public async Task RejectedRefreshClearsPreviouslyDisplayedLicenseText()
     {
         var reader = new StubLegalCatalogReader(Catalog());
-        var controller = new WristLegalController(reader, linesPerPage: 2);
+        var sink = new CapturingComplianceFaultSink();
+        var controller = new WristLegalController(
+            reader,
+            sink,
+            linesPerPage: 2);
         await controller.OpenAsync(CancellationToken.None);
         await controller.ShowDetailAsync("a", CancellationToken.None);
         await controller.ShowLicenseAsync(CancellationToken.None);
@@ -63,6 +70,7 @@ public sealed class WristLegalControllerTests
         Assert.Equal(0, controller.State.FirstVisibleLine);
         Assert.Contains(controller.State.Issues, issue =>
             issue.Code == "legal-bundle-payload-hash-mismatch");
+        Assert.Equal(1, sink.CallCount);
     }
 
     [Fact]
@@ -70,6 +78,7 @@ public sealed class WristLegalControllerTests
     {
         var controller = new WristLegalController(
             new StubLegalCatalogReader(Catalog()),
+            new CapturingComplianceFaultSink(),
             linesPerPage: 2);
         await controller.OpenAsync(CancellationToken.None);
         await controller.ShowDetailAsync("a", CancellationToken.None);
@@ -141,6 +150,17 @@ public sealed class WristLegalControllerTests
                     $"LICENSES/{componentId}/LICENSE.txt",
                     "line 1\nline 2\nline 3\nline 4\n"));
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class CapturingComplianceFaultSink : IComplianceFaultSink
+    {
+        public int CallCount { get; private set; }
+
+        public ValueTask EnterComplianceFaultAsync()
+        {
+            CallCount++;
+            return ValueTask.CompletedTask;
         }
     }
 }
