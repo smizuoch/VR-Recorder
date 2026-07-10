@@ -509,6 +509,37 @@ public sealed class DesktopRecordingRuntimeTests
     }
 
     [Fact]
+    public async Task StopFailureStillDisposesOwnedRuntimeResourcesAfterLifecycle()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-owned-resources"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueCompleted(Started(Handle("session-owned-resources")));
+        var stops = new ControllableStopRequestSink(lifecycle);
+        var ownedResources = new TrackingAsyncDisposable(
+            () => lifecycle.DisposeCallCount);
+        var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops,
+            ownedResources);
+        await runtime.ToggleAsync(CancellationToken.None);
+
+        var first = runtime.DisposeAsync().AsTask();
+        var second = runtime.DisposeAsync().AsTask();
+        await stops.WaitUntilRequestedAsync();
+        var failure = new IOException("native flush failed");
+        stops.Fail(failure);
+
+        Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => first));
+        Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => second));
+        Assert.Same(first, second);
+        Assert.Equal(1, lifecycle.DisposeCallCount);
+        Assert.Equal(1, ownedResources.DisposeCallCount);
+        Assert.Equal(1, ownedResources.LifecycleDisposeCountObserved);
+    }
+
+    [Fact]
     public async Task DisposeCancelsAndJoinsInflightStartWithoutStopRequest()
     {
         var requests = new ControllableStartRequestSource();
@@ -809,6 +840,21 @@ public sealed class DesktopRecordingRuntimeTests
         {
             await _completed.Task.WaitAsync(cancellationToken);
             lifecycle.SetState(RecorderState.Ready);
+        }
+    }
+
+    private sealed class TrackingAsyncDisposable(Func<int> lifecycleDisposeCount)
+        : IAsyncDisposable
+    {
+        public int DisposeCallCount { get; private set; }
+
+        public int LifecycleDisposeCountObserved { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCallCount++;
+            LifecycleDisposeCountObserved = lifecycleDisposeCount();
+            return ValueTask.CompletedTask;
         }
     }
 }
