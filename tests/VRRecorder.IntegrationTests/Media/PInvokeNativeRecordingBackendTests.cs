@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Media;
@@ -9,6 +10,43 @@ namespace VRRecorder.IntegrationTests.Media;
 
 public sealed class PInvokeNativeRecordingBackendTests
 {
+    [Fact]
+    public async Task SelectedEncoderKindCrossesManagedNativeAbi()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "take.recording.mp4"),
+            Path.Combine(directory.Path, "take.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new FrameRate(60),
+            EncoderKind.Amf);
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+
+        Assert.Equal(2u, controls.EncoderKind());
+        await session.AbortAsync(CancellationToken.None);
+    }
+
     [Fact]
     public async Task DisposeIsRejectedWhileNativeSessionIsActive()
     {
@@ -198,6 +236,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly CommitDelegate _commit;
         private readonly CompleteDelegate _complete;
         private readonly FailDelegate _fail;
+        private readonly EncoderKindDelegate _encoderKind;
 
         public NativeFixtureControls(string path)
         {
@@ -214,6 +253,10 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_fail"));
+            _encoderKind = Marshal.GetDelegateForFunctionPointer<EncoderKindDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_encoder_kind"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -224,6 +267,8 @@ public sealed class PInvokeNativeRecordingBackendTests
             _complete(videoPacketCount, audioPacketCount);
 
         public void Fail(int status, string message) => _fail(status, message);
+
+        public uint EncoderKind() => _encoderKind();
 
         public void Dispose() => NativeLibrary.Free(_library);
 
@@ -239,6 +284,9 @@ public sealed class PInvokeNativeRecordingBackendTests
         private delegate void FailDelegate(
             int status,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate uint EncoderKindDelegate();
     }
 
     private sealed class TemporaryDirectory : IDisposable

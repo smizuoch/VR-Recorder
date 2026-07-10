@@ -11,8 +11,10 @@ namespace {
 
 class FakeMediaBackend final : public MediaBackend {
 public:
-    explicit FakeMediaBackend(MediaEventSink &events) noexcept
-        : events_(events)
+    FakeMediaBackend(
+        const vrrec_session_config_v1 &config,
+        MediaEventSink &events) noexcept
+        : events_(events), encoder_kind_(config.encoder_kind)
     {
         active_ = this;
     }
@@ -61,8 +63,14 @@ public:
         return active_;
     }
 
+    std::uint32_t EncoderKind() const noexcept
+    {
+        return encoder_kind_;
+    }
+
 private:
     MediaEventSink &events_;
+    std::uint32_t encoder_kind_;
     bool aborted_ = false;
     static FakeMediaBackend *active_;
 };
@@ -150,9 +158,8 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
     MediaEventSink &events,
     vrrec_status_t &status)
 {
-    (void)config;
     status = VRREC_STATUS_OK;
-    return std::make_unique<FakeMediaBackend>(events);
+    return std::make_unique<FakeMediaBackend>(config, events);
 }
 
 std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
@@ -182,6 +189,11 @@ void CompleteTrailerFlushClose(
 void Fail(std::int32_t status, std::string_view message)
 {
     FakeMediaBackend::Active()->Fail(status, std::string(message));
+}
+
+std::uint32_t EncoderKind()
+{
+    return FakeMediaBackend::Active()->EncoderKind();
 }
 
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed)

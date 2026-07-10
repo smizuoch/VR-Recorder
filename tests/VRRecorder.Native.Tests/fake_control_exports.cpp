@@ -31,6 +31,11 @@ extern "C" VRREC_TEST_API void vrrec_test_fail(
         message_utf8 == nullptr ? "" : message_utf8);
 }
 
+extern "C" VRREC_TEST_API std::uint32_t vrrec_test_encoder_kind(void)
+{
+    return vrrecorder::native::testing::EncoderKind();
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_set_steamvr_digital_state(
     std::uint8_t is_active,
     std::uint8_t state,

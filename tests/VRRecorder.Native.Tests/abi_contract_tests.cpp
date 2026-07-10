@@ -7,7 +7,7 @@
 #include "vrrecorder_native.h"
 
 static_assert(VRREC_ABI_V1 == 1);
-static_assert(sizeof(vrrec_session_config_v1) == 40);
+static_assert(sizeof(vrrec_session_config_v1) == 48);
 static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
@@ -54,6 +54,8 @@ vrrec_session_config_v1 ValidConfig()
         30,
         1,
         1'784'000'000'000,
+        VRREC_ENCODER_AMF,
+        0,
     };
 }
 
@@ -127,6 +129,7 @@ bool EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones()
     CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
           VRREC_STATUS_OK);
     CHECK(session != nullptr);
+    CHECK(vrrecorder::native::testing::EncoderKind() == VRREC_ENCODER_AMF);
     CHECK(log.events.empty());
     CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
     CHECK(log.events.empty());
