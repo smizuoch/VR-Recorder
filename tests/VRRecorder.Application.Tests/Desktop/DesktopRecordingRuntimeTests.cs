@@ -140,7 +140,10 @@ public sealed class DesktopRecordingRuntimeTests
         lifecycle.EnqueueCompleted(Started(Handle("session-selected")));
         var selector = new StubVrChatInstanceSelectionPrompt(
             second.ServiceId);
-        var stops = new ControllableStopRequestSink(lifecycle);
+        var stops = new ControllableStopRequestSink(lifecycle)
+        {
+            CompleteImmediately = true,
+        };
         await using var runtime = new DesktopRecordingRuntime(
             requests,
             lifecycle,
