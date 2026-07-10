@@ -517,6 +517,7 @@ public sealed class WpfHostProjectContractTests
                      "FfprobeRecordingFileValidator",
                      "RotatingJsonLinesDiagnosticLog",
                      "StructuredRecordingEventSink",
+                     "RecorderStatusDiagnosticObserver",
                  })
         {
             Assert.Contains(productionType, factory);
