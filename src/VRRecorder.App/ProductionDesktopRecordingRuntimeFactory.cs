@@ -126,6 +126,10 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 sessions,
                 events,
                 new SystemCameraLeaseIdentitySource(wallClock));
+            resources.Add(new RecorderStatusDiagnosticObserver(
+                lifecycle,
+                diagnosticLog,
+                wallClock));
 
             var legalVerifier = new AuthenticatedLegalBundleVerifier(
                 new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
