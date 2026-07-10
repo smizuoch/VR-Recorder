@@ -9,6 +9,8 @@ public abstract record RecordingFinalizationResult
     public sealed record Saved(FinalizedRecording Recording)
         : RecordingFinalizationResult;
 
-    public sealed record RecoveryRequired(FinalizedRecording Recording)
+    public sealed record RecoveryRequired(
+        RecordingRecoveryReason Reason,
+        QuarantinedRecording Quarantine)
         : RecordingFinalizationResult;
 }

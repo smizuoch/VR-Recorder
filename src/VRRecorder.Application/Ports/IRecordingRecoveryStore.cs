@@ -4,7 +4,7 @@ namespace VRRecorder.Application.Ports;
 
 public interface IRecordingRecoveryStore
 {
-    Task QuarantineAsync(
-        FinalizedRecording recording,
+    Task<QuarantinedRecording> QuarantineAsync(
+        RecoverableRecording recording,
         CancellationToken cancellationToken);
 }

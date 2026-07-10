@@ -40,10 +40,14 @@ public sealed class RecordingFileFinalizationUseCase
             .ConfigureAwait(false);
         if (validation == RecordingFileValidation.Invalid)
         {
-            await _recovery
-                .QuarantineAsync(finalized, cancellationToken)
+            var quarantined = await _recovery
+                .QuarantineAsync(
+                    new RecoverableRecording(finalized.FinalPath),
+                    cancellationToken)
                 .ConfigureAwait(false);
-            return new RecordingFinalizationResult.RecoveryRequired(finalized);
+            return new RecordingFinalizationResult.RecoveryRequired(
+                RecordingRecoveryReason.ValidationFailed,
+                quarantined);
         }
 
         await _savedRecordings
