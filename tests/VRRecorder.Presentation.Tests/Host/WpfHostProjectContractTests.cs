@@ -457,7 +457,8 @@ public sealed class WpfHostProjectContractTests
         foreach (var name in new[]
                  {
                      "LegalComponentList",
-                     "ShowLicenseButton",
+                     "LegalDocumentList",
+                     "FullDocumentText",
                      "OpenLicenseFolderButton",
                      "RefreshLegalButton",
                      "CloseLegalButton",
@@ -477,12 +478,14 @@ public sealed class WpfHostProjectContractTests
             .ToHashSet(StringComparer.Ordinal);
         Assert.Contains("ProductVersionText", identityFields);
         Assert.Contains("BundleIdentityText", identityFields);
+        Assert.Contains("ManifestSha256Text", identityFields);
         Assert.Contains("ComponentDetailText", identityFields);
+        Assert.Contains("LegalDocumentHeadingText", identityFields);
         Assert.Contains("LegalUnavailableText", identityFields);
         Assert.Single(
             legalWindow.Descendants(Presentation + "TextBox"),
             element => element.Attribute(Xaml + "Name")?.Value ==
-                       "FullLicenseText");
+                       "FullDocumentText");
 
         var mainCode = File.ReadAllText(Path.Combine(
             appDirectory,
@@ -512,14 +515,118 @@ public sealed class WpfHostProjectContractTests
                      "Legal_Title",
                      "Legal_ProductVersion_Label",
                      "Legal_BundleIdentity_Label",
+                     "Legal_ManifestSha256_Label",
                      "Legal_ThirdPartyComponents",
-                     "Legal_FullLicense",
+                     "Legal_Documents_Header",
+                     "Legal_DocumentText_Heading",
                      "Legal_OpenFolder_AccessibleName",
                      "Legal_OpenFolder_Tooltip",
                      "Legal_State_ComplianceFault",
                  })
         {
             Assert.Contains(key, english.Keys);
+        }
+    }
+
+    [Fact]
+    public void DesktopLegalWindowProjectsEveryAuthenticatedV3Document()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var legalWindow = LoadRequiredXaml(appDirectory, "LegalWindow.xaml");
+
+        var manifest = Assert.Single(
+            legalWindow.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "ManifestSha256Text");
+        Assert.Null(manifest.Attribute("AutomationProperties.Name"));
+        Assert.Equal("Wrap", manifest.Attribute("TextWrapping")?.Value);
+
+        var documentList = Assert.Single(
+            legalWindow.Descendants(Presentation + "ListBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "LegalDocumentList");
+        Assert.Equal(
+            "OnDocumentSelectionChanged",
+            documentList.Attribute("SelectionChanged")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_DocumentList_AccessibleName}",
+            documentList.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_DocumentList_Tooltip}",
+            documentList.Attribute("AutomationProperties.HelpText")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_DocumentList_Tooltip}",
+            documentList.Attribute("ToolTip")?.Value);
+
+        var documentText = Assert.Single(
+            legalWindow.Descendants(Presentation + "TextBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "FullDocumentText");
+        Assert.Equal("True", documentText.Attribute("IsReadOnly")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_DocumentText_AccessibleName}",
+            documentText.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_DocumentText_Tooltip}",
+            documentText.Attribute("AutomationProperties.HelpText")?.Value);
+        Assert.Equal(
+            "{DynamicResource Legal_DocumentText_Tooltip}",
+            documentText.Attribute("ToolTip")?.Value);
+
+        var legalCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "LegalWindow.xaml.cs"));
+        Assert.Contains("_controller.ShowDocumentAsync(", legalCode);
+        Assert.Contains("selected.Reference", legalCode);
+        Assert.Contains("state.ManifestSha256", legalCode);
+        Assert.Contains("state.FullDocumentText", legalCode);
+        Assert.Contains("component.CopyrightNotice", legalCode);
+        Assert.Contains("Legal_Detail_Copyright_Format", legalCode);
+        Assert.Contains("LegalDocumentList.ItemsSource =", legalCode);
+        Assert.Contains("LegalDocumentList.SelectedItem =", legalCode);
+        Assert.Contains("FullDocumentText.Text =", legalCode);
+        Assert.Contains("AutomationProperties.SetName", legalCode);
+        Assert.Contains(
+            "available ? state.ManifestSha256 : null",
+            legalCode);
+        Assert.Contains(
+            "available ? state.FullDocumentText : null",
+            legalCode);
+
+        var requiredKeys = new[]
+        {
+            "Legal_ManifestSha256_Label",
+            "Legal_ManifestSha256_AccessibleName",
+            "Legal_ManifestSha256_Format",
+            "Legal_Detail_Copyright_Format",
+            "Legal_Documents_Header",
+            "Legal_DocumentList_AccessibleName",
+            "Legal_DocumentList_Tooltip",
+            "Legal_DocumentKind_License",
+            "Legal_DocumentKind_Notice",
+            "Legal_DocumentKind_Copyright",
+            "Legal_DocumentKind_Attribution",
+            "Legal_DocumentKind_AssetManifest",
+            "Legal_DocumentText_Heading",
+            "Legal_DocumentText_HeadingFormat",
+            "Legal_DocumentText_AccessibleName",
+            "Legal_DocumentText_AccessibleNameFormat",
+            "Legal_DocumentText_Tooltip",
+        };
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            Assert.All(requiredKeys, key =>
+                Assert.Contains(key, resources.Keys));
         }
     }
 
@@ -536,7 +643,9 @@ public sealed class WpfHostProjectContractTests
                  {
                      "ProductVersionText",
                      "BundleIdentityText",
+                     "ManifestSha256Text",
                      "ComponentDetailText",
+                     "LegalDocumentHeadingText",
                  })
         {
             var dynamicValue = Assert.Single(
@@ -558,6 +667,14 @@ public sealed class WpfHostProjectContractTests
             StringComparison.Ordinal);
         Assert.Contains(
             "ApplyAccessibleText(ComponentDetailText,",
+            legalCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ApplyAccessibleText(ManifestSha256Text,",
+            legalCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ApplyAccessibleText(LegalDocumentHeadingText,",
             legalCode,
             StringComparison.Ordinal);
         Assert.Contains(
