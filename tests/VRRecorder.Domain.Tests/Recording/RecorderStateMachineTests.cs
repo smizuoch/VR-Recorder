@@ -21,6 +21,18 @@ public sealed class RecorderStateMachineTests
     }
 
     [Fact]
+    public void CompletedComplianceRepairRestartsVerification()
+    {
+        var repairCompleted = Enum.Parse<RecorderTrigger>("RepairCompleted");
+
+        var next = RecorderStateMachine.Transition(
+            RecorderState.ComplianceFault,
+            repairCompleted);
+
+        Assert.Equal(RecorderState.Booting, next);
+    }
+
+    [Fact]
     public void StartRequestedWhenReadyTransitionsToArming()
     {
         var next = RecorderStateMachine.Transition(
