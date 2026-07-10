@@ -4,6 +4,22 @@ namespace VRRecorder.Domain.Tests.Recording;
 
 public sealed class RecorderStateMachineTests
 {
+    [Theory]
+    [InlineData("LegalVerificationSucceeded", RecorderState.Ready)]
+    [InlineData("LegalVerificationFailed", RecorderState.ComplianceFault)]
+    public void BootOutcomeIsDeterminedByLegalBundleVerification(
+        string triggerName,
+        RecorderState expected)
+    {
+        var trigger = Enum.Parse<RecorderTrigger>(triggerName);
+
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Booting,
+            trigger);
+
+        Assert.Equal(expected, next);
+    }
+
     [Fact]
     public void StartRequestedWhenReadyTransitionsToArming()
     {
