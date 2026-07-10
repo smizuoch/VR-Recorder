@@ -37,4 +37,25 @@ public sealed class VideoSignalMonitorTests
         Assert.Equal(VideoSignalStatus.Available, beforeThreshold);
         Assert.Equal(VideoSignalStatus.SignalLost, atThreshold);
     }
+
+    [Fact]
+    public void FiveSecondsWithoutRecoveryRequestsSafeStop()
+    {
+        var monitor = new VideoSignalMonitor();
+        var receivedAt = MonotonicTimestamp.FromElapsed(TimeSpan.Zero);
+        monitor.ObserveFreshFrame(new VideoFrameObservation(
+            receivedAt,
+            isBlack: false));
+        var signalLostAt = receivedAt.Add(TimeSpan.FromMilliseconds(1500));
+
+        Assert.Equal(
+            VideoSignalStatus.SignalLost,
+            monitor.Evaluate(signalLostAt));
+        Assert.Equal(
+            VideoSignalStatus.SignalLost,
+            monitor.Evaluate(signalLostAt.Add(TimeSpan.FromMilliseconds(4999))));
+        Assert.Equal(
+            VideoSignalStatus.SafeStop,
+            monitor.Evaluate(signalLostAt.Add(TimeSpan.FromSeconds(5))));
+    }
 }
