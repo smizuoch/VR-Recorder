@@ -1,3 +1,4 @@
+using VRRecorder.Application.Compliance;
 using VRRecorder.DesignSystem;
 
 namespace VRRecorder.Presentation.Wrist;
@@ -21,6 +22,13 @@ public sealed record WristLegalDetailFieldSnapshot(
     LocalizedText Label,
     string Value);
 
+public sealed record WristLegalDocumentSnapshot(
+    LegalDocumentReference Reference,
+    LocalizedText KindLabel,
+    string RelativePath,
+    LocalizedText AccessibleName,
+    int MinimumTargetDp);
+
 public sealed record WristLegalTextPageSnapshot(
     string Text,
     int PageNumber,
@@ -43,9 +51,16 @@ public sealed record WristLegalUiSnapshot(
     WristLegalView View,
     LocalizedText Title,
     LocalizedText VersionLabel,
+    LocalizedText BundleIdentityLabel,
+    LocalizedText ManifestSha256Label,
     IReadOnlyList<WristLegalComponentSnapshot> Components,
     IReadOnlyList<WristLegalDetailFieldSnapshot> DetailFields,
+    IReadOnlyList<WristLegalDocumentSnapshot> Documents,
+    LegalDocumentReference? SelectedDocument,
     WristLegalTextPageSnapshot? LicensePage,
     IReadOnlyList<WristLegalNavigationActionSnapshot> NavigationActions,
     IReadOnlyList<UiActionSnapshot> FixedRecordingActions,
-    LocalizedText? StatusMessage);
+    LocalizedText? StatusMessage)
+{
+    public WristLegalTextPageSnapshot? DocumentPage => LicensePage;
+}

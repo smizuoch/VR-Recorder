@@ -33,6 +33,16 @@ public sealed class WristLegalProjector
                      state.SelectedComponent is not null
             ? ProjectDetail(state.SelectedComponent)
             : [];
+        var documents = state.View == WristLegalView.ComponentDetail &&
+                        state.SelectedComponent is not null
+            ? state.SelectedComponent.LegalDocuments
+                .OrderBy(document => document.Kind)
+                .ThenBy(
+                    document => document.RelativePath,
+                    StringComparer.Ordinal)
+                .Select(ProjectDocument)
+                .ToArray()
+            : [];
         var page = state.View == WristLegalView.LicenseText
             ? ProjectLicensePage(state)
             : null;
@@ -52,8 +62,16 @@ public sealed class WristLegalProjector
             state.ProductVersion is null
                 ? new LocalizedText("legal.version.format", string.Empty)
                 : Format("legal.version.format", state.ProductVersion),
+            state.BundleId is null
+                ? new LocalizedText("legal.bundle.format", string.Empty)
+                : Format("legal.bundle.format", state.BundleId),
+            state.ManifestSha256 is null
+                ? new LocalizedText("legal.manifest.format", string.Empty)
+                : Format("legal.manifest.format", state.ManifestSha256),
             components,
             detail,
+            documents,
+            state.SelectedDocument,
             page,
             ProjectNavigation(state, page),
             fixedRecordingActions,
@@ -75,21 +93,59 @@ public sealed class WristLegalProjector
                 component.Version,
                 component.LicenseExpression));
 
-    private IReadOnlyList<WristLegalDetailFieldSnapshot> ProjectDetail(
-        LegalCatalogComponent component) =>
-    [
-        Field("legal.field.name", component.DisplayName),
-        Field("legal.field.version", component.Version),
-        Field("legal.field.license", component.LicenseExpression),
-        Field("legal.field.usage", component.Usage),
-        Field("legal.field.linkage", component.Linkage),
-        Field(
+    private List<WristLegalDetailFieldSnapshot> ProjectDetail(
+        LegalCatalogComponent component)
+    {
+        var fields = new List<WristLegalDetailFieldSnapshot>
+        {
+            Field("legal.field.name", component.DisplayName),
+            Field("legal.field.version", component.Version),
+            Field("legal.field.license", component.LicenseExpression),
+        };
+        if (!string.IsNullOrWhiteSpace(component.CopyrightNotice))
+        {
+            fields.Add(Field(
+                "legal.field.copyright",
+                component.CopyrightNotice));
+        }
+
+        fields.Add(Field("legal.field.usage", component.Usage));
+        fields.Add(Field("legal.field.linkage", component.Linkage));
+        fields.Add(Field(
             "legal.field.modified",
             _localizer.Resolve(component.Modified
                 ? "legal.modified.yes"
-                : "legal.modified.no").Value),
-        Field("legal.field.source", component.SourceInformation),
-    ];
+                : "legal.modified.no").Value));
+        fields.Add(Field("legal.field.source", component.SourceInformation));
+        return fields;
+    }
+
+    private WristLegalDocumentSnapshot ProjectDocument(
+        LegalDocumentReference reference)
+    {
+        var kind = _localizer.Resolve(reference.Kind switch
+        {
+            LegalDocumentKind.License => "legal.document.license",
+            LegalDocumentKind.Notice => "legal.document.notice",
+            LegalDocumentKind.Copyright => "legal.document.copyright",
+            LegalDocumentKind.Attribution => "legal.document.attribution",
+            LegalDocumentKind.AssetManifest =>
+                "legal.document.asset-manifest",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(reference),
+                reference.Kind,
+                "Unsupported legal document kind."),
+        });
+        return new WristLegalDocumentSnapshot(
+            reference,
+            kind,
+            reference.RelativePath,
+            Format(
+                "legal.document.accessible.format",
+                kind.Value,
+                reference.RelativePath),
+            MinimumTargetDp: 56);
+    }
 
     private WristLegalTextPageSnapshot? ProjectLicensePage(
         WristLegalState state)

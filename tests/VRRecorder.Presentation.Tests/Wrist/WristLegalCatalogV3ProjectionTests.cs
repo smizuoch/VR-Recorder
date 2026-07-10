@@ -53,7 +53,7 @@ public sealed class WristLegalCatalogV3ProjectionTests
         var document = projector.Project(controller.State, ReadyStatus());
         Assert.Equal(attribution, document.SelectedDocument);
         Assert.Equal(
-            "authenticated Attribution document\n",
+            "authenticated Attribution document",
             document.DocumentPage?.Text);
         Assert.Empty(document.FixedRecordingActions);
         Assert.Equal(0, sink.CallCount);

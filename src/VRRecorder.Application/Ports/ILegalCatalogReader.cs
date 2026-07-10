@@ -15,6 +15,11 @@ public interface ILegalCatalogReader
         ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
         ArgumentNullException.ThrowIfNull(reference);
         cancellationToken.ThrowIfCancellationRequested();
+        if (reference.Kind == LegalDocumentKind.License)
+        {
+            return ReadLicenseTextAsync(componentId, cancellationToken);
+        }
+
         return Task.FromResult<LegalTextReadResult>(
             new LegalTextReadResult.Rejected(
             [

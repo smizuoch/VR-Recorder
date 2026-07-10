@@ -10,4 +10,9 @@ public sealed record DesktopLegalState(
     IReadOnlyList<LegalCatalogComponent> Components,
     LegalCatalogComponent? SelectedComponent,
     string? FullLicenseText,
-    IReadOnlyList<LegalCatalogIssue> Issues);
+    IReadOnlyList<LegalCatalogIssue> Issues,
+    string? ManifestSha256 = null,
+    LegalDocumentReference? SelectedDocument = null)
+{
+    public string? FullDocumentText => FullLicenseText;
+}

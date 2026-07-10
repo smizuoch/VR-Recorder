@@ -11,4 +11,10 @@ public sealed record WristLegalState(
     string? FullLicenseText,
     int FirstVisibleLine,
     int LinesPerPage,
-    IReadOnlyList<LegalCatalogIssue> Issues);
+    IReadOnlyList<LegalCatalogIssue> Issues,
+    string? BundleId = null,
+    string? ManifestSha256 = null,
+    LegalDocumentReference? SelectedDocument = null)
+{
+    public string? FullDocumentText => FullLicenseText;
+}

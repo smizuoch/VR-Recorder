@@ -43,6 +43,16 @@ public sealed class DesktopLegalController
     public Task ShowLicenseAsync(CancellationToken cancellationToken) =>
         ExecuteSerializedAsync(ShowLicenseCoreAsync, cancellationToken);
 
+    public Task ShowDocumentAsync(
+        LegalDocumentReference reference,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        return ExecuteSerializedAsync(
+            token => ShowDocumentCoreAsync(reference, token),
+            cancellationToken);
+    }
+
     public Task RefreshAsync(CancellationToken cancellationToken) =>
         ExecuteSerializedAsync(RefreshCoreAsync, cancellationToken);
 
@@ -69,7 +79,9 @@ public sealed class DesktopLegalController
             SortComponents(catalog.Components),
             SelectedComponent: null,
             FullLicenseText: null,
-            Issues: []);
+            Issues: [],
+            catalog.ManifestSha256,
+            SelectedDocument: null);
     }
 
     private async Task ShowDetailCoreAsync(
@@ -104,7 +116,9 @@ public sealed class DesktopLegalController
             SortComponents(catalog.Components),
             component,
             FullLicenseText: null,
-            Issues: []);
+            Issues: [],
+            catalog.ManifestSha256,
+            SelectedDocument: null);
     }
 
     private async Task ShowLicenseCoreAsync(
@@ -113,8 +127,37 @@ public sealed class DesktopLegalController
         var selected = State.SelectedComponent ??
                        throw new InvalidOperationException(
                            "A component must be selected before its license is opened.");
+        var reference = selected.LegalDocuments.Single(document =>
+            document.Kind == LegalDocumentKind.License);
+        await ShowDocumentCoreAsync(reference, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task ShowDocumentCoreAsync(
+        LegalDocumentReference reference,
+        CancellationToken cancellationToken)
+    {
+        var selected = State.SelectedComponent ??
+                       throw new InvalidOperationException(
+                           "A component must be selected before its legal document is opened.");
+        var expectedReference = selected.LegalDocuments.SingleOrDefault(
+            document => document == reference);
+        if (expectedReference is null)
+        {
+            await FailClosedAsync(
+            [
+                new LegalCatalogIssue(
+                    "legal-catalog-document-reference-mismatch",
+                    selected.Id),
+            ]).ConfigureAwait(false);
+            return;
+        }
+
         var result = await _reader
-            .ReadLicenseTextAsync(selected.Id, cancellationToken)
+            .ReadDocumentAsync(
+                selected.Id,
+                expectedReference,
+                cancellationToken)
             .ConfigureAwait(false);
         if (result is LegalTextReadResult.Rejected rejected)
         {
@@ -127,15 +170,12 @@ public sealed class DesktopLegalController
                 selected.Id,
                 document.ComponentId,
                 StringComparison.Ordinal) ||
-            !string.Equals(
-                selected.LicenseTextPath,
-                document.RelativePath,
-                StringComparison.Ordinal))
+            document.Reference != expectedReference)
         {
             await FailClosedAsync(
             [
                 new LegalCatalogIssue(
-                    "legal-catalog-license-identity-mismatch",
+                    "legal-catalog-document-identity-mismatch",
                     selected.Id),
             ]).ConfigureAwait(false);
             return;
@@ -146,6 +186,7 @@ public sealed class DesktopLegalController
             Revision = State.Revision + 1,
             View = DesktopLegalView.LicenseText,
             FullLicenseText = document.Text,
+            SelectedDocument = expectedReference,
             Issues = [],
         };
     }
@@ -159,8 +200,11 @@ public sealed class DesktopLegalController
                     State.SelectedComponent.Id,
                     cancellationToken),
             DesktopLegalView.LicenseText when
-                State.SelectedComponent is not null =>
-                ShowLicenseCoreAsync(cancellationToken),
+                State.SelectedComponent is not null &&
+                State.SelectedDocument is not null =>
+                ShowDocumentCoreAsync(
+                    State.SelectedDocument,
+                    cancellationToken),
             _ => OpenCoreAsync(cancellationToken),
         };
 
@@ -262,7 +306,9 @@ public sealed class DesktopLegalController
             Components: [],
             SelectedComponent: null,
             FullLicenseText: null,
-            issues);
+            issues,
+            ManifestSha256: null,
+            SelectedDocument: null);
 
     private static LegalCatalogComponent[] SortComponents(
         IReadOnlyList<LegalCatalogComponent> components) =>

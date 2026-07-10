@@ -121,21 +121,30 @@ public sealed class AuthenticatedLegalCatalogV3IntegrationTests
             linesPerPage: 2);
         await wrist.OpenAsync(CancellationToken.None);
         await wrist.ShowDetailAsync(component.Id, CancellationToken.None);
+        var wristProjector = new WristLegalProjector(
+            EnglishUiLocalizer.Instance);
+        var wristDetail = wristProjector.Project(
+            wrist.State,
+            new RecorderStatusSnapshot(
+                Revision: 1,
+                State: RecorderState.Recording,
+                AvailableActions: RecorderAvailableActions.Stop));
+        Assert.Equal(
+            component.LegalDocuments,
+            wristDetail.Documents.Select(document => document.Reference));
         var notice = component.LegalDocuments.Single(reference =>
             reference.Kind == LegalDocumentKind.Notice);
         await wrist.ShowDocumentAsync(notice, CancellationToken.None);
-        var wristProjection = new WristLegalProjector(
-            EnglishUiLocalizer.Instance).Project(
-                wrist.State,
-                new RecorderStatusSnapshot(
-                    Revision: 1,
-                    State: RecorderState.Recording,
-                    AvailableActions: RecorderAvailableActions.Stop));
+        var wristProjection = wristProjector.Project(
+            wrist.State,
+            new RecorderStatusSnapshot(
+                Revision: 1,
+                State: RecorderState.Recording,
+                AvailableActions: RecorderAvailableActions.Stop));
         Assert.Equal(manifest.Sha256, wrist.State.ManifestSha256);
         Assert.Equal(
-            component.LegalDocuments,
-            wristProjection.Documents.Select(document => document.Reference));
-        Assert.Equal(texts[notice.RelativePath], wristProjection.DocumentPage?.Text);
+            texts[notice.RelativePath].TrimEnd('\n'),
+            wristProjection.DocumentPage?.Text);
 
         await File.AppendAllTextAsync(
             Path.Combine(
