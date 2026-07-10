@@ -14,14 +14,28 @@ public static class SpdxSbomGenerator
         IEnumerable<NuGetPackage> dependencies,
         IEnumerable<NoticeComponent> components)
     {
-        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(dependencies);
         ArgumentNullException.ThrowIfNull(components);
+        return Generate(
+            context,
+            new NormalizedComponentGraph(
+                dependencies.ToArray(),
+                components.Select(ToNormalizedComponent).ToArray()));
+    }
+
+    public static string Generate(
+        SpdxGenerationContext context,
+        NormalizedComponentGraph graph)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(graph.Dependencies);
+        ArgumentNullException.ThrowIfNull(graph.Components);
         ValidateContext(context);
 
         var packages = ResolvePackages(
-            dependencies.ToArray(),
-            components.ToArray());
+            graph.Dependencies.ToArray(),
+            graph.Components.ToArray());
         var buffer = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(
                    buffer,
@@ -72,7 +86,7 @@ public static class SpdxSbomGenerator
 
     private static ResolvedPackage[] ResolvePackages(
         NuGetPackage[] dependencies,
-        NoticeComponent[] components)
+        NormalizedComponent[] components)
     {
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var spdxIds = new HashSet<string>(StringComparer.Ordinal);
@@ -125,13 +139,36 @@ public static class SpdxSbomGenerator
         return [.. resolved];
     }
 
-    private static void ValidatePackageMetadata(NoticeComponent component)
+    private static void ValidatePackageMetadata(NormalizedComponent component)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(component.Id);
-        ArgumentException.ThrowIfNullOrWhiteSpace(component.LicenseExpression);
+        ArgumentNullException.ThrowIfNull(component.License);
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            component.License.DeclaredExpression);
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            component.License.ConcludedExpression);
         ArgumentException.ThrowIfNullOrWhiteSpace(component.CopyrightNotice);
         ArgumentException.ThrowIfNullOrWhiteSpace(component.SourceInformation);
     }
+
+    private static NormalizedComponent ToNormalizedComponent(
+        NoticeComponent component) =>
+        new(
+            component.Id,
+            component.DisplayName,
+            component.Version,
+            new LicenseDecision(
+                component.LicenseExpression,
+                component.LicenseExpression),
+            component.CopyrightNotice,
+            component.Usage,
+            component.Linkage,
+            component.Modified,
+            component.SourceInformation,
+            component.LicenseText,
+            component.Scope,
+            component.ApprovalStatus,
+            component.Packages);
 
     private static string CreatePackageSpdxId(NuGetPackage dependency)
     {
@@ -222,10 +259,10 @@ public static class SpdxSbomGenerator
         writer.WriteBoolean("filesAnalyzed", false);
         writer.WriteString(
             "licenseConcluded",
-            package.Component.LicenseExpression);
+            package.Component.License.ConcludedExpression);
         writer.WriteString(
             "licenseDeclared",
-            package.Component.LicenseExpression);
+            package.Component.License.DeclaredExpression);
         writer.WriteString(
             "copyrightText",
             package.Component.CopyrightNotice);
@@ -244,6 +281,6 @@ public static class SpdxSbomGenerator
 
     private sealed record ResolvedPackage(
         NuGetPackage Dependency,
-        NoticeComponent Component,
+        NormalizedComponent Component,
         string SpdxId);
 }
