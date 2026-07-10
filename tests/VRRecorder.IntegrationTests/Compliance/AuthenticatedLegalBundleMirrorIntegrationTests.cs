@@ -19,7 +19,12 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
         var anchor = await CreateAuthenticatedBundleAsync(
             installRoot,
             "https://example.invalid/spdx/vr-recorder-install",
-            "install-root");
+            "install-root",
+            new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                ["CUSTOM-LEGAL/authenticated-proof.dat"] =
+                    "custom authenticated legal evidence\n"u8.ToArray(),
+            });
         var authenticatedFiles = ReadTree(installRoot);
         await WriteFileAsync(
             installRoot,
@@ -56,6 +61,10 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
             mirroredVersion,
             "native",
             "vrrecorder_native.dll")));
+        Assert.True(File.Exists(Path.Combine(
+            mirroredVersion,
+            "CUSTOM-LEGAL",
+            "authenticated-proof.dat")));
         var verification = await new AuthenticatedLegalBundleVerifier(
                 new FixedAuthenticatedAnchorSource(anchor))
             .VerifyAsync(mirroredVersion, CancellationToken.None);
@@ -371,7 +380,8 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
         CreateAuthenticatedBundleAsync(
             string directory,
             string bundleId,
-            string marker)
+            string marker,
+            IReadOnlyDictionary<string, byte[]>? additionalFiles = null)
     {
         var catalog = Encoding.UTF8.GetBytes($$"""
             {
@@ -400,6 +410,13 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
             ["THIRD-PARTY-NOTICES.txt"] = Encoding.UTF8.GetBytes(
                 $"notice {marker}\n"),
         };
+        if (additionalFiles is not null)
+        {
+            foreach (var (relativePath, content) in additionalFiles)
+            {
+                files.Add(relativePath, content);
+            }
+        }
         Directory.CreateDirectory(directory);
         foreach (var (relativePath, content) in files)
         {
