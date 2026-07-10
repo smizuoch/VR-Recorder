@@ -104,13 +104,13 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
 
         Assert.Equal(0, firstOsc.Available);
         Assert.Equal(
-            2,
+            6,
             oscQuery.Requests.Count(request =>
                 request.Port == first.HttpPort &&
                 request.PathAndQuery is "/usercamera/Mode" or
                     "/usercamera/Streaming"));
         Assert.Equal(
-            4,
+            8,
             oscQuery.Requests.Count(request =>
                 request.Port == second.HttpPort &&
                 request.PathAndQuery is "/usercamera/Mode" or
