@@ -108,6 +108,12 @@
       "vrrecorder.domain": {
         "type": "Project"
       },
+      "vrrecorder.infrastructure.media": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
       "vrrecorder.infrastructure.storage": {
         "type": "Project",
         "dependencies": {
