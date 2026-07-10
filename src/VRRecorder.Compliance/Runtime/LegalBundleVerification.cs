@@ -11,7 +11,14 @@ public abstract record LegalBundleVerification
     }
 
     public sealed record Verified(LegalBundleIdentity Identity)
-        : LegalBundleVerification;
+        : LegalBundleVerification
+    {
+        internal IReadOnlyList<string> AuthenticatedRelativePaths
+        {
+            get;
+            init;
+        } = [];
+    }
 
     public sealed record Rejected(IReadOnlyList<ComplianceIssue> Issues)
         : LegalBundleVerification;

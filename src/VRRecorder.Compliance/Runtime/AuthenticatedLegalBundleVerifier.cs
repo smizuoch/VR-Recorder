@@ -113,14 +113,21 @@ public sealed class AuthenticatedLegalBundleVerifier
             return new LegalBundleVerification.Rejected([payloadIssue]);
         }
 
+        string[] authenticatedRelativePaths;
         try
         {
             var pathComparer = OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
-            var manifestPaths = ParseManifest(manifestBytes, root)
+            var parsedManifest = ParseManifest(manifestBytes, root);
+            var manifestPaths = parsedManifest
                 .Select(entry => entry.RelativePath)
                 .ToHashSet(pathComparer);
+            authenticatedRelativePaths = parsedManifest
+                .Select(entry => entry.RelativePath)
+                .Append(ManifestFileName)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
             var catalogBytes = await File
                 .ReadAllBytesAsync(catalogPath, cancellationToken)
                 .ConfigureAwait(false);
@@ -139,7 +146,10 @@ public sealed class AuthenticatedLegalBundleVerifier
         return new LegalBundleVerification.Verified(
             new LegalBundleIdentity(
                 anchor.BundleId,
-                anchor.ManifestSha256));
+                anchor.ManifestSha256))
+        {
+            AuthenticatedRelativePaths = authenticatedRelativePaths,
+        };
     }
 
     private static LegalBundleVerification.Rejected Reject(
@@ -212,8 +222,7 @@ public sealed class AuthenticatedLegalBundleVerifier
             .Select(entry => entry.RelativePath)
             .Append(ManifestFileName)
             .ToHashSet(pathComparer);
-        var unexpectedPath = Directory
-            .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        var unexpectedPath = EnumerateScopeFiles(root, verificationScope)
             .Select(path => Path
                 .GetRelativePath(root, path)
                 .Replace(Path.DirectorySeparatorChar, '/')
@@ -233,6 +242,35 @@ public sealed class AuthenticatedLegalBundleVerifier
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> EnumerateScopeFiles(
+        string root,
+        LegalBundleVerificationScope verificationScope)
+    {
+        if (verificationScope ==
+            LegalBundleVerificationScope.StrictIsolatedBundle)
+        {
+            return Directory.EnumerateFiles(
+                root,
+                "*",
+                SearchOption.AllDirectories);
+        }
+
+        return Directory
+            .EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
+            .Concat(LegalOwnedDirectories
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .SelectMany(directory =>
+                {
+                    var legalDirectory = Path.Combine(root, directory);
+                    return Directory.Exists(legalDirectory)
+                        ? Directory.EnumerateFiles(
+                            legalDirectory,
+                            "*",
+                            SearchOption.AllDirectories)
+                        : [];
+                }));
     }
 
     private static bool IsLegalOwnedPath(string relativePath)

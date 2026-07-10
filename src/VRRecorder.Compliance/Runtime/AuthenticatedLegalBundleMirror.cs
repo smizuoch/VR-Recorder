@@ -14,12 +14,29 @@ public sealed class AuthenticatedLegalBundleMirror
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true);
     private readonly AuthenticatedLegalBundleVerifier _verifier;
+    private readonly LegalBundleVerificationScope _sourceVerificationScope;
 
     public AuthenticatedLegalBundleMirror(
         AuthenticatedLegalBundleVerifier verifier)
+        : this(
+            verifier,
+            LegalBundleVerificationScope.StrictIsolatedBundle)
+    {
+    }
+
+    public AuthenticatedLegalBundleMirror(
+        AuthenticatedLegalBundleVerifier verifier,
+        LegalBundleVerificationScope sourceVerificationScope)
     {
         ArgumentNullException.ThrowIfNull(verifier);
+        if (!Enum.IsDefined(sourceVerificationScope))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(sourceVerificationScope));
+        }
+
         _verifier = verifier;
+        _sourceVerificationScope = sourceVerificationScope;
     }
 
     public async Task<LegalBundleIdentity> MirrorAsync(
@@ -47,12 +64,15 @@ public sealed class AuthenticatedLegalBundleMirror
                 "The Legal Bundle source and recording output must not overlap.");
         }
 
-        var sourceIdentity = await RequireVerifiedAsync(
+        var sourceVerification = await RequireVerifiedAsync(
                 sourceRoot,
+                _sourceVerificationScope,
                 cancellationToken)
             .ConfigureAwait(false);
-        var sourceFiles = EnumerateFilesWithoutLinks(
+        var sourceIdentity = sourceVerification.Identity;
+        var sourceFiles = ResolveAuthenticatedFilesWithoutLinks(
             sourceRoot,
+            sourceVerification.AuthenticatedRelativePaths,
             cancellationToken);
 
         EnsureExistingAncestorsAreNotLinks(outputRoot);
@@ -78,11 +98,12 @@ public sealed class AuthenticatedLegalBundleMirror
                 productVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        var mirroredIdentity = await RequireVerifiedAsync(
+        var mirroredVerification = await RequireVerifiedAsync(
                 versionDirectory,
+                LegalBundleVerificationScope.StrictIsolatedBundle,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (mirroredIdentity != sourceIdentity)
+        if (mirroredVerification.Identity != sourceIdentity)
         {
             throw new InvalidDataException(
                 "The mirrored Legal Bundle identity changed during publication.");
@@ -121,11 +142,12 @@ public sealed class AuthenticatedLegalBundleMirror
         if (Directory.Exists(versionDirectory))
         {
             EnsureTreeContainsNoLinks(versionDirectory, cancellationToken);
-            var existingIdentity = await RequireVerifiedAsync(
+            var existingVerification = await RequireVerifiedAsync(
                     versionDirectory,
+                    LegalBundleVerificationScope.StrictIsolatedBundle,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (existingIdentity != sourceIdentity)
+            if (existingVerification.Identity != sourceIdentity)
             {
                 throw new InvalidDataException(
                     $"Legal Bundle version {productVersion} already has a different identity.");
@@ -156,11 +178,12 @@ public sealed class AuthenticatedLegalBundleMirror
                     .ConfigureAwait(false);
             }
 
-            var stagedIdentity = await RequireVerifiedAsync(
+            var stagedVerification = await RequireVerifiedAsync(
                     stagingDirectory,
+                    LegalBundleVerificationScope.StrictIsolatedBundle,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (stagedIdentity != sourceIdentity)
+            if (stagedVerification.Identity != sourceIdentity)
             {
                 throw new InvalidDataException(
                     "The staged Legal Bundle identity does not match its authenticated source.");
@@ -178,16 +201,20 @@ public sealed class AuthenticatedLegalBundleMirror
         }
     }
 
-    private async Task<LegalBundleIdentity> RequireVerifiedAsync(
+    private async Task<LegalBundleVerification.Verified> RequireVerifiedAsync(
         string bundleDirectory,
+        LegalBundleVerificationScope verificationScope,
         CancellationToken cancellationToken)
     {
         var verification = await _verifier
-            .VerifyAsync(bundleDirectory, cancellationToken)
+            .VerifyAsync(
+                bundleDirectory,
+                verificationScope,
+                cancellationToken)
             .ConfigureAwait(false);
         return verification switch
         {
-            LegalBundleVerification.Verified verified => verified.Identity,
+            LegalBundleVerification.Verified verified => verified,
             LegalBundleVerification.Rejected rejected =>
                 throw new InvalidDataException(
                     "Legal Bundle authentication failed: " +
@@ -197,6 +224,51 @@ public sealed class AuthenticatedLegalBundleMirror
             _ => throw new InvalidOperationException(
                 "Unknown Legal Bundle verification result."),
         };
+    }
+
+    private static BundleFile[] ResolveAuthenticatedFilesWithoutLinks(
+        string root,
+        IReadOnlyList<string> authenticatedRelativePaths,
+        CancellationToken cancellationToken)
+    {
+        if (authenticatedRelativePaths.Count == 0)
+        {
+            throw new InvalidDataException(
+                "The authenticated Legal Bundle file inventory is empty.");
+        }
+
+        var pathComparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var paths = new HashSet<string>(pathComparer);
+        var files = new List<BundleFile>(authenticatedRelativePaths.Count);
+        foreach (var relativePath in authenticatedRelativePaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!paths.Add(relativePath))
+            {
+                throw new InvalidDataException(
+                    $"Windows-equivalent Legal Bundle path is duplicated: {relativePath}");
+            }
+
+            var fullPath = LegalArtifactPath.Resolve(root, relativePath);
+            var file = new FileInfo(fullPath);
+            if (!file.Exists)
+            {
+                throw new InvalidDataException(
+                    $"Legal Bundle payload disappeared: {relativePath}");
+            }
+
+            EnsureDirectoryAndAncestorsAreNotLinks(
+                file.DirectoryName ?? throw new InvalidDataException(
+                    $"Legal Bundle payload has no parent: {relativePath}"));
+            EnsureNotLink(file);
+            files.Add(new BundleFile(relativePath, fullPath));
+        }
+
+        return files
+            .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static BundleFile[] EnumerateFilesWithoutLinks(
@@ -301,6 +373,9 @@ public sealed class AuthenticatedLegalBundleMirror
                 $"Legal Bundle payload disappeared: {source.RelativePath}");
         }
 
+        EnsureDirectoryAndAncestorsAreNotLinks(
+            file.DirectoryName ?? throw new InvalidDataException(
+                $"Legal Bundle payload has no parent: {source.RelativePath}"));
         EnsureNotLink(file);
     }
 

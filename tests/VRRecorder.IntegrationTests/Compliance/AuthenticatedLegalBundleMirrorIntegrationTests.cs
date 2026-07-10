@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
-using VRRecorder.Application.Ports;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.Domain.Storage;
 
@@ -38,12 +37,11 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
             installRoot,
             "resources/application.json",
             "{\"not\":\"legal\"}\n");
-        ILegalBundleOutputMirror mirror =
-            new AuthenticatedLegalBundleOutputMirror(
-                installRoot,
-                "2.5.0",
-                new AuthenticatedLegalBundleVerifier(
-                    new FixedAuthenticatedAnchorSource(anchor)));
+        var mirror = new AuthenticatedLegalBundleOutputMirror(
+            installRoot,
+            "2.5.0",
+            new AuthenticatedLegalBundleVerifier(
+                new FixedAuthenticatedAnchorSource(anchor)));
 
         await mirror.MirrorAsync(
             new OutputPath(output),
@@ -95,12 +93,11 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
             installRoot,
             "LICENSES/rogue/LICENSE.txt",
             "unregistered legal payload");
-        ILegalBundleOutputMirror mirror =
-            new AuthenticatedLegalBundleOutputMirror(
-                installRoot,
-                "2.5.0",
-                new AuthenticatedLegalBundleVerifier(
-                    new FixedAuthenticatedAnchorSource(anchor)));
+        var mirror = new AuthenticatedLegalBundleOutputMirror(
+            installRoot,
+            "2.5.0",
+            new AuthenticatedLegalBundleVerifier(
+                new FixedAuthenticatedAnchorSource(anchor)));
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             mirror.MirrorAsync(
@@ -136,12 +133,11 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
         Directory.CreateSymbolicLink(
             Path.Combine(installRoot, "plugins"),
             outsidePlugins);
-        ILegalBundleOutputMirror mirror =
-            new AuthenticatedLegalBundleOutputMirror(
-                installRoot,
-                "2.5.0",
-                new AuthenticatedLegalBundleVerifier(
-                    new FixedAuthenticatedAnchorSource(anchor)));
+        var mirror = new AuthenticatedLegalBundleOutputMirror(
+            installRoot,
+            "2.5.0",
+            new AuthenticatedLegalBundleVerifier(
+                new FixedAuthenticatedAnchorSource(anchor)));
 
         await mirror.MirrorAsync(
             new OutputPath(output),
