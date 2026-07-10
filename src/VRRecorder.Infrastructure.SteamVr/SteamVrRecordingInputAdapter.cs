@@ -19,6 +19,7 @@ public sealed class SteamVrRecordingInputAdapter
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        var pressIsLatched = false;
         await foreach (var state in _runtime
                            .ObserveDigitalActionAsync(
                                RecordingInputContract.SteamVrToggleActionPath,
@@ -26,11 +27,18 @@ public sealed class SteamVrRecordingInputAdapter
                            .WithCancellation(cancellationToken)
                            .ConfigureAwait(false))
         {
-            if (!state.IsActive || !state.State || !state.Changed)
+            if (!state.IsActive || !state.State)
+            {
+                pressIsLatched = false;
+                continue;
+            }
+
+            if (!state.Changed || pressIsLatched)
             {
                 continue;
             }
 
+            pressIsLatched = true;
             await _inputs
                 .DispatchAsync(
                     UiActivationKind.SteamVrAction,
