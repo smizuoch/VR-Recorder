@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Ports;
+using VRRecorder.Domain.Camera;
 using VRRecorder.Infrastructure.Osc;
 
 namespace VRRecorder.IntegrationTests.Osc;
@@ -15,6 +18,92 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         "/usercamera/OrientationIsLandscape",
         "/usercamera/Streaming",
     ];
+
+    [Fact]
+    [Trait("Scenario", "IT-021")]
+    public async Task MultipleTargetsCreateAndSendNothingUntilExactSelection()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var firstOsc = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        using var secondOsc = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        var first = Advertisement("select-alpha", httpPort: 19007);
+        var second = Advertisement("select-beta", httpPort: 19008);
+        var browser = new StubOscQueryServiceBrowser([second, first]);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [first.HttpPort] = new Fixture(
+                    first.InstanceName,
+                    ((IPEndPoint)firstOsc.Client.LocalEndPoint!).Port),
+                [second.HttpPort] = new Fixture(
+                    second.InstanceName,
+                    ((IPEndPoint)secondOsc.Client.LocalEndPoint!).Port),
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1));
+        var gateways = new CapturingGatewayFactory(
+            new ConfirmedUdpVrChatCameraGatewayFactory());
+        var useCase = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(discovery),
+            gateways);
+
+        var unresolved = await useCase.ResolveAsync(
+            selectedServiceId: null,
+            timeout.Token);
+        var stale = await useCase.ResolveAsync(
+            selectedServiceId: "stale-service-id",
+            timeout.Token);
+
+        Assert.IsType<
+            VrChatCameraConnectionResolution.SelectionRequired>(unresolved);
+        Assert.IsType<
+            VrChatCameraConnectionResolution.SelectionRequired>(stale);
+        Assert.Empty(gateways.CreatedFor);
+        Assert.Equal(0, firstOsc.Available);
+        Assert.Equal(0, secondOsc.Available);
+
+        var resolved = await useCase.ResolveAsync(
+            selectedServiceId: second.ServiceId,
+            timeout.Token);
+
+        var connected = Assert.IsType<
+            VrChatCameraConnectionResolution.Connected>(resolved);
+        Assert.Equal(second.ServiceId, connected.Candidate.ServiceId);
+        Assert.Equal(new[] { connected.Candidate }, gateways.CreatedFor);
+        Assert.Equal(0, firstOsc.Available);
+        Assert.Equal(0, secondOsc.Available);
+
+        await using var gatewayLifetime = Assert.IsAssignableFrom<IAsyncDisposable>(
+            connected.Gateway);
+        var controller = new CameraSessionController(
+            connected.Gateway,
+            new InMemoryCameraLeaseStore());
+        var acquisition = controller.AcquireAsync(
+            new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)),
+            timeout.Token);
+
+        var mode = await secondOsc.ReceiveAsync(timeout.Token);
+        Assert.Equal(OscPacketCodec.EncodeMode(CameraMode.Stream), mode.Buffer);
+        await secondOsc.SendAsync(
+            mode.Buffer,
+            mode.RemoteEndPoint,
+            timeout.Token);
+        var streaming = await secondOsc.ReceiveAsync(timeout.Token);
+        Assert.Equal(OscPacketCodec.EncodeStreaming(true), streaming.Buffer);
+        await secondOsc.SendAsync(
+            streaming.Buffer,
+            streaming.RemoteEndPoint,
+            timeout.Token);
+        await acquisition;
+
+        Assert.Equal(0, firstOsc.Available);
+    }
 
     [Fact]
     public async Task MultipleValidLoopbackServicesRequireSelectionAfterCapabilityProbe()
@@ -196,6 +285,35 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(_services);
         }
+    }
+
+    private sealed class CapturingGatewayFactory : IVrChatCameraGatewayFactory
+    {
+        private readonly IVrChatCameraGatewayFactory _inner;
+
+        public CapturingGatewayFactory(IVrChatCameraGatewayFactory inner)
+        {
+            _inner = inner;
+        }
+
+        public List<VrChatInstanceCandidate> CreatedFor { get; } = [];
+
+        public IVrChatCameraGateway Create(VrChatInstanceCandidate candidate)
+        {
+            CreatedFor.Add(candidate);
+            return _inner.Create(candidate);
+        }
+    }
+
+    private sealed class InMemoryCameraLeaseStore : ICameraLeaseStore
+    {
+        public Task SaveAsync(
+            CameraLease lease,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task DeleteAsync(
+            CameraLease lease,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class OscQueryFixtureHandler : HttpMessageHandler
