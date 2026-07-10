@@ -73,4 +73,14 @@ public sealed class RecorderStateMachineTests
 
         Assert.Equal(RecorderState.Stopping, next);
     }
+
+    [Fact]
+    public void FreshFrameTimeoutWhenRecordingTransitionsToSignalLost()
+    {
+        var next = RecorderStateMachine.Transition(
+            RecorderState.Recording,
+            RecorderTrigger.FreshFrameTimeout);
+
+        Assert.Equal(RecorderState.SignalLost, next);
+    }
 }
