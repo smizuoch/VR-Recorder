@@ -8,4 +8,11 @@ public sealed record ReleaseLegalPackageRequest(
     SpdxGenerationContext GenerationContext,
     string StagingDirectory,
     string PackagePath,
-    IReadOnlyList<RegisteredStagedArtifact> ApprovedPayloadArtifacts);
+    IReadOnlyList<RegisteredStagedArtifact> ApprovedPayloadArtifacts)
+{
+    public MaterialSymbolsReleaseEvidence? MaterialSymbolsEvidence
+    {
+        get;
+        init;
+    }
+}

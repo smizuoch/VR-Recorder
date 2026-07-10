@@ -29,10 +29,10 @@ public sealed class LegalReleasePackageIntegrationTests
         var orchestrator = new LegalReleasePackageOrchestrator();
 
         var firstResult = await orchestrator.GenerateAsync(
-            Request(first.StagingPath, firstPackage, first.Registration),
+            Request(first.StagingPath, firstPackage, first.Registrations),
             CancellationToken.None);
         var secondResult = await orchestrator.GenerateAsync(
-            Request(second.StagingPath, secondPackage, second.Registration),
+            Request(second.StagingPath, secondPackage, second.Registrations),
             CancellationToken.None);
 
         Assert.True(firstResult.Succeeded);
@@ -103,7 +103,7 @@ public sealed class LegalReleasePackageIntegrationTests
         var request = Request(
             payload.StagingPath,
             packagePath,
-            payload.Registration) with
+            payload.Registrations) with
         {
             ComponentGraph = graph,
         };
@@ -137,7 +137,7 @@ public sealed class LegalReleasePackageIntegrationTests
                 Request(
                     payload.StagingPath,
                     packagePath,
-                    payload.Registration),
+                    payload.Registrations),
                 CancellationToken.None);
 
         Assert.False(result.Succeeded);
@@ -150,6 +150,186 @@ public sealed class LegalReleasePackageIntegrationTests
     }
 
     [Fact]
+    public async Task MissingMaterialSymbolsReleaseEvidenceFailsClosed()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        var request = Request(
+            payload.StagingPath,
+            packagePath,
+            payload.Registrations) with
+        {
+            MaterialSymbolsEvidence = null,
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "material-symbols-release-evidence-missing");
+    }
+
+    [Theory]
+    [InlineData("source", "material-symbols-source-hash-mismatch")]
+    [InlineData("output", "material-symbols-output-hash-mismatch")]
+    public async Task RepositoryAssetHashMismatchFailsClosed(
+        string asset,
+        string expectedIssueCode)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var path = asset == "source"
+            ? MaterialSymbolsManifestTestFixture.SourcePath
+            : MaterialSymbolsManifestTestFixture.OutputPath;
+        await File.WriteAllTextAsync(
+            Path.Combine(
+                payload.Evidence.RepositoryRoot,
+                path.Replace('/', Path.DirectorySeparatorChar)),
+            "tampered\n");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                Request(
+                    payload.StagingPath,
+                    packagePath,
+                    payload.Registrations),
+                CancellationToken.None);
+
+        AssertRejected(result, packagePath, expectedIssueCode);
+    }
+
+    [Theory]
+    [InlineData("component", "not-material-symbols")]
+    [InlineData("upstream", "https://example.invalid/icons")]
+    [InlineData("commit", "ffffffffffffffffffffffffffffffffffffffff")]
+    [InlineData("license", "MIT")]
+    [InlineData("path-glob", "assets/**/*")]
+    [InlineData("manifest", "ui/other-icons.yml")]
+    [InlineData("redistribution", "false")]
+    [InlineData("trademark", "true")]
+    public async Task RightsLedgerMismatchFailsClosed(
+        string mutation,
+        string value)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var entry = payload.Evidence.RightsLedgerEntry;
+        entry = mutation switch
+        {
+            "component" => entry with { ComponentRef = value },
+            "upstream" => entry with { Upstream = value },
+            "commit" => entry with { Commit = value },
+            "license" => entry with { License = value },
+            "path-glob" => entry with { PathGlob = value },
+            "manifest" => entry with { SelectedAssetManifest = value },
+            "redistribution" => entry with
+            {
+                RedistributionApproved = bool.Parse(value),
+            },
+            "trademark" => entry with { TrademarkUse = bool.Parse(value) },
+            _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
+        };
+        var request = Request(
+            payload.StagingPath,
+            Path.Combine(directory.Path, "release.zip"),
+            payload.Registrations) with
+        {
+            MaterialSymbolsEvidence = payload.Evidence with
+            {
+                RightsLedgerEntry = entry,
+            },
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            request.PackagePath,
+            "material-symbols-rights-ledger-mismatch");
+    }
+
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("hash")]
+    [InlineData("kind")]
+    [InlineData("mapping")]
+    public async Task StagingRightsRegistrationMismatchFailsClosed(
+        string mutation)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var registrations = payload.Registrations.ToArray();
+        var assetIndex = Array.FindIndex(registrations, registration =>
+            registration.ComponentId == "material-symbols");
+        var asset = registrations[assetIndex];
+        var evidence = payload.Evidence;
+        switch (mutation)
+        {
+            case "owner":
+                registrations[assetIndex] = asset with
+                {
+                    ComponentId = "unrelated-component",
+                };
+                break;
+            case "hash":
+                registrations[assetIndex] = asset with
+                {
+                    Sha256 = new string('f', 64),
+                };
+                await File.WriteAllTextAsync(
+                    Path.Combine(
+                        payload.StagingPath,
+                        MaterialSymbolsManifestTestFixture.StagingPath
+                            .Replace('/', Path.DirectorySeparatorChar)),
+                    "different registered asset\n");
+                break;
+            case "kind":
+                registrations[assetIndex] = asset with
+                {
+                    Kind = StagedArtifactKind.Executable,
+                };
+                break;
+            case "mapping":
+                evidence = evidence with
+                {
+                    StagedAssets =
+                    [
+                        evidence.StagedAssets[0] with
+                        {
+                            OutputPath =
+                                "src/VRRecorder.DesignSystem/Assets/" +
+                                "MaterialSymbols/unlisted.svg",
+                        },
+                    ],
+                };
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mutation));
+        }
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        var request = Request(
+            payload.StagingPath,
+            packagePath,
+            registrations) with
+        {
+            MaterialSymbolsEvidence = evidence,
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "material-symbols-staging-registration-mismatch");
+    }
+
+    [Fact]
     public async Task MissingMaterialSymbolsManifestProducesNoReleaseArtifacts()
     {
         using var directory = TemporaryDirectory.Create();
@@ -158,7 +338,7 @@ public sealed class LegalReleasePackageIntegrationTests
         var request = Request(
             payload.StagingPath,
             packagePath,
-            payload.Registration) with
+            payload.Registrations) with
         {
             ComponentGraph = new NormalizedComponentGraph(
                 Graph().Dependencies,
@@ -202,7 +382,7 @@ public sealed class LegalReleasePackageIntegrationTests
         var request = Request(
             payload.StagingPath,
             packagePath,
-            payload.Registration) with
+            payload.Registrations) with
         {
             ComponentGraph = graph,
         };
@@ -224,8 +404,13 @@ public sealed class LegalReleasePackageIntegrationTests
     private static ReleaseLegalPackageRequest Request(
         string stagingPath,
         string packagePath,
-        RegisteredStagedArtifact payload) =>
-        new(
+        IReadOnlyList<RegisteredStagedArtifact> registrations)
+    {
+        var evidenceRoot = Path.Combine(
+            Path.GetDirectoryName(stagingPath)!,
+            $"{Path.GetFileName(stagingPath)}-repository");
+        var evidence = CreateEvidence(evidenceRoot);
+        return new ReleaseLegalPackageRequest(
             Graph(),
             new SpdxGenerationContext(
                 ProductName: "VR-Recorder",
@@ -242,7 +427,11 @@ public sealed class LegalReleasePackageIntegrationTests
                 Creator: "Organization: VR-Recorder Project"),
             stagingPath,
             packagePath,
-            [payload]);
+            registrations)
+        {
+            MaterialSymbolsEvidence = evidence,
+        };
+    }
 
     private static NormalizedComponentGraph Graph() =>
         new(
@@ -354,13 +543,92 @@ public sealed class LegalReleasePackageIntegrationTests
         Directory.CreateDirectory(Path.GetDirectoryName(payloadPath)!);
         byte[] content = [0x4d, 0x5a, 0x90, 0x00];
         await File.WriteAllBytesAsync(payloadPath, content);
+        var materialAssetPath = Path.Combine(
+            stagingPath,
+            MaterialSymbolsManifestTestFixture.StagingPath
+                .Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(materialAssetPath)!);
+        await File.WriteAllTextAsync(
+            materialAssetPath,
+            MaterialSymbolsManifestTestFixture.OutputContent);
+        var evidenceRoot = Path.Combine(root, $"{stagingName}-repository");
+        await WriteRepositoryEvidenceAsync(evidenceRoot);
         return new StagedPayload(
             stagingPath,
-            new RegisteredStagedArtifact(
-                "vr-recorder",
-                relativePath,
-                Hash(content),
-                StagedArtifactKind.Executable));
+            [
+                new RegisteredStagedArtifact(
+                    "vr-recorder",
+                    relativePath,
+                    Hash(content),
+                    StagedArtifactKind.Executable),
+                new RegisteredStagedArtifact(
+                    "material-symbols",
+                    MaterialSymbolsManifestTestFixture.StagingPath,
+                    MaterialSymbolsManifestTestFixture.OutputSha256,
+                    StagedArtifactKind.Asset),
+            ],
+            CreateEvidence(evidenceRoot));
+    }
+
+    private static MaterialSymbolsReleaseEvidence CreateEvidence(
+        string repositoryRoot) =>
+        new(
+            repositoryRoot,
+            new MaterialSymbolsRightsLedgerEntry(
+                "material-symbols-ui-icons",
+                "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/**/*",
+                "material-symbols",
+                "https://github.com/google/material-design-icons",
+                MaterialSymbolsManifestTestFixture.Commit,
+                "ui/material-symbols.yml",
+                "Apache-2.0",
+                "docs/legal-review/assets/material-symbols.md",
+                TrademarkUse: false,
+                ProductLogoUse: false,
+                RuntimeNetworkAllowed: false,
+                RedistributionApproved: true,
+                ApprovalId: "TEST-RIGHTS-MATERIAL-SYMBOLS"),
+            [
+                new MaterialSymbolsStagedAssetRegistration(
+                    MaterialSymbolsManifestTestFixture.OutputPath,
+                    MaterialSymbolsManifestTestFixture.StagingPath,
+                    "material-symbols-ui-icons"),
+            ]);
+
+    private static async Task WriteRepositoryEvidenceAsync(string root)
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [MaterialSymbolsManifestTestFixture.SourcePath] =
+                MaterialSymbolsManifestTestFixture.SourceContent,
+            [MaterialSymbolsManifestTestFixture.OutputPath] =
+                MaterialSymbolsManifestTestFixture.OutputContent,
+            ["ui/material-symbols.yml"] =
+                "synthetic: material-symbols allowlist fixture\n",
+            ["docs/legal-review/assets/material-symbols.md"] =
+                "Synthetic independent rights review fixture.\n",
+        };
+        foreach (var (relativePath, content) in files)
+        {
+            var path = Path.Combine(
+                root,
+                relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, content);
+        }
+    }
+
+    private static void AssertRejected(
+        LegalReleasePackageResult result,
+        string packagePath,
+        string expectedIssueCode)
+    {
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Issues, issue =>
+            issue.Code == expectedIssueCode);
+        Assert.Null(result.AuthenticatedAnchor);
+        Assert.Null(result.LegalBundleRelativePath);
+        Assert.False(File.Exists(packagePath));
     }
 
     private static string Hash(ReadOnlySpan<byte> content) =>
@@ -380,7 +648,8 @@ public sealed class LegalReleasePackageIntegrationTests
 
     private sealed record StagedPayload(
         string StagingPath,
-        RegisteredStagedArtifact Registration);
+        IReadOnlyList<RegisteredStagedArtifact> Registrations,
+        MaterialSymbolsReleaseEvidence Evidence);
 
     private sealed class TemporaryDirectory : IDisposable
     {

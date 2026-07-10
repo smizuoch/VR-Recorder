@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace VRRecorder.IntegrationTests.Compliance;
@@ -6,6 +8,19 @@ internal static class MaterialSymbolsManifestTestFixture
 {
     public const string Commit =
         "0123456789abcdef0123456789abcdef01234567";
+    public const string SourcePath =
+        "upstream/symbols/fiber_manual_record.svg";
+    public const string OutputPath =
+        "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/" +
+        "recording-start.svg";
+    public const string StagingPath =
+        "app/Assets/MaterialSymbols/recording-start.svg";
+    public const string SourceContent =
+        "<svg data-fixture=\"material-symbols-source\"/>\n";
+    public const string OutputContent =
+        "<svg data-fixture=\"material-symbols-output\"/>\n";
+    public static readonly string SourceSha256 = Hash(SourceContent);
+    public static readonly string OutputSha256 = Hash(OutputContent);
 
     public static string Create(
         string licenseFile,
@@ -99,13 +114,10 @@ internal static class MaterialSymbolsManifestTestFixture
                     },
                     rtlMirror = false,
                     interactive = true,
-                    sourcePath =
-                        "upstream/symbols/fiber_manual_record.svg",
-                    sourceSha256 = new string('a', 64),
-                    outputPath =
-                        "src/VRRecorder.DesignSystem/Assets/" +
-                        "MaterialSymbols/recording-start.svg",
-                    outputSha256 = new string('b', 64),
+                    sourcePath = SourcePath,
+                    sourceSha256 = SourceSha256,
+                    outputPath = OutputPath,
+                    outputSha256 = OutputSha256,
                     modified = true,
                     modificationNotice =
                         "Synthetic deterministic integration fixture.",
@@ -119,4 +131,8 @@ internal static class MaterialSymbolsManifestTestFixture
         };
         return JsonSerializer.Serialize(manifest) + "\n";
     }
+
+    private static string Hash(string content) => Convert
+        .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)))
+        .ToLowerInvariant();
 }
