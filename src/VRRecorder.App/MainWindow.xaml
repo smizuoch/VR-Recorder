@@ -1,0 +1,34 @@
+<Window x:Class="VRRecorder.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource App_Title}"
+        AutomationProperties.Name="{DynamicResource App_Window_AccessibleName}"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        PreviewKeyDown="OnPreviewKeyDown"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="{StaticResource Spacing.LayoutGrid}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="RecordingStatusText"
+                   Grid.Row="0"
+                   Text="{DynamicResource Recording_State_Ready}"
+                   AutomationProperties.Name="{DynamicResource Status_Ready_AccessibleDescription}"
+                   AutomationProperties.LiveSetting="Polite" />
+
+        <Button x:Name="RecordingToggleButton"
+                Grid.Row="1"
+                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                MinHeight="{StaticResource Interaction.MinimumTarget}"
+                MinWidth="{StaticResource Interaction.MinimumTarget}"
+                Content="{DynamicResource Recording_Start_Short}"
+                AutomationProperties.Name="{DynamicResource Recording_Start_AccessibleName}"
+                AutomationProperties.HelpText="{DynamicResource Recording_Start_Tooltip}"
+                ToolTip="{DynamicResource Recording_Start_Tooltip}"
+                Click="OnRecordingToggleClick" />
+    </Grid>
+</Window>

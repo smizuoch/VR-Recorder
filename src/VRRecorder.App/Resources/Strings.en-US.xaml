@@ -1,0 +1,15 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=System.Runtime">
+    <system:String x:Key="App_Title">VR-Recorder</system:String>
+    <system:String x:Key="App_Window_AccessibleName">VR-Recorder</system:String>
+    <system:String x:Key="Recording_Start_Short">REC</system:String>
+    <system:String x:Key="Recording_Start_AccessibleName">Start recording</system:String>
+    <system:String x:Key="Recording_Start_Tooltip">Start recording</system:String>
+    <system:String x:Key="Recording_Stop_Short">STOP</system:String>
+    <system:String x:Key="Recording_Stop_AccessibleName">Stop recording</system:String>
+    <system:String x:Key="Recording_Stop_Tooltip">Stop recording and save the MP4 file</system:String>
+    <system:String x:Key="Recording_State_Ready">Ready to record</system:String>
+    <system:String x:Key="Status_Ready_AccessibleDescription">The connection and video signal are ready</system:String>
+    <system:String x:Key="Status_CommandUnavailable">Recording services are not available</system:String>
+</ResourceDictionary>
