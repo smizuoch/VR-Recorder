@@ -307,6 +307,52 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopShellActivatesRecordingHostAndSurfacesServiceFailure()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("DesktopRecordingCommandHost", appCode);
+        Assert.Contains("RecordingUiCommandDispatcher", appCode);
+        Assert.Contains("_recordingHost.ActivateAsync(", appCode);
+        Assert.Contains("ProductionDesktopRecordingRuntimeFactory", appCode);
+        Assert.DoesNotContain("UnavailableUiCommandDispatcher", appCode);
+
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("DesktopRecordingHostActivation", windowCode);
+        Assert.Contains(
+            "DesktopRecordingHostState.InitializationFailed",
+            windowCode);
+        Assert.Contains("Recording_State_InitializationFailed", windowCode);
+        Assert.Contains(
+            "Status_InitializationFailed_AccessibleDescription",
+            windowCode);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            Assert.Contains(
+                "Recording_State_InitializationFailed",
+                resources.Keys);
+            Assert.Contains(
+                "Status_InitializationFailed_AccessibleDescription",
+                resources.Keys);
+        }
+    }
+
+    [Fact]
     public void ReleaseBuildRequiresAuthenticatedLegalAnchorAndPayload()
     {
         var project = XDocument.Load(Path.Combine(
