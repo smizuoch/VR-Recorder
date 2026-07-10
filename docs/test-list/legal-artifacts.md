@@ -14,6 +14,7 @@
 - [x] SBOMのUNKNOWN／NOASSERTION／NONEを拒否する
 - [x] 全payload fileを列挙する決定論的な`LEGAL-MANIFEST.sha256`を生成する
 - [x] 外部resource／JavaScriptなしで目次・検索案内・license全文を持つHTML Noticesを生成する
+- [x] 生成対象外のfileがLegal Bundle directoryに残っていれば検証を失敗させる
 
 ## English
 
@@ -29,3 +30,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Reject UNKNOWN, NOASSERTION, and NONE in the SBOM
 - [x] Generate a deterministic `LEGAL-MANIFEST.sha256` covering every payload file
 - [x] Generate HTML Notices with contents, search guidance, and full license text without external resources or JavaScript
+- [x] Fail Legal Bundle directory verification when any unexpected file remains

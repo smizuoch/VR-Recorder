@@ -14,6 +14,12 @@ public static class LegalArtifactDirectoryVerifier
         ArgumentNullException.ThrowIfNull(expected.Artifacts);
 
         var issues = new List<ComplianceIssue>();
+        var pathComparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var expectedPaths = expected.Artifacts
+            .Select(artifact => artifact.RelativePath)
+            .ToHashSet(pathComparer);
         foreach (var artifact in expected.Artifacts)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -49,6 +55,28 @@ public static class LegalArtifactDirectoryVerifier
                 issues.Add(new ComplianceIssue(
                     "generated-artifact-diff",
                     artifact.RelativePath));
+            }
+        }
+
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory);
+        if (Directory.Exists(fullOutputDirectory))
+        {
+            foreach (var path in Directory.EnumerateFiles(
+                         fullOutputDirectory,
+                         "*",
+                         SearchOption.AllDirectories))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var relativePath = Path
+                    .GetRelativePath(fullOutputDirectory, path)
+                    .Replace(Path.DirectorySeparatorChar, '/')
+                    .Replace(Path.AltDirectorySeparatorChar, '/');
+                if (!expectedPaths.Contains(relativePath))
+                {
+                    issues.Add(new ComplianceIssue(
+                        "generated-artifact-unexpected",
+                        relativePath));
+                }
             }
         }
 
