@@ -118,6 +118,9 @@ public sealed class DesktopRecordingCommandHostTests
 
         Assert.Equal(DesktopRecordingHostState.Disposed, result.State);
         Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ApplicationShutdown],
+            runtime.ShutdownReasons);
     }
 
     [Fact]
@@ -156,6 +159,9 @@ public sealed class DesktopRecordingCommandHostTests
             exception.State);
         Assert.Equal(DesktopRecordingHostState.ComplianceFault, host.State);
         Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ComplianceFault],
+            runtime.ShutdownReasons);
     }
 
     [Fact]
@@ -173,11 +179,48 @@ public sealed class DesktopRecordingCommandHostTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => toggle);
         Assert.Equal(DesktopRecordingHostState.ComplianceFault, host.State);
         Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ComplianceFault],
+            runtime.ShutdownReasons);
 
         await host.DisposeAsync();
         await host.DisposeAsync();
 
         Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ComplianceFault],
+            runtime.ShutdownReasons);
+    }
+
+    [Fact]
+    public async Task DisposeWinsLaterComplianceFaultRaceWithOneTypedShutdown()
+    {
+        var runtime = new ControllableDesktopRecordingRuntime(
+            holdShutdown: true);
+        var factory = new StubDesktopRecordingRuntimeFactory(runtime);
+        var host = new DesktopRecordingCommandHost(factory);
+        await host.ActivateAsync(ReadyStartup(), CancellationToken.None);
+
+        var disposal = host.DisposeAsync().AsTask();
+        var complianceFault = ((IComplianceFaultSink)host)
+            .EnterComplianceFaultAsync()
+            .AsTask();
+        await runtime.WaitUntilShutdownRequestedAsync()
+            .WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Same(disposal, complianceFault);
+        Assert.Equal(
+            [RecordingStopReason.ApplicationShutdown],
+            runtime.ShutdownReasons);
+        Assert.Equal(1, runtime.DisposeCallCount);
+
+        runtime.CompleteShutdown();
+        await Task.WhenAll(disposal, complianceFault);
+
+        Assert.Equal(1, runtime.DisposeCallCount);
+        Assert.Equal(
+            [RecordingStopReason.ApplicationShutdown],
+            runtime.ShutdownReasons);
     }
 
     private static RecorderStartupResult ReadyStartup() =>
@@ -219,8 +262,13 @@ public sealed class DesktopRecordingCommandHostTests
         private readonly TaskCompletionSource _toggleRequested = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _toggleCompletion;
+        private readonly TaskCompletionSource _shutdownRequested = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _shutdownCompletion;
 
-        public ControllableDesktopRecordingRuntime(bool holdToggle = false)
+        public ControllableDesktopRecordingRuntime(
+            bool holdToggle = false,
+            bool holdShutdown = false)
         {
             _toggleCompletion = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
@@ -228,11 +276,20 @@ public sealed class DesktopRecordingCommandHostTests
             {
                 _toggleCompletion.SetResult();
             }
+
+            _shutdownCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!holdShutdown)
+            {
+                _shutdownCompletion.SetResult();
+            }
         }
 
         public int ToggleCallCount { get; private set; }
 
         public int DisposeCallCount { get; private set; }
+
+        public List<RecordingStopReason> ShutdownReasons { get; } = [];
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
@@ -242,12 +299,22 @@ public sealed class DesktopRecordingCommandHostTests
             return _toggleCompletion.Task.WaitAsync(cancellationToken);
         }
 
-        public Task ShutdownAsync(RecordingStopReason reason) =>
-            DisposeAsync().AsTask();
+        public Task ShutdownAsync(RecordingStopReason reason)
+        {
+            ShutdownReasons.Add(reason);
+            DisposeCallCount++;
+            _shutdownRequested.TrySetResult();
+            return _shutdownCompletion.Task;
+        }
 
         public Task WaitUntilToggleRequestedAsync() => _toggleRequested.Task;
 
+        public Task WaitUntilShutdownRequestedAsync() =>
+            _shutdownRequested.Task;
+
         public void CompleteToggle() => _toggleCompletion.TrySetResult();
+
+        public void CompleteShutdown() => _shutdownCompletion.TrySetResult();
 
         public ValueTask DisposeAsync()
         {
@@ -283,11 +350,17 @@ public sealed class DesktopRecordingCommandHostTests
     {
         public int DisposeCallCount { get; private set; }
 
+        public List<RecordingStopReason> ShutdownReasons { get; } = [];
+
         public Task ToggleAsync(CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
-        public Task ShutdownAsync(RecordingStopReason reason) =>
-            DisposeAsync().AsTask();
+        public Task ShutdownAsync(RecordingStopReason reason)
+        {
+            ShutdownReasons.Add(reason);
+            DisposeCallCount++;
+            return Task.CompletedTask;
+        }
 
         public ValueTask DisposeAsync()
         {
