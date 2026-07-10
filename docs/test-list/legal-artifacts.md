@@ -15,6 +15,7 @@
 - [x] 全payload fileを列挙する決定論的な`LEGAL-MANIFEST.sha256`を生成する
 - [x] 外部resource／JavaScriptなしで目次・検索案内・license全文を持つHTML Noticesを生成する
 - [x] 生成対象外のfileがLegal Bundle directoryに残っていれば検証を失敗させる
+- [x] Legal Bundleを同一volumeのstagingから置換し、失敗時は既存bundleを保持する
 
 ## English
 
@@ -31,3 +32,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Generate a deterministic `LEGAL-MANIFEST.sha256` covering every payload file
 - [x] Generate HTML Notices with contents, search guidance, and full license text without external resources or JavaScript
 - [x] Fail Legal Bundle directory verification when any unexpected file remains
+- [x] Replace a Legal Bundle from same-volume staging while preserving the existing bundle on failure
