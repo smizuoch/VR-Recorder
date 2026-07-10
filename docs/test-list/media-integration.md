@@ -14,7 +14,7 @@
 - [x] versioned native Spout sourceからsender snapshotとframe observationをUTF-8 buffer sizing付きで取得する
 - [x] managed P/Invoke sourceを既存の3 frame／300 ms stability gatewayへ接続する
 - [x] native pollのcaller cancellationとDisposeを短いpoll sliceで収束させる
-- [ ] forced encoder終了時はpendingを保持しSavedを発行しない
+- [x] forced encoder終了時はpendingを保持しSavedを発行しない
 
 ## English
 
@@ -30,4 +30,4 @@
 - [x] Read sender snapshots and frame observations from a versioned native Spout source with UTF-8 buffer sizing
 - [x] Connect the managed P/Invoke source to the existing three-frame/300-ms stability gateway
 - [x] Converge caller cancellation and Dispose around native polling through short poll slices
-- [ ] Preserve pending output and suppress Saved after forced encoder termination
+- [x] Preserve pending output and suppress Saved after forced encoder termination
