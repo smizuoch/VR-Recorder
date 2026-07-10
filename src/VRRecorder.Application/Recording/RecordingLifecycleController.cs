@@ -162,6 +162,17 @@ public sealed class RecordingLifecycleController : IDisposable
                     RecorderState.Recording,
                     RecorderTrigger.FreshFrameTimeout));
             }
+            else if (status == VideoSignalStatus.SafeStop &&
+                     State == RecorderState.SignalLost)
+            {
+                var stopping = RecorderStateMachine.Transition(
+                    RecorderState.SignalLost,
+                    RecorderTrigger.GraceExpired);
+                SetState(RecorderStateMachine.Transition(
+                    stopping,
+                    RecorderTrigger.StopCompleted));
+                _videoSignal = null;
+            }
 
             return status;
         }
