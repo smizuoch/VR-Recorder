@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
-using VRRecorder.Application.Compliance;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.Domain.Recording;
+using RecorderStartupUseCase =
+    VRRecorder.Application.Compliance.RecorderStartupUseCase;
 
 namespace VRRecorder.Compliance.Tests.Runtime;
 

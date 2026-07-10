@@ -99,7 +99,19 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "vrrecorder.application": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Domain": "[1.0.0, )"
+        }
+      },
       "vrrecorder.compliance": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.domain": {
         "type": "Project"
       }
     }

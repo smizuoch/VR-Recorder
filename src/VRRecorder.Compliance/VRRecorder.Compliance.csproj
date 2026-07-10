@@ -3,4 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>VRRecorder.Compliance</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../VRRecorder.Application/VRRecorder.Application.csproj" />
+  </ItemGroup>
 </Project>
