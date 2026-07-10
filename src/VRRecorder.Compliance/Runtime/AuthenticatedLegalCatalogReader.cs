@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Ports;
 using VRRecorder.Compliance.Generation;
@@ -51,7 +50,8 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         try
         {
             return new LegalCatalogReadResult.Available(
-                await LoadAsync(cancellationToken).ConfigureAwait(false));
+                (await LoadWithManifestAsync(cancellationToken)
+                    .ConfigureAwait(false)).Catalog);
         }
         catch (LegalCatalogRejectedException exception)
         {
@@ -63,11 +63,38 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         }
     }
 
-    public async Task<LegalTextReadResult> ReadLicenseTextAsync(
+    public Task<LegalTextReadResult> ReadDocumentAsync(
+        string componentId,
+        LegalDocumentReference reference,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
+        ArgumentNullException.ThrowIfNull(reference);
+        return ReadDocumentCoreAsync(
+            componentId,
+            reference,
+            useCatalogLicenseReference: false,
+            cancellationToken);
+    }
+
+    public Task<LegalTextReadResult> ReadLicenseTextAsync(
         string componentId,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
+        return ReadDocumentCoreAsync(
+            componentId,
+            requestedReference: null,
+            useCatalogLicenseReference: true,
+            cancellationToken);
+    }
+
+    private async Task<LegalTextReadResult> ReadDocumentCoreAsync(
+        string componentId,
+        LegalDocumentReference? requestedReference,
+        bool useCatalogLicenseReference,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var loaded = await LoadWithManifestAsync(cancellationToken)
@@ -81,8 +108,26 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
                     componentId);
             }
 
+            LegalDocumentReference reference;
+            if (useCatalogLicenseReference)
+            {
+                reference = component.LegalDocuments.Single(item =>
+                    item.Kind == LegalDocumentKind.License);
+            }
+            else
+            {
+                reference = component.LegalDocuments.SingleOrDefault(item =>
+                    item == requestedReference)!;
+                if (reference is null)
+                {
+                    return RejectText(
+                        "legal-catalog-document-reference-mismatch",
+                        ReferenceSubject(componentId, requestedReference!));
+                }
+            }
+
             var content = await ReadVerifiedPayloadAsync(
-                    component.LicenseTextPath,
+                    reference.RelativePath,
                     loaded.Manifest,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -94,13 +139,13 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
             catch (DecoderFallbackException)
             {
                 return RejectText(
-                    "legal-catalog-license-text-invalid",
-                    component.LicenseTextPath);
+                    "legal-catalog-document-text-invalid",
+                    reference.RelativePath);
             }
 
             return new LegalTextReadResult.Available(new LegalTextDocument(
                 component.Id,
-                component.LicenseTextPath,
+                reference,
                 text));
         }
         catch (LegalCatalogRejectedException exception)
@@ -110,15 +155,10 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         catch (Exception exception) when (IsFailClosedReadFailure(exception))
         {
             return RejectText(
-                "legal-catalog-license-text-unreadable",
+                "legal-catalog-document-unreadable",
                 componentId);
         }
     }
-
-    private async Task<LegalCatalogSnapshot> LoadAsync(
-        CancellationToken cancellationToken) =>
-        (await LoadWithManifestAsync(cancellationToken).ConfigureAwait(false))
-        .Catalog;
 
     private async Task<LoadedCatalog> LoadWithManifestAsync(
         CancellationToken cancellationToken)
@@ -246,7 +286,7 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         if (!manifest.TryGetValue(relativePath, out var expectedHash))
         {
             throw Reject(
-                "legal-catalog-license-reference-invalid",
+                "legal-catalog-document-reference-invalid",
                 relativePath);
         }
 
@@ -259,7 +299,7 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         catch (ArgumentException)
         {
             throw Reject(
-                "legal-catalog-license-reference-invalid",
+                "legal-catalog-document-reference-invalid",
                 relativePath);
         }
 
@@ -288,129 +328,43 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         LegalBundleIdentity identity,
         IReadOnlyDictionary<string, byte[]> manifest)
     {
+        ParsedLegalCatalog parsed;
         try
         {
-            using var document = JsonDocument.Parse(
-                StrictUtf8.GetString(bytes),
-                new JsonDocumentOptions
-                {
-                    AllowTrailingCommas = false,
-                    CommentHandling = JsonCommentHandling.Disallow,
-                    MaxDepth = 16,
-                });
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object ||
-                HasDuplicateProperties(root) ||
-                RequiredInt32(root, "schemaVersion") != 2 ||
-                !string.Equals(
-                    RequiredString(root, "bundleId"),
-                    identity.BundleId,
-                    StringComparison.Ordinal))
-            {
-                throw new InvalidDataException();
-            }
-
-            var productVersion = RequiredString(root, "productVersion");
-            var generatedAt = RequiredString(root, "generatedAtUtc");
-            if (!DateTimeOffset.TryParseExact(
-                    generatedAt,
-                    "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.AssumeUniversal |
-                    System.Globalization.DateTimeStyles.AdjustToUniversal,
-                    out _))
-            {
-                throw new InvalidDataException();
-            }
-
-            var integrity = RequiredObject(root, "integrityManifest");
-            if (!string.Equals(
-                    RequiredString(integrity, "path"),
-                    ManifestFileName,
-                    StringComparison.Ordinal) ||
-                !string.Equals(
-                    RequiredString(integrity, "algorithm"),
-                    "SHA-256",
-                    StringComparison.Ordinal))
-            {
-                throw new InvalidDataException();
-            }
-
-            var componentArray = RequiredArray(root, "components");
-            var componentIds = new HashSet<string>(StringComparer.Ordinal);
-            var components = new List<LegalCatalogComponent>();
-            foreach (var element in componentArray.EnumerateArray())
-            {
-                if (element.ValueKind != JsonValueKind.Object)
-                {
-                    throw new InvalidDataException();
-                }
-
-                var id = RequiredString(element, "id");
-                if (!componentIds.Add(id))
-                {
-                    throw new InvalidDataException();
-                }
-
-                var licenseText = RequiredString(element, "licenseText");
-                ValidateLicenseReference(licenseText, manifest);
-                components.Add(new LegalCatalogComponent(
-                    id,
-                    RequiredString(element, "displayName"),
-                    RequiredString(element, "version"),
-                    RequiredString(element, "licenseExpression"),
-                    RequiredString(element, "usage"),
-                    RequiredString(element, "linkage"),
-                    RequiredBoolean(element, "modified"),
-                    RequiredString(element, "sourceInfo"),
-                    licenseText));
-            }
-
-            return new LegalCatalogSnapshot(
+            var pathComparer = OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            parsed = LegalCatalogV3Parser.Parse(
+                bytes,
                 identity.BundleId,
-                productVersion,
-                components
-                    .OrderBy(component => component.Id, StringComparer.Ordinal)
-                    .ToArray());
+                manifest.Keys.ToHashSet(pathComparer),
+                _bundleDirectory);
         }
-        catch (LegalCatalogRejectedException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (
-            exception is JsonException or
-                DecoderFallbackException or
-                InvalidDataException or
-                InvalidOperationException or
-                KeyNotFoundException)
+        catch (InvalidDataException)
         {
             throw Reject("legal-catalog-invalid", CatalogFileName);
         }
-    }
 
-    private void ValidateLicenseReference(
-        string relativePath,
-        IReadOnlyDictionary<string, byte[]> manifest)
-    {
-        try
-        {
-            _ = LegalArtifactPath.Resolve(_bundleDirectory, relativePath);
-        }
-        catch (ArgumentException)
-        {
-            throw Reject(
-                "legal-catalog-license-reference-invalid",
-                relativePath);
-        }
-
-        if (!relativePath.StartsWith("LICENSES/", StringComparison.Ordinal) ||
-            !relativePath.EndsWith("/LICENSE.txt", StringComparison.Ordinal) ||
-            !manifest.ContainsKey(relativePath))
-        {
-            throw Reject(
-                "legal-catalog-license-reference-invalid",
-                relativePath);
-        }
+        return new LegalCatalogSnapshot(
+            parsed.BundleId,
+            parsed.ProductVersion,
+            identity.ManifestSha256,
+            parsed.Components.Select(component =>
+                new LegalCatalogComponent(
+                    component.Id,
+                    component.DisplayName,
+                    component.Version,
+                    component.LicenseExpression,
+                    component.Usage,
+                    component.Linkage,
+                    component.Modified,
+                    component.SourceInformation,
+                    component.CopyrightNotice,
+                    component.LegalDocuments.Select(reference =>
+                        new LegalDocumentReference(
+                            MapKind(reference.Kind),
+                            reference.Path)).ToArray()))
+                .ToArray());
     }
 
     private void RejectReparsePoints(string relativePath)
@@ -431,86 +385,20 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
         }
     }
 
-    private static bool HasDuplicateProperties(JsonElement element)
+    private static LegalDocumentKind MapKind(LegalFileKind kind) => kind switch
     {
-        if (element.ValueKind == JsonValueKind.Object)
-        {
-            var properties = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var property in element.EnumerateObject())
-            {
-                if (!properties.Add(property.Name) ||
-                    HasDuplicateProperties(property.Value))
-                {
-                    return true;
-                }
-            }
-        }
-        else if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in element.EnumerateArray())
-            {
-                if (HasDuplicateProperties(item))
-                {
-                    return true;
-                }
-            }
-        }
+        LegalFileKind.License => LegalDocumentKind.License,
+        LegalFileKind.Notice => LegalDocumentKind.Notice,
+        LegalFileKind.Copyright => LegalDocumentKind.Copyright,
+        LegalFileKind.Attribution => LegalDocumentKind.Attribution,
+        LegalFileKind.AssetManifest => LegalDocumentKind.AssetManifest,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
-        return false;
-    }
-
-    private static string RequiredString(JsonElement parent, string name)
-    {
-        var value = parent.GetProperty(name);
-        if (value.ValueKind != JsonValueKind.String)
-        {
-            throw new InvalidDataException();
-        }
-
-        var text = value.GetString();
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            throw new InvalidDataException();
-        }
-
-        return text;
-    }
-
-    private static int RequiredInt32(JsonElement parent, string name)
-    {
-        var value = parent.GetProperty(name);
-        return value.ValueKind == JsonValueKind.Number &&
-               value.TryGetInt32(out var result)
-            ? result
-            : throw new InvalidDataException();
-    }
-
-    private static bool RequiredBoolean(JsonElement parent, string name)
-    {
-        var value = parent.GetProperty(name);
-        return value.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            _ => throw new InvalidDataException(),
-        };
-    }
-
-    private static JsonElement RequiredObject(JsonElement parent, string name)
-    {
-        var value = parent.GetProperty(name);
-        return value.ValueKind == JsonValueKind.Object
-            ? value
-            : throw new InvalidDataException();
-    }
-
-    private static JsonElement RequiredArray(JsonElement parent, string name)
-    {
-        var value = parent.GetProperty(name);
-        return value.ValueKind == JsonValueKind.Array
-            ? value
-            : throw new InvalidDataException();
-    }
+    private static string ReferenceSubject(
+        string componentId,
+        LegalDocumentReference reference) =>
+        $"{componentId}:{reference.Kind}:{reference.RelativePath}";
 
     private static LegalCatalogRejectedException Reject(
         string code,
@@ -530,7 +418,6 @@ public sealed class AuthenticatedLegalCatalogReader : ILegalCatalogReader
     private static bool IsFailClosedReadFailure(Exception exception) =>
         exception is IOException or
             UnauthorizedAccessException or
-            JsonException or
             DecoderFallbackException or
             CryptographicException;
 
