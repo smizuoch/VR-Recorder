@@ -6,6 +6,50 @@ namespace VRRecorder.IntegrationTests.Storage;
 
 public sealed class FfprobeRecordingFileValidatorTests
 {
+    [Fact]
+    public async Task OneValidatorUsesTheExpectationOfEachRecordingSession()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var ffprobePath = Path.Combine(directory.Path, "ffprobe-fixture");
+        var recordingPath = Path.Combine(directory.Path, "recording.mp4");
+        await File.WriteAllBytesAsync(recordingPath, []);
+        await File.WriteAllTextAsync(
+            ffprobePath,
+            CreateProbeFixtureScript("30/1"));
+        File.SetUnixFileMode(
+            ffprobePath,
+            UnixFileMode.UserRead |
+            UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute);
+        var validator = new FfprobeRecordingFileValidator(ffprobePath);
+        var recording = new FinalizedRecording(recordingPath);
+        var matching = new RecordingMediaExpectation(
+            Width: 320,
+            Height: 180,
+            FramesPerSecond: 30,
+            AudioSampleRate: 48000,
+            AudioChannels: 2,
+            ExpectedDuration: TimeSpan.FromSeconds(3));
+        var mismatching = matching with { Width = 640 };
+
+        var valid = await validator.ValidateAsync(
+            recording,
+            matching,
+            CancellationToken.None);
+        var invalid = await validator.ValidateAsync(
+            recording,
+            mismatching,
+            CancellationToken.None);
+
+        Assert.Equal(RecordingFileValidation.Valid, valid);
+        Assert.Equal(RecordingFileValidation.Invalid, invalid);
+    }
+
     [Theory]
     [InlineData("0/0")]
     [InlineData("NaN/1")]
