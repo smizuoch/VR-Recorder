@@ -35,29 +35,29 @@ public sealed class EncoderSelector
     private static IReadOnlyList<EncoderKind> Candidates(
         EncoderPreference preference,
         GpuVendor vendor) => preference switch
-    {
-        EncoderPreference.Auto => vendor switch
         {
-            GpuVendor.Nvidia =>
-                [EncoderKind.Nvenc, EncoderKind.MediaFoundationSoftware],
-            GpuVendor.Amd =>
-                [EncoderKind.Amf, EncoderKind.MediaFoundationSoftware],
-            GpuVendor.Intel =>
-                [EncoderKind.Qsv, EncoderKind.MediaFoundationSoftware],
-            GpuVendor.Unknown => [EncoderKind.MediaFoundationSoftware],
+            EncoderPreference.Auto => vendor switch
+            {
+                GpuVendor.Nvidia =>
+                    [EncoderKind.Nvenc, EncoderKind.MediaFoundationSoftware],
+                GpuVendor.Amd =>
+                    [EncoderKind.Amf, EncoderKind.MediaFoundationSoftware],
+                GpuVendor.Intel =>
+                    [EncoderKind.Qsv, EncoderKind.MediaFoundationSoftware],
+                GpuVendor.Unknown => [EncoderKind.MediaFoundationSoftware],
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(vendor),
+                    vendor,
+                    "Unknown GPU vendor."),
+            },
+            EncoderPreference.Nvenc => [EncoderKind.Nvenc],
+            EncoderPreference.Amf => [EncoderKind.Amf],
+            EncoderPreference.Qsv => [EncoderKind.Qsv],
+            EncoderPreference.MediaFoundationSoftware =>
+                [EncoderKind.MediaFoundationSoftware],
             _ => throw new ArgumentOutOfRangeException(
-                nameof(vendor),
-                vendor,
-                "Unknown GPU vendor."),
-        },
-        EncoderPreference.Nvenc => [EncoderKind.Nvenc],
-        EncoderPreference.Amf => [EncoderKind.Amf],
-        EncoderPreference.Qsv => [EncoderKind.Qsv],
-        EncoderPreference.MediaFoundationSoftware =>
-            [EncoderKind.MediaFoundationSoftware],
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(preference),
-            preference,
-            "Unknown encoder preference."),
-    };
+                nameof(preference),
+                preference,
+                "Unknown encoder preference."),
+        };
 }
