@@ -8,21 +8,37 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class LegalArtifactSetGeneratorTests
 {
     [Fact]
+    public async Task ManualNoticeEditIsDetectedByRegenerationDiff()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var context = Context("manual-edit");
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var expected = LegalArtifactSetGenerator.Generate(
+            context,
+            eligibility.ApprovedGraph!);
+        await LegalArtifactDirectoryWriter.WriteAsync(
+            directory.Path,
+            expected,
+            CancellationToken.None);
+        var noticePath = Path.Combine(
+            directory.Path,
+            "THIRD-PARTY-NOTICES.txt");
+        await File.AppendAllTextAsync(noticePath, "MANUAL EDIT");
+
+        var issues = await LegalArtifactDirectoryVerifier.VerifyAsync(
+            directory.Path,
+            expected,
+            CancellationToken.None);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("generated-artifact-diff", issue.Code);
+        Assert.Equal("THIRD-PARTY-NOTICES.txt", issue.Subject);
+    }
+
+    [Fact]
     public void ReorderedGraphProducesByteIdenticalArtifactSet()
     {
-        var context = new SpdxGenerationContext(
-            ProductName: "VR-Recorder",
-            ProductVersion: "0.1.0",
-            DocumentNamespace: "https://example.invalid/spdx/artifact-set",
-            CreatedAtUtc: new DateTimeOffset(
-                2026,
-                7,
-                10,
-                0,
-                0,
-                0,
-                TimeSpan.Zero),
-            Creator: "Organization: VR-Recorder Project");
+        var context = Context("artifact-set");
         var forward = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
         var reverse = ReleaseEligibilityGate.Evaluate(Graph(reverse: true));
         Assert.True(forward.IsApproved);
@@ -55,6 +71,21 @@ public sealed class LegalArtifactSetGeneratorTests
                 pair.First.Sha256);
         });
     }
+
+    private static SpdxGenerationContext Context(string suffix) =>
+        new(
+            ProductName: "VR-Recorder",
+            ProductVersion: "0.1.0",
+            DocumentNamespace: $"https://example.invalid/spdx/{suffix}",
+            CreatedAtUtc: new DateTimeOffset(
+                2026,
+                7,
+                10,
+                0,
+                0,
+                0,
+                TimeSpan.Zero),
+            Creator: "Organization: VR-Recorder Project");
 
     private static NormalizedComponentGraph Graph(bool reverse)
     {
@@ -111,4 +142,31 @@ public sealed class LegalArtifactSetGeneratorTests
 
     private static string Hash(ReadOnlySpan<byte> content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        private TemporaryDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TemporaryDirectory Create()
+        {
+            var path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"vr-recorder-legal-tests-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(path);
+            return new TemporaryDirectory(path);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
 }
