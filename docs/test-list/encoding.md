@@ -9,7 +9,7 @@
 - [x] Intel adapterではQSVを先にprobeする
 - [x] 固定指定が失敗した場合は黙って別encoderを選ばず明示失敗する
 - [x] packetを生成しないprobeは失敗として扱う
-- [ ] 全encoder probe requestを安定化したSpout senderと同じadapter LUIDへ固定する
+- [x] 全encoder probe requestを安定化したSpout senderと同じadapter LUIDへ固定する
 
 ## English
 
@@ -20,4 +20,4 @@ Following Basic Design v0.3 §§10.3, 11.2, 18.4, and 24, probe success requires
 - [x] Probe QSV first on an Intel adapter
 - [x] Fail explicitly instead of silently choosing another encoder when a fixed preference fails
 - [x] Treat a probe that produces no packet as failed
-- [ ] Pin every encoder probe request to the same adapter LUID as the stabilized Spout sender
+- [x] Pin every encoder probe request to the same adapter LUID as the stabilized Spout sender

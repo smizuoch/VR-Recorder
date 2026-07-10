@@ -1,5 +1,8 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Encoding;
+using VRRecorder.Domain.Timing;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Infrastructure.Media;
 
@@ -122,34 +125,25 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
     {
         public Candidate(SpoutFrameObservation frame)
         {
-            Signal = frame.Signal;
+            Signature = SourceSignature.From(frame.Signal);
             FirstReceivedAt = frame.ReceivedAt;
             LastReceivedAt = frame.ReceivedAt;
             LastFrameSequence = frame.FrameSequence;
             FrameCount = 1;
         }
 
-        public StableVideoSignal Signal { get; }
+        public SourceSignature Signature { get; }
 
-        public Domain.Timing.MonotonicTimestamp FirstReceivedAt { get; }
+        public MonotonicTimestamp FirstReceivedAt { get; }
 
-        public Domain.Timing.MonotonicTimestamp LastReceivedAt { get; private set; }
+        public MonotonicTimestamp LastReceivedAt { get; private set; }
 
         public ulong LastFrameSequence { get; private set; }
 
         public int FrameCount { get; private set; }
 
         public bool HasSameSignature(StableVideoSignal signal) =>
-            string.Equals(Signal.SenderId, signal.SenderId, StringComparison.Ordinal) &&
-            Signal.AdapterLuid == signal.AdapterLuid &&
-            string.Equals(
-                Signal.GpuIdentity,
-                signal.GpuIdentity,
-                StringComparison.Ordinal) &&
-            Signal.GpuVendor == signal.GpuVendor &&
-            Signal.Width == signal.Width &&
-            Signal.Height == signal.Height &&
-            Signal.PixelFormat == signal.PixelFormat;
+            Signature == SourceSignature.From(signal);
 
         public void Observe(SpoutFrameObservation frame)
         {
@@ -157,5 +151,27 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
             LastFrameSequence = frame.FrameSequence;
             FrameCount++;
         }
+    }
+
+    // Estimated FPS is deliberately excluded: it is a rolling estimate. The
+    // last stable frame's estimate is carried to the recording plan instead.
+    private sealed record SourceSignature(
+        string SenderId,
+        ulong AdapterLuid,
+        string GpuIdentity,
+        GpuVendor GpuVendor,
+        int Width,
+        int Height,
+        VideoPixelFormat PixelFormat)
+    {
+        public static SourceSignature From(StableVideoSignal signal) =>
+            new(
+                signal.SenderId,
+                signal.AdapterLuid,
+                signal.GpuIdentity,
+                signal.GpuVendor,
+                signal.Width,
+                signal.Height,
+                signal.PixelFormat);
     }
 }
