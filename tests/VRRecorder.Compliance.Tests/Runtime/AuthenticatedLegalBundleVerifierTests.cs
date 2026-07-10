@@ -136,6 +136,45 @@ public sealed class AuthenticatedLegalBundleVerifierTests
         Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
     }
 
+    [Fact]
+    public async Task RejectsDuplicateCatalogProperties()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var catalog = Encoding.UTF8.GetBytes($$"""
+            {
+              "schemaVersion": 2,
+              "bundleId": "{{BundleId}}",
+              "bundleId": "{{BundleId}}",
+              "integrityManifest": {
+                "path": "LEGAL-MANIFEST.sha256",
+                "algorithm": "SHA-256"
+              }
+            }
+            """);
+        var manifest = Encoding.UTF8.GetBytes(
+            $"{Hash(catalog)}  THIRD-PARTY-COMPONENTS.json\n");
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "THIRD-PARTY-COMPONENTS.json"),
+            catalog);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory.Path, "LEGAL-MANIFEST.sha256"),
+            manifest);
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new StubAuthenticatedAnchorSource(
+                new AuthenticatedLegalBundleAnchor(
+                    BundleId,
+                    Hash(manifest))));
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var rejected = Assert.IsType<LegalBundleVerification.Rejected>(result);
+        var issue = Assert.Single(rejected.Issues);
+        Assert.Equal("legal-bundle-catalog-invalid", issue.Code);
+        Assert.Equal("THIRD-PARTY-COMPONENTS.json", issue.Subject);
+    }
+
     private static string CatalogJson() => $$"""
         {
           "schemaVersion": 2,
