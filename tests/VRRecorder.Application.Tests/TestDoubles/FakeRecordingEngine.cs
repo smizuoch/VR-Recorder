@@ -5,7 +5,12 @@ namespace VRRecorder.Application.Tests.TestDoubles;
 
 internal sealed class FakeRecordingEngine : IRecordingEngine
 {
+    private readonly TaskCompletionSource<RecordingResult> _stopCompletion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+
     public int StartCallCount { get; private set; }
+
+    public int StopCallCount { get; private set; }
 
     public List<string> CreatedFiles { get; } = [];
 
@@ -20,6 +25,12 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
 
     public Task<RecordingResult> StopAsync(
         RecordingHandle handle,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        CancellationToken cancellationToken)
+    {
+        StopCallCount++;
+        return _stopCompletion.Task.WaitAsync(cancellationToken);
+    }
+
+    public void CompleteStop(RecordingResult result) =>
+        _stopCompletion.TrySetResult(result);
 }
