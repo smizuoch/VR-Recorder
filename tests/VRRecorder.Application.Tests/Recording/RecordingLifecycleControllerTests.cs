@@ -64,12 +64,19 @@ public sealed class RecordingLifecycleControllerTests
                     MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
                 sessions));
         var restoreWarnings = new FakeCameraRestoreWarningSink();
+        var leaseStore = new RecordingCameraLeaseStore(events);
+        var leaseIdentity = new CameraLeaseIdentity(
+            "camera-session-001",
+            candidate.ServiceId,
+            processId: 1234,
+            new DateTimeOffset(2026, 7, 10, 3, 4, 5, TimeSpan.Zero));
         using var lifecycle = new RecordingLifecycleController(
             connections,
-            new RecordingCameraLeaseStore(events),
+            leaseStore,
             startRecording,
             sessions,
-            restoreWarnings);
+            restoreWarnings,
+            new FixedLeaseIdentitySource(leaseIdentity));
         var starting = lifecycle.StartAsync(
             candidate.ServiceId,
             new CameraSnapshot(
@@ -90,6 +97,7 @@ public sealed class RecordingLifecycleControllerTests
         engine.CommitFirstPacket(handle);
         var started = Assert.IsType<StartRecordingResult.Started>(
             (await starting).Recording);
+        Assert.Same(leaseIdentity, leaseStore.SavedLease?.Identity);
 
         var userStop = sessions.RequestStopAsync(
             new RecordingStopRequest(
@@ -458,11 +466,14 @@ public sealed class RecordingLifecycleControllerTests
     private sealed class RecordingCameraLeaseStore(List<string> events)
         : ICameraLeaseStore
     {
+        public CameraLease? SavedLease { get; private set; }
+
         public Task SaveAsync(
             CameraLease lease,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            SavedLease = lease;
             events.Add("lease:save");
             return Task.CompletedTask;
         }
@@ -474,6 +485,16 @@ public sealed class RecordingLifecycleControllerTests
             cancellationToken.ThrowIfCancellationRequested();
             events.Add("lease:delete");
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FixedLeaseIdentitySource(CameraLeaseIdentity identity)
+        : ICameraLeaseIdentitySource
+    {
+        public CameraLeaseIdentity Create(string vrChatServiceId)
+        {
+            Assert.Equal(identity.VrChatServiceId, vrChatServiceId);
+            return identity;
         }
     }
 
