@@ -1,4 +1,5 @@
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
 using VRRecorder.Domain.Storage;
@@ -247,6 +248,42 @@ public sealed class StartRecordingUseCaseTests
         Assert.Single(stopRequests.RequestedHandles);
     }
 
+    [Fact]
+    public async Task ActivatesSessionBeforeStartingRuntimeMonitors()
+    {
+        var events = new List<string>();
+        var signal = new ControllableVideoSignalGateway();
+        var engine = new FakeRecordingEngine();
+        var activator = new OrderedSessionActivator(events);
+        var useCase = new StartRecordingUseCase(
+            signal,
+            new ControllableCountdownTimer(),
+            CompletedReservation(),
+            new FixedWallClock(TestLocalNow),
+            SufficientStorage(),
+            engine,
+            activator,
+            new OrderedStorageMonitor(events),
+            CreateAutoStopScheduler());
+        var execution = useCase.ExecuteAsync(
+            Command(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await engine.WaitUntilStartRequestedAsync();
+        var handle = new RecordingHandle(
+            "session-001",
+            MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(1)));
+
+        engine.CommitFirstPacket(handle);
+        await execution;
+
+        Assert.Equal(["activate", "monitor"], events);
+        Assert.Equal(handle, activator.Handle);
+    }
+
     private static StartRecordingUseCase CreateUseCase(
         ControllableVideoSignalGateway signal,
         ControllableCountdownTimer countdown,
@@ -287,4 +324,31 @@ public sealed class StartRecordingUseCaseTests
 
     private static StubStorageSpaceProbe SufficientStorage() =>
         new(new StorageSpace(StorageCapacityPolicy.MinimumStartBytes));
+
+    private sealed class OrderedSessionActivator(List<string> events)
+        : IRecordingSessionActivator
+    {
+        public RecordingHandle? Handle { get; private set; }
+
+        public void Activate(
+            RecordingHandle handle,
+            CancellationToken sessionLifetimeToken)
+        {
+            Handle = handle;
+            events.Add("activate");
+        }
+    }
+
+    private sealed class OrderedStorageMonitor(List<string> events)
+        : IRecordingStorageMonitor
+    {
+        public Task RunAsync(
+            RecordingHandle handle,
+            OutputPath outputPath,
+            CancellationToken cancellationToken)
+        {
+            events.Add("monitor");
+            return Task.CompletedTask;
+        }
+    }
 }
