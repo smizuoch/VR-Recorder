@@ -166,6 +166,41 @@ public sealed class DesktopRecordingRuntimeTests
     }
 
     [Fact]
+    public async Task StaleVrChatSelectionPromptsBeforeUsingOnlyNewCandidate()
+    {
+        var candidate = Candidate("service-new", "VRChat New", 9020);
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("service-stale"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueCompleted(new RecordingLifecycleStartResult(
+            RecorderState.Ready,
+            new VrChatCameraConnectionResolution.SelectionRequired(
+                [candidate]),
+            Recording: null));
+        lifecycle.EnqueueCompleted(Started(Handle("session-reselected")));
+        var selector = new StubVrChatInstanceSelectionPrompt(
+            candidate.ServiceId);
+        var stops = new ControllableStopRequestSink(lifecycle)
+        {
+            CompleteImmediately = true,
+        };
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops,
+            selector);
+
+        await runtime.ToggleAsync(CancellationToken.None);
+
+        Assert.Equal([candidate], Assert.Single(selector.Prompts));
+        Assert.Equal(
+            ["service-stale", candidate.ServiceId],
+            lifecycle.StartRequests.Select(request => request.ServiceId));
+        Assert.Equal(RecorderState.Recording, lifecycle.State);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
     public async Task CompletedExternalStopDoesNotSendStaleStopBeforeNextStart()
     {
         var requests = new ControllableStartRequestSource();
