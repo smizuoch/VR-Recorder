@@ -81,6 +81,84 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(0, engine.StartCallCount);
     }
 
+    [Fact]
+    public async Task CountdownCancellationRestoresOwnedCameraStateWithoutStartingMedia()
+    {
+        var events = new List<string>();
+        var candidate = Candidate("selected", 9000);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(new RecordingCameraGateway(events)));
+        var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
+        var reservation = new FakeRecordingFileReservation();
+        var engine = new FakeRecordingEngine();
+        var startRecording = new StartRecordingUseCase(
+            signal,
+            countdown,
+            reservation,
+            new FixedWallClock(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new StubStorageSpaceProbe(new StorageSpace(
+                StorageCapacityPolicy.MinimumStartBytes)),
+            new EncoderSelector(new ScriptedEncoderProbe(
+                (EncoderKind.MediaFoundationSoftware,
+                    EncoderProbeResult.PacketProduced))),
+            engine,
+            new FakeRecordingSessionActivator(),
+            new FakeRecordingStorageMonitor(),
+            new AutoStopScheduler(
+                new ControllableMonotonicClock(
+                    MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+                new FakeStopRequestSink()));
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            new RecordingCameraLeaseStore(events),
+            startRecording,
+            new FakeStopRequestSink());
+        using var cancellation = new CancellationTokenSource();
+        var start = lifecycle.StartAsync(
+            candidate.ServiceId,
+            new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)),
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(3),
+                RecordingDuration.Infinite,
+                new OutputPath(Path.GetTempPath()),
+                new FrameRate(30)),
+            cancellation.Token);
+        await signal.WaitUntilRequestedAsync();
+        signal.CompleteWithStableSignal(new StableVideoSignal(320, 180));
+        await countdown.WaitUntilRequestedAsync();
+
+        Assert.Equal(
+            ["lease:save", "mode:Stream", "streaming:true"],
+            events);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start);
+        Assert.Equal(
+            [
+                "lease:save",
+                "mode:Stream",
+                "streaming:true",
+                "streaming:false",
+                "mode:Photo",
+                "lease:delete",
+            ],
+            events);
+        Assert.Equal(RecorderState.Ready, lifecycle.State);
+        Assert.Equal(0, reservation.CallCount);
+        Assert.Equal(0, engine.StartCallCount);
+    }
+
     private static VrChatInstanceCandidate Candidate(
         string serviceId,
         int oscPort) =>
@@ -111,6 +189,57 @@ public sealed class RecordingLifecycleControllerTests
         {
             CreatedFor.Add(candidate);
             return new UnexpectedCameraGateway();
+        }
+    }
+
+    private sealed class FixedGatewayFactory(IVrChatCameraGateway gateway)
+        : IVrChatCameraGatewayFactory
+    {
+        public IVrChatCameraGateway Create(VrChatInstanceCandidate candidate) =>
+            gateway;
+    }
+
+    private sealed class RecordingCameraGateway(List<string> events)
+        : IVrChatCameraGateway
+    {
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add($"mode:{mode}");
+            return Task.CompletedTask;
+        }
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingCameraLeaseStore(List<string> events)
+        : ICameraLeaseStore
+    {
+        public Task SaveAsync(
+            CameraLease lease,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add("lease:save");
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(
+            CameraLease lease,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add("lease:delete");
+            return Task.CompletedTask;
         }
     }
 
