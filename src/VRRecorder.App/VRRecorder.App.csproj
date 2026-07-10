@@ -16,4 +16,31 @@
     <ProjectReference Include="../VRRecorder.DesignSystem/VRRecorder.DesignSystem.csproj" />
     <ProjectReference Include="../VRRecorder.Infrastructure.SteamVr/VRRecorder.Infrastructure.SteamVr.csproj" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(LegalBundleId)' != '' and '$(LegalManifestSha256)' != ''">
+    <AssemblyMetadata Include="VRRecorder.LegalBundleId"
+                      Value="$(LegalBundleId)" />
+    <AssemblyMetadata Include="VRRecorder.LegalManifestSha256"
+                      Value="$(LegalManifestSha256)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(LegalBundleDirectory)' != '' and Exists('$(LegalBundleDirectory)')">
+    <Content Include="$(LegalBundleDirectory)/**/*"
+             Link="%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="ValidateReleaseLegalBundle"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'Release'">
+    <Error Condition="'$(LegalBundleId)' == ''"
+           Text="Release requires LegalBundleId from the approved Legal Bundle." />
+    <Error Condition="'$(LegalManifestSha256)' == '' or !$([System.Text.RegularExpressions.Regex]::IsMatch('$(LegalManifestSha256)', '^[0-9a-f]{64}$'))"
+           Text="Release requires LegalManifestSha256 as 64 lowercase hexadecimal characters." />
+    <Error Condition="'$(LegalBundleDirectory)' == '' or !Exists('$(LegalBundleDirectory)/LEGAL-MANIFEST.sha256')"
+           Text="Release requires LegalBundleDirectory containing LEGAL-MANIFEST.sha256." />
+    <Error Condition="'$(LegalBundleDirectory)' == '' or !Exists('$(LegalBundleDirectory)/THIRD-PARTY-COMPONENTS.json')"
+           Text="Release requires LegalBundleDirectory containing THIRD-PARTY-COMPONENTS.json." />
+  </Target>
 </Project>
