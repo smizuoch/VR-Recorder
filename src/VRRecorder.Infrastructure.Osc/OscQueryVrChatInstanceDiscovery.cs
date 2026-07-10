@@ -83,6 +83,23 @@ public sealed class OscQueryVrChatInstanceDiscovery
         OscQueryServiceAdvertisement advertisement,
         CancellationToken cancellationToken)
     {
+        try
+        {
+            return await ProbeTrustedEndpointAsync(
+                    advertisement,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (UntrustedResponseUriException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<VrChatInstanceCandidate?> ProbeTrustedEndpointAsync(
+        OscQueryServiceAdvertisement advertisement,
+        CancellationToken cancellationToken)
+    {
         var queryEndpoint = new UriBuilder(
             Uri.UriSchemeHttp,
             advertisement.Address.ToString(),
@@ -239,6 +256,9 @@ public sealed class OscQueryVrChatInstanceDiscovery
         using var response = await _http
             .SendAsync(request, cancellationToken)
             .ConfigureAwait(false);
+        EnsureTrustedResponseUri(
+            endpoint,
+            response.RequestMessage?.RequestUri);
         response.EnsureSuccessStatusCode();
         if (!string.Equals(
                 response.Content.Headers.ContentType?.MediaType,
@@ -298,6 +318,30 @@ public sealed class OscQueryVrChatInstanceDiscovery
         return document;
     }
 
+    private static void EnsureTrustedResponseUri(
+        Uri requestedEndpoint,
+        Uri? effectiveEndpoint)
+    {
+        if (effectiveEndpoint is null ||
+            !effectiveEndpoint.IsAbsoluteUri ||
+            !string.Equals(
+                effectiveEndpoint.Scheme,
+                Uri.UriSchemeHttp,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                effectiveEndpoint.Authority,
+                requestedEndpoint.Authority,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(effectiveEndpoint.UserInfo) ||
+            !IPAddress.TryParse(
+                effectiveEndpoint.IdnHost,
+                out var effectiveAddress) ||
+            !IPAddress.IsLoopback(effectiveAddress))
+        {
+            throw new UntrustedResponseUriException();
+        }
+    }
+
     private static bool HasDuplicateProperties(JsonElement element)
     {
         if (element.ValueKind == JsonValueKind.Array)
@@ -349,4 +393,8 @@ public sealed class OscQueryVrChatInstanceDiscovery
         string Name,
         IPAddress OscAddress,
         int OscPort);
+
+    private sealed class UntrustedResponseUriException : Exception
+    {
+    }
 }
