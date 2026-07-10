@@ -2,6 +2,7 @@ using VRRecorder.Application.Camera;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
@@ -39,6 +40,8 @@ public sealed class RecordingLifecycleControllerTests
             CreateStartRecording(signal, reservation, engine),
             new FakeStopRequestSink(),
             new FakeCameraRestoreWarningSink());
+        List<RecorderStatusSnapshot> statuses = [];
+        using var statusSubscription = lifecycle.Subscribe(statuses.Add);
         await using var runtime = new DesktopRecordingRuntime(
             new FixedStartRequestSource(new DesktopRecordingStartRequest(
                 candidate.ServiceId,
@@ -70,6 +73,11 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(0, signal.CallCount);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);
+        AssertStatusSequence(
+            statuses,
+            RecorderState.Ready,
+            RecorderState.Arming,
+            RecorderState.Ready);
     }
 
     [Fact]
@@ -335,6 +343,8 @@ public sealed class RecordingLifecycleControllerTests
             CreateStartRecording(signal, reservation, engine, sessions),
             new FakeStopRequestSink(),
             new FakeCameraRestoreWarningSink());
+        List<RecorderStatusSnapshot> statuses = [];
+        using var statusSubscription = lifecycle.Subscribe(statuses.Add);
 
         var starting = lifecycle.StartAsync(
             candidate.ServiceId,
@@ -388,6 +398,13 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(1, gateway.DisposeCallCount);
         Assert.DoesNotContain("mode:Photo", events);
         Assert.Equal(RecorderState.Ready, lifecycle.State);
+        AssertStatusSequence(
+            statuses,
+            RecorderState.Ready,
+            RecorderState.Arming,
+            RecorderState.Starting,
+            RecorderState.Recording,
+            RecorderState.Ready);
     }
 
     [Fact]
@@ -475,6 +492,8 @@ public sealed class RecordingLifecycleControllerTests
             startRecording,
             new FakeStopRequestSink(),
             restoreWarnings);
+        List<RecorderStatusSnapshot> statuses = [];
+        using var statusSubscription = lifecycle.Subscribe(statuses.Add);
         using var cancellation = new CancellationTokenSource();
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
@@ -512,6 +531,12 @@ public sealed class RecordingLifecycleControllerTests
         Assert.Equal(RecorderState.Ready, lifecycle.State);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);
+        AssertStatusSequence(
+            statuses,
+            RecorderState.Ready,
+            RecorderState.Arming,
+            RecorderState.Countdown,
+            RecorderState.Ready);
     }
 
     [Theory]
@@ -753,6 +778,19 @@ public sealed class RecordingLifecycleControllerTests
                 new ControllableMonotonicClock(
                     MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
                 new FakeStopRequestSink()));
+
+    private static void AssertStatusSequence(
+        IReadOnlyList<RecorderStatusSnapshot> statuses,
+        params RecorderState[] expectedStates)
+    {
+        Assert.Equal(expectedStates, statuses.Select(status => status.State));
+        Assert.Equal(
+            Enumerable.Range(0, expectedStates.Length).Select(value => (long)value),
+            statuses.Select(status => status.Revision));
+        Assert.All(statuses, status => Assert.Equal(
+            RecorderStatusSnapshot.Create(status.Revision, status.State),
+            status));
+    }
 
     private sealed class StubDiscovery(
         IReadOnlyList<VrChatInstanceCandidate> candidates)
