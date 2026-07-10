@@ -8,6 +8,17 @@
     <system:String x:Key="Tray_Legal_Label">⟦Áböüt ánd lïcënsës · Áböüt ánd lïcënsës⟧</system:String>
     <system:String x:Key="Tray_LicenseFolder_Label">⟦Öpën lïcënsë földër · Öpën lïcënsë földër⟧</system:String>
     <system:String x:Key="Tray_Exit_Label">⟦Ëxït VR-Rëcördër sáfëly · Ëxït VR-Rëcördër sáfëly⟧</system:String>
+    <system:String x:Key="Rights_Title">⟦Bëförë yöü rëcörd · Bëförë yöü rëcörd⟧</system:String>
+    <system:String x:Key="Rights_Body">⟦Cönfïrm thát yöü hávë thë nëcëssáry cöpyrïght, ïmágë, vöïcë, prïvácy, pártïcïpánt-cönsënt, ánd sërvïcë-tërms përmïssïöns för whát yöü rëcörd. Rëcördïng stárts önly áftër yöür ëxplïcït áctïön ánd rëmáïns vïsïbly ïndïcátëd. · Cönfïrm thát yöü hávë thë nëcëssáry cöpyrïght, ïmágë, vöïcë, prïvácy, pártïcïpánt-cönsënt, ánd sërvïcë-tërms përmïssïöns för whát yöü rëcörd. Rëcördïng stárts önly áftër yöür ëxplïcït áctïön ánd rëmáïns vïsïbly ïndïcátëd.⟧</system:String>
+    <system:String x:Key="Rights_Acknowledge_Label">⟦Ï ündërstánd thát Ï ám rëspönsïblë för cönfïrmïng thësë rïghts ánd përmïssïöns. · Ï ündërstánd thát Ï ám rëspönsïblë för cönfïrmïng thësë rïghts ánd përmïssïöns.⟧</system:String>
+    <system:String x:Key="Rights_Acknowledge_AccessibleName">⟦Ácknöwlëdgë rëspönsïbïlïty för rëcördïng rïghts ánd pártïcïpánt cönsënt · Ácknöwlëdgë rëspönsïbïlïty för rëcördïng rïghts ánd pártïcïpánt cönsënt⟧</system:String>
+    <system:String x:Key="Rights_Accept_Label">⟦Ï ÜNDËRSTÁND · Ï ÜNDËRSTÁND⟧</system:String>
+    <system:String x:Key="Rights_Accept_AccessibleName">⟦Áccëpt thë rëcördïng rïghts nötïcë · Áccëpt thë rëcördïng rïghts nötïcë⟧</system:String>
+    <system:String x:Key="Rights_Accept_Tooltip">⟦Sávë thïs ácknöwlëdgëmënt ánd cöntïnüë · Sávë thïs ácknöwlëdgëmënt ánd cöntïnüë⟧</system:String>
+    <system:String x:Key="Rights_Decline_Label">⟦ËXÏT · ËXÏT⟧</system:String>
+    <system:String x:Key="Rights_Decline_AccessibleName">⟦Dëclïnë ánd ëxït VR-Rëcördër · Dëclïnë ánd ëxït VR-Rëcördër⟧</system:String>
+    <system:String x:Key="Rights_Decline_Tooltip">⟦Ëxït wïthöüt ënáblïng rëcördïng · Ëxït wïthöüt ënáblïng rëcördïng⟧</system:String>
+    <system:String x:Key="Rights_Persistence_Error">⟦Rëcördïng rëmáïns dïsáblëd bëcáüsë thë rïghts ácknöwlëdgëmënt cöüld nöt bë sávëd. · Rëcördïng rëmáïns dïsáblëd bëcáüsë thë rïghts ácknöwlëdgëmënt cöüld nöt bë sávëd.⟧</system:String>
     <system:String x:Key="Recording_Start_Short">⟦RËC · RËC⟧</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">⟦Stárt rëcördïng · Stárt rëcördïng⟧</system:String>
     <system:String x:Key="Recording_Start_Tooltip">⟦Stárt rëcördïng · Stárt rëcördïng⟧</system:String>

@@ -6,6 +6,7 @@ using VRRecorder.Application.Presentation;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
+using VRRecorder.Infrastructure.Storage;
 using VRRecorder.Infrastructure.SteamVr;
 
 namespace VRRecorder.App;
@@ -20,6 +21,9 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly AuthenticatedLegalBundleVerifier _legalVerifier;
     private readonly DesktopLegalController _legalController;
+    private readonly JsonFileRecordingRightsAcknowledgementStore
+        _recordingRightsStore;
+    private readonly RecordingRightsGate _recordingRightsGate;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
     private System.Windows.Forms.ContextMenuStrip? _trayMenu;
@@ -29,6 +33,12 @@ public partial class App : System.Windows.Application, IDisposable
 
     public App()
     {
+        _recordingRightsStore =
+            new JsonFileRecordingRightsAcknowledgementStore(
+                RecordingRightsPath());
+        _recordingRightsGate = new RecordingRightsGate(
+            _recordingRightsStore,
+            SystemWallClock.Instance);
         _legalVerifier = new AuthenticatedLegalBundleVerifier(
             new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
                 typeof(App).Assembly));
@@ -61,6 +71,19 @@ public partial class App : System.Windows.Application, IDisposable
 
     internal static bool IsExitRequested =>
         ((App)Current)._exitRequested;
+
+    internal static Task<bool> IsRecordingRightsAcknowledgedAsync(
+        CancellationToken cancellationToken) =>
+        ((App)Current)._recordingRightsGate.IsAcknowledgedAsync(
+            cancellationToken);
+
+    internal static Task AcknowledgeRecordingRightsAsync(
+        CancellationToken cancellationToken) =>
+        ((App)Current)._recordingRightsGate.AcknowledgeAsync(
+            cancellationToken);
+
+    internal static void ExitAfterRightsDeclined() =>
+        ((App)Current).RequestExit();
 
     internal static async Task<DesktopRecordingHostActivation>
         ActivateRecordingHostAsync(
@@ -132,7 +155,14 @@ public partial class App : System.Windows.Application, IDisposable
         finally
         {
             _steamVrInputLifetime.Dispose();
-            _recordingHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            try
+            {
+                _recordingHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            finally
+            {
+                _recordingRightsStore.Dispose();
+            }
         }
 
         GC.SuppressFinalize(this);
@@ -239,6 +269,17 @@ public partial class App : System.Windows.Application, IDisposable
     {
         _exitRequested = true;
         Shutdown();
+    }
+
+    private static string RecordingRightsPath()
+    {
+        var settingsPath = new WindowsSettingsPathProvider().GetPath();
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(
+            applicationDataDirectory,
+            "recording-rights.json");
     }
 
     private void StartSteamVrInput()

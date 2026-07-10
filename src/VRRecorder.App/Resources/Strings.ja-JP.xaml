@@ -8,6 +8,17 @@
     <system:String x:Key="Tray_Legal_Label">この製品とライセンス</system:String>
     <system:String x:Key="Tray_LicenseFolder_Label">ライセンスフォルダーを開く</system:String>
     <system:String x:Key="Tray_Exit_Label">安全にVR-Recorderを終了</system:String>
+    <system:String x:Key="Rights_Title">録画する前に確認してください</system:String>
+    <system:String x:Key="Rights_Body">録画対象の著作権、肖像、音声、プライバシー、参加者の同意、利用するサービスの規約について、必要な権利と許可があることを確認してください。録画は明示操作後にだけ開始し、録画中は常に表示されます。</system:String>
+    <system:String x:Key="Rights_Acknowledge_Label">これらの権利と許可を確認する責任が自分にあることを理解しました。</system:String>
+    <system:String x:Key="Rights_Acknowledge_AccessibleName">録画の権利と参加者同意を確認する責任を了承</system:String>
+    <system:String x:Key="Rights_Accept_Label">理解しました</system:String>
+    <system:String x:Key="Rights_Accept_AccessibleName">録画権利の確認事項を了承</system:String>
+    <system:String x:Key="Rights_Accept_Tooltip">了承を保存して続行します</system:String>
+    <system:String x:Key="Rights_Decline_Label">終了</system:String>
+    <system:String x:Key="Rights_Decline_AccessibleName">了承せずVR-Recorderを終了</system:String>
+    <system:String x:Key="Rights_Decline_Tooltip">録画を有効にせず終了します</system:String>
+    <system:String x:Key="Rights_Persistence_Error">録画権利の了承を保存できなかったため、録画は無効のままです。</system:String>
     <system:String x:Key="Recording_Start_Short">REC</system:String>
     <system:String x:Key="Recording_Start_AccessibleName">録画を開始</system:String>
     <system:String x:Key="Recording_Start_Tooltip">録画を開始します</system:String>

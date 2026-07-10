@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -97,10 +98,63 @@ public partial class MainWindow : Window
 
         _startupApplied = true;
         var startup = await App.VerifyStartupAsync(CancellationToken.None);
+        if (startup.State == RecorderState.Ready)
+        {
+            bool rightsAcknowledged;
+            try
+            {
+                rightsAcknowledged =
+                    await App.IsRecordingRightsAcknowledgedAsync(
+                        CancellationToken.None);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                ApplyRightsPersistenceError();
+                return;
+            }
+
+            if (!rightsAcknowledged)
+            {
+                var rightsWindow = new RecordingRightsWindow
+                {
+                    Owner = this,
+                };
+                if (rightsWindow.ShowDialog() != true)
+                {
+                    App.ExitAfterRightsDeclined();
+                    return;
+                }
+
+                try
+                {
+                    await App.AcknowledgeRecordingRightsAsync(
+                        CancellationToken.None);
+                }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException)
+                {
+                    ApplyRightsPersistenceError();
+                    return;
+                }
+            }
+        }
+
         var activation = await App.ActivateRecordingHostAsync(
             startup,
             CancellationToken.None);
         ApplyStartupResult(startup, activation);
+    }
+
+    private void ApplyRightsPersistenceError()
+    {
+        RecordingToggleButton.IsEnabled = false;
+        RecordingStatusText.SetResourceReference(
+            TextBlock.TextProperty,
+            "Rights_Persistence_Error");
+        RecordingStatusText.SetResourceReference(
+            AutomationProperties.NameProperty,
+            "Rights_Persistence_Error");
     }
 
     protected override void OnClosed(EventArgs e)
