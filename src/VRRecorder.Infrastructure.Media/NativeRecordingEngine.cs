@@ -104,11 +104,35 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                     $"Native recording session {handle.Id} is not active.");
             }
 
-            var result = await activeSession.Session
-                .StopAsync(cancellationToken)
-                .ConfigureAwait(false);
-            _sessions.TryRemove(handle.Id, out _);
-            return result;
+            try
+            {
+                var result = await activeSession.Session
+                    .StopAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                _sessions.TryRemove(handle.Id, out _);
+                return result;
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                _sessions.TryRemove(handle.Id, out _);
+                try
+                {
+                    await activeSession.Session
+                        .AbortAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Preserve the stop failure that made the session terminal.
+                }
+
+                throw;
+            }
         }
         finally
         {
