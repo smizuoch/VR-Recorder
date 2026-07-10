@@ -358,6 +358,64 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopProductionFactoryRecoversStaleCameraLeaseBeforeMediaPreflight()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var project = XDocument.Load(Path.Combine(
+            appDirectory,
+            "VRRecorder.App.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(reference => reference.Attribute("Include")?.Value)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Contains(
+            "../VRRecorder.Infrastructure.Osc/VRRecorder.Infrastructure.Osc.csproj",
+            references);
+        Assert.Contains(
+            "../VRRecorder.Infrastructure.Storage/VRRecorder.Infrastructure.Storage.csproj",
+            references);
+
+        var factory = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+        foreach (var productionType in new[]
+                 {
+                     "WindowsSettingsPathProvider",
+                     "FileSystemCameraLeaseStore",
+                     "SystemProcessCameraLeaseOwnerActivityProbe",
+                     "WindowsDnsSdOscQueryServiceBrowser",
+                     "OscQueryVrChatInstanceDiscovery",
+                     "ConfirmedUdpVrChatCameraGatewayFactory",
+                     "VrChatTargetResolver",
+                     "VrChatCameraConnectionUseCase",
+                     "StaleCameraLeaseRecoveryUseCase",
+                 })
+        {
+            Assert.Contains(productionType, factory);
+        }
+
+        Assert.Contains("StaleCameraLeaseRecoveryResult.NoLease", factory);
+        Assert.Contains("StaleCameraLeaseRecoveryResult.Restored", factory);
+        Assert.Contains("StaleCameraLeaseRecoveryResult.OwnerStillActive", factory);
+        Assert.Contains("StaleCameraLeaseRecoveryResult.Failed", factory);
+        Assert.Contains("DesktopRecordingInitializationException", factory);
+        Assert.DoesNotContain("NoOpCameraRestoreWarningSink", factory);
+
+        var recovery = factory.IndexOf(
+            "await RecoverStaleCameraLeaseAsync(",
+            StringComparison.Ordinal);
+        var mediaPreflight = factory.IndexOf(
+            "File.Exists(nativeLibraryPath)",
+            StringComparison.Ordinal);
+        Assert.True(recovery >= 0, "Production stale CameraLease recovery is missing.");
+        Assert.True(
+            mediaPreflight > recovery,
+            "Stale CameraLease recovery must finish before media preflight.");
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
