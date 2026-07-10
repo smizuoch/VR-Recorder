@@ -24,4 +24,16 @@ public sealed class VideoGeometryTests
 
         Assert.Equal(VideoOrientation.Landscape, geometry.Orientation);
     }
+
+    [Fact]
+    public void OddDimensionsArePaddedByOnePixelForChroma420()
+    {
+        var geometry = new VideoGeometry(1921, 1081, VideoPixelFormat.Bgra8);
+
+        var padded = geometry.PadForChroma420();
+
+        Assert.Equal(
+            new VideoGeometry(1922, 1082, VideoPixelFormat.Bgra8),
+            padded);
+    }
 }
