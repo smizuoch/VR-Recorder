@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "fake_media_backend.hpp"
@@ -22,6 +23,9 @@ static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
 static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
+static_assert(sizeof(vrrec_spout_source_config_v1) == 16);
+static_assert(sizeof(vrrec_spout_sender_snapshot_v1) == 24);
+static_assert(sizeof(vrrec_spout_frame_v1) == 80);
 
 namespace {
 
@@ -148,6 +152,64 @@ vrrec_steamvr_input_config_v1 ValidSteamVrConfig()
         manifest_path,
         "/actions/vrrecorder",
         "/actions/vrrecorder/in/toggle_recording",
+    };
+}
+
+vrrec_spout_source_config_v1 ValidSpoutSourceConfig()
+{
+    return vrrec_spout_source_config_v1 {
+        sizeof(vrrec_spout_source_config_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+    };
+}
+
+vrrec_spout_frame_v1 ValidSpoutFrameOutput()
+{
+    return vrrec_spout_frame_v1 {
+        sizeof(vrrec_spout_frame_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        VRREC_GPU_VENDOR_UNKNOWN,
+        0,
+        0,
+        0,
+        0.0,
+        0,
+        0,
+        0,
+    };
+}
+
+vrrec_spout_sender_snapshot_v1 ValidSpoutSnapshotOutput()
+{
+    return vrrec_spout_sender_snapshot_v1 {
+        sizeof(vrrec_spout_sender_snapshot_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+    };
+}
+
+vrrecorder::native::testing::TestSpoutFrame ValidTestSpoutFrame()
+{
+    return vrrecorder::native::testing::TestSpoutFrame {
+        "VRChat-Spout-Sender-42",
+        UINT64_C(0x00000001ABCDEF01),
+        "pci\\ven_10de&dev_2684|driver-32.0.15.6094",
+        VRREC_GPU_VENDOR_NVIDIA,
+        1920,
+        1080,
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+        59.94,
+        42,
+        INT64_C(1234567),
     };
 }
 
@@ -824,6 +886,556 @@ bool PollsSteamVrDigitalStateThroughVersionedAbi()
     return true;
 }
 
+bool RejectsInvalidSpoutSourceAbiInputs()
+{
+    using vrrecorder::native::testing::ResetSpoutSource;
+    using vrrecorder::native::testing::SetSpoutSnapshot;
+    using vrrecorder::native::testing::TestSpoutSenderSnapshot;
+
+    ResetSpoutSource();
+    auto config = ValidSpoutSourceConfig();
+    auto *source = reinterpret_cast<vrrec_spout_source_t *>(UINTPTR_MAX);
+    CHECK(vrrec_spout_source_create_v1(nullptr, &source) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(source == nullptr);
+    CHECK(vrrec_spout_source_create_v1(&config, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    config.struct_size = sizeof(config) - 1;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(source == nullptr);
+    config = ValidSpoutSourceConfig();
+    config.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    CHECK(source == nullptr);
+    config = ValidSpoutSourceConfig();
+    config.reserved_v1 = 1;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(source == nullptr);
+
+    config = ValidSpoutSourceConfig();
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_OK);
+    CHECK(source != nullptr);
+    SetSpoutSnapshot({TestSpoutSenderSnapshot {"sender", 1}});
+    std::uint32_t entry_count = 0;
+    std::uint32_t utf8_size = 0;
+    auto entry = ValidSpoutSnapshotOutput();
+    char byte = '\0';
+    CHECK(vrrec_spout_source_snapshot_v1(
+              nullptr,
+              nullptr,
+              0,
+              nullptr,
+              0,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              nullptr,
+              0,
+              nullptr,
+              0,
+              nullptr,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              nullptr,
+              0,
+              nullptr,
+              0,
+              &entry_count,
+              nullptr) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              nullptr,
+              1,
+              nullptr,
+              0,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              &entry,
+              1,
+              nullptr,
+              1,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              &entry,
+              VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES + 1,
+              &byte,
+              1,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              &entry,
+              1,
+              &byte,
+              VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE + 1,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    entry.struct_size = sizeof(entry) - 1;
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              &entry,
+              1,
+              &byte,
+              1,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    entry = ValidSpoutSnapshotOutput();
+    entry.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              &entry,
+              1,
+              &byte,
+              1,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_UNSUPPORTED_ABI);
+
+    auto frame = ValidSpoutFrameOutput();
+    std::uint32_t required_size = 0;
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              nullptr,
+              0,
+              &frame,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              nullptr,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              nullptr,
+              0,
+              nullptr) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS + 1,
+              &frame,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              nullptr,
+              1,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              &byte,
+              VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE + 1,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    frame.struct_size = sizeof(frame) - 1;
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    frame = ValidSpoutFrameOutput();
+    frame.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_UNSUPPORTED_ABI);
+
+    vrrec_spout_source_destroy_v1(&source);
+    CHECK(source == nullptr);
+    vrrec_spout_source_destroy_v1(&source);
+    vrrec_spout_source_destroy_v1(nullptr);
+    return true;
+}
+
+bool SnapshotsPackedUtf8WithRequiredSizing()
+{
+    using vrrecorder::native::testing::ResetSpoutSource;
+    using vrrecorder::native::testing::SetSpoutSnapshot;
+    using vrrecorder::native::testing::TestSpoutSenderSnapshot;
+
+    ResetSpoutSource();
+    const std::string first_id = "VRChat-Spout-Sender-42";
+    const std::string second_id = "VRChat-\xE9\x80\x81\xE4\xBF\xA1";
+    SetSpoutSnapshot({
+        TestSpoutSenderSnapshot {first_id, 41},
+        TestSpoutSenderSnapshot {second_id, 92},
+    });
+    auto config = ValidSpoutSourceConfig();
+    vrrec_spout_source_t *source = nullptr;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_OK);
+
+    std::uint32_t entry_count = 0;
+    std::uint32_t utf8_size = 0;
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              nullptr,
+              0,
+              nullptr,
+              0,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(entry_count == 2);
+    CHECK(utf8_size == first_id.size() + second_id.size());
+
+    std::vector<vrrec_spout_sender_snapshot_v1> short_entries(
+        entry_count - 1,
+        ValidSpoutSnapshotOutput());
+    short_entries[0].sender_id_offset = UINT32_MAX;
+    std::vector<char> utf8_buffer(utf8_size, '#');
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              short_entries.data(),
+              static_cast<std::uint32_t>(short_entries.size()),
+              utf8_buffer.data(),
+              static_cast<std::uint32_t>(utf8_buffer.size()),
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(short_entries[0].sender_id_offset == UINT32_MAX);
+    CHECK(utf8_buffer.front() == '#');
+
+    std::vector<vrrec_spout_sender_snapshot_v1> entries(
+        entry_count,
+        ValidSpoutSnapshotOutput());
+    entries[0].sender_id_offset = UINT32_MAX;
+    std::vector<char> short_buffer(utf8_size - 1, '#');
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              entries.data(),
+              static_cast<std::uint32_t>(entries.size()),
+              short_buffer.data(),
+              static_cast<std::uint32_t>(short_buffer.size()),
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(entries[0].sender_id_offset == UINT32_MAX);
+    CHECK(short_buffer.front() == '#');
+
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              entries.data(),
+              static_cast<std::uint32_t>(entries.size()),
+              utf8_buffer.data(),
+              static_cast<std::uint32_t>(utf8_buffer.size()),
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_OK);
+    CHECK(entries[0].struct_size == sizeof(entries[0]));
+    CHECK(entries[0].abi_version == VRREC_ABI_V1);
+    CHECK(entries[0].sender_id_offset == 0);
+    CHECK(entries[0].sender_id_size == first_id.size());
+    CHECK(entries[0].latest_frame_generation == 41);
+    CHECK(entries[1].sender_id_offset == first_id.size());
+    CHECK(entries[1].sender_id_size == second_id.size());
+    CHECK(entries[1].latest_frame_generation == 92);
+    CHECK(std::string(
+              utf8_buffer.data() + entries[0].sender_id_offset,
+              entries[0].sender_id_size) == first_id);
+    CHECK(std::string(
+              utf8_buffer.data() + entries[1].sender_id_offset,
+              entries[1].sender_id_size) == second_id);
+
+    SetSpoutSnapshot({});
+    entry_count = UINT32_MAX;
+    utf8_size = UINT32_MAX;
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              nullptr,
+              0,
+              nullptr,
+              0,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_OK);
+    CHECK(entry_count == 0);
+    CHECK(utf8_size == 0);
+
+    vrrec_spout_source_destroy_v1(&source);
+    return true;
+}
+
+bool PollsFrameWithoutConsumingOnBufferRetry()
+{
+    using vrrecorder::native::testing::PushSpoutFrame;
+    using vrrecorder::native::testing::ResetSpoutSource;
+
+    ResetSpoutSource();
+    auto expected = ValidTestSpoutFrame();
+    PushSpoutFrame(expected);
+    auto config = ValidSpoutSourceConfig();
+    vrrec_spout_source_t *source = nullptr;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_OK);
+
+    auto frame = ValidSpoutFrameOutput();
+    frame.sender_id_offset = UINT32_MAX;
+    std::uint32_t required_size = 0;
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(required_size ==
+          expected.sender_id.size() + expected.gpu_identity.size());
+    CHECK(frame.sender_id_offset == UINT32_MAX);
+
+    std::vector<char> short_buffer(required_size - 1, '#');
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              short_buffer.data(),
+              static_cast<std::uint32_t>(short_buffer.size()),
+              &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(frame.sender_id_offset == UINT32_MAX);
+    CHECK(short_buffer.front() == '#');
+
+    char byte = '#';
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              &byte,
+              VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE + 1,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    std::vector<char> buffer(required_size, '#');
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              buffer.data(),
+              static_cast<std::uint32_t>(buffer.size()),
+              &required_size) == VRREC_STATUS_OK);
+    CHECK(frame.sender_id_offset == 0);
+    CHECK(frame.sender_id_size == expected.sender_id.size());
+    CHECK(frame.gpu_identity_offset == expected.sender_id.size());
+    CHECK(frame.gpu_identity_size == expected.gpu_identity.size());
+    CHECK(frame.adapter_luid == expected.adapter_luid);
+    CHECK(frame.gpu_vendor == expected.gpu_vendor);
+    CHECK(frame.width == expected.width);
+    CHECK(frame.height == expected.height);
+    CHECK(frame.pixel_format == expected.pixel_format);
+    CHECK(frame.estimated_source_fps == expected.estimated_source_fps);
+    CHECK(frame.frame_sequence == expected.frame_sequence);
+    CHECK(frame.monotonic_timestamp_microseconds ==
+          expected.monotonic_timestamp_microseconds);
+    CHECK(frame.reserved == 0);
+    CHECK(std::string(
+              buffer.data() + frame.sender_id_offset,
+              frame.sender_id_size) == expected.sender_id);
+    CHECK(std::string(
+              buffer.data() + frame.gpu_identity_offset,
+              frame.gpu_identity_size) == expected.gpu_identity);
+
+    frame = ValidSpoutFrameOutput();
+    required_size = UINT32_MAX;
+    CHECK(vrrec_spout_source_poll_frame_v1(
+              source,
+              0,
+              &frame,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_TIMEOUT);
+    CHECK(required_size == 0);
+    vrrec_spout_source_destroy_v1(&source);
+    return true;
+}
+
+bool RejectsMalformedOrOversizeSpoutBackendData()
+{
+    using vrrecorder::native::testing::PushSpoutFrame;
+    using vrrecorder::native::testing::ResetSpoutSource;
+    using vrrecorder::native::testing::SetSpoutSnapshot;
+    using vrrecorder::native::testing::TestSpoutFrame;
+    using vrrecorder::native::testing::TestSpoutSenderSnapshot;
+
+    ResetSpoutSource();
+    auto config = ValidSpoutSourceConfig();
+    vrrec_spout_source_t *source = nullptr;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_OK);
+
+    const auto rejects_snapshot = [&](std::string sender_id) {
+        SetSpoutSnapshot({TestSpoutSenderSnapshot {
+            std::move(sender_id),
+            1,
+        }});
+        std::uint32_t entry_count = 0;
+        std::uint32_t utf8_size = 0;
+        return vrrec_spout_source_snapshot_v1(
+            source,
+            nullptr,
+            0,
+            nullptr,
+            0,
+            &entry_count,
+            &utf8_size) == VRREC_STATUS_INTERNAL_ERROR;
+    };
+    CHECK(rejects_snapshot(std::string("\xC3\x28", 2)));
+    CHECK(rejects_snapshot(std::string("a\0b", 3)));
+    CHECK(rejects_snapshot(std::string(
+        VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE + 1,
+        'a')));
+
+    std::vector<TestSpoutSenderSnapshot> too_many_senders;
+    too_many_senders.reserve(VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES + 1);
+    for (std::uint32_t index = 0;
+         index <= VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES;
+         ++index) {
+        too_many_senders.push_back(TestSpoutSenderSnapshot {
+            "sender-" + std::to_string(index),
+            index,
+        });
+    }
+    SetSpoutSnapshot(std::move(too_many_senders));
+    std::uint32_t entry_count = 0;
+    std::uint32_t utf8_size = 0;
+    CHECK(vrrec_spout_source_snapshot_v1(
+              source,
+              nullptr,
+              0,
+              nullptr,
+              0,
+              &entry_count,
+              &utf8_size) == VRREC_STATUS_INTERNAL_ERROR);
+
+    const auto rejects_frame = [&](TestSpoutFrame invalid) {
+        PushSpoutFrame(std::move(invalid));
+        auto frame = ValidSpoutFrameOutput();
+        std::vector<char> buffer(VRREC_SPOUT_MAX_UTF8_BUFFER_SIZE);
+        std::uint32_t required_size = 0;
+        return vrrec_spout_source_poll_frame_v1(
+            source,
+            0,
+            &frame,
+            buffer.data(),
+            static_cast<std::uint32_t>(buffer.size()),
+            &required_size) == VRREC_STATUS_INTERNAL_ERROR;
+    };
+    auto invalid = ValidTestSpoutFrame();
+    invalid.sender_id = std::string("\xC3\x28", 2);
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.gpu_identity = std::string("gpu\0identity", 12);
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.gpu_identity = std::string(
+        VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE + 1,
+        'g');
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.adapter_luid = 0;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.gpu_vendor = VRREC_GPU_VENDOR_INTEL + 1;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.width = 0;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.height = 0;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.width = static_cast<std::uint32_t>(INT32_MAX) + 1U;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.pixel_format = VRREC_SOURCE_PIXEL_FORMAT_NV12 + 1;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.estimated_source_fps =
+        std::numeric_limits<double>::quiet_NaN();
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.estimated_source_fps = 0.0;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.estimated_source_fps = 1000.01;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.monotonic_timestamp_microseconds = -1;
+    CHECK(rejects_frame(invalid));
+    invalid = ValidTestSpoutFrame();
+    invalid.monotonic_timestamp_microseconds =
+        INT64_C(922337203685477581);
+    CHECK(rejects_frame(invalid));
+
+    vrrec_spout_source_destroy_v1(&source);
+    return true;
+}
+
+bool DestroyWaitsForActiveSpoutPollAndIsIdempotent()
+{
+    using namespace std::chrono_literals;
+    using vrrecorder::native::testing::ActiveSpoutSourceCount;
+    using vrrecorder::native::testing::BlockNextSpoutPoll;
+    using vrrecorder::native::testing::ReleaseSpoutPoll;
+    using vrrecorder::native::testing::ResetSpoutSource;
+    using vrrecorder::native::testing::SpoutSourceDestroyCount;
+    using vrrecorder::native::testing::WaitUntilSpoutPollEntered;
+
+    ResetSpoutSource();
+    auto config = ValidSpoutSourceConfig();
+    vrrec_spout_source_t *source = nullptr;
+    CHECK(vrrec_spout_source_create_v1(&config, &source) ==
+          VRREC_STATUS_OK);
+    CHECK(ActiveSpoutSourceCount() == 1);
+    BlockNextSpoutPoll();
+    auto *poll_source = source;
+    auto polling = std::async(std::launch::async, [poll_source] {
+        auto frame = ValidSpoutFrameOutput();
+        std::vector<char> buffer(256);
+        std::uint32_t required_size = 0;
+        return vrrec_spout_source_poll_frame_v1(
+            poll_source,
+            10,
+            &frame,
+            buffer.data(),
+            static_cast<std::uint32_t>(buffer.size()),
+            &required_size);
+    });
+    CHECK(WaitUntilSpoutPollEntered(1s));
+
+    auto destroying = std::async(std::launch::async, [&source] {
+        vrrec_spout_source_destroy_v1(&source);
+    });
+    CHECK(destroying.wait_for(25ms) == std::future_status::timeout);
+    ReleaseSpoutPoll();
+    CHECK(polling.get() == VRREC_STATUS_TIMEOUT);
+    CHECK(destroying.wait_for(1s) == std::future_status::ready);
+    destroying.get();
+    CHECK(source == nullptr);
+    CHECK(ActiveSpoutSourceCount() == 0);
+    CHECK(SpoutSourceDestroyCount() == 1);
+    vrrec_spout_source_destroy_v1(&source);
+    vrrec_spout_source_destroy_v1(nullptr);
+    CHECK(SpoutSourceDestroyCount() == 1);
+    return true;
+}
+
 }
 
 int main()
@@ -843,7 +1455,12 @@ int main()
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
-        !PollsSteamVrDigitalStateThroughVersionedAbi()) {
+        !PollsSteamVrDigitalStateThroughVersionedAbi() ||
+        !RejectsInvalidSpoutSourceAbiInputs() ||
+        !SnapshotsPackedUtf8WithRequiredSizing() ||
+        !PollsFrameWithoutConsumingOnBufferRetry() ||
+        !RejectsMalformedOrOversizeSpoutBackendData() ||
+        !DestroyWaitsForActiveSpoutPollAndIsIdempotent()) {
         return 1;
     }
 

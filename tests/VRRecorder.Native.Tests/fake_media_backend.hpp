@@ -5,6 +5,7 @@
 #include <chrono>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "vrrecorder_native.h"
 
@@ -57,6 +58,30 @@ std::string_view SteamVrActionSetPath();
 std::string_view SteamVrDigitalActionPath();
 std::uint32_t SteamVrPollCount();
 bool HasActiveSteamVrInput();
+struct TestSpoutSenderSnapshot {
+    std::string sender_id;
+    std::uint64_t latest_frame_generation;
+};
+struct TestSpoutFrame {
+    std::string sender_id;
+    std::uint64_t adapter_luid;
+    std::string gpu_identity;
+    std::uint32_t gpu_vendor;
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t pixel_format;
+    double estimated_source_fps;
+    std::uint64_t frame_sequence;
+    std::int64_t monotonic_timestamp_microseconds;
+};
+void ResetSpoutSource();
+void SetSpoutSnapshot(std::vector<TestSpoutSenderSnapshot> senders);
+void PushSpoutFrame(TestSpoutFrame frame);
+void BlockNextSpoutPoll();
+bool WaitUntilSpoutPollEntered(std::chrono::milliseconds timeout);
+void ReleaseSpoutPoll();
+std::uint32_t ActiveSpoutSourceCount();
+std::uint32_t SpoutSourceDestroyCount();
 
 }
 

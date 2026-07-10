@@ -26,6 +26,15 @@ _Static_assert(
 _Static_assert(
     sizeof(vrrec_steamvr_digital_state_v1) == 12,
     "SteamVR digital state ABI drift");
+_Static_assert(
+    sizeof(vrrec_spout_source_config_v1) == 16,
+    "Spout source config ABI drift");
+_Static_assert(
+    sizeof(vrrec_spout_sender_snapshot_v1) == 24,
+    "Spout sender snapshot ABI drift");
+_Static_assert(
+    sizeof(vrrec_spout_frame_v1) == 80,
+    "Spout frame ABI drift");
 #endif
 
 _Static_assert(
@@ -37,6 +46,10 @@ _Static_assert(
 _Static_assert(
     VRREC_SOURCE_PIXEL_FORMAT_NV12 == 3,
     "NV12 ABI value drift");
+_Static_assert(VRREC_GPU_VENDOR_UNKNOWN == 0, "unknown GPU ABI drift");
+_Static_assert(VRREC_GPU_VENDOR_NVIDIA == 1, "NVIDIA ABI drift");
+_Static_assert(VRREC_GPU_VENDOR_AMD == 2, "AMD ABI drift");
+_Static_assert(VRREC_GPU_VENDOR_INTEL == 3, "Intel ABI drift");
 
 static void VRREC_CALL consume_event(
     void *user_data,

@@ -130,6 +130,21 @@ int main(void)
               &input) == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(input == NULL);
 
+    vrrec_spout_source_config_v1 spout_config = {
+        sizeof(vrrec_spout_source_config_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+    };
+    vrrec_spout_source_t *spout_source =
+        (vrrec_spout_source_t *)(uintptr_t)UINTPTR_MAX;
+    CHECK(vrrec_spout_source_create_v1(
+              &spout_config,
+              &spout_source) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(spout_source == NULL);
+    vrrec_spout_source_destroy_v1(&spout_source);
+    vrrec_spout_source_destroy_v1(&spout_source);
+
     puts("native C header/runtime smoke tests passed");
     return 0;
 }
