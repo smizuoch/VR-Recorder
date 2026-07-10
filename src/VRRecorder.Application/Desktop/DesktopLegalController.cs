@@ -7,21 +7,52 @@ public sealed class DesktopLegalController
 {
     private readonly ILegalCatalogReader _reader;
     private readonly ILegalBundleFolderOpener _folderOpener;
+    private readonly IComplianceFaultSink _complianceFaultSink;
+    private readonly object _operationGate = new();
+    private Task _operationTail = Task.CompletedTask;
 
     public DesktopLegalController(
         ILegalCatalogReader reader,
-        ILegalBundleFolderOpener folderOpener)
+        ILegalBundleFolderOpener folderOpener,
+        IComplianceFaultSink complianceFaultSink)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(folderOpener);
+        ArgumentNullException.ThrowIfNull(complianceFaultSink);
         _reader = reader;
         _folderOpener = folderOpener;
+        _complianceFaultSink = complianceFaultSink;
         State = EmptyState(revision: 0, []);
     }
 
     public DesktopLegalState State { get; private set; }
 
-    public async Task OpenAsync(CancellationToken cancellationToken)
+    public Task OpenAsync(CancellationToken cancellationToken) =>
+        ExecuteSerializedAsync(OpenCoreAsync, cancellationToken);
+
+    public Task ShowDetailAsync(
+        string componentId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
+        return ExecuteSerializedAsync(
+            token => ShowDetailCoreAsync(componentId, token),
+            cancellationToken);
+    }
+
+    public Task ShowLicenseAsync(CancellationToken cancellationToken) =>
+        ExecuteSerializedAsync(ShowLicenseCoreAsync, cancellationToken);
+
+    public Task RefreshAsync(CancellationToken cancellationToken) =>
+        ExecuteSerializedAsync(RefreshCoreAsync, cancellationToken);
+
+    public Task OpenLicenseFolderAsync(
+        CancellationToken cancellationToken) =>
+        ExecuteSerializedAsync(
+            OpenLicenseFolderCoreAsync,
+            cancellationToken);
+
+    private async Task OpenCoreAsync(CancellationToken cancellationToken)
     {
         var catalog = await ReadCatalogAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -41,11 +72,10 @@ public sealed class DesktopLegalController
             Issues: []);
     }
 
-    public async Task ShowDetailAsync(
+    private async Task ShowDetailCoreAsync(
         string componentId,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
         var catalog = await ReadCatalogAsync(cancellationToken)
             .ConfigureAwait(false);
         if (catalog is null)
@@ -57,12 +87,12 @@ public sealed class DesktopLegalController
             string.Equals(item.Id, componentId, StringComparison.Ordinal));
         if (component is null)
         {
-            FailClosed(
+            await FailClosedAsync(
             [
                 new LegalCatalogIssue(
                     "legal-catalog-component-not-found",
                     componentId),
-            ]);
+            ]).ConfigureAwait(false);
             return;
         }
 
@@ -77,7 +107,8 @@ public sealed class DesktopLegalController
             Issues: []);
     }
 
-    public async Task ShowLicenseAsync(CancellationToken cancellationToken)
+    private async Task ShowLicenseCoreAsync(
+        CancellationToken cancellationToken)
     {
         var selected = State.SelectedComponent ??
                        throw new InvalidOperationException(
@@ -87,7 +118,7 @@ public sealed class DesktopLegalController
             .ConfigureAwait(false);
         if (result is LegalTextReadResult.Rejected rejected)
         {
-            FailClosed(rejected.Issues);
+            await FailClosedAsync(rejected.Issues).ConfigureAwait(false);
             return;
         }
 
@@ -101,12 +132,12 @@ public sealed class DesktopLegalController
                 document.RelativePath,
                 StringComparison.Ordinal))
         {
-            FailClosed(
+            await FailClosedAsync(
             [
                 new LegalCatalogIssue(
                     "legal-catalog-license-identity-mismatch",
                     selected.Id),
-            ]);
+            ]).ConfigureAwait(false);
             return;
         }
 
@@ -119,21 +150,21 @@ public sealed class DesktopLegalController
         };
     }
 
-    public Task RefreshAsync(CancellationToken cancellationToken) =>
+    private Task RefreshCoreAsync(CancellationToken cancellationToken) =>
         State.View switch
         {
             DesktopLegalView.ComponentDetail when
                 State.SelectedComponent is not null =>
-                ShowDetailAsync(
+                ShowDetailCoreAsync(
                     State.SelectedComponent.Id,
                     cancellationToken),
             DesktopLegalView.LicenseText when
                 State.SelectedComponent is not null =>
-                ShowLicenseAsync(cancellationToken),
-            _ => OpenAsync(cancellationToken),
+                ShowLicenseCoreAsync(cancellationToken),
+            _ => OpenCoreAsync(cancellationToken),
         };
 
-    public async Task OpenLicenseFolderAsync(
+    private async Task OpenLicenseFolderCoreAsync(
         CancellationToken cancellationToken)
     {
         var catalog = await ReadCatalogAsync(cancellationToken)
@@ -148,7 +179,7 @@ public sealed class DesktopLegalController
             .ConfigureAwait(false);
         if (result is LegalFolderOpenResult.Rejected rejected)
         {
-            FailClosed(rejected.Issues);
+            await FailClosedAsync(rejected.Issues).ConfigureAwait(false);
         }
     }
 
@@ -163,14 +194,61 @@ public sealed class DesktopLegalController
             return available.Catalog;
         }
 
-        FailClosed(((LegalCatalogReadResult.Rejected)result).Issues);
+        await FailClosedAsync(
+                ((LegalCatalogReadResult.Rejected)result).Issues)
+            .ConfigureAwait(false);
         return null;
     }
 
-    private void FailClosed(IReadOnlyList<LegalCatalogIssue> issues)
+    private async Task FailClosedAsync(
+        IReadOnlyList<LegalCatalogIssue> issues)
     {
         ArgumentNullException.ThrowIfNull(issues);
         State = EmptyState(State.Revision + 1, issues.ToArray());
+        try
+        {
+            await _complianceFaultSink
+                .EnterComplianceFaultAsync()
+                .ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Local legal data remains cleared even when the global notifier fails.
+        }
+    }
+
+    private Task ExecuteSerializedAsync(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken)
+    {
+        lock (_operationGate)
+        {
+            var queued = ExecuteAfterAsync(
+                _operationTail,
+                operation,
+                cancellationToken);
+            _operationTail = queued;
+            return queued;
+        }
+    }
+
+    private static async Task ExecuteAfterAsync(
+        Task preceding,
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        try
+        {
+            await preceding.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // A failed caller cannot poison later legal-view operations.
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await operation(cancellationToken).ConfigureAwait(false);
     }
 
     private static DesktopLegalState EmptyState(

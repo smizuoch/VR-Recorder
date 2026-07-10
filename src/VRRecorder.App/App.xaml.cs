@@ -32,7 +32,8 @@ public partial class App : System.Windows.Application, IDisposable
                 AppContext.BaseDirectory,
                 _legalVerifier,
                 new WindowsLegalFolderShell(),
-                LegalBundleVerificationScope.InstallRoot));
+                LegalBundleVerificationScope.InstallRoot),
+            _recordingHost);
         _recordingInputs = new RecordingInputDispatcher(
             new RecordingUiCommandDispatcher(
                 (_, cancellationToken) =>

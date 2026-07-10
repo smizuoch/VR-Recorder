@@ -28,8 +28,8 @@ public partial class LegalWindow : Window
         }
 
         _loaded = true;
-        await _controller.OpenAsync(CancellationToken.None);
-        ApplyState();
+        await RunLegalOperationAsync(() =>
+            _controller.OpenAsync(CancellationToken.None));
     }
 
     private async void OnComponentSelectionChanged(
@@ -42,37 +42,52 @@ public partial class LegalWindow : Window
             return;
         }
 
-        await _controller.ShowDetailAsync(
-            selected.Component.Id,
-            CancellationToken.None);
-        ApplyState();
+        await RunLegalOperationAsync(() =>
+            _controller.ShowDetailAsync(
+                selected.Component.Id,
+                CancellationToken.None));
     }
 
     private async void OnShowLicenseClick(
         object sender,
         RoutedEventArgs e)
     {
-        await _controller.ShowLicenseAsync(CancellationToken.None);
-        ApplyState();
+        await RunLegalOperationAsync(() =>
+            _controller.ShowLicenseAsync(CancellationToken.None));
     }
 
     private async void OnOpenLicenseFolderClick(
         object sender,
         RoutedEventArgs e)
     {
-        await _controller.OpenLicenseFolderAsync(CancellationToken.None);
-        ApplyState();
+        await RunLegalOperationAsync(() =>
+            _controller.OpenLicenseFolderAsync(CancellationToken.None));
     }
 
     private async void OnRefreshLegalClick(
         object sender,
         RoutedEventArgs e)
     {
-        await _controller.RefreshAsync(CancellationToken.None);
-        ApplyState();
+        await RunLegalOperationAsync(() =>
+            _controller.RefreshAsync(CancellationToken.None));
     }
 
     private void OnCloseLegalClick(object sender, RoutedEventArgs e) => Close();
+
+    private async Task RunLegalOperationAsync(Func<Task> operation)
+    {
+        try
+        {
+            await operation();
+        }
+        catch (Exception)
+        {
+            // Application ports fail closed; an event-handler exception must not
+            // escape the WPF synchronization context.
+        }
+
+        ApplyState();
+    }
 
     private void ApplyState()
     {

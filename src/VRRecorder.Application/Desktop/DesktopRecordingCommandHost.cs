@@ -1,9 +1,12 @@
 using VRRecorder.Application.Compliance;
+using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Desktop;
 
-public sealed class DesktopRecordingCommandHost : IAsyncDisposable
+public sealed class DesktopRecordingCommandHost
+    : IAsyncDisposable,
+      IComplianceFaultSink
 {
     private const string UnexpectedInitializationFailureCode =
         "RECORDING_INITIALIZATION_FAILED";
@@ -12,9 +15,12 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private Task<DesktopRecordingHostActivation>? _activationTask;
     private Task? _toggleTask;
+    private Task? _shutdownTask;
+    private Task? _disposeTask;
     private IDesktopRecordingRuntime? _runtime;
     private DesktopRecordingHostState _state = DesktopRecordingHostState.Booting;
     private DesktopRecordingInitializationFailure? _failure;
+    private bool _complianceFaulted;
     private bool _disposed;
 
     public DesktopRecordingCommandHost(
@@ -41,18 +47,27 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(startup);
         cancellationToken.ThrowIfCancellationRequested();
+        if (startup.State == RecorderState.ComplianceFault)
+        {
+            var complianceActivation = ActivateComplianceFaultAsync();
+            return cancellationToken.CanBeCanceled
+                ? complianceActivation.WaitAsync(cancellationToken)
+                : complianceActivation;
+        }
+
+        if (startup.State != RecorderState.Ready)
+        {
+            throw new InvalidOperationException(
+                $"Desktop recording cannot activate from recorder state {startup.State}.");
+        }
+
         Task<DesktopRecordingHostActivation> activationTask;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            _activationTask ??= startup.State switch
-            {
-                RecorderState.Ready => InitializeAsync(),
-                RecorderState.ComplianceFault => CompleteComplianceFault(),
-                _ => throw new InvalidOperationException(
-                    $"Desktop recording cannot activate from recorder state {startup.State}."),
-            };
-            activationTask = _activationTask;
+            activationTask = _complianceFaulted
+                ? ComplianceFaultActivation()
+                : _activationTask ??= InitializeAsync();
         }
 
         return cancellationToken.CanBeCanceled
@@ -89,61 +104,57 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        IDesktopRecordingRuntime? runtime;
-        Task<DesktopRecordingHostActivation>? activationTask;
-        Task? toggleTask;
+        Task disposeTask;
+        lock (_gate)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            disposeTask = _disposeTask;
+        }
+
+        await disposeTask.ConfigureAwait(false);
+    }
+
+    public ValueTask EnterComplianceFaultAsync()
+    {
+        bool cancelLifetime = false;
         lock (_gate)
         {
             if (_disposed)
             {
-                return;
+                return _disposeTask is null
+                    ? ValueTask.CompletedTask
+                    : new ValueTask(_disposeTask);
             }
 
-            _disposed = true;
-            _state = DesktopRecordingHostState.Disposed;
-            runtime = _runtime;
-            activationTask = _activationTask;
-            toggleTask = _toggleTask;
+            if (!_complianceFaulted)
+            {
+                _complianceFaulted = true;
+                _failure = null;
+                _state = DesktopRecordingHostState.ComplianceFault;
+                cancelLifetime = true;
+            }
         }
 
-        _lifetime.Cancel();
-        if (activationTask is not null)
+        if (cancelLifetime)
         {
-            try
-            {
-                await activationTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (
-                _lifetime.IsCancellationRequested)
-            {
-            }
+            CancelLifetime();
         }
 
-        if (toggleTask is not null)
-        {
-            try
-            {
-                await toggleTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-            {
-            }
-        }
-
-        if (runtime is not null)
-        {
-            await runtime.DisposeAsync().ConfigureAwait(false);
-        }
-
-        _lifetime.Dispose();
+        return new ValueTask(EnsureShutdownStarted());
     }
 
-    private Task<DesktopRecordingHostActivation> CompleteComplianceFault()
+    private async Task<DesktopRecordingHostActivation>
+        ActivateComplianceFaultAsync()
     {
-        _state = DesktopRecordingHostState.ComplianceFault;
-        return Task.FromResult(new DesktopRecordingHostActivation(
-            _state,
-            Failure: null));
+        await EnterComplianceFaultAsync().ConfigureAwait(false);
+        lock (_gate)
+        {
+            return _disposed
+                ? new DesktopRecordingHostActivation(
+                    DesktopRecordingHostState.Disposed,
+                    Failure: null)
+                : ComplianceFaultActivationResult();
+        }
     }
 
     private async Task<DesktopRecordingHostActivation> InitializeAsync()
@@ -158,7 +169,10 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
-            throw;
+            lock (_gate)
+            {
+                return TerminalActivationAfterShutdown();
+            }
         }
         catch (Exception exception)
         {
@@ -174,6 +188,11 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
                         Failure: null);
                 }
 
+                if (_complianceFaulted)
+                {
+                    return ComplianceFaultActivationResult();
+                }
+
                 _failure = new DesktopRecordingInitializationFailure(
                     code,
                     exception.Message);
@@ -184,19 +203,123 @@ public sealed class DesktopRecordingCommandHost : IAsyncDisposable
 
         lock (_gate)
         {
+            _runtime = runtime;
+            if (_disposed)
+            {
+                return new DesktopRecordingHostActivation(
+                    DesktopRecordingHostState.Disposed,
+                    Failure: null);
+            }
+
+            if (_complianceFaulted)
+            {
+                return ComplianceFaultActivationResult();
+            }
+
+            _state = DesktopRecordingHostState.Ready;
+            return new DesktopRecordingHostActivation(
+                _state,
+                Failure: null);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        await Task.Yield();
+        lock (_gate)
+        {
             if (!_disposed)
             {
-                _runtime = runtime;
-                _state = DesktopRecordingHostState.Ready;
-                return new DesktopRecordingHostActivation(
-                    _state,
-                    Failure: null);
+                _disposed = true;
+                _state = DesktopRecordingHostState.Disposed;
             }
         }
 
-        await runtime.DisposeAsync().ConfigureAwait(false);
-        return new DesktopRecordingHostActivation(
-            DesktopRecordingHostState.Disposed,
-            Failure: null);
+        CancelLifetime();
+        await EnsureShutdownStarted().ConfigureAwait(false);
+        _lifetime.Dispose();
     }
+
+    private Task EnsureShutdownStarted()
+    {
+        lock (_gate)
+        {
+            return _shutdownTask ??= ShutdownCoreAsync();
+        }
+    }
+
+    private async Task ShutdownCoreAsync()
+    {
+        await Task.Yield();
+        Task<DesktopRecordingHostActivation>? activationTask;
+        lock (_gate)
+        {
+            activationTask = _activationTask;
+        }
+
+        await ObserveWithoutInterruptingShutdownAsync(activationTask)
+            .ConfigureAwait(false);
+
+        Task? toggleTask;
+        IDesktopRecordingRuntime? runtime;
+        lock (_gate)
+        {
+            toggleTask = _toggleTask;
+            runtime = _runtime;
+        }
+
+        await ObserveWithoutInterruptingShutdownAsync(toggleTask)
+            .ConfigureAwait(false);
+        if (runtime is not null)
+        {
+            await runtime.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void CancelLifetime()
+    {
+        try
+        {
+            _lifetime.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // A concurrent DisposeAsync already completed the same shutdown.
+        }
+    }
+
+    private static async Task ObserveWithoutInterruptingShutdownAsync(
+        Task? operation)
+    {
+        if (operation is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await operation.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Shutdown must still dispose the runtime after a canceled or failed command.
+        }
+    }
+
+    private static Task<DesktopRecordingHostActivation>
+        ComplianceFaultActivation() =>
+        Task.FromResult(ComplianceFaultActivationResult());
+
+    private static DesktopRecordingHostActivation
+        ComplianceFaultActivationResult() =>
+        new(
+            DesktopRecordingHostState.ComplianceFault,
+            Failure: null);
+
+    private DesktopRecordingHostActivation TerminalActivationAfterShutdown() =>
+        _disposed
+            ? new DesktopRecordingHostActivation(
+                DesktopRecordingHostState.Disposed,
+                Failure: null)
+            : ComplianceFaultActivationResult();
 }
