@@ -403,8 +403,11 @@ public sealed class DesktopLegalViewerIntegrationTests
             return Task.CompletedTask;
         }
 
-        public Task ShutdownAsync(RecordingStopReason reason) =>
-            DisposeAsync().AsTask();
+        public Task ShutdownAsync(RecordingStopReason reason)
+        {
+            ShutdownReasons.Add(reason);
+            return DisposeAsync().AsTask();
+        }
 
         public ValueTask DisposeAsync()
         {
