@@ -44,6 +44,26 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains(
             "../VRRecorder.DesignSystem/VRRecorder.DesignSystem.csproj",
             references);
+        Assert.Contains(
+            "../VRRecorder.Infrastructure.SteamVr/VRRecorder.Infrastructure.SteamVr.csproj",
+            references);
+
+        var steamVrProjectPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "VRRecorder.Infrastructure.SteamVr",
+            "VRRecorder.Infrastructure.SteamVr.csproj");
+        var steamVrProject = XDocument.Load(steamVrProjectPath).Root;
+        Assert.NotNull(steamVrProject);
+        var openVrPayload = Assert.Single(steamVrProject
+            .Descendants("None"),
+            item => item.Attribute("Update")?.Value == "OpenVr/**/*.json");
+        Assert.Equal(
+            "PreserveNewest",
+            openVrPayload.Attribute("CopyToOutputDirectory")?.Value);
+        Assert.Equal(
+            "PreserveNewest",
+            openVrPayload.Attribute("CopyToPublishDirectory")?.Value);
     }
 
     private static void AssertProperty(
