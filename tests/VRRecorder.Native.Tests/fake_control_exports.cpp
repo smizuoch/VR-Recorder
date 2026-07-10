@@ -184,6 +184,23 @@ vrrec_test_encoder_probe_copy_config_v1(
     };
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_encoder_probe_block_next(void)
+{
+    vrrecorder::native::testing::BlockNextEncoderProbe();
+}
+
+extern "C" VRREC_TEST_API int vrrec_test_encoder_probe_wait_until_entered(
+    std::uint32_t milliseconds)
+{
+    return vrrecorder::native::testing::WaitUntilEncoderProbeEntered(
+        std::chrono::milliseconds(milliseconds));
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_encoder_probe_release(void)
+{
+    vrrecorder::native::testing::ReleaseEncoderProbe();
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_set_statistics_v1(
     std::uint64_t source_video_frame_count,
     std::uint64_t muxed_video_packet_count,

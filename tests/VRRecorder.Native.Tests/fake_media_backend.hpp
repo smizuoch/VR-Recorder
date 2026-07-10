@@ -98,6 +98,9 @@ void ResetEncoderProbe();
 void SetEncoderProbeResult(std::int32_t status, bool packet_produced);
 std::uint32_t EncoderProbeCallCount();
 ObservedEncoderProbeConfig EncoderProbeConfig();
+void BlockNextEncoderProbe();
+bool WaitUntilEncoderProbeEntered(std::chrono::milliseconds timeout);
+void ReleaseEncoderProbe();
 
 }
 

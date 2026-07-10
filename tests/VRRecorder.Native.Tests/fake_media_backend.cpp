@@ -418,8 +418,12 @@ public:
 
 struct FakeEncoderProbeState {
     std::mutex mutex;
+    std::condition_variable condition;
     vrrec_status_t status = VRREC_STATUS_OK;
     bool packet_produced = false;
+    bool block_next = false;
+    bool entered = false;
+    bool release = false;
     std::uint32_t call_count = 0;
     testing::ObservedEncoderProbeConfig observed {
         0,
@@ -441,7 +445,7 @@ public:
         const vrrec_encoder_probe_config_v1 &config,
         bool &packet_produced) noexcept override
     {
-        const std::lock_guard lock(fake_encoder_probe.mutex);
+        std::unique_lock lock(fake_encoder_probe.mutex);
         ++fake_encoder_probe.call_count;
         fake_encoder_probe.observed =
             testing::ObservedEncoderProbeConfig {
@@ -454,6 +458,16 @@ public:
                 config.fps_denominator,
                 config.gpu_identity_utf8,
             };
+        fake_encoder_probe.entered = true;
+        fake_encoder_probe.condition.notify_all();
+        if (fake_encoder_probe.block_next) {
+            fake_encoder_probe.condition.wait(lock, [] {
+                return fake_encoder_probe.release;
+            });
+            fake_encoder_probe.block_next = false;
+            fake_encoder_probe.release = false;
+        }
+
         packet_produced = fake_encoder_probe.packet_produced;
         return fake_encoder_probe.status;
     }
@@ -674,6 +688,9 @@ void ResetEncoderProbe()
     const std::lock_guard lock(fake_encoder_probe.mutex);
     fake_encoder_probe.status = VRREC_STATUS_OK;
     fake_encoder_probe.packet_produced = false;
+    fake_encoder_probe.block_next = false;
+    fake_encoder_probe.entered = false;
+    fake_encoder_probe.release = false;
     fake_encoder_probe.call_count = 0;
     fake_encoder_probe.observed = ObservedEncoderProbeConfig {
         0,
@@ -706,6 +723,29 @@ ObservedEncoderProbeConfig EncoderProbeConfig()
 {
     const std::lock_guard lock(fake_encoder_probe.mutex);
     return fake_encoder_probe.observed;
+}
+
+void BlockNextEncoderProbe()
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    fake_encoder_probe.block_next = true;
+    fake_encoder_probe.entered = false;
+    fake_encoder_probe.release = false;
+}
+
+bool WaitUntilEncoderProbeEntered(std::chrono::milliseconds timeout)
+{
+    std::unique_lock lock(fake_encoder_probe.mutex);
+    return fake_encoder_probe.condition.wait_for(lock, timeout, [] {
+        return fake_encoder_probe.entered;
+    });
+}
+
+void ReleaseEncoderProbe()
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    fake_encoder_probe.release = true;
+    fake_encoder_probe.condition.notify_all();
 }
 
 }
