@@ -6,4 +6,5 @@ namespace VRRecorder.Application.Recording;
 public sealed record RecordingLifecycleStartResult(
     RecorderState State,
     VrChatCameraConnectionResolution Connection,
-    StartRecordingResult? Recording);
+    StartRecordingResult? Recording,
+    CameraSnapshotStartFailure? SnapshotFailure = null);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
 
@@ -13,6 +14,8 @@ public sealed class ConfirmedUdpVrChatCameraGateway
     private readonly UdpClient _client;
     private readonly IPEndPoint _remoteEndpoint;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private readonly OscQueryCameraSnapshotReader? _snapshotReader;
+    private readonly IDisposable? _snapshotHttpOwner;
 
     public ConfirmedUdpVrChatCameraGateway(IPEndPoint remoteEndpoint)
     {
@@ -48,6 +51,34 @@ public sealed class ConfirmedUdpVrChatCameraGateway
             0));
     }
 
+    internal ConfirmedUdpVrChatCameraGateway(
+        IPEndPoint remoteEndpoint,
+        VrChatInstanceCandidate candidate,
+        HttpMessageInvoker snapshotHttp,
+        IDisposable? snapshotHttpOwner)
+        : this(remoteEndpoint)
+    {
+        try
+        {
+            _snapshotReader = new OscQueryCameraSnapshotReader(
+                candidate,
+                snapshotHttp);
+            _snapshotHttpOwner = snapshotHttpOwner;
+        }
+        catch
+        {
+            _client.Dispose();
+            _writeGate.Dispose();
+            throw;
+        }
+    }
+
+    public Task<CameraSnapshot> ReadSnapshotAsync(
+        CancellationToken cancellationToken) =>
+        _snapshotReader?.ReadAsync(cancellationToken) ??
+        Task.FromException<CameraSnapshot>(new NotSupportedException(
+            "This fallback-only VRChat camera gateway has no OSCQuery snapshot source."));
+
     public Task SetModeAsync(
         CameraMode mode,
         CancellationToken cancellationToken) =>
@@ -65,6 +96,8 @@ public sealed class ConfirmedUdpVrChatCameraGateway
     public ValueTask DisposeAsync()
     {
         _client.Dispose();
+        _writeGate.Dispose();
+        _snapshotHttpOwner?.Dispose();
         return ValueTask.CompletedTask;
     }
 

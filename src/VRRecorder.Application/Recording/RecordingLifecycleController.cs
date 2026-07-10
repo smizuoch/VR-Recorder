@@ -54,11 +54,9 @@ public sealed class RecordingLifecycleController : IDisposable
 
     public async Task<RecordingLifecycleStartResult> StartAsync(
         string? selectedServiceId,
-        CameraSnapshot cameraSnapshot,
         StartRecordingCommand command,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(cameraSnapshot);
         ArgumentNullException.ThrowIfNull(command);
         await _operationGate
             .WaitAsync(cancellationToken)
@@ -80,6 +78,37 @@ public sealed class RecordingLifecycleController : IDisposable
                     State,
                     connection,
                     Recording: null);
+            }
+
+            CameraSnapshot cameraSnapshot;
+            try
+            {
+                cameraSnapshot = await connected.Gateway
+                    .ReadSnapshotAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (cameraSnapshot is null ||
+                    (cameraSnapshot.Mode.IsKnown &&
+                     !Enum.IsDefined(cameraSnapshot.Mode.Value)))
+                {
+                    throw new InvalidDataException(
+                        "The selected VRChat camera returned an invalid snapshot.");
+                }
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                return new RecordingLifecycleStartResult(
+                    State,
+                    connection,
+                    Recording: null,
+                    new CameraSnapshotStartFailure(
+                        CameraSnapshotStartFailureKind.ReadFailed,
+                        connected.Candidate.ServiceId,
+                        exception));
             }
 
             SetState(RecorderStateMachine.Transition(
