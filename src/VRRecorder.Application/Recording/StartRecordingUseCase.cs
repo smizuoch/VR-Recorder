@@ -117,7 +117,10 @@ public sealed class StartRecordingUseCase
             startedAt,
             command.FrameRate,
             encoder,
-            videoLayout);
+            videoLayout)
+        {
+            Media = command.Media ?? RecordingMediaConfiguration.CreateDefault(),
+        };
         var handle = await _recordingEngine
             .StartAsync(plan, cancellationToken)
             .ConfigureAwait(false);

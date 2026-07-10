@@ -14,4 +14,5 @@ public sealed record StartRecordingCommand(
     EncoderPreference EncoderPreference = EncoderPreference.Auto,
     GpuVendor GpuVendor = GpuVendor.Unknown,
     ResolutionChangePolicy ResolutionChangePolicy =
-        ResolutionChangePolicy.SingleFileFit);
+        ResolutionChangePolicy.SingleFileFit,
+    RecordingMediaConfiguration? Media = null);
