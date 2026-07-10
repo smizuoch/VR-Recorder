@@ -10,7 +10,7 @@ namespace VRRecorder.IntegrationTests.Input;
 public sealed class RecordingInputParityIntegrationTests
 {
     [Fact]
-    public async Task DesktopKeyboardWristAndSteamVrUseOneRecordingCommand()
+    public async Task DesktopKeyboardTrayWristAndSteamVrUseOneRecordingCommand()
     {
         var commands = new CapturingUiCommandDispatcher();
         var recordingInputs = new RecordingInputDispatcher(commands);
@@ -20,6 +20,9 @@ public sealed class RecordingInputParityIntegrationTests
             CancellationToken.None);
         await recordingInputs.DispatchAsync(
             UiActivationKind.DesktopKeyboard,
+            CancellationToken.None);
+        await recordingInputs.DispatchAsync(
+            UiActivationKind.DesktopTray,
             CancellationToken.None);
         var wristAction = Assert.Single(new WristUiProjector(
                 EnglishUiLocalizer.Instance)
