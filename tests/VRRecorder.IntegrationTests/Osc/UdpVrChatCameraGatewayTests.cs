@@ -102,6 +102,58 @@ public sealed class UdpVrChatCameraGatewayTests
     }
 
     [Fact]
+    public async Task CallerCancellationStopsConfirmationWithoutRetry()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            timeout.Token);
+        using var fakeVrChat = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(endpoint);
+
+        var write = gateway.SetStreamingAsync(true, cancellation.Token);
+        await fakeVrChat.ReceiveAsync(timeout.Token);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => write);
+        await Task.Delay(TimeSpan.FromMilliseconds(250), timeout.Token);
+        Assert.Equal(0, fakeVrChat.Available);
+    }
+
+    [Fact]
+    public async Task MalformedAndWrongSourcePacketsDoNotConfirmWrite()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var fakeVrChat = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        using var wrongSource = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(endpoint);
+
+        var write = gateway.SetModeAsync(CameraMode.Stream, timeout.Token);
+        var request = await fakeVrChat.ReceiveAsync(timeout.Token);
+        await wrongSource.SendAsync(
+            request.Buffer,
+            request.RemoteEndPoint,
+            timeout.Token);
+        await fakeVrChat.SendAsync(
+            new byte[] { 0x01, 0x02, 0x03 }.AsMemory(),
+            request.RemoteEndPoint,
+            timeout.Token);
+        await Task.Delay(TimeSpan.FromMilliseconds(50), timeout.Token);
+
+        Assert.False(write.IsCompleted);
+
+        await fakeVrChat.SendAsync(
+            request.Buffer,
+            request.RemoteEndPoint,
+            timeout.Token);
+        await write;
+    }
+
+    [Fact]
     [Trait("Scenario", "IT-001")]
     public async Task AcquireAndRestoreSendOrderedLoopbackDatagrams()
     {
