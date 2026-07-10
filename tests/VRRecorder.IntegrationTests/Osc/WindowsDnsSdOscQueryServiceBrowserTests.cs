@@ -75,6 +75,110 @@ public sealed class WindowsDnsSdOscQueryServiceBrowserTests
             });
     }
 
+    [Theory]
+    [InlineData(1460u)]
+    [InlineData(9003u)]
+    [InlineData(9501u)]
+    [InlineData(9554u)]
+    [InlineData(9701u)]
+    [InlineData(9714u)]
+    public async Task TransientResolveFailureDoesNotDiscardValidCandidate(
+        uint status)
+    {
+        var alphaId = "VRChat-Client-alpha._oscjson._tcp.local.";
+        var zetaId = "VRChat-Client-zeta._oscjson._tcp.local.";
+        var api = new StubWindowsDnsSdApi(
+            [alphaId, zetaId],
+            new Dictionary<string, WindowsDnsSdResolvedService>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                [zetaId] = Resolved(
+                    zetaId,
+                    "zeta-host.local.",
+                    [IPAddress.Loopback],
+                    port: 19002,
+                    new Dictionary<string, string>(StringComparer.Ordinal)),
+            },
+            new Dictionary<string, Exception>(StringComparer.OrdinalIgnoreCase)
+            {
+                [alphaId] = new WindowsDnsSdException("resolve", status),
+            });
+        var browser = new WindowsDnsSdOscQueryServiceBrowser(api);
+
+        var advertisements = await browser.BrowseAsync(CancellationToken.None);
+
+        var advertisement = Assert.Single(advertisements);
+        Assert.Equal(zetaId, advertisement.ServiceId);
+        Assert.Equal([alphaId, zetaId], api.ResolveQueries);
+    }
+
+    [Fact]
+    public async Task StructuralResolveFailurePropagates()
+    {
+        var serviceId = "VRChat-Client-alpha._oscjson._tcp.local.";
+        var failure = new WindowsDnsSdException("resolve", status: 13);
+        var browser = CreateFailingBrowser(serviceId, failure);
+
+        var actual = await Assert.ThrowsAsync<WindowsDnsSdException>(() =>
+            browser.BrowseAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+    }
+
+    [Fact]
+    public async Task UnclassifiedIoResolveFailurePropagates()
+    {
+        var serviceId = "VRChat-Client-alpha._oscjson._tcp.local.";
+        var failure = new IOException("Unclassified resolve failure.");
+        var browser = CreateFailingBrowser(serviceId, failure);
+
+        var actual = await Assert.ThrowsAsync<IOException>(() =>
+            browser.BrowseAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+    }
+
+    [Fact]
+    public async Task PlatformResolveFailurePropagates()
+    {
+        var serviceId = "VRChat-Client-alpha._oscjson._tcp.local.";
+        var failure = new PlatformNotSupportedException();
+        var browser = CreateFailingBrowser(serviceId, failure);
+
+        var actual = await Assert.ThrowsAsync<PlatformNotSupportedException>(() =>
+            browser.BrowseAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+    }
+
+    [Fact]
+    public async Task CallerCancellationWinsOverTransientResolveFailure()
+    {
+        var serviceId = "VRChat-Client-alpha._oscjson._tcp.local.";
+        using var cancellation = new CancellationTokenSource();
+        var browser = CreateFailingBrowser(
+            serviceId,
+            new WindowsDnsSdException("resolve", status: 9554),
+            _ => cancellation.Cancel());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            browser.BrowseAsync(cancellation.Token));
+    }
+
+    private static WindowsDnsSdOscQueryServiceBrowser CreateFailingBrowser(
+        string serviceId,
+        Exception failure,
+        Action<string>? beforeFailure = null) =>
+        new(new StubWindowsDnsSdApi(
+            [serviceId],
+            new Dictionary<string, WindowsDnsSdResolvedService>(
+                StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, Exception>(StringComparer.OrdinalIgnoreCase)
+            {
+                [serviceId] = failure,
+            },
+            beforeFailure));
+
     private static WindowsDnsSdResolvedService Resolved(
         string serviceInstanceName,
         string hostName,
@@ -93,14 +197,21 @@ public sealed class WindowsDnsSdOscQueryServiceBrowserTests
         private readonly IReadOnlyList<string> _browseResults;
         private readonly IReadOnlyDictionary<string, WindowsDnsSdResolvedService>
             _resolveResults;
+        private readonly IReadOnlyDictionary<string, Exception> _resolveFailures;
+        private readonly Action<string>? _beforeFailure;
 
         public StubWindowsDnsSdApi(
             IReadOnlyList<string> browseResults,
             IReadOnlyDictionary<string, WindowsDnsSdResolvedService>
-                resolveResults)
+                resolveResults,
+            IReadOnlyDictionary<string, Exception>? resolveFailures = null,
+            Action<string>? beforeFailure = null)
         {
             _browseResults = browseResults;
             _resolveResults = resolveResults;
+            _resolveFailures = resolveFailures ??
+                new Dictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
+            _beforeFailure = beforeFailure;
         }
 
         public bool IsSupported => true;
@@ -124,6 +235,12 @@ public sealed class WindowsDnsSdOscQueryServiceBrowserTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             ResolveQueries.Add(serviceInstanceName);
+            if (_resolveFailures.TryGetValue(serviceInstanceName, out var failure))
+            {
+                _beforeFailure?.Invoke(serviceInstanceName);
+                return Task.FromException<WindowsDnsSdResolvedService?>(failure);
+            }
+
             return Task.FromResult<WindowsDnsSdResolvedService?>(
                 _resolveResults[serviceInstanceName]);
         }
