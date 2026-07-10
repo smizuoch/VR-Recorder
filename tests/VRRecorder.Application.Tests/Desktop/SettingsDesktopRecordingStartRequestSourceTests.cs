@@ -123,15 +123,43 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
     }
 
     [Fact]
-    public async Task NonCanonicalAbsolutePathFailsClosed()
+    public async Task NormalizableAbsolutePathAndTrailingSeparatorAreAccepted()
     {
         var nonCanonicalPath = Path.Combine(
             AbsolutePath("parent"),
             "..",
-            "output");
+            "output") + Path.DirectorySeparatorChar;
         var source = new SettingsDesktopRecordingStartRequestSource(
             new QueueSettingsStore(CreateSettings(
                 outputFolder: nonCanonicalPath)),
+            new TrackingDefaultOutputPathProvider(AbsolutePath("unused")));
+
+        var request = await source.GetAsync(CancellationToken.None);
+
+        Assert.Equal(
+            Path.GetFullPath(nonCanonicalPath),
+            request.Command.OutputPath.FullPath);
+    }
+
+    [Fact]
+    public async Task FileSystemRootIsAcceptedAsAnAbsoluteCustomPath()
+    {
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(CreateSettings(outputFolder: root)),
+            new TrackingDefaultOutputPathProvider(AbsolutePath("unused")));
+
+        var request = await source.GetAsync(CancellationToken.None);
+
+        Assert.Equal(Path.GetFullPath(root), request.Command.OutputPath.FullPath);
+    }
+
+    [Fact]
+    public async Task ControlCharacterInAbsolutePathFailsClosed()
+    {
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(CreateSettings(
+                outputFolder: $"{AbsolutePath("output")}\0hidden")),
             new TrackingDefaultOutputPathProvider(AbsolutePath("unused")));
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
@@ -175,6 +203,32 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
         Assert.Equal(cancellation.Token, store.LastCancellationToken);
         Assert.Equal(cancellation.Token, exception.CancellationToken);
         Assert.Equal(0, defaults.CallCount);
+    }
+
+    [Fact]
+    public async Task NullSettingsResultFailsBeforeDefaultResolution()
+    {
+        var defaults = new TrackingDefaultOutputPathProvider(
+            AbsolutePath("unused"));
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new NullSettingsStore(),
+            defaults);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            source.GetAsync(CancellationToken.None));
+
+        Assert.Equal(0, defaults.CallCount);
+    }
+
+    [Fact]
+    public async Task NullKnownFolderResultFailsClosed()
+    {
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(CreateSettings()),
+            new NullDefaultOutputPathProvider());
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            source.GetAsync(CancellationToken.None));
     }
 
     private static VRRecorderSettings CreateSettings(
@@ -256,5 +310,23 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
             CallCount++;
             return new OutputPath(path);
         }
+    }
+
+    private sealed class NullSettingsStore : ISettingsStore
+    {
+        public Task<VRRecorderSettings> LoadAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<VRRecorderSettings>(null!);
+
+        public Task SaveAsync(
+            VRRecorderSettings settings,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class NullDefaultOutputPathProvider
+        : IDefaultOutputPathProvider
+    {
+        public OutputPath GetDefault() => null!;
     }
 }

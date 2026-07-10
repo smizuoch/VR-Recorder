@@ -75,28 +75,58 @@ public sealed class SettingsDesktopRecordingStartRequestSourceIntegrationTests
     }
 
     [Fact]
-    public async Task PersistedInvalidGainFailsBeforeKnownFolderResolution()
+    public async Task ExternallyCorruptedGainIsBackedUpBeforeDefaultsAreMapped()
     {
         using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
         var store = new JsonFileSettingsStore(
-            Path.Combine(directory.Path, "settings.json"));
+            settingsPath);
         var settings = VRRecorderSettings.CreateDefault();
-        await store.SaveAsync(
-            settings with
-            {
-                Audio = settings.Audio with { DesktopGainDb = 25 },
-            },
-            CancellationToken.None);
+        await store.SaveAsync(settings, CancellationToken.None);
+        var json = await File.ReadAllTextAsync(settingsPath);
+        await File.WriteAllTextAsync(
+            settingsPath,
+            json.Replace(
+                "\"desktopGainDb\": -6",
+                "\"desktopGainDb\": 25",
+                StringComparison.Ordinal));
         var defaults = new FixedDefaultOutputPathProvider(
             Path.Combine(directory.Path, "Downloads"));
         var source = new SettingsDesktopRecordingStartRequestSource(
             store,
             defaults);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            source.GetAsync(CancellationToken.None));
+        var request = await source.GetAsync(CancellationToken.None);
 
-        Assert.Equal(0, defaults.CallCount);
+        var media = Assert.IsType<RecordingMediaConfiguration>(
+            request.Command.Media);
+        Assert.Equal(
+            RecordingMediaConfiguration.DefaultInputGainDb,
+            media.DesktopGainDb);
+        Assert.False(File.Exists(settingsPath));
+        Assert.Single(Directory.EnumerateFiles(
+            directory.Path,
+            "settings.corrupt-*.json",
+            SearchOption.TopDirectoryOnly));
+        Assert.Equal(1, defaults.CallCount);
+    }
+
+    [Fact]
+    public async Task OutOfRangeGainCannotBePersisted()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        var store = new JsonFileSettingsStore(settingsPath);
+        var settings = VRRecorderSettings.CreateDefault();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.SaveAsync(
+            settings with
+            {
+                Audio = settings.Audio with { MicrophoneGainDb = 25 },
+            },
+            CancellationToken.None));
+
+        Assert.False(File.Exists(settingsPath));
     }
 
     private sealed class FixedDefaultOutputPathProvider(string path)
