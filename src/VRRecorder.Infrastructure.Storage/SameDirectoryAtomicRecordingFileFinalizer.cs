@@ -1,4 +1,3 @@
-using System.Globalization;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
 
@@ -57,22 +56,9 @@ public sealed class SameDirectoryAtomicRecordingFileFinalizer
             stream.Flush(flushToDisk: true);
         }
 
-        for (var part = 1; ; part++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var candidatePath = part == 1
-                ? finalPath
-                : NumberedPath(finalPath, part);
-            try
-            {
-                File.Move(temporaryPath, candidatePath, overwrite: false);
-                return new FinalizedRecording(candidatePath);
-            }
-            catch (IOException) when (File.Exists(candidatePath))
-            {
-                // A colliding destination is preserved; try the next name.
-            }
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        File.Move(temporaryPath, finalPath, overwrite: false);
+        return new FinalizedRecording(finalPath);
     }
 
     private static RecordingFileFinalizationException CreateFinalizationException(
@@ -101,16 +87,5 @@ public sealed class SameDirectoryAtomicRecordingFileFinalizer
             throw new InvalidOperationException(
                 "Recording finalization requires a same-directory rename.");
         }
-    }
-
-    private static string NumberedPath(string finalPath, int part)
-    {
-        var directory = Path.GetDirectoryName(finalPath) ??
-                        throw new InvalidOperationException(
-                            "The final recording has no parent directory.");
-        var fileName = Path.GetFileNameWithoutExtension(finalPath);
-        var extension = Path.GetExtension(finalPath);
-        var suffix = part.ToString("000", CultureInfo.InvariantCulture);
-        return Path.Combine(directory, $"{fileName}_{suffix}{extension}");
     }
 }
