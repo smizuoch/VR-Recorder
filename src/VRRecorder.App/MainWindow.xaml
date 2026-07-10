@@ -5,6 +5,7 @@
         AutomationProperties.Name="{DynamicResource App_Window_AccessibleName}"
         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
         Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        Loaded="OnLoaded"
         PreviewKeyDown="OnPreviewKeyDown"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen">
@@ -16,8 +17,8 @@
 
         <TextBlock x:Name="RecordingStatusText"
                    Grid.Row="0"
-                   Text="{DynamicResource Recording_State_Ready}"
-                   AutomationProperties.Name="{DynamicResource Status_Ready_AccessibleDescription}"
+                   Text="{DynamicResource Recording_State_Booting}"
+                   AutomationProperties.Name="{DynamicResource Status_Booting_AccessibleDescription}"
                    AutomationProperties.LiveSetting="Polite" />
 
         <Button x:Name="RecordingToggleButton"
@@ -29,6 +30,7 @@
                 AutomationProperties.Name="{DynamicResource Recording_Start_AccessibleName}"
                 AutomationProperties.HelpText="{DynamicResource Recording_Start_Tooltip}"
                 ToolTip="{DynamicResource Recording_Start_Tooltip}"
+                IsEnabled="False"
                 Click="OnRecordingToggleClick" />
     </Grid>
 </Window>

@@ -125,10 +125,10 @@ public sealed class WpfHostProjectContractTests
             element => element.Attribute(Xaml + "Name")?.Value ==
                        "RecordingStatusText");
         Assert.Equal(
-            "{DynamicResource Recording_State_Ready}",
+            "{DynamicResource Recording_State_Booting}",
             status.Attribute("Text")?.Value);
         Assert.Equal(
-            "{DynamicResource Status_Ready_AccessibleDescription}",
+            "{DynamicResource Status_Booting_AccessibleDescription}",
             status.Attribute("AutomationProperties.Name")?.Value);
         Assert.Equal(
             "Polite",

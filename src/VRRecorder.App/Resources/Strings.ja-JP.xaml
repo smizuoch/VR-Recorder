@@ -10,6 +10,10 @@
     <system:String x:Key="Recording_Stop_AccessibleName">録画を停止</system:String>
     <system:String x:Key="Recording_Stop_Tooltip">録画を停止してMP4を保存します</system:String>
     <system:String x:Key="Recording_State_Ready">録画準備完了</system:String>
+    <system:String x:Key="Recording_State_Booting">法的情報を検証中</system:String>
+    <system:String x:Key="Recording_State_ComplianceFault">法的情報の検証に失敗しました</system:String>
     <system:String x:Key="Status_Ready_AccessibleDescription">接続と映像信号は正常です</system:String>
+    <system:String x:Key="Status_Booting_AccessibleDescription">必要なオフライン法的情報を検証しています</system:String>
+    <system:String x:Key="Status_ComplianceFault_AccessibleDescription">必要な法的情報がないか無効なため録画は無効です</system:String>
     <system:String x:Key="Status_CommandUnavailable">録画機能を利用できません</system:String>
 </ResourceDictionary>

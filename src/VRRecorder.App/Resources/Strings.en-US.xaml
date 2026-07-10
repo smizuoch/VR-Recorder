@@ -10,6 +10,10 @@
     <system:String x:Key="Recording_Stop_AccessibleName">Stop recording</system:String>
     <system:String x:Key="Recording_Stop_Tooltip">Stop recording and save the MP4 file</system:String>
     <system:String x:Key="Recording_State_Ready">Ready to record</system:String>
+    <system:String x:Key="Recording_State_Booting">Verifying legal bundle</system:String>
+    <system:String x:Key="Recording_State_ComplianceFault">Compliance check failed</system:String>
     <system:String x:Key="Status_Ready_AccessibleDescription">The connection and video signal are ready</system:String>
+    <system:String x:Key="Status_Booting_AccessibleDescription">The required offline legal bundle is being verified</system:String>
+    <system:String x:Key="Status_ComplianceFault_AccessibleDescription">Recording is disabled because the required legal bundle is missing or invalid</system:String>
     <system:String x:Key="Status_CommandUnavailable">Recording services are not available</system:String>
 </ResourceDictionary>
