@@ -652,6 +652,87 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopRequiresExplicitRecordingRightsAcknowledgementBeforeHostActivation()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var rightsWindow = LoadRequiredXaml(
+            appDirectory,
+            "RecordingRightsWindow.xaml");
+        Assert.Equal(
+            "VRRecorder.App.RecordingRightsWindow",
+            rightsWindow.Root?.Attribute(Xaml + "Class")?.Value);
+        var acknowledgement = Assert.Single(
+            rightsWindow.Descendants(Presentation + "CheckBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "RightsAcknowledgementCheckBox");
+        Assert.Equal(
+            "OnAcknowledgementChanged",
+            acknowledgement.Attribute("Checked")?.Value);
+        Assert.Equal(
+            "OnAcknowledgementChanged",
+            acknowledgement.Attribute("Unchecked")?.Value);
+        var accept = Assert.Single(
+            rightsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "AcceptRightsButton");
+        Assert.Equal("False", accept.Attribute("IsEnabled")?.Value);
+        Assert.Equal("OnAccept", accept.Attribute("Click")?.Value);
+        Assert.Single(
+            rightsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnDecline");
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("JsonFileRecordingRightsAcknowledgementStore", appCode);
+        Assert.Contains("RecordingRightsGate", appCode);
+        Assert.Contains("IsRecordingRightsAcknowledgedAsync", appCode);
+        Assert.Contains("AcknowledgeRecordingRightsAsync", appCode);
+
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("RecordingRightsWindow", windowCode);
+        Assert.Contains("ShowDialog()", windowCode);
+        Assert.Contains("ExitAfterRightsDeclined", windowCode);
+        var rightsCheck = windowCode.IndexOf(
+            "IsRecordingRightsAcknowledgedAsync",
+            StringComparison.Ordinal);
+        var activation = windowCode.IndexOf(
+            "ActivateRecordingHostAsync",
+            StringComparison.Ordinal);
+        Assert.True(rightsCheck >= 0, "The recording-rights gate is missing.");
+        Assert.True(
+            activation > rightsCheck,
+            "Recording host activation must follow rights acknowledgement.");
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Rights_Title",
+                         "Rights_Body",
+                         "Rights_Acknowledge_Label",
+                         "Rights_Accept_Label",
+                         "Rights_Decline_Label",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
