@@ -42,10 +42,21 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 $"Native recording session {session.Id} already exists.");
         }
 
-        var committedAt = await firstPacket.Task
-            .WaitAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return new RecordingHandle(session.Id, committedAt);
+        try
+        {
+            var committedAt = await firstPacket.Task
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return new RecordingHandle(session.Id, committedAt);
+        }
+        catch
+        {
+            _sessions.TryRemove(session.Id, out _);
+            await session
+                .AbortAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     public Task<RecordingStopResult> StopAsync(

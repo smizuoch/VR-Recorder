@@ -6,5 +6,7 @@ public interface INativeRecordingSession
 {
     string Id { get; }
 
+    Task AbortAsync(CancellationToken cancellationToken);
+
     Task<RecordingStopResult> StopAsync(CancellationToken cancellationToken);
 }
