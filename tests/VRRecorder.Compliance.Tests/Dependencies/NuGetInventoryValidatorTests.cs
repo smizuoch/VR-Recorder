@@ -23,4 +23,23 @@ public sealed class NuGetInventoryValidatorTests
         Assert.Equal("missing-component-registration", issue.Code);
         Assert.Equal("Transitive.Package@2.0.0", issue.Subject);
     }
+
+    [Fact]
+    public void RegisteredPackageAtDifferentVersionProducesMismatchIssue()
+    {
+        NuGetPackage[] packages =
+        [
+            new("Versioned.Package", "2.0.0", NuGetDependencyKind.Direct),
+        ];
+        RegisteredNuGetPackage[] registry =
+        [
+            new("Versioned.Package", "1.0.0"),
+        ];
+
+        var issues = NuGetInventoryValidator.Validate(packages, registry);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("registry-version-mismatch", issue.Code);
+        Assert.Equal("Versioned.Package@2.0.0", issue.Subject);
+    }
 }
