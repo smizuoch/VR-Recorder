@@ -13,7 +13,6 @@ public sealed class AudioSessionService
     private readonly IAudioEndpointRediscoveryScheduler _rediscovery;
     private readonly IAudioSessionEventSink _events;
     private AudioRouting _routing;
-    private AudioRouting? _queuedRouting;
     private AudioRoutingRamp? _activeRamp;
     private int _rampFrameOffset;
     private AudioInputAvailability _availability = AudioInputAvailability.All;
@@ -37,13 +36,16 @@ public sealed class AudioSessionService
         EnsureDefined(routing, nameof(routing));
         lock (_gate)
         {
-            if (_activeRamp is not null)
+            if (routing == _routing)
             {
-                _queuedRouting = routing;
                 return;
             }
 
-            BeginRoutingTransition(routing);
+            var currentGains = CurrentGains(_availability);
+            _routing = routing;
+            BeginTransition(
+                currentGains,
+                TargetGains(_routing, _availability));
         }
     }
 
@@ -191,18 +193,11 @@ public sealed class AudioSessionService
             }
         }
 
-        if (previous != current && _activeRamp is null)
+        if (previous != current)
         {
-            var from = EffectiveRouting(_routing, previous);
-            var to = EffectiveRouting(_routing, current);
-            if (from != to)
-            {
-                _activeRamp = AudioRoutingRamp.Create(
-                    from,
-                    to,
-                    RequiredSampleRate);
-                _rampFrameOffset = 0;
-            }
+            BeginTransition(
+                CurrentGains(previous),
+                TargetGains(_routing, current));
         }
 
         _availability = current;
@@ -262,26 +257,21 @@ public sealed class AudioSessionService
 
         _activeRamp = null;
         _rampFrameOffset = 0;
-        if (_queuedRouting is { } queued)
-        {
-            _queuedRouting = null;
-            BeginRoutingTransition(queued);
-        }
     }
 
-    private void BeginRoutingTransition(AudioRouting routing)
+    private void BeginTransition(AudioGains from, AudioGains to)
     {
-        if (routing == _routing)
+        _rampFrameOffset = 0;
+        if (from == to)
         {
+            _activeRamp = null;
             return;
         }
 
         _activeRamp = AudioRoutingRamp.Create(
-            EffectiveRouting(_routing, _availability),
-            EffectiveRouting(routing, _availability),
+            from,
+            to,
             RequiredSampleRate);
-        _rampFrameOffset = 0;
-        _routing = routing;
     }
 
     private void ScheduleRediscovery(
@@ -349,31 +339,45 @@ public sealed class AudioSessionService
     private static bool IsAvailable(
         AudioInputAvailability availability,
         AudioInput input) => input switch
-    {
-        AudioInput.Desktop => availability.HasFlag(AudioInputAvailability.Desktop),
-        AudioInput.Microphone => availability.HasFlag(
-            AudioInputAvailability.Microphone),
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(input),
-            input,
-            "Unknown audio input."),
-    };
+        {
+            AudioInput.Desktop => availability.HasFlag(AudioInputAvailability.Desktop),
+            AudioInput.Microphone => availability.HasFlag(
+                AudioInputAvailability.Microphone),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(input),
+                input,
+                "Unknown audio input."),
+        };
 
-    private static AudioRouting EffectiveRouting(
+    private AudioGains CurrentGains(AudioInputAvailability availability)
+    {
+        var gains = _activeRamp is { } ramp
+            ? ramp.AtSample(_rampFrameOffset)
+            : RoutingGains(_routing);
+        return ApplyAvailability(gains, availability);
+    }
+
+    private static AudioGains TargetGains(
         AudioRouting routing,
+        AudioInputAvailability availability) =>
+        ApplyAvailability(RoutingGains(routing), availability);
+
+    private static AudioGains RoutingGains(AudioRouting routing) =>
+        AudioRoutingRamp
+            .Create(routing, routing, RequiredSampleRate)
+            .AtSample(0);
+
+    private static AudioGains ApplyAvailability(
+        AudioGains gains,
         AudioInputAvailability availability)
     {
-        var desktop = routing is AudioRouting.Mixed or AudioRouting.DesktopOnly &&
-                      availability.HasFlag(AudioInputAvailability.Desktop);
-        var microphone = routing is AudioRouting.Mixed or AudioRouting.MicOnly &&
-                         availability.HasFlag(AudioInputAvailability.Microphone);
-        return (desktop, microphone) switch
-        {
-            (true, true) => AudioRouting.Mixed,
-            (true, false) => AudioRouting.DesktopOnly,
-            (false, true) => AudioRouting.MicOnly,
-            _ => AudioRouting.Muted,
-        };
+        var desktop = availability.HasFlag(AudioInputAvailability.Desktop)
+            ? gains.Desktop
+            : 0;
+        var microphone = availability.HasFlag(AudioInputAvailability.Microphone)
+            ? gains.Microphone
+            : 0;
+        return new AudioGains(desktop, microphone);
     }
 
     private static void EnsureDefined(AudioRouting routing, string parameterName)

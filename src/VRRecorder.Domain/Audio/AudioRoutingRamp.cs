@@ -20,6 +20,12 @@ public sealed class AudioRoutingRamp
     public static AudioRoutingRamp Create(
         AudioRouting from,
         AudioRouting to,
+        int sampleRate) =>
+        Create(GainsFor(from), GainsFor(to), sampleRate);
+
+    public static AudioRoutingRamp Create(
+        AudioGains from,
+        AudioGains to,
         int sampleRate)
     {
         if (sampleRate <= 0)
@@ -30,9 +36,11 @@ public sealed class AudioRoutingRamp
                 "Sample rate must be positive.");
         }
 
+        EnsureFinite(from, nameof(from));
+        EnsureFinite(to, nameof(to));
         return new AudioRoutingRamp(
-            GainsFor(from),
-            GainsFor(to),
+            from,
+            to,
             Math.Max(1, sampleRate / 100));
     }
 
@@ -67,4 +75,16 @@ public sealed class AudioRoutingRamp
 
     private static double Interpolate(double start, double end, double progress) =>
         start + ((end - start) * progress);
+
+    private static void EnsureFinite(AudioGains gains, string parameterName)
+    {
+        if (!double.IsFinite(gains.Desktop) ||
+            !double.IsFinite(gains.Microphone))
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                gains,
+                "Audio gains must be finite.");
+        }
+    }
 }
