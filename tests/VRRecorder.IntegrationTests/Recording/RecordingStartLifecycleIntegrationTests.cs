@@ -226,6 +226,35 @@ public sealed class RecordingStartLifecycleIntegrationTests
 
         backend.Session.CompleteStop();
 
+        var restoreStreamingReceive = selectedOsc
+            .ReceiveAsync(timeout.Token)
+            .AsTask();
+        Assert.Same(
+            restoreStreamingReceive,
+            await Task.WhenAny(safeStop, restoreStreamingReceive));
+        var restoreStreaming = await restoreStreamingReceive;
+        Assert.Equal(
+            OscPacketCodec.EncodeStreaming(enabled: false),
+            restoreStreaming.Buffer);
+        await selectedOsc.SendAsync(
+            restoreStreaming.Buffer,
+            restoreStreaming.RemoteEndPoint,
+            timeout.Token);
+        var restoreModeReceive = selectedOsc
+            .ReceiveAsync(timeout.Token)
+            .AsTask();
+        Assert.Same(
+            restoreModeReceive,
+            await Task.WhenAny(safeStop, restoreModeReceive));
+        var restoreMode = await restoreModeReceive;
+        Assert.Equal(
+            OscPacketCodec.EncodeMode(CameraMode.Photo),
+            restoreMode.Buffer);
+        await selectedOsc.SendAsync(
+            restoreMode.Buffer,
+            restoreMode.RemoteEndPoint,
+            timeout.Token);
+
         Assert.Equal(VideoSignalStatus.SafeStop, await safeStop);
         await userStop;
         Assert.Equal(1, backend.Session.StopCallCount);
@@ -236,6 +265,7 @@ public sealed class RecordingStartLifecycleIntegrationTests
         Assert.Equal(
             Path.GetFullPath(backend.Plan!.Output.FinalPath),
             Assert.Single(savedRecordings.Recordings).FinalPath);
+        Assert.Equal(1, leaseStore.DeleteCallCount);
     }
 
     private static OscQueryServiceAdvertisement Advertisement(
@@ -342,6 +372,8 @@ public sealed class RecordingStartLifecycleIntegrationTests
     {
         public int SaveCallCount { get; private set; }
 
+        public int DeleteCallCount { get; private set; }
+
         public Task SaveAsync(
             CameraLease lease,
             CancellationToken cancellationToken)
@@ -353,8 +385,12 @@ public sealed class RecordingStartLifecycleIntegrationTests
 
         public Task DeleteAsync(
             CameraLease lease,
-            CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Camera restore was not expected.");
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DeleteCallCount++;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class ControllableStableVideoSignalGateway : IVideoSignalGateway
