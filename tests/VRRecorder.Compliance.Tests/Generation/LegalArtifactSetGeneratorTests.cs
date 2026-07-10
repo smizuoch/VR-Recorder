@@ -8,6 +8,36 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class LegalArtifactSetGeneratorTests
 {
     [Fact]
+    public async Task UnexpectedFileIsRejectedByDirectoryVerification()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var expected = LegalArtifactSetGenerator.Generate(
+            Context("unexpected-file"),
+            eligibility.ApprovedGraph!);
+        await LegalArtifactDirectoryWriter.WriteAsync(
+            directory.Path,
+            expected,
+            CancellationToken.None);
+        var unexpectedPath = Path.Combine(
+            directory.Path,
+            "LICENSES",
+            "stale-component",
+            "LICENSE.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(unexpectedPath)!);
+        await File.WriteAllTextAsync(unexpectedPath, "stale license");
+
+        var issues = await LegalArtifactDirectoryVerifier.VerifyAsync(
+            directory.Path,
+            expected,
+            CancellationToken.None);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("generated-artifact-unexpected", issue.Code);
+        Assert.Equal("LICENSES/stale-component/LICENSE.txt", issue.Subject);
+    }
+
+    [Fact]
     public void ArtifactSetIncludesOfflineHtmlNoticesWithContentsAndFullText()
     {
         var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
