@@ -23,7 +23,8 @@ public sealed class WristUiProjector
     {
         ArgumentNullException.ThrowIfNull(status);
         UiActionSnapshot[] actions;
-        if (status.State == RecorderState.Recording &&
+        if ((status.State == RecorderState.Recording ||
+             status.State == RecorderState.SignalLost) &&
             status.AvailableActions.HasFlag(RecorderAvailableActions.Stop))
         {
             actions = [CreateStopAction()];
