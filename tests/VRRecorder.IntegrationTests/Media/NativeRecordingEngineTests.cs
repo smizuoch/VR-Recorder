@@ -9,6 +9,25 @@ namespace VRRecorder.IntegrationTests.Media;
 public sealed class NativeRecordingEngineTests
 {
     [Fact]
+    public async Task CancellationBeforeFirstPacketAbortsOpenedNativeSession()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var clock = new ControllableClock(
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var engine = new NativeRecordingEngine(backend, clock);
+        using var cancellation = new CancellationTokenSource();
+
+        var start = engine.StartAsync(
+            new RecordingPlan(new StableVideoSignal(320, 180)),
+            cancellation.Token);
+        await backend.WaitUntilOpenedAsync();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start);
+        Assert.Equal(1, backend.Session.AbortCallCount);
+    }
+
+    [Fact]
     public async Task StartCompletesOnlyAfterNativeFirstPacketCallback()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -37,6 +56,8 @@ public sealed class NativeRecordingEngineTests
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Action? _firstVideoPacketMuxed;
 
+        public StubNativeRecordingSession Session { get; } = new();
+
         public Task<INativeRecordingSession> OpenAsync(
             RecordingPlan plan,
             Action firstVideoPacketMuxed,
@@ -44,8 +65,7 @@ public sealed class NativeRecordingEngineTests
         {
             _firstVideoPacketMuxed = firstVideoPacketMuxed;
             _opened.TrySetResult();
-            return Task.FromResult<INativeRecordingSession>(
-                new StubNativeRecordingSession());
+            return Task.FromResult<INativeRecordingSession>(Session);
         }
 
         public void SignalFirstVideoPacketMuxed() =>
@@ -57,7 +77,15 @@ public sealed class NativeRecordingEngineTests
 
     private sealed class StubNativeRecordingSession : INativeRecordingSession
     {
+        public int AbortCallCount { get; private set; }
+
         public string Id => "native-session-001";
+
+        public Task AbortAsync(CancellationToken cancellationToken)
+        {
+            AbortCallCount++;
+            return Task.CompletedTask;
+        }
 
         public Task<RecordingStopResult> StopAsync(
             CancellationToken cancellationToken) =>
