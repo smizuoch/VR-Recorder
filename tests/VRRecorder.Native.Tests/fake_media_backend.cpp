@@ -124,6 +124,10 @@ public:
     vrrec_status_t GetStatistics(
         vrrec_session_statistics_v1 &statistics) noexcept override
     {
+        if (statistics_status_ != VRREC_STATUS_OK) {
+            return statistics_status_;
+        }
+
         statistics = statistics_;
         return VRREC_STATUS_OK;
     }
@@ -181,6 +185,11 @@ public:
         statistics_ = statistics;
     }
 
+    void SetStatisticsStatus(vrrec_status_t status) noexcept
+    {
+        statistics_status_ = status;
+    }
+
     void FaultDuringNextVideoLayoutUpdate() noexcept
     {
         const std::lock_guard lock(control_mutex_);
@@ -231,6 +240,7 @@ private:
     bool video_layout_update_entered_ = false;
     bool release_video_layout_update_ = false;
     std::uint32_t request_stop_call_count_ = 0;
+    vrrec_status_t statistics_status_ = VRREC_STATUS_OK;
     bool aborted_ = false;
     static FakeMediaBackend *active_;
 };
@@ -374,6 +384,11 @@ std::uint32_t VideoLayoutUpdateCount()
 void SetStatistics(const vrrec_session_statistics_v1 &statistics)
 {
     FakeMediaBackend::Active()->SetStatistics(statistics);
+}
+
+void SetStatisticsStatus(std::int32_t status)
+{
+    FakeMediaBackend::Active()->SetStatisticsStatus(status);
 }
 
 void FaultDuringNextVideoLayoutUpdate()

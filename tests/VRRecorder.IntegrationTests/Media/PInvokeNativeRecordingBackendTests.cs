@@ -232,6 +232,43 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(expected, terminal);
     }
 
+    [Fact]
+    public async Task FinalStatisticsFailureDoesNotReplaceSuccessfulStopResult()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "take.recording.mp4"),
+            Path.Combine(directory.Path, "take.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        controls.SetStatisticsStatus(status: 6);
+
+        var stopping = session.StopAsync(CancellationToken.None);
+        controls.CompleteTrailerFlushClose(90, 142);
+        var stopped = await stopping;
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => session.GetStatisticsAsync(CancellationToken.None));
+
+        Assert.Equal(pending, stopped.Recording);
+        Assert.Equal(90, stopped.VideoPacketCount);
+        Assert.Equal(142, stopped.AudioPacketCount);
+        Assert.Equal(6, exception.Fault.Status);
+    }
+
     [Theory]
     [InlineData(EncoderKind.Nvenc, 1u)]
     [InlineData(EncoderKind.Amf, 2u)]
@@ -468,6 +505,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly CopyMediaConfigDelegate _copyMediaConfig;
         private readonly CopyVideoLayoutDelegate _copyVideoLayout;
         private readonly SetStatisticsDelegate _setStatistics;
+        private readonly SetStatisticsStatusDelegate _setStatisticsStatus;
 
         public NativeFixtureControls(string path)
         {
@@ -503,6 +541,11 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_set_statistics_v1"));
+            _setStatisticsStatus = Marshal.GetDelegateForFunctionPointer<
+                SetStatisticsStatusDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_set_statistics_status"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -571,6 +614,9 @@ public sealed class PInvokeNativeRecordingBackendTests
                 checked((ulong)statistics.MaximumEncodeLatency.TotalMicroseconds),
                 checked((long)statistics.AudioVideoOffset.TotalMicroseconds));
 
+        public void SetStatisticsStatus(int status) =>
+            _setStatisticsStatus(status);
+
         public void Dispose() => NativeLibrary.Free(_library);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -607,6 +653,9 @@ public sealed class PInvokeNativeRecordingBackendTests
             ulong latestEncodeLatencyMicroseconds,
             ulong maximumEncodeLatencyMicroseconds,
             long audioVideoOffsetMicroseconds);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void SetStatisticsStatusDelegate(int status);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeObservedMediaConfig

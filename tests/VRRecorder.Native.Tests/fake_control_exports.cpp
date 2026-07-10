@@ -151,6 +151,12 @@ extern "C" VRREC_TEST_API void vrrec_test_set_statistics_v1(
         });
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_set_statistics_status(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::SetStatisticsStatus(status);
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_set_steamvr_digital_state(
     std::uint8_t is_active,
     std::uint8_t state,
