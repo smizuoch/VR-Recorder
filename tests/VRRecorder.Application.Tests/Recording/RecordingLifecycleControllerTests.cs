@@ -83,13 +83,13 @@ public sealed class RecordingLifecycleControllerTests
     }
 
     [Fact]
-    public async Task CountdownCancellationRestoresOwnedCameraStateWithoutStartingMedia()
+    public async Task RestoreFailurePreservesCountdownCancellationAndWarns()
     {
         var events = new List<string>();
         var candidate = Candidate("selected", 9000);
         var connections = new VrChatCameraConnectionUseCase(
             new VrChatTargetResolver(new StubDiscovery([candidate])),
-            new FixedGatewayFactory(new RecordingCameraGateway(events)));
+            new FixedGatewayFactory(new FailingRestoreCameraGateway(events)));
         var signal = new ControllableVideoSignalGateway();
         var countdown = new ControllableCountdownTimer();
         var reservation = new FakeRecordingFileReservation();
@@ -118,12 +118,13 @@ public sealed class RecordingLifecycleControllerTests
                 new ControllableMonotonicClock(
                     MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
                 new FakeStopRequestSink()));
+        var restoreWarnings = new FakeCameraRestoreWarningSink();
         using var lifecycle = new RecordingLifecycleController(
             connections,
             new RecordingCameraLeaseStore(events),
             startRecording,
             new FakeStopRequestSink(),
-            new FakeCameraRestoreWarningSink());
+            restoreWarnings);
         using var cancellation = new CancellationTokenSource();
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
@@ -152,23 +153,24 @@ public sealed class RecordingLifecycleControllerTests
                 "mode:Stream",
                 "streaming:true",
                 "streaming:false",
-                "mode:Photo",
-                "lease:delete",
             ],
             events);
+        var warning = Assert.Single(restoreWarnings.Warnings);
+        Assert.Equal(CameraRestoreWarningReason.StartCanceled, warning.Reason);
+        Assert.IsType<TestCameraRestoreException>(warning.Failure);
         Assert.Equal(RecorderState.Ready, lifecycle.State);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);
     }
 
     [Fact]
-    public async Task SignalTimeoutRestoresOwnedCameraStateWithoutCreatingAFile()
+    public async Task RestoreFailurePreservesNoSignalResultAndWarns()
     {
         var events = new List<string>();
         var candidate = Candidate("selected", 9000);
         var connections = new VrChatCameraConnectionUseCase(
             new VrChatTargetResolver(new StubDiscovery([candidate])),
-            new FixedGatewayFactory(new RecordingCameraGateway(events)));
+            new FixedGatewayFactory(new FailingRestoreCameraGateway(events)));
         var signal = new ControllableVideoSignalGateway();
         var reservation = new FakeRecordingFileReservation();
         var engine = new FakeRecordingEngine();
@@ -196,12 +198,13 @@ public sealed class RecordingLifecycleControllerTests
                 new ControllableMonotonicClock(
                     MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
                 new FakeStopRequestSink()));
+        var restoreWarnings = new FakeCameraRestoreWarningSink();
         using var lifecycle = new RecordingLifecycleController(
             connections,
             new RecordingCameraLeaseStore(events),
             startRecording,
             new FakeStopRequestSink(),
-            new FakeCameraRestoreWarningSink());
+            restoreWarnings);
         var start = lifecycle.StartAsync(
             candidate.ServiceId,
             new CameraSnapshot(
@@ -227,10 +230,11 @@ public sealed class RecordingLifecycleControllerTests
                 "mode:Stream",
                 "streaming:true",
                 "streaming:false",
-                "mode:Photo",
-                "lease:delete",
             ],
             events);
+        var warning = Assert.Single(restoreWarnings.Warnings);
+        Assert.Equal(CameraRestoreWarningReason.NoSignal, warning.Reason);
+        Assert.IsType<TestCameraRestoreException>(warning.Failure);
         Assert.Equal(0, reservation.CallCount);
         Assert.Equal(0, engine.StartCallCount);
     }
@@ -275,7 +279,7 @@ public sealed class RecordingLifecycleControllerTests
             gateway;
     }
 
-    private sealed class RecordingCameraGateway(List<string> events)
+    private sealed class FailingRestoreCameraGateway(List<string> events)
         : IVrChatCameraGateway
     {
         public Task SetModeAsync(
@@ -293,8 +297,17 @@ public sealed class RecordingLifecycleControllerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             events.Add($"streaming:{enabled.ToString().ToLowerInvariant()}");
+            if (!enabled)
+            {
+                throw new TestCameraRestoreException();
+            }
+
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class TestCameraRestoreException : Exception
+    {
     }
 
     private sealed class RecordingCameraLeaseStore(List<string> events)
