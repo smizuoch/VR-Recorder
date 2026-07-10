@@ -6,6 +6,10 @@ namespace VRRecorder.Application.Tests.TestDoubles;
 
 internal sealed class FakeRecordingEngine : IRecordingEngine
 {
+    private readonly TaskCompletionSource _startRequested = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<RecordingHandle> _firstPacketCommitted = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<RecordingResult> _stopCompletion = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -21,9 +25,8 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
     {
         StartCallCount++;
         CreatedFiles.Add("recording.recording.mp4");
-        return Task.FromResult(new RecordingHandle(
-            "test-recording",
-            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+        _startRequested.TrySetResult();
+        return _firstPacketCommitted.Task.WaitAsync(cancellationToken);
     }
 
     public Task<RecordingResult> StopAsync(
@@ -36,4 +39,9 @@ internal sealed class FakeRecordingEngine : IRecordingEngine
 
     public void CompleteStop(RecordingResult result) =>
         _stopCompletion.TrySetResult(result);
+
+    public Task WaitUntilStartRequestedAsync() => _startRequested.Task;
+
+    public void CommitFirstPacket(RecordingHandle handle) =>
+        _firstPacketCommitted.TrySetResult(handle);
 }

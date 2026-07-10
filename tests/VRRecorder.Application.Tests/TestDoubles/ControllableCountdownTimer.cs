@@ -17,4 +17,6 @@ internal sealed class ControllableCountdownTimer : ICountdownTimer
     }
 
     public Task WaitUntilRequestedAsync() => _requested.Task;
+
+    public void Complete() => _completed.TrySetResult();
 }

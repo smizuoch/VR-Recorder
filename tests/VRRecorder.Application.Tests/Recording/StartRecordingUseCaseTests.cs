@@ -72,4 +72,55 @@ public sealed class StartRecordingUseCaseTests
         Assert.Equal(0, engine.StartCallCount);
         Assert.Empty(engine.CreatedFiles);
     }
+
+    [Fact]
+    public async Task AutoStopDeadlineStartsAtEngineFirstPacketCommit()
+    {
+        var initialNow = MonotonicTimestamp.FromElapsed(TimeSpan.Zero);
+        var signal = new ControllableVideoSignalGateway();
+        var countdown = new ControllableCountdownTimer();
+        var engine = new FakeRecordingEngine();
+        var clock = new ControllableMonotonicClock(initialNow);
+        var stopRequests = new FakeStopRequestSink();
+        var autoStop = new AutoStopScheduler(clock, stopRequests);
+        var useCase = new StartRecordingUseCase(
+            signal,
+            countdown,
+            engine,
+            autoStop);
+
+        var execution = useCase.ExecuteAsync(
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(3),
+                RecordingDuration.FromSeconds(3)),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, clock.DelayCallCount);
+
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await countdown.WaitUntilRequestedAsync();
+        clock.AdvanceBy(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, clock.DelayCallCount);
+
+        countdown.Complete();
+        await engine.WaitUntilStartRequestedAsync();
+        clock.AdvanceBy(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, clock.DelayCallCount);
+
+        var committedAt = clock.Now;
+        engine.CommitFirstPacket(new RecordingHandle("session-001", committedAt));
+        var started = Assert.IsType<StartRecordingResult.Started>(await execution);
+        var deadline = await clock.WaitUntilDeadlineRequestedAsync();
+
+        Assert.Equal(committedAt.Add(TimeSpan.FromSeconds(3)), deadline);
+
+        clock.AdvanceBy(TimeSpan.FromMilliseconds(2999));
+        Assert.Empty(stopRequests.RequestedHandles);
+
+        clock.AdvanceBy(TimeSpan.FromMilliseconds(1));
+        await started.AutoStopCompletion;
+        Assert.Single(stopRequests.RequestedHandles);
+    }
 }
