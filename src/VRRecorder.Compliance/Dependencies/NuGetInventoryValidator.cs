@@ -9,15 +9,30 @@ public static class NuGetInventoryValidator
         ArgumentNullException.ThrowIfNull(packages);
         ArgumentNullException.ThrowIfNull(registry);
 
-        var registeredIdentities = registry
-            .Select(package => package.Identity)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var packagesById = registry.ToDictionary(
+            package => package.Id,
+            StringComparer.OrdinalIgnoreCase);
+        var issues = new List<ComplianceIssue>();
 
-        return packages
-            .Where(package => !registeredIdentities.Contains(package.Identity))
-            .Select(package => new ComplianceIssue(
-                "missing-component-registration",
-                package.Identity))
-            .ToArray();
+        foreach (var package in packages)
+        {
+            if (!packagesById.TryGetValue(package.Id, out var registeredPackage))
+            {
+                issues.Add(new ComplianceIssue(
+                    "missing-component-registration",
+                    package.Identity));
+            }
+            else if (!string.Equals(
+                         package.Version,
+                         registeredPackage.Version,
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new ComplianceIssue(
+                    "registry-version-mismatch",
+                    package.Identity));
+            }
+        }
+
+        return issues;
     }
 }
