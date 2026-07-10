@@ -1,4 +1,5 @@
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Recording;
 
@@ -7,16 +8,21 @@ namespace VRRecorder.Application.Desktop;
 public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
 {
     private readonly object _gate = new();
+    private readonly object _statusGate = new();
     private readonly IDesktopRecordingStartRequestSource _requests;
     private readonly IRecordingLifecycleController _lifecycle;
     private readonly IStopRequestSink _stopRequests;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly RecorderStatusHub _statuses;
+    private readonly IDisposable? _lifecycleStatusSubscription;
     private RecordingHandle? _activeHandle;
     private Task? _sessionStopTask;
     private Task? _transportToggleTask;
     private CancellationTokenSource? _startCancellation;
     private bool _semanticStartCancellationRequested;
     private Task? _shutdownTask;
+    private long _statusRevision;
+    private bool _terminalStatus;
     private bool _disposed;
 
     public DesktopRecordingRuntime(
@@ -30,7 +36,19 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         _requests = requests;
         _lifecycle = lifecycle;
         _stopRequests = stopRequests;
+        _statuses = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, lifecycle.State));
+        if (lifecycle is IRecorderStatusSource statusSource)
+        {
+            _lifecycleStatusSubscription = statusSource.Subscribe(status =>
+                PublishStatus(status.State));
+        }
     }
+
+    public RecorderStatusSnapshot Current => _statuses.Current;
+
+    public IDisposable Subscribe(Action<RecorderStatusSnapshot> subscriber) =>
+        _statuses.Subscribe(subscriber);
 
     public Task ToggleAsync(CancellationToken cancellationToken)
     {
@@ -99,6 +117,11 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
 
         if (cancelLifetime)
         {
+            if (reason == RecordingStopReason.ComplianceFault)
+            {
+                PublishStatus(RecorderState.ComplianceFault);
+            }
+
             CancelLifetime();
         }
 
@@ -132,6 +155,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
                 ClearStartCancellation(operationCancellation);
             }
 
+            PublishStatus(_lifecycle.State);
             operationCancellation.Dispose();
         }
     }
@@ -216,6 +240,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     {
         var handle = _activeHandle ?? throw new InvalidOperationException(
             "The recording lifecycle has no desktop-owned active handle.");
+        PublishStatus(RecorderState.Stopping);
         _sessionStopTask ??= _stopRequests.RequestStopAsync(
             new RecordingStopRequest(handle, reason),
             CancellationToken.None);
@@ -231,6 +256,8 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             {
                 ClearCompletedSession();
             }
+
+            PublishStatus(_lifecycle.State);
         }
     }
 
@@ -259,12 +286,37 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         {
             try
             {
+                _lifecycleStatusSubscription?.Dispose();
                 _lifecycle.Dispose();
             }
             finally
             {
-                _lifetime.Dispose();
+                try
+                {
+                    _statuses.Dispose();
+                }
+                finally
+                {
+                    _lifetime.Dispose();
+                }
             }
+        }
+    }
+
+    private void PublishStatus(RecorderState state)
+    {
+        lock (_statusGate)
+        {
+            if (_terminalStatus || _statuses.Current.State == state)
+            {
+                return;
+            }
+
+            _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                checked(++_statusRevision),
+                state));
+            _terminalStatus = state is
+                RecorderState.Faulted or RecorderState.ComplianceFault;
         }
     }
 
