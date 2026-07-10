@@ -34,6 +34,23 @@ public sealed class ProductionTimeAdapterTests
     }
 
     [Fact]
+    public void MonotonicClockInstancesShareProviderTimestampDomain()
+    {
+        var provider = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
+        var firstClock = new SystemMonotonicClock(provider);
+        provider.Advance(TimeSpan.FromSeconds(5));
+
+        var secondClock = new SystemMonotonicClock(provider);
+
+        Assert.Equal(firstClock.Now, secondClock.Now);
+        Assert.Equal(TimeSpan.FromSeconds(5), secondClock.Now.Elapsed);
+
+        provider.Advance(TimeSpan.FromSeconds(2));
+        Assert.Equal(firstClock.Now, secondClock.Now);
+        Assert.Equal(TimeSpan.FromSeconds(7), secondClock.Now.Elapsed);
+    }
+
+    [Fact]
     public async Task MonotonicClockCompletesPastDeadlineWithoutCreatingTimer()
     {
         var provider = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
