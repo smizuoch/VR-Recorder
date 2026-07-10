@@ -13,6 +13,7 @@
 - [x] 生成済みNoticesの手編集を再生成差分で検出する
 - [x] SBOMのUNKNOWN／NOASSERTION／NONEを拒否する
 - [x] 全payload fileを列挙する決定論的な`LEGAL-MANIFEST.sha256`を生成する
+- [x] 外部resource／JavaScriptなしで目次・検索案内・license全文を持つHTML Noticesを生成する
 
 ## English
 
@@ -27,3 +28,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Detect manual edits to generated Notices through regeneration diff
 - [x] Reject UNKNOWN, NOASSERTION, and NONE in the SBOM
 - [x] Generate a deterministic `LEGAL-MANIFEST.sha256` covering every payload file
+- [x] Generate HTML Notices with contents, search guidance, and full license text without external resources or JavaScript

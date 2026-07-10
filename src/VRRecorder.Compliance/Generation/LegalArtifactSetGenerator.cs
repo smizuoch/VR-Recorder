@@ -22,6 +22,12 @@ public static class LegalArtifactSetGenerator
                 approvedGraph)));
         AddArtifact(
             artifacts,
+            "THIRD-PARTY-NOTICES.html",
+            Encoding.UTF8.GetBytes(ThirdPartyNoticeHtmlGenerator.Generate(
+                context.ProductName,
+                approvedGraph)));
+        AddArtifact(
+            artifacts,
             "SBOM/manifest.spdx.json",
             Encoding.UTF8.GetBytes(SpdxSbomGenerator.Generate(
                 context,
