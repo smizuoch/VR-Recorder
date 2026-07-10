@@ -22,6 +22,7 @@
 - [x] 重複catalog property・未登録file・改ざん・trust anchor欠落をfail-closedで拒否する
 - [x] runtime改ざんをComplianceFaultへ写像しREC actionを禁止する
 - [x] Release buildでbundle ID・manifest digest・payloadを必須化しdigestを照合する
+- [x] 検証済みstagingからbyte-identicalなZIPを一時file経由で安全に確定する
 
 ## English
 
@@ -45,3 +46,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Fail closed on duplicate catalog properties, unlisted files, tampering, or a missing trust anchor
 - [x] Map runtime tampering to ComplianceFault and suppress the REC action
 - [x] Require the bundle ID, manifest digest, and payload for Release builds and compare the digest
+- [x] Publish a byte-identical ZIP from verified staging through a fail-safe temporary file
