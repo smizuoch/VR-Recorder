@@ -10,14 +10,40 @@ public static class ThirdPartyNoticeGenerator
         IEnumerable<NuGetPackage> dependencies,
         IEnumerable<NoticeComponent> components)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(productName);
         ArgumentNullException.ThrowIfNull(dependencies);
         ArgumentNullException.ThrowIfNull(components);
+        return GenerateCore(
+            productName,
+            dependencies.ToArray(),
+            components.Select(ToRenderedComponent).ToArray(),
+            showLicenseDecision: false);
+    }
 
-        var dependencyArray = dependencies.ToArray();
+    public static string Generate(
+        string productName,
+        ApprovedReleaseGraph approvedGraph)
+    {
+        ArgumentNullException.ThrowIfNull(approvedGraph);
+        return GenerateCore(
+            productName,
+            approvedGraph.Graph.Dependencies.ToArray(),
+            approvedGraph.Graph.Components
+                .Select(ToRenderedComponent)
+                .ToArray(),
+            showLicenseDecision: true);
+    }
+
+    private static string GenerateCore(
+        string productName,
+        NuGetPackage[] dependencies,
+        RenderedComponent[] components,
+        bool showLicenseDecision)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productName);
+
         var selectedComponents = SelectDistributedComponents(
-            dependencyArray,
-            components.ToArray());
+            dependencies,
+            components);
         var output = new StringBuilder();
         output.Append(productName).Append(" THIRD-PARTY NOTICES\n\n");
 
@@ -25,7 +51,22 @@ public static class ThirdPartyNoticeGenerator
         {
             output.Append("Component: ").Append(component.DisplayName).Append('\n');
             output.Append("Version: ").Append(component.Version).Append('\n');
-            output.Append("SPDX: ").Append(component.LicenseExpression).Append('\n');
+            if (showLicenseDecision)
+            {
+                output.Append("SPDX declared: ")
+                    .Append(component.LicenseDeclared)
+                    .Append('\n');
+                output.Append("SPDX concluded: ")
+                    .Append(component.LicenseConcluded)
+                    .Append('\n');
+            }
+            else
+            {
+                output.Append("SPDX: ")
+                    .Append(component.LicenseConcluded)
+                    .Append('\n');
+            }
+
             output.Append("Copyright: ")
                 .Append(component.CopyrightNotice)
                 .Append('\n');
@@ -40,7 +81,7 @@ public static class ThirdPartyNoticeGenerator
 
             foreach (var dependency in DependenciesFor(
                          component,
-                         dependencyArray))
+                         dependencies))
             {
                 output.Append("Dependency: ")
                     .Append(dependency.Identity)
@@ -62,11 +103,11 @@ public static class ThirdPartyNoticeGenerator
         return output.ToString();
     }
 
-    private static NoticeComponent[] SelectDistributedComponents(
+    private static RenderedComponent[] SelectDistributedComponents(
         IReadOnlyList<NuGetPackage> dependencies,
-        IReadOnlyList<NoticeComponent> components)
+        IReadOnlyList<RenderedComponent> components)
     {
-        var selected = new Dictionary<string, NoticeComponent>(
+        var selected = new Dictionary<string, RenderedComponent>(
             StringComparer.OrdinalIgnoreCase);
 
         foreach (var dependency in dependencies)
@@ -90,7 +131,7 @@ public static class ThirdPartyNoticeGenerator
                 continue;
             }
 
-            if (component.ApprovalStatus != LegalApprovalStatus.Approved)
+            if (!component.IsApproved)
             {
                 throw new InvalidOperationException(
                     $"Component {component.Id} is not approved for release notices.");
@@ -111,7 +152,7 @@ public static class ThirdPartyNoticeGenerator
     }
 
     private static NuGetPackage[] DependenciesFor(
-        NoticeComponent component,
+        RenderedComponent component,
         IEnumerable<NuGetPackage> dependencies) =>
         dependencies
             .Where(dependency => component.Packages.Any(package =>
@@ -122,4 +163,56 @@ public static class ThirdPartyNoticeGenerator
             .OrderBy(dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
             .ThenBy(dependency => dependency.Version, StringComparer.Ordinal)
             .ToArray();
+
+    private static RenderedComponent ToRenderedComponent(
+        NoticeComponent component) =>
+        new(
+            component.Id,
+            component.DisplayName,
+            component.Version,
+            component.LicenseExpression,
+            component.LicenseExpression,
+            component.CopyrightNotice,
+            component.Usage,
+            component.Linkage,
+            component.Modified,
+            component.SourceInformation,
+            component.LicenseText,
+            component.Scope,
+            component.ApprovalStatus == LegalApprovalStatus.Approved,
+            component.Packages);
+
+    private static RenderedComponent ToRenderedComponent(
+        NormalizedComponent component) =>
+        new(
+            component.Id,
+            component.DisplayName,
+            component.Version,
+            component.License.DeclaredExpression,
+            component.License.ConcludedExpression,
+            component.CopyrightNotice,
+            component.Usage,
+            component.Linkage,
+            component.Modified,
+            component.SourceInformation,
+            component.LicenseText,
+            component.Scope,
+            component.Approval.Status == LegalApprovalStatus.Approved,
+            component.Packages);
+
+    private sealed record RenderedComponent(
+        string Id,
+        string DisplayName,
+        string Version,
+        string LicenseDeclared,
+        string LicenseConcluded,
+        string CopyrightNotice,
+        string Usage,
+        string Linkage,
+        bool Modified,
+        string SourceInformation,
+        string LicenseText,
+        NoticeScope Scope,
+        bool IsApproved,
+        IReadOnlyList<NoticePackage> Packages);
 }
