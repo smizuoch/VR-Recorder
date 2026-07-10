@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using VRRecorder.Compliance.Dependencies;
 using VRRecorder.Compliance.Generation;
+using VRRecorder.Compliance.Runtime;
 
 namespace VRRecorder.Compliance.Tests.Generation;
 
@@ -109,6 +110,36 @@ public sealed class LegalArtifactSetGeneratorTests
         var issue = Assert.Single(issues);
         Assert.Equal("generated-artifact-unexpected", issue.Code);
         Assert.Equal("LICENSES/stale-component/LICENSE.txt", issue.Subject);
+    }
+
+    [Fact]
+    public async Task GeneratedBundlePassesAuthenticatedRuntimeVerification()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var context = Context("runtime-verification");
+        var eligibility = ReleaseEligibilityGate.Evaluate(Graph(reverse: false));
+        var generated = LegalArtifactSetGenerator.Generate(
+            context,
+            eligibility.ApprovedGraph!);
+        await LegalArtifactDirectoryWriter.WriteAsync(
+            directory.Path,
+            generated,
+            CancellationToken.None);
+        var manifest = Assert.Single(generated.Artifacts, artifact =>
+            artifact.RelativePath == "LEGAL-MANIFEST.sha256");
+        var verifier = new AuthenticatedLegalBundleVerifier(
+            new FixedAuthenticatedAnchorSource(
+                new AuthenticatedLegalBundleAnchor(
+                    context.DocumentNamespace,
+                    manifest.Sha256)));
+
+        var result = await verifier.VerifyAsync(
+            directory.Path,
+            CancellationToken.None);
+
+        var verified = Assert.IsType<LegalBundleVerification.Verified>(result);
+        Assert.Equal(context.DocumentNamespace, verified.Identity.BundleId);
+        Assert.Equal(manifest.Sha256, verified.Identity.ManifestSha256);
     }
 
     [Fact]
@@ -399,6 +430,18 @@ public sealed class LegalArtifactSetGeneratorTests
         Assert.Equal(
             $"https://example.invalid/{id}@commit",
             component.GetProperty("sourceInfo").GetString());
+    }
+
+    private sealed class FixedAuthenticatedAnchorSource(
+        AuthenticatedLegalBundleAnchor anchor)
+        : IAuthenticatedLegalBundleAnchorSource
+    {
+        public ValueTask<AuthenticatedLegalBundleAnchor> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(anchor);
+        }
     }
 
     private static string Hash(ReadOnlySpan<byte> content) =>
