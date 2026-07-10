@@ -111,7 +111,28 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
         Assert.Equal("alpha", callbackService.TextProperties["name"]);
         Assert.Equal("1", callbackService.TextProperties["txtvers"]);
         Assert.Equal(1, interop.FreeServiceInstanceCallCount);
+
+        operation.Cancel();
+
         Assert.Equal(0, interop.ResolveCancelCallCount);
+    }
+
+    [Fact]
+    public void ResolveCancelIsTerminalWithoutNativeCallback()
+    {
+        var interop = new StubWindowsDnsServiceInterop();
+        var api = new ShellWindowsDnsServiceNativeApi(interop);
+        var callbackCallCount = 0;
+        var operation = api.StartResolve(
+            "VRChat-Client-alpha._oscjson._tcp.local.",
+            (_, _) => callbackCallCount++);
+
+        operation.Cancel();
+        var disposeException = Record.Exception(operation.Dispose);
+
+        Assert.Equal(1, interop.ResolveCancelCallCount);
+        Assert.Equal(0, callbackCallCount);
+        Assert.Null(disposeException);
     }
 
     [Fact]
