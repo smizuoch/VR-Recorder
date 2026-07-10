@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Presentation;
 using VRRecorder.Domain.Camera;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Domain.Timing;
@@ -18,8 +19,11 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
     private readonly IStopRequestSink _stopRequests;
     private readonly ICameraRestoreWarningSink _cameraRestoreWarnings;
     private readonly ICameraLeaseIdentitySource? _cameraLeaseIdentities;
+    private readonly RecorderStatusHub _statuses = new(
+        RecorderStatusSnapshot.Create(0, RecorderState.Ready));
     private VideoSignalSupervisor? _videoSignal;
     private RecorderState _state = RecorderState.Ready;
+    private long _statusRevision;
 
     public RecordingLifecycleController(
         VrChatCameraConnectionUseCase cameraConnections,
@@ -52,6 +56,11 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             }
         }
     }
+
+    public RecorderStatusSnapshot Current => _statuses.Current;
+
+    public IDisposable Subscribe(Action<RecorderStatusSnapshot> subscriber) =>
+        _statuses.Subscribe(subscriber);
 
     public async Task<RecordingLifecycleStartResult> StartAsync(
         string? selectedServiceId,
@@ -233,7 +242,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                                 _videoSignal = new VideoSignalSupervisor(
                                     started.Handle,
                                     _stopRequests);
-                                _state = state;
+                                SetStateLocked(state);
                             }
                         }))
                     {
@@ -361,13 +370,17 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
         }
     }
 
-    public void Dispose() => _operationGate.Dispose();
+    public void Dispose()
+    {
+        _statuses.Dispose();
+        _operationGate.Dispose();
+    }
 
     private void SetState(RecorderState state)
     {
         lock (_stateGate)
         {
-            _state = state;
+            SetStateLocked(state);
         }
     }
 
@@ -375,7 +388,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
     {
         lock (_stateGate)
         {
-            _state = RecorderStateMachine.Transition(_state, trigger);
+            SetStateLocked(RecorderStateMachine.Transition(_state, trigger));
         }
     }
 
@@ -383,11 +396,11 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
     {
         lock (_stateGate)
         {
-            _state = _state is RecorderState.Arming or RecorderState.Countdown
+            SetStateLocked(_state is RecorderState.Arming or RecorderState.Countdown
                 ? RecorderStateMachine.Transition(
                     _state,
                     RecorderTrigger.CancelRequested)
-                : RecorderState.Ready;
+                : RecorderState.Ready);
         }
     }
 
@@ -405,8 +418,21 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
         lock (_stateGate)
         {
             _videoSignal = null;
-            _state = finalState;
+            SetStateLocked(finalState);
         }
+    }
+
+    private void SetStateLocked(RecorderState state)
+    {
+        if (_state == state)
+        {
+            return;
+        }
+
+        _state = state;
+        _statuses.TryPublish(RecorderStatusSnapshot.Create(
+            checked(++_statusRevision),
+            state));
     }
 
     private async Task RestoreCameraBestEffortAsync(
