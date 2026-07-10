@@ -527,6 +527,42 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopPublishRequiresAndCopiesApprovedMediaRuntimeInputs()
+    {
+        var project = XDocument.Load(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "VRRecorder.App.csproj"));
+
+        var native = Assert.Single(project.Descendants("Content"), element =>
+            element.Attribute("Include")?.Value == "$(NativeMediaLibraryPath)");
+        Assert.Equal("vrrecorder_native.dll", native.Element("Link")?.Value);
+        Assert.Equal("PreserveNewest", native.Element("CopyToOutputDirectory")?.Value);
+        Assert.Equal("PreserveNewest", native.Element("CopyToPublishDirectory")?.Value);
+
+        var ffprobe = Assert.Single(project.Descendants("Content"), element =>
+            element.Attribute("Include")?.Value == "$(FfprobeExecutablePath)");
+        Assert.Equal("ffprobe.exe", ffprobe.Element("Link")?.Value);
+        Assert.Equal("PreserveNewest", ffprobe.Element("CopyToOutputDirectory")?.Value);
+        Assert.Equal("PreserveNewest", ffprobe.Element("CopyToPublishDirectory")?.Value);
+
+        var validation = Assert.Single(project.Descendants("Target"), element =>
+            element.Attribute("Name")?.Value == "ValidateReleaseMediaRuntime");
+        Assert.Equal(
+            "PrepareForBuild",
+            validation.Attribute("BeforeTargets")?.Value);
+        Assert.Contains("'$(Configuration)' == 'Release'", validation.Attribute("Condition")?.Value);
+        var errors = validation.Elements("Error")
+            .Select(error => error.Attribute("Condition")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.Contains(errors, condition =>
+            condition.Contains("NativeMediaLibraryPath", StringComparison.Ordinal));
+        Assert.Contains(errors, condition =>
+            condition.Contains("FfprobeExecutablePath", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
