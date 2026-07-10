@@ -1,4 +1,5 @@
 using System.Net;
+using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
 
@@ -38,8 +39,8 @@ public static class VRRecorderSettingsContract
             settings.Audio.DesktopEndpointId);
         ArgumentException.ThrowIfNullOrWhiteSpace(
             settings.Audio.MicrophoneEndpointId);
-        EnsureFinite(settings.Audio.DesktopGainDb, "desktop gain");
-        EnsureFinite(settings.Audio.MicrophoneGainDb, "microphone gain");
+        EnsureGain(settings.Audio.DesktopGainDb, "desktop gain");
+        EnsureGain(settings.Audio.MicrophoneGainDb, "microphone gain");
 
         ArgumentNullException.ThrowIfNull(settings.Vr);
         EnsureDefined(settings.Vr.Hand);
@@ -70,11 +71,16 @@ public static class VRRecorderSettingsContract
         }
     }
 
-    private static void EnsureFinite(double value, string name)
+    private static void EnsureGain(double value, string name)
     {
-        if (!double.IsFinite(value))
+        if (!double.IsFinite(value) ||
+            value is < RecordingMediaConfiguration.MinimumInputGainDb or
+                > RecordingMediaConfiguration.MaximumInputGainDb)
         {
-            throw new InvalidDataException($"The {name} must be finite.");
+            throw new InvalidDataException(
+                $"The {name} must be between " +
+                $"{RecordingMediaConfiguration.MinimumInputGainDb} and " +
+                $"{RecordingMediaConfiguration.MaximumInputGainDb} dB.");
         }
     }
 
