@@ -44,19 +44,31 @@ public sealed class OscQueryVrChatInstanceDiscovery
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken);
         timeout.CancelAfter(_timeout);
-        var advertisements = await _browser
-            .BrowseAsync(timeout.Token)
-            .ConfigureAwait(false);
-        ArgumentNullException.ThrowIfNull(advertisements);
-        var probes = advertisements
-            .Where(IsEligibleAdvertisement)
-            .Select(advertisement => ProbeAsync(advertisement, timeout.Token));
-        var candidates = await Task.WhenAll(probes).ConfigureAwait(false);
-        return candidates
-            .Where(candidate => candidate is not null)
-            .Select(candidate => candidate!)
-            .OrderBy(candidate => candidate.ServiceId, StringComparer.Ordinal)
-            .ToArray();
+        try
+        {
+            var advertisements = await _browser
+                .BrowseAsync(timeout.Token)
+                .ConfigureAwait(false);
+            ArgumentNullException.ThrowIfNull(advertisements);
+            var probes = advertisements
+                .Where(IsEligibleAdvertisement)
+                .Select(advertisement =>
+                    ProbeAsync(advertisement, timeout.Token));
+            var candidates = await Task.WhenAll(probes).ConfigureAwait(false);
+            return candidates
+                .Where(candidate => candidate is not null)
+                .Select(candidate => candidate!)
+                .OrderBy(
+                    candidate => candidate.ServiceId,
+                    StringComparer.Ordinal)
+                .ToArray();
+        }
+        catch (OperationCanceledException exception) when (
+            !cancellationToken.IsCancellationRequested &&
+            timeout.IsCancellationRequested)
+        {
+            throw new OscQueryTimeoutException(_timeout, exception);
+        }
     }
 
     private static bool IsEligibleAdvertisement(
