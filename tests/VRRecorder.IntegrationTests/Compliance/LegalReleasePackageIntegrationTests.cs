@@ -149,6 +149,78 @@ public sealed class LegalReleasePackageIntegrationTests
         Assert.False(File.Exists(packagePath));
     }
 
+    [Fact]
+    public async Task MissingMaterialSymbolsManifestProducesNoReleaseArtifacts()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        var request = Request(
+            payload.StagingPath,
+            packagePath,
+            payload.Registration) with
+        {
+            ComponentGraph = new NormalizedComponentGraph(
+                Graph().Dependencies,
+                Graph().Components.Where(component =>
+                    component.Id != "material-symbols").ToArray()),
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Issues, issue =>
+            issue.Code == "material-symbols-manifest-missing" &&
+            issue.Subject == "material-symbols");
+        Assert.Null(result.AuthenticatedAnchor);
+        Assert.Null(result.LegalBundleRelativePath);
+        Assert.False(File.Exists(packagePath));
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    public async Task LegacyEmptyIconsManifestProducesNoReleaseArtifacts()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        const string legacyManifest =
+            "{\"schemaVersion\":2,\"icons\":[]}\n";
+        var graph = Graph();
+        graph = graph with
+        {
+            Components =
+            [
+                .. graph.Components.Where(component =>
+                    component.Id != "material-symbols"),
+                MaterialSymbolsComponent(legacyManifest),
+            ],
+        };
+        var request = Request(
+            payload.StagingPath,
+            packagePath,
+            payload.Registration) with
+        {
+            ComponentGraph = graph,
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Issues, issue =>
+            issue.Code == "material-symbols-manifest-invalid");
+        Assert.Null(result.AuthenticatedAnchor);
+        Assert.Null(result.LegalBundleRelativePath);
+        Assert.False(File.Exists(packagePath));
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
     private static ReleaseLegalPackageRequest Request(
         string stagingPath,
         string packagePath,
@@ -221,6 +293,45 @@ public sealed class LegalReleasePackageIntegrationTests
                 RequestedBy: "release-engineer",
                 Reviewer: "independent-legal-reviewer"),
             Packages: [new NoticePackage(packageId, version)]);
+    }
+
+    private static NormalizedComponent MaterialSymbolsComponent(
+        string manifest)
+    {
+        const string license = "Apache License 2.0 test fixture\n";
+        return new NormalizedComponent(
+            Id: "material-symbols",
+            DisplayName: "Material Symbols (Material Design icons by Google)",
+            Version: "0123456789abcdef0123456789abcdef01234567",
+            License: new LicenseDecision("Apache-2.0", "Apache-2.0"),
+            CopyrightNotice: "Copyright Google LLC",
+            Usage: "user-interface-icons",
+            Linkage: "runtime-bundled-assets",
+            Modified: true,
+            SourceInformation:
+                "https://github.com/google/material-design-icons@" +
+                "0123456789abcdef0123456789abcdef01234567",
+            LicenseText: license,
+            LegalFiles:
+            [
+                new VerifiedLegalFile(
+                    LegalFileKind.License,
+                    "LICENSES/material-symbols/LICENSE.txt",
+                    Hash(Encoding.UTF8.GetBytes(license)),
+                    license),
+                new VerifiedLegalFile(
+                    LegalFileKind.AssetManifest,
+                    "MATERIAL-SYMBOLS-MANIFEST.json",
+                    Hash(Encoding.UTF8.GetBytes(manifest)),
+                    manifest),
+            ],
+            Scope: NoticeScope.RuntimeBundled,
+            Approval: new LegalApproval(
+                LegalApprovalStatus.Approved,
+                TicketId: "TEST-RIGHTS-MATERIAL-SYMBOLS",
+                RequestedBy: "asset-importer",
+                Reviewer: "independent-rights-reviewer"),
+            Packages: []);
     }
 
     private static async Task<StagedPayload> StagePayloadAsync(
