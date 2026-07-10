@@ -6,17 +6,23 @@ using VRRecorder.Application.Presentation;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
+using VRRecorder.Infrastructure.SteamVr;
 
 namespace VRRecorder.App;
 
 public partial class App : System.Windows.Application, IDisposable
 {
     private const string LocaleArgumentPrefix = "--ui-locale=";
+    private const string NativeLibraryFileName = "vrrecorder_native.dll";
+    private readonly object _steamVrInputGate = new();
     private readonly DesktopRecordingCommandHost _recordingHost = new(
         new ProductionDesktopRecordingRuntimeFactory());
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly AuthenticatedLegalBundleVerifier _legalVerifier;
     private readonly DesktopLegalController _legalController;
+    private readonly CancellationTokenSource _steamVrInputLifetime = new();
+    private Task? _steamVrInputTask;
+    private int _disposeStarted;
 
     public App()
     {
@@ -50,13 +56,22 @@ public partial class App : System.Windows.Application, IDisposable
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
 
-    internal static Task<DesktopRecordingHostActivation>
+    internal static async Task<DesktopRecordingHostActivation>
         ActivateRecordingHostAsync(
             RecorderStartupResult startup,
-            CancellationToken cancellationToken) =>
-        ((App)Current)._recordingHost.ActivateAsync(
-            startup,
-            cancellationToken);
+            CancellationToken cancellationToken)
+    {
+        var app = (App)Current;
+        var activation = await app._recordingHost
+            .ActivateAsync(startup, cancellationToken)
+            .ConfigureAwait(true);
+        if (activation.State == DesktopRecordingHostState.Ready)
+        {
+            app.StartSteamVrInput();
+        }
+
+        return activation;
+    }
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
@@ -79,8 +94,76 @@ public partial class App : System.Windows.Application, IDisposable
 
     public void Dispose()
     {
-        _recordingHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _steamVrInputLifetime.Cancel();
+            Task? steamVrInputTask;
+            lock (_steamVrInputGate)
+            {
+                steamVrInputTask = _steamVrInputTask;
+            }
+
+            steamVrInputTask?.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            _steamVrInputLifetime.Dispose();
+            _recordingHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
         GC.SuppressFinalize(this);
+    }
+
+    private void StartSteamVrInput()
+    {
+        lock (_steamVrInputGate)
+        {
+            if (_steamVrInputTask is not null)
+            {
+                return;
+            }
+
+            var nativeLibraryPath = Path.Combine(
+                AppContext.BaseDirectory,
+                NativeLibraryFileName);
+            _steamVrInputTask = Task.Run(() =>
+                RunSteamVrInputAsync(nativeLibraryPath));
+        }
+    }
+
+    private async Task RunSteamVrInputAsync(string nativeLibraryPath)
+    {
+        try
+        {
+            var runtime = new NativeSteamVrInputRuntime(
+                nativeLibraryPath,
+                AppContext.BaseDirectory);
+            await new SteamVrRecordingInputAdapter(runtime, _recordingInputs)
+                .RunAsync(_steamVrInputLifetime.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            _steamVrInputLifetime.IsCancellationRequested)
+        {
+            // Normal application shutdown.
+        }
+        catch (Exception exception) when (
+            exception is SteamVrInputException or
+                FileNotFoundException or
+                DllNotFoundException or
+                BadImageFormatException or
+                IOException or
+                UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "SteamVR recording input is unavailable: {0}",
+                exception.Message);
+        }
     }
 
     internal static async Task<RecorderStartupResult> VerifyStartupAsync(
