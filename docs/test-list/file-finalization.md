@@ -7,8 +7,8 @@
 - [x] 最終rename成功前にSavedを発行しない
 - [x] 最終fileの再検証成功後だけSavedを発行する
 - [x] MP4検証失敗時はSavedを発行せずrecoveryへ隔離する
-- [ ] temporary fileとfinal fileは同一directory／volumeを使用する
-- [ ] 同名final fileがある場合は上書きせず連番を確保する
+- [x] temporary fileとfinal fileは同一directory／volumeを使用する
+- [x] 同名final fileがある場合は上書きせず開始前に連番を確保する
 
 ## English
 
@@ -17,5 +17,5 @@ The flush, atomic-rename, reopen-validation, and recovery rules from Basic Desig
 - [x] Do not publish Saved before the final rename succeeds
 - [x] Publish Saved only after the final file passes reopen validation
 - [x] Publish no Saved event and quarantine to recovery when MP4 validation fails
-- [ ] Keep temporary and final files on the same directory and volume
-- [ ] Reserve a numbered name instead of overwriting an existing final file
+- [x] Keep temporary and final files on the same directory and volume
+- [x] Reserve a numbered name before Start instead of overwriting an existing final file
