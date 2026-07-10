@@ -38,7 +38,11 @@ public sealed class AutoStopScheduler
             .DelayUntilAsync(deadline, cancellationToken)
             .ConfigureAwait(false);
         await _stopRequests
-            .RequestStopAsync(handle, cancellationToken)
+            .RequestStopAsync(
+                new RecordingStopRequest(
+                    handle,
+                    RecordingStopReason.AutoStop),
+                cancellationToken)
             .ConfigureAwait(false);
     }
 }

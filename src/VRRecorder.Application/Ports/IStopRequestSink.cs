@@ -5,6 +5,6 @@ namespace VRRecorder.Application.Ports;
 public interface IStopRequestSink
 {
     Task RequestStopAsync(
-        RecordingHandle handle,
+        RecordingStopRequest request,
         CancellationToken cancellationToken);
 }

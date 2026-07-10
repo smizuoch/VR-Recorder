@@ -39,7 +39,11 @@ public sealed class VideoSignalSupervisor
         try
         {
             await _stopRequests
-                .RequestStopAsync(_handle, cancellationToken)
+                .RequestStopAsync(
+                    new RecordingStopRequest(
+                        _handle,
+                        RecordingStopReason.SignalLost),
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
         catch
