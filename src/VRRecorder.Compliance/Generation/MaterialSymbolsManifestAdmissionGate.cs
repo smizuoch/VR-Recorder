@@ -128,23 +128,7 @@ internal static class MaterialSymbolsManifestAdmissionGate
             return Order(issues);
         }
 
-        MaterialSymbolsManifestDocument? manifest;
-        try
-        {
-            using var json = JsonDocument.Parse(manifestFile.Utf8Content);
-            if (ContainsDuplicateProperty(json.RootElement))
-            {
-                issues.Add(Issue(
-                    "material-symbols-manifest-invalid",
-                    ComponentId));
-                return Order(issues);
-            }
-
-            manifest = json.RootElement.Deserialize<
-                MaterialSymbolsManifestDocument>(
-                JsonOptions);
-        }
-        catch (JsonException)
+        if (!TryParseManifest(manifestFile.Utf8Content, out var manifest))
         {
             issues.Add(Issue(
                 "material-symbols-manifest-invalid",
@@ -175,6 +159,55 @@ internal static class MaterialSymbolsManifestAdmissionGate
         ValidateValidationPolicy(validatedManifest.Validation, issues);
         ValidateIcons(validatedManifest.SelectedIcons, issues);
         return Order(issues);
+    }
+
+    internal static bool TryReadManifest(
+        IReadOnlyList<NormalizedComponent> components,
+        out MaterialSymbolsManifestDocument? manifest)
+    {
+        manifest = null;
+        var materialComponents = components.Where(component =>
+                string.Equals(component.Id, ComponentId, StringComparison.Ordinal))
+            .ToArray();
+        if (materialComponents.Length != 1)
+        {
+            return false;
+        }
+
+        var manifests = materialComponents[0].LegalFiles.Where(file =>
+                file.Kind == LegalFileKind.AssetManifest &&
+                string.Equals(
+                    file.RelativePath,
+                    ManifestPath,
+                    StringComparison.Ordinal))
+            .ToArray();
+        return manifests.Length == 1 &&
+               TryParseManifest(manifests[0].Utf8Content, out manifest) &&
+               HasValidStructure(manifest);
+    }
+
+    private static bool TryParseManifest(
+        string utf8Content,
+        out MaterialSymbolsManifestDocument? manifest)
+    {
+        manifest = null;
+        try
+        {
+            using var json = JsonDocument.Parse(utf8Content);
+            if (ContainsDuplicateProperty(json.RootElement))
+            {
+                return false;
+            }
+
+            manifest = json.RootElement.Deserialize<
+                MaterialSymbolsManifestDocument>(
+                JsonOptions);
+            return manifest is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool HasValidStructure(

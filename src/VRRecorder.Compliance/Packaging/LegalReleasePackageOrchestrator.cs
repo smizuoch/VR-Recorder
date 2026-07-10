@@ -98,10 +98,18 @@ public sealed class LegalReleasePackageOrchestrator
             ReleaseLegalPackageRequest request,
             CancellationToken cancellationToken)
     {
+        var materialIssues = await MaterialSymbolsAssetProvenanceValidator
+            .ValidateAsync(
+                request.ComponentGraph,
+                request.MaterialSymbolsEvidence,
+                request.ApprovedPayloadArtifacts,
+                cancellationToken)
+            .ConfigureAwait(false);
         var inventory = await _inventoryReader
             .ReadAsync(request.StagingDirectory, cancellationToken)
             .ConfigureAwait(false);
-        return inventory.ScanIssues
+        return materialIssues
+            .Concat(inventory.ScanIssues)
             .Concat(StagingInventoryValidator.Validate(
                 inventory.Files,
                 request.ApprovedPayloadArtifacts))
