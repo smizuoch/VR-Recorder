@@ -9,17 +9,21 @@ public sealed class NativeRecordingEngine : IRecordingEngine
 {
     private readonly INativeRecordingBackend _backend;
     private readonly IMonotonicClock _clock;
+    private readonly INativeRecordingRuntimeFaultSink _runtimeFaults;
     private readonly ConcurrentDictionary<string, INativeRecordingSession> _sessions =
         new(StringComparer.Ordinal);
 
     public NativeRecordingEngine(
         INativeRecordingBackend backend,
-        IMonotonicClock clock)
+        IMonotonicClock clock,
+        INativeRecordingRuntimeFaultSink runtimeFaults)
     {
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(runtimeFaults);
         _backend = backend;
         _clock = clock;
+        _runtimeFaults = runtimeFaults;
     }
 
     public async Task<RecordingHandle> StartAsync(
@@ -33,8 +37,13 @@ public sealed class NativeRecordingEngine : IRecordingEngine
             FirstVideoPacketMuxed: () =>
                 firstPacket.TrySetResult(_clock.Now),
             Faulted: fault =>
-                firstPacket.TrySetException(
-                    new NativeRecordingException(fault)));
+            {
+                if (!firstPacket.TrySetException(
+                        new NativeRecordingException(fault)))
+                {
+                    _runtimeFaults.Report(fault);
+                }
+            });
         var session = await _backend
             .OpenAsync(
                 plan,
