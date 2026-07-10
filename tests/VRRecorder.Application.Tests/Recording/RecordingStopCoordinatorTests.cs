@@ -24,8 +24,8 @@ public sealed class RecordingStopCoordinatorTests
 
         var expected = new RecordingStopResult(
             new PendingRecording(
-                "recording.recording.mp4",
-                "recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "recording.mp4")),
             VideoPacketCount: 90,
             AudioPacketCount: 142);
         engine.CompleteStop(expected);

@@ -17,8 +17,8 @@ public sealed class RecordingFileFinalizationUseCaseTests
             recovery,
             savedRecordings);
         var pending = new PendingRecording(
-            "recording.recording.mp4",
-            "recording.mp4");
+            Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "recording.mp4"));
 
         var result = await useCase.ExecuteAsync(
             pending,
@@ -52,8 +52,8 @@ public sealed class RecordingFileFinalizationUseCaseTests
             recovery,
             savedRecordings);
         var pending = new PendingRecording(
-            "recording.recording.mp4",
-            "recording.mp4");
+            Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "recording.mp4"));
 
         var execution = useCase.ExecuteAsync(pending, CancellationToken.None);
         await finalizer.WaitUntilRequestedAsync();
@@ -84,8 +84,8 @@ public sealed class RecordingFileFinalizationUseCaseTests
             recovery,
             savedRecordings);
         var pending = new PendingRecording(
-            "recording.recording.mp4",
-            "recording.mp4");
+            Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "recording.mp4"));
 
         var execution = useCase.ExecuteAsync(pending, CancellationToken.None);
         await finalizer.WaitUntilRequestedAsync();

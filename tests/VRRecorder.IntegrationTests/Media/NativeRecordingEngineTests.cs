@@ -109,8 +109,8 @@ public sealed class NativeRecordingEngineTests
             CancellationToken cancellationToken) =>
             Task.FromResult(new RecordingStopResult(
                 new PendingRecording(
-                    "take.recording.mp4",
-                    "take.mp4"),
+                    Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
+                    Path.Combine(Path.GetTempPath(), "take.mp4")),
                 VideoPacketCount: 90,
                 AudioPacketCount: 142));
     }

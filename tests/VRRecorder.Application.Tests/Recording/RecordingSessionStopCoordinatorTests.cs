@@ -32,8 +32,8 @@ public sealed class RecordingSessionStopCoordinatorTests
         Assert.Same(first, second);
         Assert.Equal(1, engine.StopCallCount);
         var pending = new PendingRecording(
-            "recording.recording.mp4",
-            "recording.mp4");
+            Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "recording.mp4"));
         engine.CompleteStop(new RecordingStopResult(
             pending,
             VideoPacketCount: 90,
