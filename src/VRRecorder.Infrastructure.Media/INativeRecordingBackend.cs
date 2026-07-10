@@ -6,6 +6,6 @@ public interface INativeRecordingBackend
 {
     Task<INativeRecordingSession> OpenAsync(
         RecordingPlan plan,
-        Action firstVideoPacketMuxed,
+        NativeRecordingCallbacks callbacks,
         CancellationToken cancellationToken);
 }

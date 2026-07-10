@@ -29,10 +29,16 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         ArgumentNullException.ThrowIfNull(plan);
         var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var callbacks = new NativeRecordingCallbacks(
+            FirstVideoPacketMuxed: () =>
+                firstPacket.TrySetResult(_clock.Now),
+            Faulted: fault =>
+                firstPacket.TrySetException(
+                    new NativeRecordingException(fault)));
         var session = await _backend
             .OpenAsync(
                 plan,
-                () => firstPacket.TrySetResult(_clock.Now),
+                callbacks,
                 cancellationToken)
             .ConfigureAwait(false);
         ArgumentException.ThrowIfNullOrWhiteSpace(session.Id);
