@@ -814,6 +814,87 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopPromptsForExactVrChatInstanceSelection()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var window = LoadRequiredXaml(
+            appDirectory,
+            "VrChatInstanceSelectionWindow.xaml");
+        Assert.Equal(
+            "VRRecorder.App.VrChatInstanceSelectionWindow",
+            window.Root?.Attribute(Xaml + "Class")?.Value);
+
+        var candidates = Assert.Single(
+            window.Descendants(Presentation + "ListBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "VrChatInstanceList");
+        Assert.Equal(
+            "OnSelectionChanged",
+            candidates.Attribute("SelectionChanged")?.Value);
+        Assert.Equal(
+            "{DynamicResource VrChat_Selection_List_AccessibleName}",
+            candidates.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource VrChat_Selection_List_Tooltip}",
+            candidates.Attribute("AutomationProperties.HelpText")?.Value);
+
+        var accept = Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "AcceptSelectionButton");
+        Assert.Equal("False", accept.Attribute("IsEnabled")?.Value);
+        Assert.Equal("OnAccept", accept.Attribute("Click")?.Value);
+        Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnCancel");
+
+        var promptCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "WpfVrChatInstanceSelectionPrompt.cs"));
+        Assert.Contains("IVrChatInstanceSelectionPrompt", promptCode);
+        Assert.Contains("Dispatcher", promptCode);
+        Assert.Contains("ShowDialog()", promptCode);
+        Assert.Contains("SelectedServiceId", promptCode);
+        Assert.Contains("cancellationToken.Register", promptCode);
+
+        var factory = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+        Assert.Contains("new WpfVrChatInstanceSelectionPrompt", factory);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "VrChat_Selection_Title",
+                         "VrChat_Selection_Body",
+                         "VrChat_Selection_Item_Format",
+                         "VrChat_Selection_List_AccessibleName",
+                         "VrChat_Selection_List_Tooltip",
+                         "VrChat_Selection_Accept_Label",
+                         "VrChat_Selection_Accept_AccessibleName",
+                         "VrChat_Selection_Accept_Tooltip",
+                         "VrChat_Selection_Cancel_Label",
+                         "VrChat_Selection_Cancel_AccessibleName",
+                         "VrChat_Selection_Cancel_Tooltip",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
