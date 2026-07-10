@@ -1,6 +1,6 @@
 namespace VRRecorder.Application.Recording;
 
-public interface IRecordingStartPhaseSink
+internal interface IRecordingStartPhaseSink
 {
     void CountdownStarted();
 

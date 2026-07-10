@@ -53,11 +53,21 @@ public sealed class StartRecordingUseCase
         _autoStopScheduler = autoStopScheduler;
     }
 
-    public async Task<StartRecordingResult> ExecuteAsync(
+    public Task<StartRecordingResult> ExecuteAsync(
         StartRecordingCommand command,
         CancellationToken cancellationToken,
-        IRecordingSessionCompletionSink? completionSink = null,
-        IRecordingStartPhaseSink? phaseSink = null)
+        IRecordingSessionCompletionSink? completionSink = null) =>
+        ExecuteAsync(
+            command,
+            completionSink,
+            phaseSink: null,
+            cancellationToken);
+
+    internal async Task<StartRecordingResult> ExecuteAsync(
+        StartRecordingCommand command,
+        IRecordingSessionCompletionSink? completionSink,
+        IRecordingStartPhaseSink? phaseSink,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
 

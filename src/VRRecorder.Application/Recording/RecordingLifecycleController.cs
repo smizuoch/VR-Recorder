@@ -186,9 +186,9 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                 var recording = await _startRecording
                     .ExecuteAsync(
                         command,
-                        cancellationToken,
                         completionSink,
-                        phaseSink)
+                        phaseSink,
+                        cancellationToken)
                     .ConfigureAwait(false);
                 var state = recording switch
                 {
