@@ -10,8 +10,8 @@
 - [x] 固定指定が失敗した場合は黙って別encoderを選ばず明示失敗する
 - [x] packetを生成しないprobeは失敗として扱う
 - [x] 全encoder probe requestを安定化したSpout senderと同じadapter LUIDへ固定する
-- [ ] 出力寸法・fps・同一adapterをnative ABIへ渡し16合成frameを実encodeする
-- [ ] 初期化だけでなくpacket生成時だけnative probeを成功としてmanagedへ返す
+- [x] 出力寸法・fps・同一adapterをnative ABIへ渡し16合成frameを実encodeする
+- [x] 初期化だけでなくpacket生成時だけnative probeを成功としてmanagedへ返す
 
 ## English
 
@@ -23,5 +23,5 @@ Following Basic Design v0.3 §§10.3, 11.2, 18.4, and 24, probe success requires
 - [x] Fail explicitly instead of silently choosing another encoder when a fixed preference fails
 - [x] Treat a probe that produces no packet as failed
 - [x] Pin every encoder probe request to the same adapter LUID as the stabilized Spout sender
-- [ ] Pass output geometry, frame rate, and the same adapter through the native ABI and encode 16 synthetic frames
-- [ ] Report native probe success to managed code only when an encoded packet is produced
+- [x] Pass output geometry, frame rate, and the same adapter through the native ABI and encode 16 synthetic frames
+- [x] Report native probe success to managed code only when an encoded packet is produced
