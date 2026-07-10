@@ -78,6 +78,32 @@ public sealed class FileSystemCameraLeaseStoreTests
         Assert.Equal(evidence, await File.ReadAllBytesAsync(path));
     }
 
+    [Theory]
+    [InlineData("999")]
+    [InlineData("UndefinedMode")]
+    public async Task UndefinedOrNumericModeNameIsRejectedWithoutChangingEvidence(
+        string modeName)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "camera-lease.json");
+        using var store = new FileSystemCameraLeaseStore(path);
+        await store.SaveAsync(
+            Lease("session-a", "service-a", processId: 1234),
+            CancellationToken.None);
+        var valid = await File.ReadAllTextAsync(path);
+        var invalid = valid.Replace(
+            "\"previousMode\": \"Photo\"",
+            $"\"previousMode\": \"{modeName}\"",
+            StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, invalid);
+        var evidence = await File.ReadAllBytesAsync(path);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.LoadAsync(CancellationToken.None));
+
+        Assert.Equal(evidence, await File.ReadAllBytesAsync(path));
+    }
+
     [Fact]
     public async Task LinkedLeaseFileIsRejectedWithoutChangingTarget()
     {
@@ -99,6 +125,29 @@ public sealed class FileSystemCameraLeaseStoreTests
                 CancellationToken.None));
 
         Assert.Equal("outside evidence", await File.ReadAllTextAsync(outside));
+    }
+
+    [Fact]
+    public async Task DanglingLeaseLinkIsRejectedWithoutReplacingEvidence()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var missingTarget = Path.Combine(directory.Path, "missing.json");
+        var link = Path.Combine(directory.Path, "camera-lease.json");
+        File.CreateSymbolicLink(link, missingTarget);
+        using var store = new FileSystemCameraLeaseStore(link);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(
+                Lease("session-a", "service-a", processId: 1234),
+                CancellationToken.None));
+
+        Assert.False(File.Exists(missingTarget));
+        Assert.Equal(missingTarget, new FileInfo(link).LinkTarget);
     }
 
     private static CameraLease Lease(

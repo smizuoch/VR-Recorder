@@ -13,6 +13,8 @@
 - [x] 起動時にlive ownerのleaseは変更せず保持する
 - [x] stale leaseは記録された正確なVRChat serviceだけへStreaming→Mode順で復元する
 - [x] 対象欠落・復元失敗時はtyped warningを出し、次回修復用leaseを保持する
+- [ ] 通常のcamera取得で注入identity sourceからpersist可能なleaseを作る
+- [ ] process開始時刻でPID再利用を識別し、別ownerをlive扱いしない
 
 ## English
 
@@ -27,3 +29,5 @@ The CameraLease ownership rules from Basic Design v0.3 §§9.3 and 24 are implem
 - [x] Preserve a lease owned by a live process during startup
 - [x] Restore a stale lease only to its exact VRChat service in Streaming-to-Mode order
 - [x] Publish a typed warning and retain repair evidence when the target or restore is unavailable
+- [ ] Create a persistable lease from an injected identity source during normal camera acquisition
+- [ ] Distinguish PID reuse by process start time instead of treating another owner as live
