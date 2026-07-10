@@ -211,6 +211,11 @@ public sealed class LegalReleasePackageIntegrationTests
     [InlineData("manifest", "ui/other-icons.yml")]
     [InlineData("redistribution", "false")]
     [InlineData("trademark", "true")]
+    [InlineData("product-logo", "true")]
+    [InlineData("runtime-network", "true")]
+    [InlineData("approval", "")]
+    [InlineData("approval", "../RIGHTS-APPROVAL")]
+    [InlineData("evidence", "../material-symbols.md")]
     public async Task RightsLedgerMismatchFailsClosed(
         string mutation,
         string value)
@@ -231,6 +236,16 @@ public sealed class LegalReleasePackageIntegrationTests
                 RedistributionApproved = bool.Parse(value),
             },
             "trademark" => entry with { TrademarkUse = bool.Parse(value) },
+            "product-logo" => entry with
+            {
+                ProductLogoUse = bool.Parse(value),
+            },
+            "runtime-network" => entry with
+            {
+                RuntimeNetworkAllowed = bool.Parse(value),
+            },
+            "approval" => entry with { ApprovalId = value },
+            "evidence" => entry with { Evidence = value },
             _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
         };
         var request = Request(
@@ -258,6 +273,10 @@ public sealed class LegalReleasePackageIntegrationTests
     [InlineData("hash")]
     [InlineData("kind")]
     [InlineData("mapping")]
+    [InlineData("missing-mapping")]
+    [InlineData("duplicate-mapping")]
+    [InlineData("mapping-traversal")]
+    [InlineData("ledger-id")]
     public async Task StagingRightsRegistrationMismatchFailsClosed(
         string mutation)
     {
@@ -308,6 +327,43 @@ public sealed class LegalReleasePackageIntegrationTests
                     ],
                 };
                 break;
+            case "missing-mapping":
+                evidence = evidence with { StagedAssets = [] };
+                break;
+            case "duplicate-mapping":
+                evidence = evidence with
+                {
+                    StagedAssets =
+                    [
+                        evidence.StagedAssets[0],
+                        evidence.StagedAssets[0],
+                    ],
+                };
+                break;
+            case "mapping-traversal":
+                evidence = evidence with
+                {
+                    StagedAssets =
+                    [
+                        evidence.StagedAssets[0] with
+                        {
+                            StagingRelativePath = "../recording-start.svg",
+                        },
+                    ],
+                };
+                break;
+            case "ledger-id":
+                evidence = evidence with
+                {
+                    StagedAssets =
+                    [
+                        evidence.StagedAssets[0] with
+                        {
+                            RightsLedgerEntryId = "unapproved-ledger-entry",
+                        },
+                    ],
+                };
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(mutation));
         }
@@ -327,6 +383,198 @@ public sealed class LegalReleasePackageIntegrationTests
             result,
             packagePath,
             "material-symbols-staging-registration-mismatch");
+    }
+
+    [Theory]
+    [InlineData("ui/material-symbols.yml")]
+    [InlineData("docs/legal-review/assets/material-symbols.md")]
+    public async Task MissingRightsLedgerEvidenceFileFailsClosed(
+        string relativePath)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        File.Delete(Path.Combine(
+            payload.Evidence.RepositoryRoot,
+            relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                Request(
+                    payload.StagingPath,
+                    packagePath,
+                    payload.Registrations),
+                CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "material-symbols-rights-ledger-mismatch");
+    }
+
+    [Theory]
+    [InlineData("source", "material-symbols-asset-link-not-allowed")]
+    [InlineData("output", "material-symbols-asset-link-not-allowed")]
+    [InlineData("manifest", "material-symbols-rights-ledger-mismatch")]
+    [InlineData("evidence", "material-symbols-rights-ledger-mismatch")]
+    public async Task LinkedRepositoryEvidenceFailsClosed(
+        string kind,
+        string expectedIssueCode)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var relativePath = kind switch
+        {
+            "source" => MaterialSymbolsManifestTestFixture.SourcePath,
+            "output" => MaterialSymbolsManifestTestFixture.OutputPath,
+            "manifest" => "ui/material-symbols.yml",
+            "evidence" => "docs/legal-review/assets/material-symbols.md",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+        var path = Path.Combine(
+            payload.Evidence.RepositoryRoot,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        var target = Path.Combine(
+            directory.Path,
+            $"outside-{kind}{Path.GetExtension(path)}");
+        File.Move(path, target);
+        File.CreateSymbolicLink(path, target);
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                Request(
+                    payload.StagingPath,
+                    packagePath,
+                    payload.Registrations),
+                CancellationToken.None);
+
+        AssertRejected(result, packagePath, expectedIssueCode);
+    }
+
+    [Fact]
+    public async Task RepositoryRootWithTraversalSegmentsFailsClosed()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var child = Path.Combine(payload.Evidence.RepositoryRoot, "child");
+        Directory.CreateDirectory(child);
+        var request = Request(
+            payload.StagingPath,
+            Path.Combine(directory.Path, "release.zip"),
+            payload.Registrations) with
+        {
+            MaterialSymbolsEvidence = payload.Evidence with
+            {
+                RepositoryRoot = Path.Combine(child, ".."),
+            },
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            request.PackagePath,
+            "material-symbols-release-evidence-invalid");
+    }
+
+    [Fact]
+    public async Task RepositoryRootWithLinkedAncestorFailsClosed()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var actualParent = Path.Combine(directory.Path, "actual-parent");
+        Directory.CreateDirectory(actualParent);
+        var movedRepository = Path.Combine(actualParent, "repository");
+        Directory.Move(payload.Evidence.RepositoryRoot, movedRepository);
+        var linkedParent = Path.Combine(directory.Path, "linked-parent");
+        Directory.CreateSymbolicLink(linkedParent, actualParent);
+        var request = Request(
+            payload.StagingPath,
+            Path.Combine(directory.Path, "release.zip"),
+            payload.Registrations) with
+        {
+            MaterialSymbolsEvidence = payload.Evidence with
+            {
+                RepositoryRoot = Path.Combine(linkedParent, "repository"),
+            },
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            request.PackagePath,
+            "material-symbols-release-evidence-invalid");
+    }
+
+    [Fact]
+    public async Task MatchingUnsafeApprovalIdsStillFailClosed()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        const string unsafeApprovalId = "../RIGHTS-APPROVAL";
+        var graph = Graph();
+        graph = graph with
+        {
+            Components = graph.Components.Select(component =>
+                component.Id == "material-symbols"
+                    ? component with
+                    {
+                        Approval = component.Approval with
+                        {
+                            TicketId = unsafeApprovalId,
+                        },
+                    }
+                    : component).ToArray(),
+        };
+        var request = Request(
+            payload.StagingPath,
+            Path.Combine(directory.Path, "release.zip"),
+            payload.Registrations) with
+        {
+            ComponentGraph = graph,
+            MaterialSymbolsEvidence = payload.Evidence with
+            {
+                RightsLedgerEntry = payload.Evidence.RightsLedgerEntry with
+                {
+                    ApprovalId = unsafeApprovalId,
+                },
+            },
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            request.PackagePath,
+            "material-symbols-rights-ledger-mismatch");
+    }
+
+    [Fact]
+    public async Task StagedMaterialAssetByteMismatchUsesFinalInventoryGate()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var stagedAsset = Path.Combine(
+            payload.StagingPath,
+            MaterialSymbolsManifestTestFixture.StagingPath
+                .Replace('/', Path.DirectorySeparatorChar));
+        await File.WriteAllTextAsync(stagedAsset, "tampered after approval\n");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                Request(
+                    payload.StagingPath,
+                    packagePath,
+                    payload.Registrations),
+                CancellationToken.None);
+
+        AssertRejected(result, packagePath, "staging-file-hash-mismatch");
     }
 
     [Fact]

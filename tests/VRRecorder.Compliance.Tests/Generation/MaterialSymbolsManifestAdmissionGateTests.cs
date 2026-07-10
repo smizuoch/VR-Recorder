@@ -149,6 +149,9 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
         "noninteractive-without-description-or-decorative",
         "material-symbols-accessibility-metadata-missing")]
     [InlineData("outside-output-root", "material-symbols-output-path-invalid")]
+    [InlineData(
+        "traversing-output-path",
+        "material-symbols-output-path-invalid")]
     public void InvalidManifestCannotProduceApprovedGraph(
         string mutation,
         string expectedIssueCode)
@@ -686,6 +689,11 @@ public sealed class MaterialSymbolsManifestAdmissionGateTests
                 break;
             case "outside-output-root":
                 first["outputPath"] = "assets/recording-start.svg";
+                break;
+            case "traversing-output-path":
+                first["outputPath"] =
+                    "src/VRRecorder.DesignSystem/Assets/MaterialSymbols/" +
+                    "../escaped.svg";
                 break;
             default:
                 throw new ArgumentOutOfRangeException(
