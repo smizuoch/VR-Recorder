@@ -163,6 +163,10 @@ public sealed class NativeMediaPreflightContractIntegrationTests
     [InlineData("sender")]
     [InlineData("dimensions")]
     [InlineData("adapter")]
+    [InlineData("gpuIdentity")]
+    [InlineData("gpuVendor")]
+    [InlineData("pixelFormat")]
+    [InlineData("sourceFps")]
     public async Task CandidateStabilityRestartsWhenItsSignatureChanges(
         string changedField)
     {
@@ -190,6 +194,26 @@ public sealed class NativeMediaPreflightContractIntegrationTests
                 width: 1280,
                 height: 720),
             "adapter" => Frame(3, 1_300, AdapterLuid + 1),
+            "gpuIdentity" => Frame(
+                3,
+                1_300,
+                AdapterLuid,
+                gpuIdentity: "NVIDIA replacement adapter"),
+            "gpuVendor" => Frame(
+                3,
+                1_300,
+                AdapterLuid,
+                gpuVendor: GpuVendor.Amd),
+            "pixelFormat" => Frame(
+                3,
+                1_300,
+                AdapterLuid,
+                pixelFormat: VideoPixelFormat.Bgra8),
+            "sourceFps" => Frame(
+                3,
+                1_300,
+                AdapterLuid,
+                estimatedSourceFramesPerSecond: 30),
             _ => throw new InvalidOperationException(
                 $"Unsupported changed field {changedField}."),
         };
@@ -236,6 +260,81 @@ public sealed class NativeMediaPreflightContractIntegrationTests
 
         Assert.Equal(5ul, source.LastPublishedSequence);
         Assert.Equal("VRChat-Spout-new", (await waiting).SenderId);
+    }
+
+    [Fact]
+    public async Task NonMonotonicFrameTimestampRestartsCandidateStability()
+    {
+        var source = new ControllableSpoutVideoSource([]);
+        var gateway = new SpoutVideoSignalGateway(source);
+        await gateway.CaptureBaselineAsync(CancellationToken.None);
+        var waiting = gateway.WaitForStableSignalAsync(
+            TimeSpan.FromSeconds(1),
+            CancellationToken.None);
+        await source.WaitUntilObservingAsync().WaitAsync(TimeSpan.FromSeconds(1));
+
+        source.Publish(Frame(1, 1_000, AdapterLuid));
+        source.Publish(Frame(2, 1_200, AdapterLuid));
+        source.Publish(Frame(3, 1_100, AdapterLuid));
+        source.Publish(Frame(4, 1_400, AdapterLuid));
+        source.Publish(Frame(5, 1_699, AdapterLuid));
+        await Task.Yield();
+        Assert.False(waiting.IsCompleted);
+
+        source.Publish(Frame(6, 1_700, AdapterLuid));
+
+        Assert.Equal("VRChat-Spout-new", (await waiting).SenderId);
+    }
+
+    [Fact]
+    public async Task BaselineFailureRestoresReadyBeforeAnyCameraWrite()
+    {
+        var events = new List<string>();
+        var candidate = ContractCandidate("baseline-failure");
+        var lifecycle = CreateLifecycle(
+            candidate,
+            new ThrowingBaselineVideoSignalGateway(
+                new InvalidOperationException("baseline failed")),
+            events);
+        using (lifecycle)
+        {
+            var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                lifecycle.StartAsync(
+                    candidate.ServiceId,
+                    StartCommand(),
+                    CancellationToken.None));
+
+            Assert.Equal("baseline failed", failure.Message);
+            Assert.Equal(RecorderState.Ready, lifecycle.State);
+            Assert.Empty(events);
+        }
+    }
+
+    [Fact]
+    public async Task BaselineCancellationRestoresNoSignalBeforeAnyRetryCameraWrite()
+    {
+        var events = new List<string>();
+        var candidate = ContractCandidate("baseline-cancel");
+        var signal = new CancelingRetryBaselineVideoSignalGateway();
+        using var lifecycle = CreateLifecycle(candidate, signal, events);
+        var first = await lifecycle.StartAsync(
+            candidate.ServiceId,
+            StartCommand(),
+            CancellationToken.None);
+        Assert.IsType<StartRecordingResult.NoSignal>(first.Recording);
+        Assert.Equal(RecorderState.NoSignal, lifecycle.State);
+        events.Clear();
+        using var cancellation = new CancellationTokenSource();
+        signal.CancelRetry = cancellation.Cancel;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            lifecycle.StartAsync(
+                candidate.ServiceId,
+                StartCommand(),
+                cancellation.Token));
+
+        Assert.Equal(RecorderState.NoSignal, lifecycle.State);
+        Assert.Empty(events);
     }
 
     [Fact]
@@ -308,6 +407,34 @@ public sealed class NativeMediaPreflightContractIntegrationTests
 
     private const ulong AdapterLuid = 0x00000001ABCDEF01;
 
+    private static VrChatInstanceCandidate ContractCandidate(string suffix) =>
+        new(
+            $"contract-{suffix}",
+            $"VRChat contract {suffix}",
+            new Uri("http://127.0.0.1:19001/"),
+            "127.0.0.1",
+            9001);
+
+    private static RecordingLifecycleController CreateLifecycle(
+        VrChatInstanceCandidate candidate,
+        IVideoSignalGateway signalGateway,
+        List<string> cameraEvents)
+    {
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new FixedVrChatDiscovery(candidate)),
+            new FixedCameraGatewayFactory(
+                new OrderedCameraGateway(cameraEvents)));
+        return new RecordingLifecycleController(
+            connections,
+            new NoOpCameraLeaseStore(),
+            CreateUseCase(
+                signalGateway,
+                new CapturingEncoderProbe(),
+                new CapturingRecordingEngine()),
+            new NoOpStopRequestSink(),
+            new NoOpCameraRestoreWarningSink());
+    }
+
     private static StartRecordingCommand StartCommand() =>
         new(
             SelfTimer.FromSeconds(0),
@@ -361,13 +488,22 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         ulong adapterLuid,
         string senderId = "VRChat-Spout-new",
         int width = 1920,
-        int height = 1080) =>
+        int height = 1080,
+        string gpuIdentity = "NVIDIA RTX contract adapter",
+        GpuVendor gpuVendor = GpuVendor.Nvidia,
+        VideoPixelFormat pixelFormat = VideoPixelFormat.Rgba8,
+        double estimatedSourceFramesPerSecond = 59.94) =>
         new(
             Signal(
                 senderId,
                 adapterLuid,
+                gpuIdentity,
+                gpuVendor,
                 width: width,
-                height: height),
+                height: height,
+                pixelFormat: pixelFormat,
+                estimatedSourceFramesPerSecond:
+                    estimatedSourceFramesPerSecond),
             sequence,
             MonotonicTimestamp.FromElapsed(
                 TimeSpan.FromMilliseconds(receivedAtMilliseconds)));
@@ -431,6 +567,43 @@ public sealed class NativeMediaPreflightContractIntegrationTests
                     ? EncoderProbeResult.PacketProduced
                     : EncoderProbeResult.Failed);
         }
+    }
+
+    private sealed class ThrowingBaselineVideoSignalGateway(Exception failure)
+        : IVideoSignalGateway
+    {
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken) =>
+            Task.FromException(failure);
+
+        public Task<StableVideoSignal> WaitForStableSignalAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Signal wait was not expected.");
+    }
+
+    private sealed class CancelingRetryBaselineVideoSignalGateway
+        : IVideoSignalGateway
+    {
+        private int _captureCount;
+
+        public Action? CancelRetry { get; set; }
+
+        public Task CaptureBaselineAsync(CancellationToken cancellationToken)
+        {
+            _captureCount++;
+            if (_captureCount == 2)
+            {
+                CancelRetry?.Invoke();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<StableVideoSignal> WaitForStableSignalAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken) =>
+            Task.FromException<StableVideoSignal>(new TimeoutException());
     }
 
     private sealed class CapturingEncoderProbe : IEncoderProbe
