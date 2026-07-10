@@ -10,6 +10,11 @@ public sealed class WindowsDnsSdOscQueryServiceBrowser
     private const string ServiceSuffix = "._oscjson._tcp.local.";
     private readonly IWindowsDnsSdApi _api;
 
+    public WindowsDnsSdOscQueryServiceBrowser()
+        : this(new WindowsDnsSdApi())
+    {
+    }
+
     public WindowsDnsSdOscQueryServiceBrowser(IWindowsDnsSdApi api)
     {
         ArgumentNullException.ThrowIfNull(api);

@@ -6,8 +6,17 @@ public sealed class WindowsDnsSdApi : IWindowsDnsSdApi
 {
     private const uint ErrorSuccess = 0;
     private const uint ErrorCancelled = 1223;
+    private static readonly TimeSpan DefaultBrowseDuration =
+        TimeSpan.FromMilliseconds(500);
     private readonly IWindowsDnsServiceNativeApi _native;
     private readonly TimeSpan _browseDuration;
+
+    public WindowsDnsSdApi()
+        : this(
+            new ShellWindowsDnsServiceNativeApi(),
+            DefaultBrowseDuration)
+    {
+    }
 
     public WindowsDnsSdApi(
         IWindowsDnsServiceNativeApi native,
