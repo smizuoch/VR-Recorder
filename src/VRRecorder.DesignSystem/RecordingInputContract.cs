@@ -2,6 +2,8 @@ namespace VRRecorder.DesignSystem;
 
 public static class RecordingInputContract
 {
+    public const string SteamVrActionSetPath = "/actions/vrrecorder";
+
     public const string SteamVrToggleActionPath =
         "/actions/vrrecorder/in/toggle_recording";
 
