@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly DesktopRecordingUiController _recordingUi = new();
     private readonly IDisposable _recordingStatusSubscription;
     private bool _startupApplied;
+    private bool _recordingCommandsAuthorized;
     private LegalWindow? _legalWindow;
 
     public MainWindow()
@@ -80,7 +81,8 @@ public partial class MainWindow : Window
                 $"Startup cannot complete with desktop host state " +
                 $"{activation.State}."),
         };
-        RecordingToggleButton.IsEnabled = isReady;
+        RecordingToggleButton.IsEnabled =
+            isReady && _recordingCommandsAuthorized;
         RecordingStatusText.SetResourceReference(
             TextBlock.TextProperty,
             statusText);
@@ -98,7 +100,11 @@ public partial class MainWindow : Window
 
         _startupApplied = true;
         var startup = await App.VerifyStartupAsync(CancellationToken.None);
-        if (startup.State == RecorderState.Ready)
+        var activation = await App.ActivateRecordingHostAsync(
+            startup,
+            CancellationToken.None);
+        if (startup.State == RecorderState.Ready &&
+            activation.State == DesktopRecordingHostState.Ready)
         {
             bool rightsAcknowledged;
             try
@@ -138,11 +144,10 @@ public partial class MainWindow : Window
                     return;
                 }
             }
+
+            _recordingCommandsAuthorized = true;
         }
 
-        var activation = await App.ActivateRecordingHostAsync(
-            startup,
-            CancellationToken.None);
         ApplyStartupResult(startup, activation);
     }
 
@@ -211,7 +216,8 @@ public partial class MainWindow : Window
         RecordingToggleButton.SetResourceReference(
             FrameworkElement.ToolTipProperty,
             update.ActionHelpResourceKey);
-        RecordingToggleButton.IsEnabled = update.IsActionEnabled;
+        RecordingToggleButton.IsEnabled =
+            _recordingCommandsAuthorized && update.IsActionEnabled;
     }
 
     private async void OnRecordingToggleClick(
