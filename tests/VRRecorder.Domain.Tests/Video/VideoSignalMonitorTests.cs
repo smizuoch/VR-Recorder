@@ -19,4 +19,22 @@ public sealed class VideoSignalMonitorTests
 
         Assert.Equal(VideoSignalStatus.Available, status);
     }
+
+    [Fact]
+    public void OnePointFiveSecondsWithoutFreshFrameEntersSignalLost()
+    {
+        var monitor = new VideoSignalMonitor();
+        var receivedAt = MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(10));
+        monitor.ObserveFreshFrame(new VideoFrameObservation(
+            receivedAt,
+            isBlack: false));
+
+        var beforeThreshold = monitor.Evaluate(
+            receivedAt.Add(TimeSpan.FromMilliseconds(1499)));
+        var atThreshold = monitor.Evaluate(
+            receivedAt.Add(TimeSpan.FromMilliseconds(1500)));
+
+        Assert.Equal(VideoSignalStatus.Available, beforeThreshold);
+        Assert.Equal(VideoSignalStatus.SignalLost, atThreshold);
+    }
 }
