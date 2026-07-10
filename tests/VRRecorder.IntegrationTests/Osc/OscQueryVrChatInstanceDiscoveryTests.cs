@@ -178,6 +178,31 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
     }
 
     [Fact]
+    public async Task CapabilityRedirectOutsideLoopbackProducesNoCandidate()
+    {
+        var advertisement = Advertisement("redirect", httpPort: 19009);
+        var browser = new StubOscQueryServiceBrowser([advertisement]);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = new Fixture(
+                    advertisement.InstanceName,
+                    OscPort: 9040,
+                    RedirectedPath: "/usercamera/Streaming",
+                    EffectiveRequestUri: new Uri(
+                        "http://203.0.113.10:19009/usercamera/Streaming")),
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        var candidates = await discovery.DiscoverAsync(CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
     public async Task MissingCameraEndpointReturnsExplicitCapabilityFailure()
     {
         var advertisement = Advertisement("missing", httpPort: 19004);
@@ -381,7 +406,14 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             };
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
-                RequestMessage = request,
+                RequestMessage = string.Equals(
+                    uri.AbsolutePath,
+                    fixture.RedirectedPath,
+                    StringComparison.Ordinal)
+                    ? new HttpRequestMessage(
+                        HttpMethod.Get,
+                        fixture.EffectiveRequestUri)
+                    : request,
                 Content = new StringContent(
                     json,
                     Encoding.UTF8,
@@ -415,5 +447,7 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         string Name,
         int OscPort,
         string? HostInfoJson = null,
-        string? MissingPath = null);
+        string? MissingPath = null,
+        string? RedirectedPath = null,
+        Uri? EffectiveRequestUri = null);
 }
