@@ -41,41 +41,7 @@ public sealed class SettingsDesktopRecordingStartRequestSource
 
         try
         {
-            VRRecorderSettingsContract.Validate(settings);
-            var selfTimer = SelfTimer.FromSeconds(
-                settings.Recording.SelfTimerSeconds);
-            var autoStop = settings.Recording.AutoStopSeconds is { } seconds
-                ? RecordingDuration.FromSeconds(seconds)
-                : RecordingDuration.Infinite;
-            var frameRate = new FrameRate(settings.Video.FrameRate);
-            var unidentifiedHardware = RecordingMediaConfiguration.CreateDefault();
-            var media = new RecordingMediaConfiguration(
-                settings.Audio.Routing,
-                settings.Audio.DesktopEndpointId,
-                settings.Audio.MicrophoneEndpointId,
-                settings.Audio.DesktopGainDb,
-                settings.Audio.MicrophoneGainDb,
-                settings.Video.QualityPreset,
-                unidentifiedHardware.SpoutSenderIdentity,
-                unidentifiedHardware.SpoutAdapterLuid,
-                unidentifiedHardware.EncoderAdapterLuid,
-                unidentifiedHardware.GpuIdentity);
-            cancellationToken.ThrowIfCancellationRequested();
-            var outputPath = ResolveOutputPath(
-                settings.Recording.OutputFolder);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            return new DesktopRecordingStartRequest(
-                selectedServiceId: null,
-                new StartRecordingCommand(
-                    selfTimer,
-                    autoStop,
-                    outputPath,
-                    frameRate,
-                    settings.Video.Encoder,
-                    GpuVendor.Unknown,
-                    settings.Recording.ResolutionChangePolicy,
-                    media));
+            return Map(settings, cancellationToken);
         }
         catch (InvalidDataException)
         {
@@ -87,6 +53,55 @@ public sealed class SettingsDesktopRecordingStartRequestSource
                 "The recording settings cannot be mapped to a safe start request.",
                 exception);
         }
+    }
+
+    private DesktopRecordingStartRequest Map(
+        VRRecorderSettings settings,
+        CancellationToken cancellationToken)
+    {
+        VRRecorderSettingsContract.Validate(settings);
+        var selfTimer = SelfTimer.FromSeconds(
+            settings.Recording.SelfTimerSeconds);
+        var autoStop = MapAutoStop(settings.Recording.AutoStopSeconds);
+        var frameRate = new FrameRate(settings.Video.FrameRate);
+        var media = MapMedia(settings);
+        cancellationToken.ThrowIfCancellationRequested();
+        var outputPath = ResolveOutputPath(settings.Recording.OutputFolder);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new DesktopRecordingStartRequest(
+            selectedServiceId: null,
+            new StartRecordingCommand(
+                selfTimer,
+                autoStop,
+                outputPath,
+                frameRate,
+                settings.Video.Encoder,
+                GpuVendor.Unknown,
+                settings.Recording.ResolutionChangePolicy,
+                media));
+    }
+
+    private static RecordingDuration MapAutoStop(int? seconds) =>
+        seconds is { } finiteSeconds
+            ? RecordingDuration.FromSeconds(finiteSeconds)
+            : RecordingDuration.Infinite;
+
+    private static RecordingMediaConfiguration MapMedia(
+        VRRecorderSettings settings)
+    {
+        var unidentifiedHardware = RecordingMediaConfiguration.CreateDefault();
+        return new RecordingMediaConfiguration(
+            settings.Audio.Routing,
+            settings.Audio.DesktopEndpointId,
+            settings.Audio.MicrophoneEndpointId,
+            settings.Audio.DesktopGainDb,
+            settings.Audio.MicrophoneGainDb,
+            settings.Video.QualityPreset,
+            unidentifiedHardware.SpoutSenderIdentity,
+            unidentifiedHardware.SpoutAdapterLuid,
+            unidentifiedHardware.EncoderAdapterLuid,
+            unidentifiedHardware.GpuIdentity);
     }
 
     private OutputPath ResolveOutputPath(string configuredPath)
