@@ -38,7 +38,7 @@ public partial class LegalWindow : Window
         SelectionChangedEventArgs e)
     {
         if (_applyingState ||
-            LegalComponentList.SelectedItem is not LegalListItem selected)
+            LegalComponentList.SelectedItem is not LegalComponentListItem selected)
         {
             return;
         }
@@ -114,15 +114,7 @@ public partial class LegalWindow : Window
             ApplyAccessibleText(ManifestSha256Text, CreateIdentityText(
                 "Legal_ManifestSha256_Format",
                 available ? state.ManifestSha256 : null));
-            var components = available
-                ? state.Components
-                : Array.Empty<LegalCatalogComponent>();
-            var items = components
-                .OrderBy(item => item.Id, StringComparer.Ordinal)
-                .Select(item => new LegalListItem(
-                    item,
-                    $"{item.DisplayName} — {item.Version} — {item.LicenseExpression}"))
-                .ToArray();
+            var items = ProjectComponents(state, available);
             LegalComponentList.ItemsSource = items;
             var selectedComponent = available
                 ? state.SelectedComponent
@@ -139,17 +131,7 @@ public partial class LegalWindow : Window
                         ? string.Empty
                         : FormatDetail(selectedComponent)));
 
-            var documentItems = selectedComponent is null
-                ? Array.Empty<LegalDocumentListItem>()
-                : selectedComponent.LegalDocuments
-                    .OrderBy(reference => reference.Kind)
-                    .ThenBy(
-                        reference => reference.RelativePath,
-                        StringComparer.Ordinal)
-                    .Select(reference => new LegalDocumentListItem(
-                        reference,
-                        FormatDocumentLabel(reference)))
-                    .ToArray();
+            var documentItems = ProjectDocuments(selectedComponent);
             LegalDocumentList.ItemsSource = documentItems;
             var selectedDocument = available ? state.SelectedDocument : null;
             LegalDocumentList.SelectedItem = selectedDocument is null
@@ -190,15 +172,38 @@ public partial class LegalWindow : Window
 
     private AccessibleText CreateIdentityText(
         string formatResourceKey,
-        string? value)
-    {
-        return string.IsNullOrEmpty(value)
+        string? value) =>
+        string.IsNullOrEmpty(value)
             ? AccessibleText.FromVisibleText(string.Empty)
             : AccessibleText.FromLocalizedFormat(
                 CultureInfo.CurrentCulture,
                 Resolve(formatResourceKey),
                 value);
-    }
+
+    private static LegalComponentListItem[] ProjectComponents(
+        DesktopLegalState state,
+        bool available) =>
+        (available
+            ? state.Components
+            : Array.Empty<LegalCatalogComponent>())
+        .OrderBy(component => component.Id, StringComparer.Ordinal)
+        .Select(component => new LegalComponentListItem(
+            component,
+            $"{component.DisplayName} — {component.Version} — " +
+            component.LicenseExpression))
+        .ToArray();
+
+    private LegalDocumentListItem[] ProjectDocuments(
+        LegalCatalogComponent? component) =>
+        component?.LegalDocuments
+            .OrderBy(reference => reference.Kind)
+            .ThenBy(
+                reference => reference.RelativePath,
+                StringComparer.Ordinal)
+            .Select(reference => new LegalDocumentListItem(
+                reference,
+                FormatDocumentLabel(reference)))
+            .ToArray() ?? [];
 
     private void ApplyDocumentHeading(LegalDocumentReference? reference)
     {
@@ -267,7 +272,7 @@ public partial class LegalWindow : Window
         throw new InvalidOperationException(
             $"The localized desktop resource is missing: {resourceKey}");
 
-    private sealed record LegalListItem(
+    private sealed record LegalComponentListItem(
         LegalCatalogComponent Component,
         string Label);
 
