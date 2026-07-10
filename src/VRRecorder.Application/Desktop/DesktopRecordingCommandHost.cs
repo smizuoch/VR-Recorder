@@ -1,5 +1,6 @@
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Desktop;
@@ -20,6 +21,7 @@ public sealed class DesktopRecordingCommandHost
     private IDesktopRecordingRuntime? _runtime;
     private DesktopRecordingHostState _state = DesktopRecordingHostState.Booting;
     private DesktopRecordingInitializationFailure? _failure;
+    private RecordingStopReason? _shutdownReason;
     private bool _complianceFaulted;
     private bool _disposed;
 
@@ -108,6 +110,8 @@ public sealed class DesktopRecordingCommandHost
             {
                 _disposed = true;
                 _state = DesktopRecordingHostState.Disposed;
+                _shutdownReason ??=
+                    RecordingStopReason.ApplicationShutdown;
                 cancelLifetime = true;
                 _disposeTask = DisposeCoreAsync();
             }
@@ -140,6 +144,7 @@ public sealed class DesktopRecordingCommandHost
                 _complianceFaulted = true;
                 _failure = null;
                 _state = DesktopRecordingHostState.ComplianceFault;
+                _shutdownReason = RecordingStopReason.ComplianceFault;
                 cancelLifetime = true;
             }
         }
@@ -243,11 +248,13 @@ public sealed class DesktopRecordingCommandHost
     {
         lock (_gate)
         {
-            return _shutdownTask ??= ShutdownCoreAsync();
+            var reason = _shutdownReason ?? throw new InvalidOperationException(
+                "Desktop recording shutdown has no terminal reason.");
+            return _shutdownTask ??= ShutdownCoreAsync(reason);
         }
     }
 
-    private async Task ShutdownCoreAsync()
+    private async Task ShutdownCoreAsync(RecordingStopReason reason)
     {
         await Task.Yield();
         Task<DesktopRecordingHostActivation>? activationTask;
@@ -271,7 +278,7 @@ public sealed class DesktopRecordingCommandHost
             .ConfigureAwait(false);
         if (runtime is not null)
         {
-            await runtime.DisposeAsync().ConfigureAwait(false);
+            await runtime.ShutdownAsync(reason).ConfigureAwait(false);
         }
     }
 
