@@ -9,6 +9,8 @@ public static class RecorderStateMachine
                 RecorderState.Ready,
             (RecorderState.Booting, RecorderTrigger.LegalVerificationFailed) =>
                 RecorderState.ComplianceFault,
+            (RecorderState.ComplianceFault, RecorderTrigger.RepairCompleted) =>
+                RecorderState.Booting,
             (RecorderState.Ready, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.StartRequested) => RecorderState.Arming,
             (RecorderState.Arming, RecorderTrigger.SignalTimeout) => RecorderState.NoSignal,

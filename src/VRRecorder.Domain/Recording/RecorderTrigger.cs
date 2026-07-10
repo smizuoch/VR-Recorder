@@ -4,6 +4,7 @@ public enum RecorderTrigger
 {
     LegalVerificationSucceeded,
     LegalVerificationFailed,
+    RepairCompleted,
     StartRequested,
     SignalTimeout,
     FirstPacketCommitted,
