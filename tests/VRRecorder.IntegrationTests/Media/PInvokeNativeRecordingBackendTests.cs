@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Settings;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Video;
@@ -10,6 +12,134 @@ namespace VRRecorder.IntegrationTests.Media;
 
 public sealed class PInvokeNativeRecordingBackendTests
 {
+    [Fact]
+    public async Task CompleteMediaCreateContractCrossesManagedNativeAbi()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "take.recording.mp4"),
+            Path.Combine(directory.Path, "take.mp4"));
+        var signal = new StableVideoSignal(1081, 1921);
+        var layout = RecordingVideoLayoutSession.Start(
+            signal,
+            ResolutionChangePolicy.SingleFileFit);
+        var currentLayout = layout.ApplyStableSignal(
+            new StableVideoSignal(1921, 1081));
+        var media = new RecordingMediaConfiguration(
+            AudioRouting.MicOnly,
+            "{0.0.0.00000000}.desktop-日本語",
+            "{0.0.1.00000000}.microphone-日本語",
+            DesktopGainDb: -12.25,
+            MicrophoneGainDb: 3.0,
+            VideoQualityPreset.Standard,
+            SpoutSenderIdentity: "VRChat-Spout-日本語-42",
+            SpoutAdapterLuid: 0x00000001ABCDEF01,
+            EncoderAdapterLuid: 0x00000001ABCDEF01,
+            GpuIdentity: "pci\\ven_10de&dev_2684|driver-32.0.15.6094");
+        var plan = new RecordingPlan(
+            signal,
+            pending,
+            new RecordingSessionTimestamp(new DateTimeOffset(
+                2026,
+                7,
+                10,
+                12,
+                34,
+                56,
+                TimeSpan.Zero)),
+            new FrameRate(60),
+            EncoderKind.Nvenc,
+            layout)
+        {
+            Media = media,
+        };
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        var observed = controls.MediaConfig();
+
+        Assert.Equal(
+            checked((uint)currentLayout.OutputCanvas.Width),
+            observed.CanvasWidth);
+        Assert.Equal(
+            checked((uint)currentLayout.OutputCanvas.Height),
+            observed.CanvasHeight);
+        Assert.Equal(checked((uint)currentLayout.Source.Width), observed.SourceWidth);
+        Assert.Equal(checked((uint)currentLayout.Source.Height), observed.SourceHeight);
+        Assert.Equal(
+            checked((uint)currentLayout.Placement.OffsetX),
+            observed.DestinationX);
+        Assert.Equal(
+            checked((uint)currentLayout.Placement.OffsetY),
+            observed.DestinationY);
+        Assert.Equal(
+            checked((uint)currentLayout.Placement.Width),
+            observed.DestinationWidth);
+        Assert.Equal(
+            checked((uint)currentLayout.Placement.Height),
+            observed.DestinationHeight);
+        Assert.Equal(1u, observed.CanvasBackground);
+        Assert.Equal(1u, observed.Rotation);
+        Assert.Equal(3u, observed.AudioRouting);
+        Assert.Equal(1u, observed.QualityPreset);
+        Assert.Equal(media.DesktopEndpointId, observed.DesktopEndpointId);
+        Assert.Equal(media.MicrophoneEndpointId, observed.MicrophoneEndpointId);
+        Assert.Equal(media.DesktopGainDb, observed.DesktopGainDb);
+        Assert.Equal(media.MicrophoneGainDb, observed.MicrophoneGainDb);
+        Assert.Equal(media.SpoutSenderIdentity, observed.SpoutSenderIdentity);
+        Assert.Equal(media.SpoutAdapterLuid, observed.SpoutAdapterLuid);
+        Assert.Equal(media.EncoderAdapterLuid, observed.EncoderAdapterLuid);
+        Assert.Equal(media.GpuIdentity, observed.GpuIdentity);
+        await session.AbortAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task DefaultMediaCreateContractUsesDesignDefaults()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            new PendingRecording(
+                Path.Combine(directory.Path, "take.recording.mp4"),
+                Path.Combine(directory.Path, "take.mp4")),
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        var observed = controls.MediaConfig();
+
+        Assert.Equal(1u, observed.AudioRouting);
+        Assert.Equal(2u, observed.QualityPreset);
+        Assert.Equal("default-render", observed.DesktopEndpointId);
+        Assert.Equal("default-capture", observed.MicrophoneEndpointId);
+        Assert.Equal(-6.0, observed.DesktopGainDb);
+        Assert.Equal(-6.0, observed.MicrophoneGainDb);
+        Assert.Equal("unidentified-spout-sender", observed.SpoutSenderIdentity);
+        Assert.Equal(0ul, observed.SpoutAdapterLuid);
+        Assert.Equal(0ul, observed.EncoderAdapterLuid);
+        Assert.Equal("unidentified-gpu", observed.GpuIdentity);
+        await session.AbortAsync(CancellationToken.None);
+    }
+
     [Theory]
     [InlineData(EncoderKind.Nvenc, 1u)]
     [InlineData(EncoderKind.Amf, 2u)]
@@ -243,6 +373,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly CompleteDelegate _complete;
         private readonly FailDelegate _fail;
         private readonly EncoderKindDelegate _encoderKind;
+        private readonly CopyMediaConfigDelegate _copyMediaConfig;
 
         public NativeFixtureControls(string path)
         {
@@ -263,6 +394,11 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_encoder_kind"));
+            _copyMediaConfig = Marshal.GetDelegateForFunctionPointer<
+                CopyMediaConfigDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_copy_media_config_v1"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -275,6 +411,33 @@ public sealed class PInvokeNativeRecordingBackendTests
         public void Fail(int status, string message) => _fail(status, message);
 
         public uint EncoderKind() => _encoderKind();
+
+        public ObservedMediaConfig MediaConfig()
+        {
+            var native = new NativeObservedMediaConfig();
+            _copyMediaConfig(ref native);
+            return new ObservedMediaConfig(
+                native.CanvasWidth,
+                native.CanvasHeight,
+                native.SourceWidth,
+                native.SourceHeight,
+                native.DestinationX,
+                native.DestinationY,
+                native.DestinationWidth,
+                native.DestinationHeight,
+                native.CanvasBackground,
+                native.Rotation,
+                native.AudioRouting,
+                native.QualityPreset,
+                Marshal.PtrToStringUTF8(native.DesktopEndpointIdUtf8)!,
+                Marshal.PtrToStringUTF8(native.MicrophoneEndpointIdUtf8)!,
+                native.DesktopGainDb,
+                native.MicrophoneGainDb,
+                Marshal.PtrToStringUTF8(native.SpoutSenderIdentityUtf8)!,
+                native.SpoutAdapterLuid,
+                native.EncoderAdapterLuid,
+                Marshal.PtrToStringUTF8(native.GpuIdentityUtf8)!);
+        }
 
         public void Dispose() => NativeLibrary.Free(_library);
 
@@ -293,7 +456,58 @@ public sealed class PInvokeNativeRecordingBackendTests
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint EncoderKindDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void CopyMediaConfigDelegate(
+            ref NativeObservedMediaConfig config);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeObservedMediaConfig
+        {
+            public uint CanvasWidth;
+            public uint CanvasHeight;
+            public uint SourceWidth;
+            public uint SourceHeight;
+            public uint DestinationX;
+            public uint DestinationY;
+            public uint DestinationWidth;
+            public uint DestinationHeight;
+            public uint CanvasBackground;
+            public uint Rotation;
+            public uint AudioRouting;
+            public uint QualityPreset;
+            public nint DesktopEndpointIdUtf8;
+            public nint MicrophoneEndpointIdUtf8;
+            public double DesktopGainDb;
+            public double MicrophoneGainDb;
+            public nint SpoutSenderIdentityUtf8;
+            public ulong SpoutAdapterLuid;
+            public ulong EncoderAdapterLuid;
+            public nint GpuIdentityUtf8;
+        }
     }
+
+    private sealed record ObservedMediaConfig(
+        uint CanvasWidth,
+        uint CanvasHeight,
+        uint SourceWidth,
+        uint SourceHeight,
+        uint DestinationX,
+        uint DestinationY,
+        uint DestinationWidth,
+        uint DestinationHeight,
+        uint CanvasBackground,
+        uint Rotation,
+        uint AudioRouting,
+        uint QualityPreset,
+        string DesktopEndpointId,
+        string MicrophoneEndpointId,
+        double DesktopGainDb,
+        double MicrophoneGainDb,
+        string SpoutSenderIdentity,
+        ulong SpoutAdapterLuid,
+        ulong EncoderAdapterLuid,
+        string GpuIdentity);
 
     private sealed class TemporaryDirectory : IDisposable
     {
