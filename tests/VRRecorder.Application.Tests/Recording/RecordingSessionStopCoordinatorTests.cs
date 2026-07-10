@@ -1,3 +1,4 @@
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
@@ -89,5 +90,78 @@ public sealed class RecordingSessionStopCoordinatorTests
 
         finalizer.Complete(new FinalizedRecording(pending.FinalPath));
         Assert.IsType<RecordingFinalizationResult.Saved>(await stopping);
+    }
+
+    [Fact]
+    public async Task StopResultExpectationIsUsedForSessionValidation()
+    {
+        var engine = new FakeRecordingEngine();
+        var finalizer = new ControllableRecordingFileFinalizer();
+        var validator = new CapturingSessionExpectationValidator();
+        var finalization = new RecordingFileFinalizationUseCase(
+            finalizer,
+            validator,
+            new FakeRecordingRecoveryStore(),
+            new FakeSavedRecordingSink());
+        var handle = new RecordingHandle(
+            "session-dynamic-validation",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        var coordinator = new RecordingSessionStopCoordinator(
+            engine,
+            handle,
+            finalization);
+        var expectation = new RecordingMediaExpectation(
+            Width: 1918,
+            Height: 1080,
+            FramesPerSecond: 59,
+            AudioSampleRate: 48000,
+            AudioChannels: 2,
+            ExpectedDuration: TimeSpan.FromSeconds(2));
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "dynamic.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "dynamic.mp4"));
+
+        var stopping = coordinator.StopAsync();
+        engine.CompleteStop(new RecordingStopResult(
+            pending,
+            VideoPacketCount: 118,
+            AudioPacketCount: 96,
+            MediaExpectation: expectation));
+        await finalizer.WaitUntilRequestedAsync();
+        var finalized = new FinalizedRecording(pending.FinalPath);
+        finalizer.Complete(finalized);
+        await stopping;
+
+        Assert.Equal(expectation, validator.Expectation);
+        Assert.Equal(finalized, validator.Recording);
+        Assert.False(validator.LegacyOverloadCalled);
+    }
+
+    private sealed class CapturingSessionExpectationValidator
+        : IRecordingFileValidator
+    {
+        public RecordingMediaExpectation? Expectation { get; private set; }
+
+        public FinalizedRecording? Recording { get; private set; }
+
+        public bool LegacyOverloadCalled { get; private set; }
+
+        public Task<RecordingFileValidation> ValidateAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken)
+        {
+            LegacyOverloadCalled = true;
+            return Task.FromResult(RecordingFileValidation.Valid);
+        }
+
+        public Task<RecordingFileValidation> ValidateAsync(
+            FinalizedRecording recording,
+            RecordingMediaExpectation expectation,
+            CancellationToken cancellationToken)
+        {
+            Recording = recording;
+            Expectation = expectation;
+            return Task.FromResult(RecordingFileValidation.Valid);
+        }
     }
 }
