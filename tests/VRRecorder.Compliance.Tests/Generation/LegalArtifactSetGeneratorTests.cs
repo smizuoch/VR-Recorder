@@ -411,8 +411,40 @@ public sealed class LegalArtifactSetGeneratorTests
         Assert.False(eligibility.IsApproved);
         Assert.Null(eligibility.ApprovedGraph);
         var issue = Assert.Single(eligibility.Issues, item =>
-            item.Code == "duplicate-legal-document-path");
+            item.Code == "conflicting-legal-document-path");
         Assert.Equal("a,b:LICENSES/a/LICENSE.txt", issue.Subject);
+    }
+
+    [Fact]
+    public void IdenticalDocumentCanBeSharedAcrossComponents()
+    {
+        var graph = Graph(reverse: false);
+        var firstLicense = graph.Components[0].LegalFiles.Single(file =>
+            file.Kind == LegalFileKind.License);
+        graph = graph with
+        {
+            Components =
+            [
+                graph.Components[0],
+                graph.Components[1] with { LegalFiles = [firstLicense] },
+            ],
+        };
+
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+        Assert.True(eligibility.IsApproved);
+        Assert.NotNull(eligibility.ApprovedGraph);
+        var generated = LegalArtifactSetGenerator.Generate(
+            Context("shared-license"),
+            eligibility.ApprovedGraph);
+        Assert.Single(generated.Artifacts, artifact =>
+            artifact.RelativePath == "LICENSES/a/LICENSE.txt");
+        var manifest = generated.Artifacts.Single(artifact =>
+            artifact.RelativePath == "LEGAL-MANIFEST.sha256");
+        Assert.Single(Encoding.UTF8.GetString(manifest.Content.Span)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries), line =>
+                line.EndsWith(
+                    "  LICENSES/a/LICENSE.txt",
+                    StringComparison.Ordinal));
     }
 
     [Fact]
