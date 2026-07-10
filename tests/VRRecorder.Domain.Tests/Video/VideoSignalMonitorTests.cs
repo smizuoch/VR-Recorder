@@ -58,4 +58,27 @@ public sealed class VideoSignalMonitorTests
             VideoSignalStatus.SafeStop,
             monitor.Evaluate(signalLostAt.Add(TimeSpan.FromSeconds(5))));
     }
+
+    [Fact]
+    public void FreshFrameWithinGraceRecoversSignal()
+    {
+        var monitor = new VideoSignalMonitor();
+        var receivedAt = MonotonicTimestamp.FromElapsed(TimeSpan.Zero);
+        monitor.ObserveFreshFrame(new VideoFrameObservation(
+            receivedAt,
+            isBlack: false));
+        var signalLostAt = receivedAt.Add(TimeSpan.FromMilliseconds(1500));
+        Assert.Equal(
+            VideoSignalStatus.SignalLost,
+            monitor.Evaluate(signalLostAt));
+
+        var recoveredAt = signalLostAt.Add(TimeSpan.FromMilliseconds(4999));
+        monitor.ObserveFreshFrame(new VideoFrameObservation(
+            recoveredAt,
+            isBlack: true));
+
+        Assert.Equal(
+            VideoSignalStatus.Available,
+            monitor.Evaluate(recoveredAt));
+    }
 }
