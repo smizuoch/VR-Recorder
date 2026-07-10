@@ -33,6 +33,14 @@ public sealed class SpdxSbomGeneratorTests
                     SourceInformation:
                         "https://example.invalid/dual-license@commit",
                     LicenseText: "FULL SELECTED MIT LICENSE TEXT",
+                    LegalFiles:
+                    [
+                        new VerifiedLegalFile(
+                            LegalFileKind.License,
+                            "licenses/dual-license/LICENSE.txt",
+                            ValidSha256,
+                            "FULL SELECTED MIT LICENSE TEXT"),
+                    ],
                     Scope: NoticeScope.RuntimeBundled,
                     Approval: new LegalApproval(
                         LegalApprovalStatus.Approved,
@@ -283,4 +291,7 @@ public sealed class SpdxSbomGeneratorTests
             Scope: NoticeScope.RuntimeBundled,
             ApprovalStatus: LegalApprovalStatus.Approved,
             Packages: packages);
+
+    private const string ValidSha256 =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 }

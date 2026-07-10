@@ -134,6 +134,14 @@ public sealed class ReleaseEligibilityGateTests
                     Modified: false,
                     SourceInformation: "https://example.invalid/source@commit",
                     LicenseText: "FULL MIT LICENSE TEXT",
+                    LegalFiles:
+                    [
+                        new VerifiedLegalFile(
+                            LegalFileKind.License,
+                            "licenses/pending-package/LICENSE.txt",
+                            ValidSha256,
+                            "FULL MIT LICENSE TEXT"),
+                    ],
                     Scope: NoticeScope.RuntimeBundled,
                     Approval: approval,
                     Packages:
@@ -141,4 +149,7 @@ public sealed class ReleaseEligibilityGateTests
                         new NoticePackage("Pending.Package", "1.0.0"),
                     ]),
             ]);
+
+    private const string ValidSha256 =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 }

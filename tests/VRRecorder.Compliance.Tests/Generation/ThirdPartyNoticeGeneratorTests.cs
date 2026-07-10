@@ -32,6 +32,19 @@ public sealed class ThirdPartyNoticeGeneratorTests
                     SourceInformation:
                         "https://example.invalid/dual-license@commit",
                     LicenseText: "FULL SELECTED MIT LICENSE TEXT",
+                    LegalFiles:
+                    [
+                        new VerifiedLegalFile(
+                            LegalFileKind.Notice,
+                            "notices/dual-license/NOTICE.txt",
+                            ValidSha256,
+                            "COMPONENT NOTICE\n\n"),
+                        new VerifiedLegalFile(
+                            LegalFileKind.License,
+                            "licenses/dual-license/LICENSE.txt",
+                            ValidSha256,
+                            "SELECTED MIT LICENSE\n"),
+                    ],
                     Scope: NoticeScope.RuntimeBundled,
                     Approval: new LegalApproval(
                         LegalApprovalStatus.Approved,
@@ -55,6 +68,22 @@ public sealed class ThirdPartyNoticeGeneratorTests
             StringComparison.Ordinal);
         Assert.Contains(
             "SPDX concluded: MIT",
+            notice,
+            StringComparison.Ordinal);
+        var licensePosition = notice.IndexOf(
+            "--- LEGAL FILE (License): licenses/dual-license/LICENSE.txt ---",
+            StringComparison.Ordinal);
+        var noticePosition = notice.IndexOf(
+            "--- LEGAL FILE (Notice): notices/dual-license/NOTICE.txt ---",
+            StringComparison.Ordinal);
+        Assert.True(licensePosition >= 0);
+        Assert.True(noticePosition > licensePosition);
+        Assert.Contains(
+            "SELECTED MIT LICENSE\n--- END LEGAL FILE ---",
+            notice,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "COMPONENT NOTICE\n\n--- END LEGAL FILE ---",
             notice,
             StringComparison.Ordinal);
     }
@@ -174,4 +203,7 @@ public sealed class ThirdPartyNoticeGeneratorTests
         Assert.Contains("Modified: no", notice, StringComparison.Ordinal);
         Assert.Contains("FULL MIT LICENSE TEXT", notice, StringComparison.Ordinal);
     }
+
+    private const string ValidSha256 =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 }
