@@ -118,10 +118,11 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
                 cancellationToken)
             .ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(result);
-        CaptureStartResult(result);
+        await CaptureStartResultAsync(result).ConfigureAwait(false);
     }
 
-    private void CaptureStartResult(RecordingLifecycleStartResult result)
+    private async Task CaptureStartResultAsync(
+        RecordingLifecycleStartResult result)
     {
         var lifecycleState = _lifecycle.State;
         if (result.Recording is StartRecordingResult.Started started)
@@ -138,7 +139,13 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
                 return;
             }
 
-            throw InconsistentStartResult(result, lifecycleState);
+            var inconsistency = InconsistentStartResult(result, lifecycleState);
+            _activeHandle = started.Handle;
+            await StopActiveSessionAsync(
+                    RecordingStopReason.InvariantViolation,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            throw inconsistency;
         }
 
         if (HasActiveOrStoppingSession(lifecycleState))
