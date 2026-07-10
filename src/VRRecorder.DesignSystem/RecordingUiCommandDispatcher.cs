@@ -20,7 +20,8 @@ public sealed class RecordingUiCommandDispatcher : IUiCommandDispatcher
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (command != UiCommandId.ToggleRecording)
+        if (command is not (
+                UiCommandId.ToggleRecording or UiCommandId.Retry))
         {
             throw new NotSupportedException(
                 $"UI command {command} is not supported by the recording dispatcher.");
