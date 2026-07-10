@@ -6,6 +6,60 @@ namespace VRRecorder.Compliance.Tests.Generation;
 public sealed class ThirdPartyNoticeGeneratorTests
 {
     [Fact]
+    public void ApprovedGraphNoticePreservesLicenseDecision()
+    {
+        var graph = new NormalizedComponentGraph(
+            Dependencies:
+            [
+                new NuGetPackage(
+                    "Dual.License.Package",
+                    "3.0.0",
+                    NuGetDependencyKind.Direct),
+            ],
+            Components:
+            [
+                new NormalizedComponent(
+                    Id: "dual-license-package",
+                    DisplayName: "Dual License Package",
+                    Version: "3.0.0",
+                    License: new LicenseDecision(
+                        "BSD-3-Clause OR MIT",
+                        "MIT"),
+                    CopyrightNotice: "Copyright (c) Example",
+                    Usage: "runtime-feature",
+                    Linkage: "managed-library",
+                    Modified: false,
+                    SourceInformation:
+                        "https://example.invalid/dual-license@commit",
+                    LicenseText: "FULL SELECTED MIT LICENSE TEXT",
+                    Scope: NoticeScope.RuntimeBundled,
+                    Approval: new LegalApproval(
+                        LegalApprovalStatus.Approved,
+                        TicketId: "LEGAL-001",
+                        RequestedBy: "developer",
+                        Reviewer: "license-reviewer"),
+                    Packages:
+                    [
+                        new NoticePackage("Dual.License.Package", "3.0.0"),
+                    ]),
+            ]);
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+
+        var notice = ThirdPartyNoticeGenerator.Generate(
+            "VR-Recorder",
+            eligibility.ApprovedGraph!);
+
+        Assert.Contains(
+            "SPDX declared: BSD-3-Clause OR MIT",
+            notice,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SPDX concluded: MIT",
+            notice,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NoticePreservesReviewedLicenseTextWithoutTrimming()
     {
         const string reviewedLicenseText = "LINE ONE\nLINE TWO\n\n";
