@@ -27,6 +27,16 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void LegalTemplateSnapshotMatchesHashesAndCompleteFileInventory()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = LegalTemplateManifestValidator.Verify(repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
