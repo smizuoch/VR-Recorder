@@ -6,16 +6,13 @@ namespace VRRecorder.Application.Recording;
 public sealed class RecordingVideoLayoutSession
 {
     private readonly object _gate = new();
-    private readonly VideoGeometry _initialSource;
     private RecordingVideoLayout _currentLayout;
 
     private RecordingVideoLayoutSession(
         ResolutionChangePolicy policy,
-        VideoGeometry initialSource,
         RecordingVideoLayout initialLayout)
     {
         Policy = policy;
-        _initialSource = initialSource;
         _currentLayout = initialLayout;
     }
 
@@ -53,10 +50,9 @@ public sealed class RecordingVideoLayoutSession
         var initialLayout = Layout(
             source,
             canvas,
-            new VideoPlacement(0, 0, source.Width, source.Height));
+            VideoContainCalculator.Calculate(source, canvas));
         return new RecordingVideoLayoutSession(
             policy,
-            source,
             initialLayout);
     }
 
@@ -70,10 +66,7 @@ public sealed class RecordingVideoLayoutSession
         }
 
         var source = SourceGeometry(signal);
-        var placement = source.Width == _initialSource.Width &&
-                        source.Height == _initialSource.Height
-            ? new VideoPlacement(0, 0, source.Width, source.Height)
-            : VideoContainCalculator.Calculate(source, OutputCanvas);
+        var placement = VideoContainCalculator.Calculate(source, OutputCanvas);
         var layout = Layout(source, OutputCanvas, placement);
         lock (_gate)
         {
