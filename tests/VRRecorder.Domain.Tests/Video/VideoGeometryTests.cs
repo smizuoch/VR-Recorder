@@ -14,4 +14,14 @@ public sealed class VideoGeometryTests
 
         Assert.Equal(VideoOrientation.Portrait, geometry.Orientation);
     }
+
+    [Theory]
+    [InlineData(1920, 1080)]
+    [InlineData(1080, 1080)]
+    public void WidthAtLeastHeightIsLandscape(int width, int height)
+    {
+        var geometry = new VideoGeometry(width, height, VideoPixelFormat.Bgra8);
+
+        Assert.Equal(VideoOrientation.Landscape, geometry.Orientation);
+    }
 }
