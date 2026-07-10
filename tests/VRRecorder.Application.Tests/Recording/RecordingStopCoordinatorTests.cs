@@ -12,8 +12,8 @@ public sealed class RecordingStopCoordinatorTests
         var handle = new RecordingHandle("session-001");
         var coordinator = new RecordingStopCoordinator(engine, handle);
 
-        var first = coordinator.StopAsync(CancellationToken.None);
-        var second = coordinator.StopAsync(CancellationToken.None);
+        var first = coordinator.StopAsync();
+        var second = coordinator.StopAsync();
 
         Assert.Same(first, second);
         Assert.Equal(1, engine.StopCallCount);
@@ -23,5 +23,7 @@ public sealed class RecordingStopCoordinatorTests
 
         Assert.Equal(expected, await first);
         Assert.Equal(expected, await second);
+        Assert.Same(first, coordinator.StopAsync());
+        Assert.Equal(1, engine.StopCallCount);
     }
 }

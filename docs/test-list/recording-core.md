@@ -9,7 +9,7 @@
 - [x] StableSignal前にはRecordingEngine.Startを呼ばない
 - [x] SignalTimeoutではファイルを作らない
 - [x] Countdown中のCancelでencoderを開始しない
-- [ ] Recording中のStopRequestedを2回受けてもStopAsyncは1回だけ
+- [x] Recording中のStopRequestedを2回受けてもStopAsyncは1回だけ
 
 ## English
 
@@ -20,4 +20,4 @@ This is the first vertical-slice test list for Recording Core, derived from Basi
 - [x] RecordingEngine.Start is not called before StableSignal
 - [x] SignalTimeout creates no file
 - [x] Cancel during Countdown does not start the encoder
-- [ ] Two StopRequested events while Recording call StopAsync only once
+- [x] Two StopRequested events while Recording call StopAsync only once
