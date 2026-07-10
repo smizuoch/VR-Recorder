@@ -77,6 +77,24 @@ public sealed class ReleaseEligibilityGateTests
         Assert.Equal("pending-package", issue.Subject);
     }
 
+    [Fact]
+    public void SelfApprovedComponentDoesNotProduceApprovedReleaseGraph()
+    {
+        var graph = GraphWithApproval(new LegalApproval(
+            LegalApprovalStatus.Approved,
+            TicketId: "LEGAL-001",
+            RequestedBy: "Developer-One",
+            Reviewer: "developer-one"));
+
+        var result = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.False(result.IsApproved);
+        Assert.Null(result.ApprovedGraph);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("self-approval", issue.Code);
+        Assert.Equal("pending-package", issue.Subject);
+    }
+
     private static NormalizedComponentGraph GraphWithApproval(
         LegalApproval approval) =>
         new(
