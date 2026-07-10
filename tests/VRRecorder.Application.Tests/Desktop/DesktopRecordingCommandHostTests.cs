@@ -27,7 +27,7 @@ public sealed class DesktopRecordingCommandHostTests
     [Fact]
     public async Task ConcurrentToggleActivationsJoinOneInFlightOperation()
     {
-        var runtime = new ControllableDesktopRecordingRuntime();
+        var runtime = new ControllableDesktopRecordingRuntime(holdToggle: true);
         var factory = new StubDesktopRecordingRuntimeFactory(runtime);
         await using var host = new DesktopRecordingCommandHost(factory);
         await host.ActivateAsync(ReadyStartup(), CancellationToken.None);
@@ -134,8 +134,17 @@ public sealed class DesktopRecordingCommandHostTests
     {
         private readonly TaskCompletionSource _toggleRequested = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly TaskCompletionSource _toggleCompletion = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _toggleCompletion;
+
+        public ControllableDesktopRecordingRuntime(bool holdToggle = false)
+        {
+            _toggleCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!holdToggle)
+            {
+                _toggleCompletion.SetResult();
+            }
+        }
 
         public int ToggleCallCount { get; private set; }
 
