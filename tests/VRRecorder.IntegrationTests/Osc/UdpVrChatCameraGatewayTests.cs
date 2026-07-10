@@ -12,6 +12,29 @@ public sealed class UdpVrChatCameraGatewayTests
 {
     [Fact]
     [Trait("Scenario", "IT-001")]
+    public async Task TwoMissingEchoesReturnExplicitConfirmationFailure()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var fakeVrChat = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(endpoint);
+
+        var write = gateway.SetModeAsync(CameraMode.Stream, timeout.Token);
+        var first = await fakeVrChat.ReceiveAsync(timeout.Token);
+        var second = await fakeVrChat.ReceiveAsync(timeout.Token);
+        var exception = await Assert.ThrowsAsync<CameraWriteConfirmationException>(
+            () => write);
+
+        Assert.Equal(ModeStreamPacket, first.Buffer);
+        Assert.Equal(ModeStreamPacket, second.Buffer);
+        Assert.Equal(2, exception.Attempts);
+        await Task.Delay(TimeSpan.FromMilliseconds(250), timeout.Token);
+        Assert.Equal(0, fakeVrChat.Available);
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-001")]
     public async Task MissingFirstEchoRetriesOnceAfterTwoHundredMilliseconds()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
