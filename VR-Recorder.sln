@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Compliance", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Compliance.Tests", "tests\VRRecorder.Compliance.Tests\VRRecorder.Compliance.Tests.csproj", "{E03EE291-8A87-4349-8062-D091E3B4ED76}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Application", "src\VRRecorder.Application\VRRecorder.Application.csproj", "{AD80862B-C50B-4617-B358-65191398C5F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Application.Tests", "tests\VRRecorder.Application.Tests\VRRecorder.Application.Tests.csproj", "{E7861554-29C4-4E1A-B3AE-5ED0BF309AD4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,5 +37,13 @@ Global
 		{E03EE291-8A87-4349-8062-D091E3B4ED76}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E03EE291-8A87-4349-8062-D091E3B4ED76}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E03EE291-8A87-4349-8062-D091E3B4ED76}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD80862B-C50B-4617-B358-65191398C5F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD80862B-C50B-4617-B358-65191398C5F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD80862B-C50B-4617-B358-65191398C5F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD80862B-C50B-4617-B358-65191398C5F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7861554-29C4-4E1A-B3AE-5ED0BF309AD4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7861554-29C4-4E1A-B3AE-5ED0BF309AD4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7861554-29C4-4E1A-B3AE-5ED0BF309AD4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7861554-29C4-4E1A-B3AE-5ED0BF309AD4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
