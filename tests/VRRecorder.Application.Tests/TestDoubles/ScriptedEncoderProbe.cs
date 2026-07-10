@@ -6,7 +6,7 @@ namespace VRRecorder.Application.Tests.TestDoubles;
 
 internal sealed class ScriptedEncoderProbe : IEncoderProbe
 {
-    private readonly IReadOnlyDictionary<EncoderKind, EncoderProbeResult> _results;
+    private readonly Dictionary<EncoderKind, EncoderProbeResult> _results;
 
     public ScriptedEncoderProbe(
         params (EncoderKind Encoder, EncoderProbeResult Result)[] results)
