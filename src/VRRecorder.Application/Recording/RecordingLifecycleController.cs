@@ -97,6 +97,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                     Recording: null);
             }
 
+            var gatewayLifetime = new CameraGatewayLifetime(connected.Gateway);
             CameraSnapshot cameraSnapshot;
             try
             {
@@ -114,11 +115,15 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             catch (OperationCanceledException) when (
                 cancellationToken.IsCancellationRequested)
             {
+                await gatewayLifetime.DisposeBestEffortAsync()
+                    .ConfigureAwait(false);
                 SetState(startState);
                 throw;
             }
             catch (Exception exception)
             {
+                await gatewayLifetime.DisposeBestEffortAsync()
+                    .ConfigureAwait(false);
                 SetState(startState);
                 return new RecordingLifecycleStartResult(
                     startState,
@@ -164,6 +169,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                             warningReason,
                             exception.RestorationFailure))
                     .ConfigureAwait(false);
+                await gatewayLifetime.DisposeBestEffortAsync()
+                    .ConfigureAwait(false);
                 SetState(startState);
                 ExceptionDispatchInfo.Capture(exception.AcquisitionFailure)
                     .Throw();
@@ -172,6 +179,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             }
             catch
             {
+                await gatewayLifetime.DisposeBestEffortAsync()
+                    .ConfigureAwait(false);
                 SetState(startState);
                 throw;
             }
@@ -179,7 +188,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             var completionSink = new CameraSessionCompletionSink(
                 this,
                 camera,
-                lease);
+                lease,
+                gatewayLifetime);
             var phaseSink = new RecordingStartPhaseSink(this);
             try
             {
@@ -234,6 +244,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                             lease,
                             warningReason)
                         .ConfigureAwait(false);
+                    await gatewayLifetime.DisposeBestEffortAsync()
+                        .ConfigureAwait(false);
                     SetState(state);
                 }
 
@@ -254,6 +266,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                 }
                 finally
                 {
+                    await gatewayLifetime.DisposeBestEffortAsync()
+                        .ConfigureAwait(false);
                     CompleteCanceledStart();
                 }
 
@@ -271,6 +285,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                 }
                 finally
                 {
+                    await gatewayLifetime.DisposeBestEffortAsync()
+                        .ConfigureAwait(false);
                     SetState(RecorderState.Ready);
                 }
 
@@ -422,7 +438,8 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
     private sealed class CameraSessionCompletionSink(
         RecordingLifecycleController owner,
         CameraSessionController camera,
-        CameraLease lease) : IRecordingSessionCompletionSink
+        CameraLease lease,
+        CameraGatewayLifetime gatewayLifetime) : IRecordingSessionCompletionSink
     {
         private readonly object _gate = new();
         private bool _completed;
@@ -462,10 +479,42 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
                     lease,
                     CameraRestoreWarningReason.RecordingCompleted)
                 .ConfigureAwait(false);
+            await gatewayLifetime.DisposeBestEffortAsync()
+                .ConfigureAwait(false);
             lock (_gate)
             {
                 owner.CompleteRecordingSession(completion.FinalState);
                 _completed = true;
+            }
+        }
+    }
+
+    private sealed class CameraGatewayLifetime(IVrChatCameraGateway gateway)
+    {
+        private int _disposeClaimed;
+
+        public async ValueTask DisposeBestEffortAsync()
+        {
+            if (Interlocked.CompareExchange(ref _disposeClaimed, 1, 0) != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                if (gateway is IAsyncDisposable asyncDisposable)
+                {
+                    await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                }
+                else if (gateway is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            catch (Exception)
+            {
+                // Resource cleanup must not replace the recording, camera
+                // restoration, or cancellation outcome.
             }
         }
     }
