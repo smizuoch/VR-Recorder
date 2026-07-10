@@ -563,6 +563,32 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopHostRunsSteamVrInputOnlyAfterRecordingRuntimeIsReady()
+    {
+        var appCode = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "App.xaml.cs"));
+
+        Assert.Contains("NativeSteamVrInputRuntime", appCode);
+        Assert.Contains("SteamVrRecordingInputAdapter", appCode);
+        Assert.Contains("DesktopRecordingHostState.Ready", appCode);
+        Assert.Contains("StartSteamVrInput", appCode);
+        Assert.Contains("AppContext.BaseDirectory", appCode);
+        Assert.Contains("_recordingInputs", appCode);
+        Assert.Contains("_steamVrInputLifetime.Cancel()", appCode);
+        Assert.Contains("_steamVrInputTask", appCode);
+
+        var readyCheck = appCode.IndexOf(
+            "activation.State == DesktopRecordingHostState.Ready",
+            StringComparison.Ordinal);
+        var start = appCode.IndexOf("StartSteamVrInput", readyCheck, StringComparison.Ordinal);
+        Assert.True(readyCheck >= 0, "SteamVR input is missing the host-ready gate.");
+        Assert.True(start > readyCheck, "SteamVR input must start after the host-ready gate.");
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
