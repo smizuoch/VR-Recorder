@@ -109,6 +109,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
             engine,
+            new FakeRecordingSessionActivator(),
             storageMonitor,
             CreateAutoStopScheduler());
         var pending = new PendingRecording(
@@ -169,6 +170,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             storage,
             engine,
+            new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
             CreateAutoStopScheduler());
 
@@ -210,6 +212,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
             engine,
+            new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
             autoStop);
 
@@ -298,6 +301,7 @@ public sealed class StartRecordingUseCaseTests
             new FixedWallClock(TestLocalNow),
             SufficientStorage(),
             engine,
+            new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
             new AutoStopScheduler(clock, new FakeStopRequestSink()));
     }

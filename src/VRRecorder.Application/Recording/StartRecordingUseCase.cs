@@ -12,6 +12,7 @@ public sealed class StartRecordingUseCase
     private readonly IWallClock _wallClock;
     private readonly IStorageSpaceProbe _storageSpaceProbe;
     private readonly IRecordingEngine _recordingEngine;
+    private readonly IRecordingSessionActivator _sessionActivator;
     private readonly IRecordingStorageMonitor _storageMonitor;
     private readonly AutoStopScheduler _autoStopScheduler;
 
@@ -22,6 +23,7 @@ public sealed class StartRecordingUseCase
         IWallClock wallClock,
         IStorageSpaceProbe storageSpaceProbe,
         IRecordingEngine recordingEngine,
+        IRecordingSessionActivator sessionActivator,
         IRecordingStorageMonitor storageMonitor,
         AutoStopScheduler autoStopScheduler)
     {
@@ -31,6 +33,7 @@ public sealed class StartRecordingUseCase
         ArgumentNullException.ThrowIfNull(wallClock);
         ArgumentNullException.ThrowIfNull(storageSpaceProbe);
         ArgumentNullException.ThrowIfNull(recordingEngine);
+        ArgumentNullException.ThrowIfNull(sessionActivator);
         ArgumentNullException.ThrowIfNull(storageMonitor);
         ArgumentNullException.ThrowIfNull(autoStopScheduler);
 
@@ -40,6 +43,7 @@ public sealed class StartRecordingUseCase
         _wallClock = wallClock;
         _storageSpaceProbe = storageSpaceProbe;
         _recordingEngine = recordingEngine;
+        _sessionActivator = sessionActivator;
         _storageMonitor = storageMonitor;
         _autoStopScheduler = autoStopScheduler;
     }
@@ -98,6 +102,7 @@ public sealed class StartRecordingUseCase
         var handle = await _recordingEngine
             .StartAsync(plan, cancellationToken)
             .ConfigureAwait(false);
+        _sessionActivator.Activate(handle, cancellationToken);
         var autoStopCompletion = _autoStopScheduler.OnFirstPacketCommittedAsync(
             handle,
             command.AutoStop,

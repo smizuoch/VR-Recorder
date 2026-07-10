@@ -4,7 +4,8 @@ using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Recording;
 
-public sealed class ActiveRecordingSessionCoordinator : IStopRequestSink
+public sealed class ActiveRecordingSessionCoordinator
+    : IRecordingSessionActivator, IStopRequestSink
 {
     private readonly object _gate = new();
     private readonly IRecordingEngine _recordingEngine;
