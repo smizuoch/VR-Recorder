@@ -295,7 +295,7 @@ public sealed class LegalArtifactSetGeneratorTests
     }
 
     [Fact]
-    public void ComponentCatalogRejectsMissingCopyrightNotice()
+    public void EligibilityRejectsMissingCopyrightNoticeBeforeGeneration()
     {
         var graph = Graph(reverse: false);
         graph = graph with
@@ -307,30 +307,29 @@ public sealed class LegalArtifactSetGeneratorTests
             ],
         };
         var eligibility = ReleaseEligibilityGate.Evaluate(graph);
-        Assert.True(eligibility.IsApproved);
-
-        Assert.Throws<InvalidOperationException>(() =>
-            LegalArtifactSetGenerator.Generate(
-                Context("missing-copyright"),
-                eligibility.ApprovedGraph!));
+        Assert.False(eligibility.IsApproved);
+        Assert.Null(eligibility.ApprovedGraph);
+        var issue = Assert.Single(eligibility.Issues, item =>
+            item.Code == "missing-copyright-notice");
+        Assert.Equal("a", issue.Subject);
     }
 
     [Fact]
-    public void ComponentCatalogRejectsDuplicateDocumentKinds()
+    public void ComponentCatalogAllowsSameKindAtDifferentPathsDeterministically()
     {
         var graph = Graph(reverse: false);
         var first = graph.Components[0];
-        var duplicateNotice = LegalFile(
+        var additionalNotice = LegalFile(
             LegalFileKind.Notice,
-            "NOTICES/a/SECOND-NOTICE.txt",
-            "second notice\n");
+            "NOTICES/a/ADDITIONAL-NOTICE.txt",
+            "additional notice\n");
         graph = graph with
         {
             Components =
             [
                 first with
                 {
-                    LegalFiles = [.. first.LegalFiles, duplicateNotice],
+                    LegalFiles = [.. first.LegalFiles, additionalNotice],
                 },
                 .. graph.Components.Skip(1),
             ],
@@ -338,10 +337,55 @@ public sealed class LegalArtifactSetGeneratorTests
         var eligibility = ReleaseEligibilityGate.Evaluate(graph);
         Assert.True(eligibility.IsApproved);
 
-        Assert.Throws<InvalidOperationException>(() =>
-            LegalArtifactSetGenerator.Generate(
-                Context("duplicate-document-kind"),
-                eligibility.ApprovedGraph!));
+        var generated = LegalArtifactSetGenerator.Generate(
+            Context("same-document-kind"),
+            eligibility.ApprovedGraph!);
+        var catalog = generated.Artifacts.Single(artifact =>
+            artifact.RelativePath == "THIRD-PARTY-COMPONENTS.json");
+        using var document = JsonDocument.Parse(catalog.Content);
+        var notices = document.RootElement.GetProperty("components")[0]
+            .GetProperty("legalDocuments")
+            .EnumerateArray()
+            .Where(item => item.GetProperty("kind").GetString() == "notice")
+            .Select(item => item.GetProperty("path").GetString())
+            .ToArray();
+
+        Assert.Equal(
+        [
+            "NOTICES/a/ADDITIONAL-NOTICE.txt",
+            "NOTICES/a/NOTICE.txt",
+        ],
+            notices);
+    }
+
+    [Fact]
+    public void EligibilityRejectsLegalDocumentPathCollision()
+    {
+        var graph = Graph(reverse: false);
+        var first = graph.Components[0];
+        var collision = LegalFile(
+            LegalFileKind.Attribution,
+            "NOTICES/a/NOTICE.txt",
+            "colliding path\n");
+        graph = graph with
+        {
+            Components =
+            [
+                first with
+                {
+                    LegalFiles = [.. first.LegalFiles, collision],
+                },
+                .. graph.Components.Skip(1),
+            ],
+        };
+
+        var eligibility = ReleaseEligibilityGate.Evaluate(graph);
+
+        Assert.False(eligibility.IsApproved);
+        Assert.Null(eligibility.ApprovedGraph);
+        var issue = Assert.Single(eligibility.Issues, item =>
+            item.Code == "duplicate-legal-document-path");
+        Assert.Equal("a:NOTICES/a/NOTICE.txt", issue.Subject);
     }
 
     [Fact]
