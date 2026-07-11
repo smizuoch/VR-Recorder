@@ -1,13 +1,81 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
+using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Ports;
+using VRRecorder.Application.Settings;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.Domain.Storage;
+using VRRecorder.Infrastructure.Storage;
 
 namespace VRRecorder.IntegrationTests.Compliance;
 
 public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
 {
+    [Fact]
+    [Trait("Scenario", "IT-030")]
+    public async Task SettingsOutputChangePublishesVerifiedBundleBeforeNewPathPersists()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var installRoot = Path.Combine(directory.Path, "install");
+        var oldOutput = Path.Combine(directory.Path, "old-recordings");
+        var newOutput = Path.Combine(directory.Path, "new-recordings");
+        var anchor = await CreateAuthenticatedBundleAsync(
+            installRoot,
+            "https://example.invalid/spdx/vr-recorder-settings",
+            "settings-output-change");
+        var store = new JsonFileSettingsStore(
+            Path.Combine(directory.Path, "settings.json"));
+        var defaults = VRRecorderSettings.CreateDefault();
+        await store.SaveAsync(
+            defaults with
+            {
+                Recording = defaults.Recording with
+                {
+                    OutputFolder = oldOutput,
+                },
+            },
+            CancellationToken.None);
+        var controller = new DesktopRecordingSettingsController(
+            store,
+            new RecordingOutputPathResolver(
+                new UnexpectedDefaultOutputPathProvider()),
+            new AuthenticatedLegalBundleOutputMirror(
+                installRoot,
+                "3.1.0",
+                new AuthenticatedLegalBundleVerifier(
+                    new FixedAuthenticatedAnchorSource(anchor))));
+        var draft = await controller.LoadAsync(CancellationToken.None);
+
+        await controller.SaveAsync(
+            draft with { OutputFolder = newOutput },
+            CancellationToken.None);
+
+        var persisted = await store.LoadAsync(CancellationToken.None);
+        Assert.Equal(newOutput, persisted.Recording.OutputFolder);
+        Assert.False(Directory.Exists(Path.Combine(
+            oldOutput,
+            "VR-Recorder-Legal")));
+        var mirroredVersion = Path.Combine(
+            newOutput,
+            "VR-Recorder-Legal",
+            "3.1.0");
+        var verification = await new AuthenticatedLegalBundleVerifier(
+                new FixedAuthenticatedAnchorSource(anchor))
+            .VerifyAsync(mirroredVersion, CancellationToken.None);
+        Assert.IsType<LegalBundleVerification.Verified>(verification);
+        Assert.Equal(
+            "3.1.0/\n"u8.ToArray(),
+            await File.ReadAllBytesAsync(Path.Combine(
+                newOutput,
+                "VR-Recorder-Legal",
+                "CURRENT.txt")));
+        Assert.True(File.Exists(Path.Combine(
+            newOutput,
+            "VR-Recorder-Legal",
+            "OPEN-NOTICES.html")));
+    }
+
     [Fact]
     [Trait("Scenario", "IT-030")]
     public async Task InstallRootMirrorCopiesOnlyAuthenticatedLegalFiles()
@@ -574,6 +642,13 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(anchor);
         }
+    }
+
+    private sealed class UnexpectedDefaultOutputPathProvider
+        : IDefaultOutputPathProvider
+    {
+        public OutputPath GetDefault() => throw new InvalidOperationException(
+            "Absolute settings paths must not resolve the Downloads token.");
     }
 
     private sealed class TemporaryDirectory : IDisposable
