@@ -8,6 +8,10 @@
     <system:String x:Key="Tray_Legal_Label">⟦Áböüt ánd lïcënsës · Áböüt ánd lïcënsës⟧</system:String>
     <system:String x:Key="Tray_LicenseFolder_Label">⟦Öpën lïcënsë földër · Öpën lïcënsë földër⟧</system:String>
     <system:String x:Key="Tray_Exit_Label">⟦Ëxït VR-Rëcördër sáfëly · Ëxït VR-Rëcördër sáfëly⟧</system:String>
+    <system:String x:Key="Tray_State_Ready">⟦VR-Rëcördër: Rëády · VR-Rëcördër: Rëády⟧</system:String>
+    <system:String x:Key="Tray_State_Recording">⟦VR-Rëcördër: Rëcördïng · VR-Rëcördër: Rëcördïng⟧</system:String>
+    <system:String x:Key="Tray_State_Warning">⟦VR-Rëcördër: Wárnïng · VR-Rëcördër: Wárnïng⟧</system:String>
+    <system:String x:Key="Tray_State_Fault">⟦VR-Rëcördër: Fáült · VR-Rëcördër: Fáült⟧</system:String>
     <system:String x:Key="Rights_Title">⟦Bëförë yöü rëcörd · Bëförë yöü rëcörd⟧</system:String>
     <system:String x:Key="Rights_Body">⟦Cönfïrm thát yöü hávë thë nëcëssáry cöpyrïght, ïmágë, vöïcë, prïvácy, pártïcïpánt-cönsënt, ánd sërvïcë-tërms përmïssïöns för whát yöü rëcörd. Rëcördïng stárts önly áftër yöür ëxplïcït áctïön ánd rëmáïns vïsïbly ïndïcátëd. · Cönfïrm thát yöü hávë thë nëcëssáry cöpyrïght, ïmágë, vöïcë, prïvácy, pártïcïpánt-cönsënt, ánd sërvïcë-tërms përmïssïöns för whát yöü rëcörd. Rëcördïng stárts önly áftër yöür ëxplïcït áctïön ánd rëmáïns vïsïbly ïndïcátëd.⟧</system:String>
     <system:String x:Key="Rights_Acknowledge_Label">⟦Ï ündërstánd thát Ï ám rëspönsïblë för cönfïrmïng thësë rïghts ánd përmïssïöns. · Ï ündërstánd thát Ï ám rëspönsïblë för cönfïrmïng thësë rïghts ánd përmïssïöns.⟧</system:String>

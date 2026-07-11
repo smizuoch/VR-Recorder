@@ -8,6 +8,10 @@
     <system:String x:Key="Tray_Legal_Label">この製品とライセンス</system:String>
     <system:String x:Key="Tray_LicenseFolder_Label">ライセンスフォルダーを開く</system:String>
     <system:String x:Key="Tray_Exit_Label">安全にVR-Recorderを終了</system:String>
+    <system:String x:Key="Tray_State_Ready">VR-Recorder: 準備完了</system:String>
+    <system:String x:Key="Tray_State_Recording">VR-Recorder: 録画中</system:String>
+    <system:String x:Key="Tray_State_Warning">VR-Recorder: 注意</system:String>
+    <system:String x:Key="Tray_State_Fault">VR-Recorder: エラー</system:String>
     <system:String x:Key="Rights_Title">録画する前に確認してください</system:String>
     <system:String x:Key="Rights_Body">録画対象の著作権、肖像、音声、プライバシー、参加者の同意、利用するサービスの規約について、必要な権利と許可があることを確認してください。録画は明示操作後にだけ開始し、録画中は常に表示されます。</system:String>
     <system:String x:Key="Rights_Acknowledge_Label">これらの権利と許可を確認する責任が自分にあることを理解しました。</system:String>

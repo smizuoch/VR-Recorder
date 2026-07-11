@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application, IDisposable
     private const string LocaleArgumentPrefix = "--ui-locale=";
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
     private readonly object _steamVrInputGate = new();
+    private readonly DesktopTrayUiController _trayUi = new();
     private readonly DesktopRecordingCommandHost _recordingHost;
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopRecordingSettingsController _recordingSettings;
@@ -26,8 +27,11 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly RecordingRightsGate _recordingRightsGate;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
+    private IDisposable? _trayStatusSubscription;
     private System.Windows.Forms.ContextMenuStrip? _trayMenu;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private System.Windows.Forms.ToolStripMenuItem? _trayStatusMenuItem;
+    private System.Windows.Forms.ToolStripMenuItem? _trayToggleMenuItem;
     private bool _exitRequested;
     private int _disposeStarted;
 
@@ -151,6 +155,12 @@ public partial class App : System.Windows.Application, IDisposable
         try
         {
             _exitRequested = true;
+            if (_trayStatusSubscription is not null)
+            {
+                _trayStatusSubscription.Dispose();
+                _trayStatusSubscription = null;
+            }
+
             if (_trayIcon is not null)
             {
                 _trayIcon.Visible = false;
@@ -188,14 +198,22 @@ public partial class App : System.Windows.Application, IDisposable
     private void InitializeTrayIcon()
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
+        var statusItem = new System.Windows.Forms.ToolStripMenuItem(
+            LocalizedString("Tray_State_Warning"))
+        {
+            Enabled = false,
+        };
+        menu.Items.Add(statusItem);
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
             LocalizedString("Tray_Show_Label"),
             image: null,
             (_, _) => ShowMainWindow()));
-        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
+        var toggleItem = new System.Windows.Forms.ToolStripMenuItem(
             LocalizedString("Tray_Toggle_Label"),
             image: null,
-            async (_, _) => await DispatchTrayRecordingAsync()));
+            async (_, _) => await DispatchTrayRecordingAsync());
+        menu.Items.Add(toggleItem);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem(
             LocalizedString("Tray_Legal_Label"),
@@ -215,12 +233,49 @@ public partial class App : System.Windows.Application, IDisposable
         {
             ContextMenuStrip = menu,
             Icon = System.Drawing.SystemIcons.Application,
-            Text = LocalizedString("App_Title"),
+            Text = LocalizedString("Tray_State_Warning"),
             Visible = true,
         };
         icon.DoubleClick += (_, _) => ShowMainWindow();
         _trayMenu = menu;
         _trayIcon = icon;
+        _trayStatusMenuItem = statusItem;
+        _trayToggleMenuItem = toggleItem;
+        _trayStatusSubscription = _recordingHost.Subscribe(
+            OnTrayStatusChanged);
+    }
+
+    private void OnTrayStatusChanged(RecorderStatusSnapshot status)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            ApplyTrayStatus(status);
+            return;
+        }
+
+        if (!Dispatcher.HasShutdownStarted)
+        {
+            _ = Dispatcher.InvokeAsync(() => ApplyTrayStatus(status));
+        }
+    }
+
+    private void ApplyTrayStatus(RecorderStatusSnapshot status)
+    {
+        var update = _trayUi.Apply(status);
+        if (update is null ||
+            _trayStatusMenuItem is null ||
+            _trayToggleMenuItem is null ||
+            _trayIcon is null)
+        {
+            return;
+        }
+
+        var stateLabel = LocalizedString(update.StateLabelResourceKey);
+        _trayStatusMenuItem.Text = stateLabel;
+        _trayToggleMenuItem.Text = LocalizedString(
+            update.ActionLabelResourceKey);
+        _trayToggleMenuItem.Enabled = update.IsActionEnabled;
+        _trayIcon.Text = stateLabel;
     }
 
     private string LocalizedString(string resourceKey) =>

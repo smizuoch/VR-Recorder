@@ -8,6 +8,10 @@
     <system:String x:Key="Tray_Legal_Label">About and licenses</system:String>
     <system:String x:Key="Tray_LicenseFolder_Label">Open license folder</system:String>
     <system:String x:Key="Tray_Exit_Label">Exit VR-Recorder safely</system:String>
+    <system:String x:Key="Tray_State_Ready">VR-Recorder: Ready</system:String>
+    <system:String x:Key="Tray_State_Recording">VR-Recorder: Recording</system:String>
+    <system:String x:Key="Tray_State_Warning">VR-Recorder: Warning</system:String>
+    <system:String x:Key="Tray_State_Fault">VR-Recorder: Fault</system:String>
     <system:String x:Key="Rights_Title">Before you record</system:String>
     <system:String x:Key="Rights_Body">Confirm that you have the necessary copyright, image, voice, privacy, participant-consent, and service-terms permissions for what you record. Recording starts only after your explicit action and remains visibly indicated.</system:String>
     <system:String x:Key="Rights_Acknowledge_Label">I understand that I am responsible for confirming these rights and permissions.</system:String>
