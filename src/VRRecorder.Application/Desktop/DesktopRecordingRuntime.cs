@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
@@ -13,6 +14,7 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     private readonly IDesktopRecordingStartRequestSource _requests;
     private readonly IRecordingLifecycleController _lifecycle;
     private readonly IStopRequestSink _stopRequests;
+    private readonly IActiveRecordingAudioCommands _audioCommands;
     private readonly IVrChatInstanceSelectionPrompt _vrChatSelection;
     private readonly IAsyncDisposable? _ownedLifetime;
     private readonly CancellationTokenSource _lifetime = new();
@@ -37,6 +39,23 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             requests,
             lifecycle,
             stopRequests,
+            UnsupportedActiveRecordingAudioCommands.Instance,
+            CancelingVrChatInstanceSelectionPrompt.Instance,
+            ownedLifetime)
+    {
+    }
+
+    public DesktopRecordingRuntime(
+        IDesktopRecordingStartRequestSource requests,
+        IRecordingLifecycleController lifecycle,
+        IStopRequestSink stopRequests,
+        IActiveRecordingAudioCommands audioCommands,
+        IAsyncDisposable? ownedLifetime = null)
+        : this(
+            requests,
+            lifecycle,
+            stopRequests,
+            audioCommands,
             CancelingVrChatInstanceSelectionPrompt.Instance,
             ownedLifetime)
     {
@@ -48,14 +67,33 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         IStopRequestSink stopRequests,
         IVrChatInstanceSelectionPrompt vrChatSelection,
         IAsyncDisposable? ownedLifetime = null)
+        : this(
+            requests,
+            lifecycle,
+            stopRequests,
+            UnsupportedActiveRecordingAudioCommands.Instance,
+            vrChatSelection,
+            ownedLifetime)
+    {
+    }
+
+    public DesktopRecordingRuntime(
+        IDesktopRecordingStartRequestSource requests,
+        IRecordingLifecycleController lifecycle,
+        IStopRequestSink stopRequests,
+        IActiveRecordingAudioCommands audioCommands,
+        IVrChatInstanceSelectionPrompt vrChatSelection,
+        IAsyncDisposable? ownedLifetime = null)
     {
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentNullException.ThrowIfNull(lifecycle);
         ArgumentNullException.ThrowIfNull(stopRequests);
+        ArgumentNullException.ThrowIfNull(audioCommands);
         ArgumentNullException.ThrowIfNull(vrChatSelection);
         _requests = requests;
         _lifecycle = lifecycle;
         _stopRequests = stopRequests;
+        _audioCommands = audioCommands;
         _vrChatSelection = vrChatSelection;
         _ownedLifetime = ownedLifetime;
         _statuses = new RecorderStatusHub(
@@ -68,6 +106,24 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
 
     public IDisposable Subscribe(Action<RecorderStatusSnapshot> subscriber) =>
         _statuses.Subscribe(subscriber);
+
+    public async Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+        RecordingAudioCommand command,
+        CancellationToken cancellationToken)
+    {
+        var state = Current.State;
+        if (state is not (RecorderState.Recording or RecorderState.SignalLost))
+        {
+            throw new InvalidOperationException(
+                $"Desktop audio cannot change while the recorder is {state}.");
+        }
+
+        var updated = await _audioCommands
+            .ExecuteAudioCommandAsync(command, cancellationToken)
+            .ConfigureAwait(false);
+        PublishAudioStatus(updated);
+        return updated;
+    }
 
     public Task ToggleAsync(CancellationToken cancellationToken)
     {
@@ -391,16 +447,48 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
     {
         lock (_statusGate)
         {
-            if (_terminalStatus || _statuses.Current.State == state)
+            var audioControlState = state is
+                RecorderState.Recording or
+                RecorderState.SignalLost or
+                RecorderState.Stopping
+                ? _audioCommands.CurrentAudioControlState
+                : null;
+            if (_terminalStatus ||
+                (_statuses.Current.State == state &&
+                 _statuses.Current.AudioControlState == audioControlState))
             {
                 return;
             }
 
             _statuses.TryPublish(RecorderStatusSnapshot.Create(
                 checked(++_statusRevision),
-                state));
+                state,
+                audioControlState));
             _terminalStatus = state is
                 RecorderState.Faulted or RecorderState.ComplianceFault;
+        }
+    }
+
+    private void PublishAudioStatus(
+        RecordingAudioControlState audioControlState)
+    {
+        lock (_statusGate)
+        {
+            var current = _statuses.Current;
+            if (_terminalStatus ||
+                current.State is not (
+                    RecorderState.Recording or
+                    RecorderState.SignalLost or
+                    RecorderState.Stopping) ||
+                current.AudioControlState == audioControlState)
+            {
+                return;
+            }
+
+            _statuses.TryPublish(RecorderStatusSnapshot.Create(
+                checked(++_statusRevision),
+                current.State,
+                audioControlState));
         }
     }
 
@@ -523,5 +611,20 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult<string?>(null);
         }
+    }
+
+    private sealed class UnsupportedActiveRecordingAudioCommands
+        : IActiveRecordingAudioCommands
+    {
+        public static UnsupportedActiveRecordingAudioCommands Instance
+        { get; } = new();
+
+        public RecordingAudioControlState? CurrentAudioControlState => null;
+
+        public Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+            RecordingAudioCommand command,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException(
+                "The desktop recording runtime has no active audio command source.");
     }
 }
