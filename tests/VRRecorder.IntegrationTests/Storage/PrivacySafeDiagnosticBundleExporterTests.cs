@@ -42,6 +42,25 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                         ["avatar"] = "avatar-secret",
                     }),
                 LogLine(
+                    "audio.input_warning",
+                    new Dictionary<string, string>
+                    {
+                        ["failureType"] = "IOException",
+                        ["framePosition"] = "4800",
+                        ["input"] = "microphone",
+                        ["kind"] = "input_unavailable",
+                        ["endpointId"] = "private-endpoint-secret",
+                    }),
+                LogLine(
+                    "audio.input_status",
+                    new Dictionary<string, string>
+                    {
+                        ["framePosition"] = "9600",
+                        ["input"] = "microphone",
+                        ["kind"] = "input_recovered",
+                        ["username"] = "audio-user-secret",
+                    }),
+                LogLine(
                     "recording.saved",
                     new Dictionary<string, string>
                     {
@@ -74,7 +93,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
             CancellationToken.None);
 
         Assert.Equal(destination, result.BundlePath);
-        Assert.Equal(3, result.EventCount);
+        Assert.Equal(5, result.EventCount);
         using var archive = ZipFile.OpenRead(destination);
         Assert.Equal(
             ["README.txt", "diagnostics.jsonl"],
@@ -87,11 +106,15 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         Assert.Contains("recording.state_transition", diagnostics);
         Assert.Contains("recording.saved", diagnostics);
         Assert.Contains("camera.restore_warning", diagnostics);
+        Assert.Contains("audio.input_warning", diagnostics);
+        Assert.Contains("audio.input_status", diagnostics);
         foreach (var secret in new[]
                  {
                      privatePath,
                      "alice-secret",
                      "avatar-secret",
+                     "private-endpoint-secret",
+                     "audio-user-secret",
                      "bearer-token-secret",
                      "credential-secret",
                      "world-secret",
@@ -106,7 +129,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         var lines = diagnostics.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(3, lines.Length);
+        Assert.Equal(5, lines.Length);
         Assert.All(lines, line => JsonDocument.Parse(line).Dispose());
     }
 
