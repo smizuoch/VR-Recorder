@@ -76,6 +76,21 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         "TimeoutException",
         "UnauthorizedAccessException",
     ];
+    private static readonly HashSet<string> AudioInputs =
+    [
+        "desktop",
+        "microphone",
+    ];
+    private static readonly HashSet<string> AudioWarningKinds =
+    [
+        "endpoint_rediscovery_failed",
+        "input_unavailable",
+    ];
+    private static readonly HashSet<string> AudioStatusKinds =
+    [
+        "endpoint_rediscovery_scheduled",
+        "input_recovered",
+    ];
     private readonly string _logDirectory;
 
     public PrivacySafeDiagnosticBundleExporter(string logDirectory)
@@ -338,6 +353,8 @@ public sealed class PrivacySafeDiagnosticBundleExporter
             "recording.storage" => SanitizeStorage(fields),
             "recording.saved" => SanitizeSaved(fields),
             "camera.restore_warning" => SanitizeCameraWarning(fields),
+            "audio.input_warning" => SanitizeAudioWarning(fields),
+            "audio.input_status" => SanitizeAudioStatus(fields),
             _ => null,
         };
 
@@ -454,6 +471,100 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         return sanitized;
     }
 
+    private static SortedDictionary<string, string>? SanitizeAudioWarning(
+        IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadNonnegativeLong(
+                fields,
+                "framePosition",
+                out var framePosition) ||
+            !TryReadAllowedString(
+                fields,
+                "input",
+                AudioInputs,
+                out var input) ||
+            !TryReadAllowedString(
+                fields,
+                "kind",
+                AudioWarningKinds,
+                out var kind))
+        {
+            return null;
+        }
+
+        var sanitized = new SortedDictionary<string, string>(
+            StringComparer.Ordinal)
+        {
+            ["framePosition"] = framePosition.ToString(
+                CultureInfo.InvariantCulture),
+            ["input"] = input,
+            ["kind"] = kind,
+        };
+        if (TryReadAllowedString(
+                fields,
+                "failureType",
+                SafeFailureTypes,
+                out var failureType))
+        {
+            sanitized["failureType"] = failureType;
+        }
+
+        return sanitized;
+    }
+
+    private static SortedDictionary<string, string>? SanitizeAudioStatus(
+        IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadNonnegativeLong(
+                fields,
+                "framePosition",
+                out var framePosition) ||
+            !TryReadAllowedString(
+                fields,
+                "input",
+                AudioInputs,
+                out var input) ||
+            !TryReadAllowedString(
+                fields,
+                "kind",
+                AudioStatusKinds,
+                out var kind))
+        {
+            return null;
+        }
+
+        var sanitized = new SortedDictionary<string, string>(
+            StringComparer.Ordinal)
+        {
+            ["framePosition"] = framePosition.ToString(
+                CultureInfo.InvariantCulture),
+            ["input"] = input,
+            ["kind"] = kind,
+        };
+        if (fields.ContainsKey("rediscoveryBudgetMilliseconds"))
+        {
+            if (!TryReadString(
+                    fields,
+                    "rediscoveryBudgetMilliseconds",
+                    out var budgetText) ||
+                !decimal.TryParse(
+                    budgetText,
+                    NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture,
+                    out var budget) ||
+                budget < 0)
+            {
+                return null;
+            }
+
+            sanitized["rediscoveryBudgetMilliseconds"] = budget.ToString(
+                "0.###",
+                CultureInfo.InvariantCulture);
+        }
+
+        return sanitized;
+    }
+
     private static Dictionary<string, JsonElement>? UniqueProperties(
         JsonElement element)
     {
@@ -497,6 +608,21 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         out string value) =>
         TryReadString(properties, name, out value) &&
         allowed.Contains(value);
+
+    private static bool TryReadNonnegativeLong(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        out long value)
+    {
+        value = 0;
+        return TryReadString(properties, name, out var text) &&
+               long.TryParse(
+                   text,
+                   NumberStyles.None,
+                   CultureInfo.InvariantCulture,
+                   out value) &&
+               value >= 0;
+    }
 
     private static bool TryReadString(
         IReadOnlyDictionary<string, JsonElement> properties,
