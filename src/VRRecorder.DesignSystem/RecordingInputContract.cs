@@ -7,6 +7,9 @@ public static class RecordingInputContract
     public const string SteamVrToggleActionPath =
         "/actions/vrrecorder/in/toggle_recording";
 
+    public const string SteamVrToggleMicrophoneActionPath =
+        "/actions/vrrecorder/in/toggle_microphone";
+
     public static UiCommandId Resolve(UiActivationKind activationKind) =>
         activationKind switch
         {
