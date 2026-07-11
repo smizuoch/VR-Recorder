@@ -196,6 +196,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 requests,
                 lifecycle,
                 sessions,
+                sessions,
                 new WpfVrChatInstanceSelectionPrompt(),
                 ownedLifetime);
         }
