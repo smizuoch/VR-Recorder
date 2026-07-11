@@ -116,7 +116,8 @@ public sealed class PInvokeEncoderProbe : IEncoderProbe, IDisposable
                 NativeStatus.Ok when packetProduced == 0 =>
                     EncoderProbeResult.Failed,
                 NativeStatus.BackendUnavailable or
-                    NativeStatus.InternalError => EncoderProbeResult.Failed,
+                    NativeStatus.InternalError or
+                    NativeStatus.Timeout => EncoderProbeResult.Failed,
                 NativeStatus.Ok => throw Failure(
                     status,
                     $"invalid packet flag {packetProduced}"),
