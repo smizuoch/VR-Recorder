@@ -26,8 +26,9 @@ public sealed class ActiveRecordingSessionCoordinatorTests
             handle,
             AudioRouting.DesktopOnly,
             CancellationToken.None);
+        IActiveRecordingAudioCommands audioCommands = coordinator;
 
-        var updated = await coordinator.ExecuteAudioCommandAsync(
+        var updated = await audioCommands.ExecuteAudioCommandAsync(
             RecordingAudioCommand.ToggleMicrophone,
             CancellationToken.None);
 
@@ -35,7 +36,7 @@ public sealed class ActiveRecordingSessionCoordinatorTests
             [(handle, AudioRouting.Mixed)],
             gateway.Updates);
         Assert.Equal(AudioRouting.Mixed, updated.EffectiveRouting);
-        Assert.Equal(updated, coordinator.CurrentAudioControlState);
+        Assert.Equal(updated, audioCommands.CurrentAudioControlState);
     }
 
     [Fact]
