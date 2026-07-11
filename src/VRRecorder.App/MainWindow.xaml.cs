@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly IDisposable _recordingStatusSubscription;
     private bool _startupApplied;
     private bool _recordingCommandsAuthorized;
+    private DiagnosticsWindow? _diagnosticsWindow;
     private LegalWindow? _legalWindow;
     private SettingsWindow? _settingsWindow;
 
@@ -328,6 +329,26 @@ public partial class MainWindow : Window
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) =>
         OpenSettingsWindow();
+
+    private void OnDiagnosticsClick(object sender, RoutedEventArgs e) =>
+        OpenDiagnosticsWindow();
+
+    internal void OpenDiagnosticsWindow()
+    {
+        if (_diagnosticsWindow is { IsVisible: true })
+        {
+            _diagnosticsWindow.Activate();
+            return;
+        }
+
+        var diagnosticsWindow = new DiagnosticsWindow
+        {
+            Owner = this,
+        };
+        diagnosticsWindow.Closed += (_, _) => _diagnosticsWindow = null;
+        _diagnosticsWindow = diagnosticsWindow;
+        diagnosticsWindow.Show();
+    }
 
     internal void OpenSettingsWindow()
     {

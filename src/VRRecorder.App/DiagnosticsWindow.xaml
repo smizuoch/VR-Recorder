@@ -1,0 +1,63 @@
+<Window x:Class="VRRecorder.App.DiagnosticsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Diagnostics_Title}"
+        AutomationProperties.Name="{DynamicResource Diagnostics_Window_AccessibleName}"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        FlowDirection="{DynamicResource Layout.FlowDirection}"
+        Closed="OnClosed"
+        MaxWidth="720"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="{StaticResource Spacing.LayoutGrid}"
+          MaxWidth="640">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="{DynamicResource Diagnostics_Intro}"
+                   TextWrapping="Wrap" />
+
+        <TextBlock Grid.Row="1"
+                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   Text="{DynamicResource Diagnostics_Privacy}"
+                   TextWrapping="Wrap"
+                   AutomationProperties.Name="{DynamicResource Diagnostics_Privacy}" />
+
+        <TextBlock x:Name="DiagnosticsStatusText"
+                   Grid.Row="2"
+                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed"
+                   AutomationProperties.LiveSetting="Polite" />
+
+        <StackPanel Grid.Row="3"
+                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal">
+            <Button Content="{DynamicResource Diagnostics_Close_Label}"
+                    MinHeight="{StaticResource Interaction.MinimumTarget}"
+                    MinWidth="{StaticResource Interaction.MinimumTarget}"
+                    AutomationProperties.Name="{DynamicResource Diagnostics_Close_AccessibleName}"
+                    AutomationProperties.HelpText="{DynamicResource Diagnostics_Close_Tooltip}"
+                    ToolTip="{DynamicResource Diagnostics_Close_Tooltip}"
+                    IsCancel="True"
+                    Click="OnClose" />
+            <Border Width="{StaticResource Spacing.LayoutGrid}" />
+            <Button x:Name="ExportDiagnosticsButton"
+                    Content="{DynamicResource Diagnostics_Export_Label}"
+                    MinHeight="{StaticResource Interaction.MinimumTarget}"
+                    MinWidth="{StaticResource Interaction.MinimumTarget}"
+                    AutomationProperties.Name="{DynamicResource Diagnostics_Export_AccessibleName}"
+                    AutomationProperties.HelpText="{DynamicResource Diagnostics_Export_Tooltip}"
+                    ToolTip="{DynamicResource Diagnostics_Export_Tooltip}"
+                    IsDefault="True"
+                    Click="OnExport" />
+        </StackPanel>
+    </Grid>
+</Window>

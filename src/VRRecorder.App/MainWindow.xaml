@@ -19,6 +19,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="RecordingStatusText"
@@ -64,8 +65,19 @@
                 ToolTip="{DynamicResource Settings_Open_Tooltip}"
                 Click="OnSettingsClick" />
 
-        <Button x:Name="AboutLegalButton"
+        <Button x:Name="DiagnosticsButton"
                 Grid.Row="5"
+                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                MinHeight="{StaticResource Interaction.MinimumTarget}"
+                MinWidth="{StaticResource Interaction.MinimumTarget}"
+                Content="{DynamicResource Diagnostics_Open_Label}"
+                AutomationProperties.Name="{DynamicResource Diagnostics_Open_AccessibleName}"
+                AutomationProperties.HelpText="{DynamicResource Diagnostics_Open_Tooltip}"
+                ToolTip="{DynamicResource Diagnostics_Open_Tooltip}"
+                Click="OnDiagnosticsClick" />
+
+        <Button x:Name="AboutLegalButton"
+                Grid.Row="6"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"

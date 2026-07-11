@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application, IDisposable
         new DesktopRecordingNotificationHub();
     private readonly DesktopRecordingCommandHost _recordingHost;
     private readonly RecordingInputDispatcher _recordingInputs;
+    private readonly DesktopDiagnosticsController _diagnosticsController;
     private readonly DesktopRecordingSettingsController _recordingSettings;
     private readonly AuthenticatedLegalBundleVerifier _legalVerifier;
     private readonly DesktopLegalController _legalController;
@@ -56,6 +57,9 @@ public partial class App : System.Windows.Application, IDisposable
                 AppContext.BaseDirectory,
                 ProductVersion(),
                 _legalVerifier));
+        _diagnosticsController = new DesktopDiagnosticsController(
+            new PrivacySafeDiagnosticBundleExporter(
+                LogDirectory(settingsPath)));
         _recordingHost = new DesktopRecordingCommandHost(
             new ProductionDesktopRecordingRuntimeFactory(
                 settingsStore,
@@ -92,6 +96,9 @@ public partial class App : System.Windows.Application, IDisposable
 
     internal static DesktopRecordingSettingsController RecordingSettings =>
         ((App)Current)._recordingSettings;
+
+    internal static DesktopDiagnosticsController DiagnosticsController =>
+        ((App)Current)._diagnosticsController;
 
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
@@ -461,6 +468,15 @@ public partial class App : System.Windows.Application, IDisposable
         return Path.Combine(
             applicationDataDirectory,
             "recording-rights.json");
+    }
+
+    private static string LogDirectory(string settingsPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(applicationDataDirectory, "logs");
     }
 
     private static string ProductVersion() =>
