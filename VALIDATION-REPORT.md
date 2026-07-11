@@ -6,7 +6,7 @@
 
 実装進行中であり、release適格ではありません。2026-07-11現在、Linux／WSL2で実行できるmanagedテスト、Windows x64向けWPF cross-build、Linux native ABIを検証しています。Windows上でのWPF実行、Spout2、D3D11、WASAPI、FFmpeg、OpenVR、実VRChat、Windows 10／11、GPU／HMDの検証は未実施です。
 
-desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、privacy-safe診断bundleの明示exportも配線済みです。ただしproduction native media／SteamVR backend自体は意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
+desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、media profile／最終native統計を含むprivacy-safe診断bundleの明示exportも配線済みです。ただしproduction native media／SteamVR backend自体は意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
 
 第三者台帳の現在のentryはtest-only NuGet依存のcandidateです。version、NuGet content hash、package archive SHA-256、上流commit、license全文hashを固定していますが、全entryの`approval.status`は`pending-independent-review`です。署名・公開・end-user Legal Bundleの承認を意味しません。
 
@@ -22,12 +22,12 @@ dotnet format VR-Recorder.sln --verify-no-changes --no-restore
 make -C tests/VRRecorder.Native.Tests test
 ```
 
-- managed: 796件成功、失敗0、skip 0
+- managed: 798件成功、失敗0、skip 0
   - Domain 90
   - Application 203
   - Compliance 170
   - Presentation 78
-  - Integration 255
+  - Integration 257
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI contract: 成功
 - native公開symbol allowlist: 16/16一致
@@ -37,7 +37,7 @@ make -C tests/VRRecorder.Native.Tests test
 
 ### 直前checkpointの結合テスト単独coverage
 
-設計書18.5に従い、`VRRecorder.IntegrationTests`だけを実行してCoberturaを収集した直前checkpointの値です。今回追加した音声callback／session境界を含む796件の回帰は成功していますが、coverageは追加後に再収集していないため、次の表を現在値として扱いません。
+設計書18.5に従い、`VRRecorder.IntegrationTests`だけを実行してCoberturaを収集した直前checkpointの値です。今回追加したmedia診断境界を含む798件の回帰は成功していますが、coverageは追加後に再収集していないため、次の表を現在値として扱いません。
 
 | Assembly | Line | Branch |
 |---|---:|---:|
@@ -68,13 +68,14 @@ make -C tests/VRRecorder.Native.Tests test
 - 保存pathとカメラ復元警告の分離通知、persisted録画／audio／出力設定、保存先Legal mirror
 - 明示操作だけで生成し、未知field・media・認証情報・private値・symlinkを除外するatomic診断bundle
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
+- first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 
 ### 未完了の主要release gate
 
 - 実Spout2／D3D11／WASAPI／encoder／muxer backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
-- app／OS／GPU／encoder、frame統計、A/V sync、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
+- app／OS／GPU model／driver、継続A/V閾値、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -86,7 +87,7 @@ make -C tests/VRRecorder.Native.Tests test
 
 Implementation is in progress and is not release-eligible. As of 2026-07-11, validation covers managed tests runnable on Linux/WSL2, a Windows x64 WPF cross-build, and the Linux native ABI. Running WPF on Windows and validating Spout2, D3D11, WASAPI, FFmpeg, OpenVR, real VRChat, Windows 10/11, GPUs, and HMDs remain outstanding.
 
-The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export are also wired. The production native media and SteamVR backends themselves still intentionally return `BACKEND_UNAVAILABLE`, and approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is therefore a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
+The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export including the media profile/final native statistics are also wired. The production native media and SteamVR backends themselves still intentionally return `BACKEND_UNAVAILABLE`, and approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is therefore a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
 
 The current third-party registry entries are candidates for test-only NuGet dependencies. Versions, NuGet content hashes, package-archive SHA-256 values, upstream commits, and full-license-text hashes are pinned, but every entry has `approval.status` set to `pending-independent-review`. This is not approval for signing, publication, or an end-user Legal Bundle.
 
@@ -102,12 +103,12 @@ dotnet format VR-Recorder.sln --verify-no-changes --no-restore
 make -C tests/VRRecorder.Native.Tests test
 ```
 
-- managed: 796 passed, 0 failed, 0 skipped
+- managed: 798 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 203
   - Compliance 170
   - Presentation 78
-  - Integration 255
+  - Integration 257
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI contract: passed
 - native public-symbol allowlist: exact 16/16 match
@@ -117,7 +118,7 @@ make -C tests/VRRecorder.Native.Tests test
 
 ### Integration-test-only coverage from the preceding checkpoint
 
-Following design section 18.5, Cobertura coverage was collected by running only `VRRecorder.IntegrationTests` at the preceding checkpoint. The 796-test regression including the new audio callback/session boundaries passes, but coverage has not been recollected after those additions; the following table is not a current measurement.
+Following design section 18.5, Cobertura coverage was collected by running only `VRRecorder.IntegrationTests` at the preceding checkpoint. The 798-test regression including the new media-diagnostics boundary passes, but coverage has not been recollected after those additions; the following table is not a current measurement.
 
 | Assembly | Line | Branch |
 |---|---:|---:|
@@ -148,13 +149,14 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Separate saved-path/camera-restore notifications, persisted recording/audio/output settings, and output-folder Legal mirroring
 - Atomic diagnostic bundles generated only by explicit action while excluding unknown fields, media, credentials, private values, and symlinks
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
+- Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 
 ### Major outstanding release gates
 
 - Real Spout2/D3D11/WASAPI/encoder/muxer backends
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
-- Complete structured diagnostics for app/OS/GPU/encoder, frame statistics, A/V sync, audio underruns/overruns, OSC, and finalization failures
+- Complete structured diagnostics for app/OS/GPU model/driver, continuous A/V thresholds, audio underruns/overruns, OSC, and finalization failures
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates

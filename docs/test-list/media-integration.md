@@ -17,6 +17,7 @@
 - [x] forced encoder終了時はpendingを保持しSavedを発行しない
 - [x] native音声device eventを入力別の型付きwarning／recoveryへ変換し、pending Stopを完了せずobserver障害でも録画を中断しない
 - [x] native callbackを診断I/O／presentation処理から分離し、停止時はproducer停止後にqueueをdrainする
+- [x] first packet確定後のmedia profileとgraceful stop後のnative最終統計を録画結果を変えず診断へ発行する
 
 ## English
 
@@ -35,3 +36,4 @@
 - [x] Preserve pending output and suppress Saved after forced encoder termination
 - [x] Translate native audio-device events into input-specific typed warnings/recoveries without completing a pending Stop or interrupting recording when observers fail
 - [x] Isolate native callbacks from diagnostics I/O/presentation work and drain queues after stopping producers
+- [x] Publish the committed media profile and final native statistics without changing recording start/stop outcomes
