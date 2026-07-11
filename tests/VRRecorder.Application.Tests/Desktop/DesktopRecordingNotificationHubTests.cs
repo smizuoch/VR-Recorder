@@ -1,7 +1,9 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Audio;
 
 namespace VRRecorder.Application.Tests.Desktop;
 
@@ -95,6 +97,41 @@ public sealed class DesktopRecordingNotificationHubTests
                 CancellationToken.None));
 
         Assert.Null(failure);
+    }
+
+    [Fact]
+    public void AudioLossAndActualRecoveryAreSeparateOrderedNotifications()
+    {
+        using var hub = new DesktopRecordingNotificationHub();
+        List<DesktopRecordingNotification> notifications = [];
+        using var subscription = hub.Subscribe(notifications.Add);
+        var warning = new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            AudioInput.Microphone,
+            FramePosition: 4_800);
+        var scheduled = new AudioSessionStatus(
+            AudioSessionStatusKind.EndpointRediscoveryScheduled,
+            AudioInput.Desktop,
+            FramePosition: 5_000,
+            RediscoveryBudget: TimeSpan.FromSeconds(5));
+        var recovered = new AudioSessionStatus(
+            AudioSessionStatusKind.InputRecovered,
+            AudioInput.Microphone,
+            FramePosition: 9_600);
+
+        ((IAudioSessionEventSink)hub).Publish(warning);
+        ((IAudioSessionEventSink)hub).Publish(scheduled);
+        ((IAudioSessionEventSink)hub).Publish(recovered);
+
+        var audioWarning = Assert.IsType<
+            DesktopRecordingNotification.AudioWarning>(notifications[0]);
+        Assert.Equal(1, audioWarning.Revision);
+        Assert.Same(warning, audioWarning.Warning);
+        var audioRecovered = Assert.IsType<
+            DesktopRecordingNotification.AudioRecovered>(notifications[1]);
+        Assert.Equal(2, audioRecovered.Revision);
+        Assert.Same(recovered, audioRecovered.Recovery);
+        Assert.Equal(2, notifications.Count);
     }
 
     private static string AbsolutePath(string name) => Path.Combine(
