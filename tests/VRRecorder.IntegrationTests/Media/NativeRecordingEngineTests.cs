@@ -275,6 +275,91 @@ public sealed class NativeRecordingEngineTests
         Assert.Equal(CreatePlan().Output, stopped.Recording);
     }
 
+    [Fact]
+    public async Task PublishesCommittedMediaProfileAndFinalStatistics()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        backend.Session.BlockFirstStop = false;
+        var expectedStatistics = new RecordingSessionStatistics(
+            SourceVideoFrameCount: 120,
+            MuxedVideoPacketCount: 90,
+            MuxedAudioPacketCount: 142,
+            DroppedSourceVideoFrameCount: 30,
+            DuplicatedOutputVideoFrameCount: 4,
+            LatestEncodeLatency: TimeSpan.FromMicroseconds(2_400),
+            MaximumEncodeLatency: TimeSpan.FromMicroseconds(8_000),
+            AudioVideoOffset: TimeSpan.FromMicroseconds(-15_000));
+        backend.Session.Statistics = expectedStatistics;
+        var mediaEvents = new CapturingRecordingMediaEventSink();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink(),
+            new ThrowingAudioSessionEventSink(),
+            mediaEvents);
+        var plan = CreatePlan();
+
+        var starting = engine.StartAsync(plan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        var profile = Assert.Single(mediaEvents.Profiles);
+        Assert.Equal(plan.Signal.Width, profile.SourceWidth);
+        Assert.Equal(plan.Signal.Height, profile.SourceHeight);
+        Assert.Equal(plan.Signal.PixelFormat, profile.SourcePixelFormat);
+        Assert.Equal(
+            plan.Signal.EstimatedSourceFramesPerSecond,
+            profile.EstimatedSourceFramesPerSecond);
+        Assert.Equal(
+            plan.VideoLayout.CurrentLayout.OutputCanvas.Width,
+            profile.OutputWidth);
+        Assert.Equal(
+            plan.VideoLayout.CurrentLayout.OutputCanvas.Height,
+            profile.OutputHeight);
+        Assert.Equal(plan.FrameRate.Value, profile.OutputFramesPerSecond);
+        Assert.Equal(plan.Encoder, profile.Encoder);
+        Assert.Equal(plan.Signal.GpuVendor, profile.GpuVendor);
+        Assert.Equal([expectedStatistics], mediaEvents.Statistics);
+        Assert.Equal(expectedStatistics, stopped.Statistics);
+    }
+
+    [Fact]
+    public async Task MediaDiagnosticObserverCannotChangeStartOrStopResult()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        backend.Session.BlockFirstStop = false;
+        backend.Session.Statistics = new RecordingSessionStatistics(
+            SourceVideoFrameCount: 120,
+            MuxedVideoPacketCount: 90,
+            MuxedAudioPacketCount: 142,
+            DroppedSourceVideoFrameCount: 0,
+            DuplicatedOutputVideoFrameCount: 0,
+            LatestEncodeLatency: TimeSpan.Zero,
+            MaximumEncodeLatency: TimeSpan.Zero,
+            AudioVideoOffset: TimeSpan.Zero);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink(),
+            new ThrowingAudioSessionEventSink(),
+            new ThrowingRecordingMediaEventSink());
+
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(CreatePlan().Output, stopped.Recording);
+        Assert.Equal(90, stopped.VideoPacketCount);
+        Assert.Equal(142, stopped.AudioPacketCount);
+        Assert.NotNull(stopped.Statistics);
+    }
+
     private static RecordingPlan CreatePlan() =>
         new(
             new StableVideoSignal(320, 180),
@@ -372,6 +457,8 @@ public sealed class NativeRecordingEngineTests
 
         public Exception? StopFailure { get; set; }
 
+        public RecordingSessionStatistics? Statistics { get; set; }
+
         public bool BlockFirstStop { get; set; } = true;
 
         public string Id => "native-session-001";
@@ -404,7 +491,8 @@ public sealed class NativeRecordingEngineTests
                     Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
                     Path.Combine(Path.GetTempPath(), "take.mp4")),
                 VideoPacketCount: 90,
-                AudioPacketCount: 142);
+                AudioPacketCount: 142,
+                Statistics: Statistics);
         }
 
         public Task WaitUntilFirstStopStartedAsync() => _firstStopStarted.Task;
@@ -440,6 +528,30 @@ public sealed class NativeRecordingEngineTests
             Statuses.Add(status);
             throw new InvalidOperationException("status observer failed");
         }
+    }
+
+    private sealed class CapturingRecordingMediaEventSink
+        : IRecordingMediaEventSink
+    {
+        public List<RecordingMediaProfile> Profiles { get; } = [];
+
+        public List<RecordingSessionStatistics> Statistics { get; } = [];
+
+        public void Publish(RecordingMediaProfile profile) =>
+            Profiles.Add(profile);
+
+        public void Publish(RecordingSessionStatistics statistics) =>
+            Statistics.Add(statistics);
+    }
+
+    private sealed class ThrowingRecordingMediaEventSink
+        : IRecordingMediaEventSink
+    {
+        public void Publish(RecordingMediaProfile profile) =>
+            throw new IOException("profile diagnostics unavailable");
+
+        public void Publish(RecordingSessionStatistics statistics) =>
+            throw new IOException("statistics diagnostics unavailable");
     }
 
     private sealed class ControllableClock : IMonotonicClock
