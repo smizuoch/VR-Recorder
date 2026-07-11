@@ -110,14 +110,18 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
 
             var clock = new SystemMonotonicClock();
             var wallClock = SystemWallClock.Instance;
+            var events = new StructuredRecordingEventSink(
+                diagnosticLog,
+                wallClock);
+            var audioEvents = new CompositeAudioSessionEventSink(
+                events,
+                _recordingNotifications);
             var faultStops = new NativeRecordingFaultStopSink();
             var recordingEngine = new NativeRecordingEngine(
                 nativeBackend,
                 clock,
-                faultStops);
-            var events = new StructuredRecordingEventSink(
-                diagnosticLog,
-                wallClock);
+                faultStops,
+                audioEvents);
             var savedEvents = new CompositeSavedRecordingSink(
                 events,
                 _recordingNotifications);

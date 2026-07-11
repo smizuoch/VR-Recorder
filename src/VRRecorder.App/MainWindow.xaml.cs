@@ -9,6 +9,7 @@ using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Presentation;
 using VRRecorder.DesignSystem;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.App;
@@ -17,6 +18,7 @@ public partial class MainWindow : Window
 {
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopRecordingUiController _recordingUi = new();
+    private readonly HashSet<AudioInput> _unavailableAudioInputs = [];
     private readonly IDisposable _recordingNotificationSubscription;
     private readonly IDisposable _recordingStatusSubscription;
     private bool _startupApplied;
@@ -280,7 +282,62 @@ public partial class MainWindow : Window
                     CameraRestoreWarningText.Visibility = Visibility.Visible;
                     break;
                 }
+            case DesktopRecordingNotification.AudioWarning audioWarning:
+                _unavailableAudioInputs.Add(audioWarning.Warning.Input);
+                ApplyAudioAvailability(recoveredInput: null);
+                break;
+            case DesktopRecordingNotification.AudioRecovered audioRecovered:
+                _unavailableAudioInputs.Remove(audioRecovered.Recovery.Input);
+                ApplyAudioAvailability(audioRecovered.Recovery.Input);
+                break;
         }
+    }
+
+    private void ApplyAudioAvailability(AudioInput? recoveredInput)
+    {
+        string resourceKey;
+        var liveSetting = AutomationLiveSetting.Assertive;
+        if (_unavailableAudioInputs.Count == 2)
+        {
+            resourceKey = "Recording_Notification_Audio_BothUnavailable";
+        }
+        else if (_unavailableAudioInputs.Contains(AudioInput.Desktop))
+        {
+            resourceKey = "Recording_Notification_Audio_DesktopUnavailable";
+        }
+        else if (_unavailableAudioInputs.Contains(AudioInput.Microphone))
+        {
+            resourceKey =
+                "Recording_Notification_Audio_MicrophoneUnavailable";
+        }
+        else if (recoveredInput is { } recovered)
+        {
+            liveSetting = AutomationLiveSetting.Polite;
+            resourceKey = recovered switch
+            {
+                AudioInput.Desktop =>
+                    "Recording_Notification_Audio_DesktopRecovered",
+                AudioInput.Microphone =>
+                    "Recording_Notification_Audio_MicrophoneRecovered",
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(recoveredInput),
+                    recovered,
+                    "The recovered audio input is unsupported."),
+            };
+        }
+        else
+        {
+            AudioDeviceStatusText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var text = LocalizedString(resourceKey);
+        AudioDeviceStatusText.Text = text;
+        AutomationProperties.SetName(AudioDeviceStatusText, text);
+        AutomationProperties.SetLiveSetting(
+            AudioDeviceStatusText,
+            liveSetting);
+        AudioDeviceStatusText.Visibility = Visibility.Visible;
     }
 
     private void ClearRecordingNotifications()
@@ -293,6 +350,13 @@ public partial class MainWindow : Window
             CameraRestoreWarningText,
             string.Empty);
         CameraRestoreWarningText.Visibility = Visibility.Collapsed;
+        _unavailableAudioInputs.Clear();
+        AudioDeviceStatusText.Text = string.Empty;
+        AutomationProperties.SetName(AudioDeviceStatusText, string.Empty);
+        AutomationProperties.SetLiveSetting(
+            AudioDeviceStatusText,
+            AutomationLiveSetting.Assertive);
+        AudioDeviceStatusText.Visibility = Visibility.Collapsed;
     }
 
     private string LocalizedString(string resourceKey) =>

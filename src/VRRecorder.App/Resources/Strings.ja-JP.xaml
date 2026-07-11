@@ -16,6 +16,13 @@
     <system:String x:Key="Recording_Notification_Saved_Format">MP4を保存しました: {0}</system:String>
     <system:String x:Key="Recording_Notification_CameraRestoreWarning_Title">VRChatのカメラ設定を確認してください</system:String>
     <system:String x:Key="Recording_Notification_CameraRestoreWarning">VRChatのカメラ設定を自動復元できませんでした。設定を確認し、必要に応じて手動で戻してください。この警告は録画ファイルの保存結果を変更しません。</system:String>
+    <system:String x:Key="Recording_Notification_Audio_Warning_Title">音声入力を利用できません</system:String>
+    <system:String x:Key="Recording_Notification_Audio_Recovered_Title">音声入力が復帰しました</system:String>
+    <system:String x:Key="Recording_Notification_Audio_DesktopUnavailable">デスクトップ音声を利用できません。この入力を無音にして録画を続けます。</system:String>
+    <system:String x:Key="Recording_Notification_Audio_MicrophoneUnavailable">マイクを利用できません。この入力を無音にして録画を続けます。</system:String>
+    <system:String x:Key="Recording_Notification_Audio_BothUnavailable">デスクトップ音声とマイクを利用できません。両方の音声入力を無音にして映像録画を続けます。</system:String>
+    <system:String x:Key="Recording_Notification_Audio_DesktopRecovered">デスクトップ音声を再び利用できます。</system:String>
+    <system:String x:Key="Recording_Notification_Audio_MicrophoneRecovered">マイクを再び利用できます。</system:String>
     <system:String x:Key="Diagnostics_Open_Label">診断</system:String>
     <system:String x:Key="Diagnostics_Open_AccessibleName">診断を開く</system:String>
     <system:String x:Key="Diagnostics_Open_Tooltip">プライバシー情報を確認して診断bundleをexportします</system:String>

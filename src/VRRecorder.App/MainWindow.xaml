@@ -20,6 +20,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="RecordingStatusText"
@@ -42,8 +43,15 @@
                    Visibility="Collapsed"
                    AutomationProperties.LiveSetting="Assertive" />
 
+        <TextBlock x:Name="AudioDeviceStatusText"
+                   Grid.Row="3"
+                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed"
+                   AutomationProperties.LiveSetting="Assertive" />
+
         <Button x:Name="RecordingToggleButton"
-                Grid.Row="3"
+                Grid.Row="4"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -55,7 +63,7 @@
                 Click="OnRecordingToggleClick" />
 
         <Button x:Name="SettingsButton"
-                Grid.Row="4"
+                Grid.Row="5"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -66,7 +74,7 @@
                 Click="OnSettingsClick" />
 
         <Button x:Name="DiagnosticsButton"
-                Grid.Row="5"
+                Grid.Row="6"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -77,7 +85,7 @@
                 Click="OnDiagnosticsClick" />
 
         <Button x:Name="AboutLegalButton"
-                Grid.Row="6"
+                Grid.Row="7"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"

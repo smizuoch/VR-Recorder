@@ -355,6 +355,42 @@ public partial class App : System.Windows.Application, IDisposable
                 _trayIcon.BalloonTipIcon =
                     System.Windows.Forms.ToolTipIcon.Warning;
                 break;
+            case DesktopRecordingNotification.AudioWarning audioWarning:
+                _trayIcon.BalloonTipTitle = LocalizedString(
+                    "Recording_Notification_Audio_Warning_Title");
+                _trayIcon.BalloonTipText = LocalizedString(
+                    audioWarning.Warning.Input switch
+                    {
+                        Domain.Audio.AudioInput.Desktop =>
+                            "Recording_Notification_Audio_DesktopUnavailable",
+                        Domain.Audio.AudioInput.Microphone =>
+                            "Recording_Notification_Audio_MicrophoneUnavailable",
+                        _ => throw new ArgumentOutOfRangeException(
+                            nameof(notification),
+                            audioWarning.Warning.Input,
+                            "The unavailable audio input is unsupported."),
+                    });
+                _trayIcon.BalloonTipIcon =
+                    System.Windows.Forms.ToolTipIcon.Warning;
+                break;
+            case DesktopRecordingNotification.AudioRecovered audioRecovered:
+                _trayIcon.BalloonTipTitle = LocalizedString(
+                    "Recording_Notification_Audio_Recovered_Title");
+                _trayIcon.BalloonTipText = LocalizedString(
+                    audioRecovered.Recovery.Input switch
+                    {
+                        Domain.Audio.AudioInput.Desktop =>
+                            "Recording_Notification_Audio_DesktopRecovered",
+                        Domain.Audio.AudioInput.Microphone =>
+                            "Recording_Notification_Audio_MicrophoneRecovered",
+                        _ => throw new ArgumentOutOfRangeException(
+                            nameof(notification),
+                            audioRecovered.Recovery.Input,
+                            "The recovered audio input is unsupported."),
+                    });
+                _trayIcon.BalloonTipIcon =
+                    System.Windows.Forms.ToolTipIcon.Info;
+                break;
         }
 
         _trayIcon.ShowBalloonTip(5000);

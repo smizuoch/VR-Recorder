@@ -16,6 +16,13 @@
     <system:String x:Key="Recording_Notification_Saved_Format">Saved MP4: {0}</system:String>
     <system:String x:Key="Recording_Notification_CameraRestoreWarning_Title">Check VRChat camera settings</system:String>
     <system:String x:Key="Recording_Notification_CameraRestoreWarning">VRChat camera settings could not be restored automatically. Check and restore them manually if needed. This warning does not change the recording file's save result.</system:String>
+    <system:String x:Key="Recording_Notification_Audio_Warning_Title">Audio input unavailable</system:String>
+    <system:String x:Key="Recording_Notification_Audio_Recovered_Title">Audio input recovered</system:String>
+    <system:String x:Key="Recording_Notification_Audio_DesktopUnavailable">Desktop audio is unavailable. Recording continues with that input silent.</system:String>
+    <system:String x:Key="Recording_Notification_Audio_MicrophoneUnavailable">The microphone is unavailable. Recording continues with that input silent.</system:String>
+    <system:String x:Key="Recording_Notification_Audio_BothUnavailable">Desktop audio and the microphone are unavailable. Video recording continues with both audio inputs silent.</system:String>
+    <system:String x:Key="Recording_Notification_Audio_DesktopRecovered">Desktop audio is available again.</system:String>
+    <system:String x:Key="Recording_Notification_Audio_MicrophoneRecovered">The microphone is available again.</system:String>
     <system:String x:Key="Diagnostics_Open_Label">DIAGNOSTICS</system:String>
     <system:String x:Key="Diagnostics_Open_AccessibleName">Open diagnostics</system:String>
     <system:String x:Key="Diagnostics_Open_Tooltip">Review privacy information and export a diagnostic bundle</system:String>
