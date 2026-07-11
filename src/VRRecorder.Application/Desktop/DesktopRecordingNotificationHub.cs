@@ -9,11 +9,12 @@ public sealed class DesktopRecordingNotificationHub :
     ICameraRestoreWarningSink,
     IDisposable
 {
-    private readonly object _deliveryGate = new();
     private readonly object _gate = new();
     private readonly Dictionary<long, Subscriber> _subscribers = [];
+    private Subscriber[] _disposalSubscribers = [];
     private long _nextRevision;
     private long _nextSubscriptionId;
+    private bool _disposeCompleted;
     private bool _disposed;
 
     public IDisposable Subscribe(
@@ -58,19 +59,45 @@ public sealed class DesktopRecordingNotificationHub :
         Subscriber[] subscribers;
         lock (_gate)
         {
-            if (_disposed)
+            if (!_disposed)
             {
+                _disposed = true;
+                subscribers = [.. _subscribers.Values];
+                _disposalSubscribers = subscribers;
+                _subscribers.Clear();
+            }
+            else
+            {
+                if (IsSubscriberCallbackThread(
+                        _disposalSubscribers,
+                        Environment.CurrentManagedThreadId))
+                {
+                    return;
+                }
+
+                while (!_disposeCompleted)
+                {
+                    Monitor.Wait(_gate);
+                }
+
                 return;
             }
-
-            _disposed = true;
-            subscribers = [.. _subscribers.Values];
-            _subscribers.Clear();
         }
 
-        foreach (var subscriber in subscribers)
+        try
         {
-            subscriber.Dispose();
+            foreach (var subscriber in subscribers)
+            {
+                subscriber.Dispose();
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _disposeCompleted = true;
+                Monitor.PulseAll(_gate);
+            }
         }
     }
 
@@ -79,29 +106,26 @@ public sealed class DesktopRecordingNotificationHub :
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        lock (_deliveryGate)
+        DesktopRecordingNotification notification;
+        Subscriber[] subscribers;
+        lock (_gate)
         {
-            DesktopRecordingNotification notification;
-            Subscriber[] subscribers;
-            lock (_gate)
+            if (_disposed)
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                notification = createNotification(checked(++_nextRevision));
-                subscribers = [.. _subscribers.Values];
+                return Task.CompletedTask;
             }
 
+            notification = createNotification(checked(++_nextRevision));
+            subscribers = [.. _subscribers.Values];
             foreach (var subscriber in subscribers)
             {
-                try
-                {
-                    subscriber.Publish(notification);
-                }
-                catch (Exception)
-                {
-                    // Presentation observers cannot change recording or
-                    // camera restoration outcomes.
-                }
+                subscriber.Enqueue(notification);
             }
+        }
+
+        foreach (var subscriber in subscribers)
+        {
+            subscriber.Drain();
         }
 
         return Task.CompletedTask;
@@ -118,19 +142,63 @@ public sealed class DesktopRecordingNotificationHub :
         subscriber?.Dispose();
     }
 
+    private static bool IsSubscriberCallbackThread(
+        IEnumerable<Subscriber> subscribers,
+        int threadId) =>
+        subscribers.Any(subscriber => subscriber.IsCallbackThread(threadId));
+
     private sealed class Subscriber(
         Action<DesktopRecordingNotification> callback) : IDisposable
     {
         private readonly object _gate = new();
+        private readonly Queue<DesktopRecordingNotification> _pending = [];
+        private long _lastQueuedRevision;
+        private bool _callbackActive;
+        private int _callbackThreadId;
+        private bool _draining;
         private bool _disposed;
 
-        public void Publish(DesktopRecordingNotification notification)
+        public void Enqueue(DesktopRecordingNotification notification)
         {
             lock (_gate)
             {
-                if (!_disposed)
+                if (_disposed ||
+                    notification.Revision <= _lastQueuedRevision)
+                {
+                    return;
+                }
+
+                _lastQueuedRevision = notification.Revision;
+                _pending.Enqueue(notification);
+            }
+        }
+
+        public void Drain()
+        {
+            lock (_gate)
+            {
+                if (_disposed || _draining)
+                {
+                    return;
+                }
+
+                _draining = true;
+            }
+
+            while (TryBeginCallback(out var notification))
+            {
+                try
                 {
                     callback(notification);
+                }
+                catch (Exception)
+                {
+                    // Presentation observers cannot change recording or
+                    // camera restoration outcomes.
+                }
+                finally
+                {
+                    CompleteCallback();
                 }
             }
         }
@@ -139,7 +207,63 @@ public sealed class DesktopRecordingNotificationHub :
         {
             lock (_gate)
             {
+                if (_disposed)
+                {
+                    WaitForForeignCallback();
+                    return;
+                }
+
                 _disposed = true;
+                _pending.Clear();
+                Monitor.PulseAll(_gate);
+                WaitForForeignCallback();
+            }
+        }
+
+        public bool IsCallbackThread(int threadId)
+        {
+            lock (_gate)
+            {
+                return _callbackActive && _callbackThreadId == threadId;
+            }
+        }
+
+        private bool TryBeginCallback(
+            out DesktopRecordingNotification notification)
+        {
+            lock (_gate)
+            {
+                if (_disposed || _pending.Count == 0)
+                {
+                    _draining = false;
+                    Monitor.PulseAll(_gate);
+                    notification = null!;
+                    return false;
+                }
+
+                notification = _pending.Dequeue();
+                _callbackActive = true;
+                _callbackThreadId = Environment.CurrentManagedThreadId;
+                return true;
+            }
+        }
+
+        private void CompleteCallback()
+        {
+            lock (_gate)
+            {
+                _callbackActive = false;
+                _callbackThreadId = 0;
+                Monitor.PulseAll(_gate);
+            }
+        }
+
+        private void WaitForForeignCallback()
+        {
+            var currentThread = Environment.CurrentManagedThreadId;
+            while (_callbackActive && _callbackThreadId != currentThread)
+            {
+                Monitor.Wait(_gate);
             }
         }
     }
