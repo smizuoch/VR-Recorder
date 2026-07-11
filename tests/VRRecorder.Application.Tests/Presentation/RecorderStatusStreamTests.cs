@@ -1,10 +1,26 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Presentation;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Tests.Presentation;
 
 public sealed class RecorderStatusStreamTests
 {
+    [Fact]
+    public void SnapshotCarriesActiveAudioControlState()
+    {
+        var audio = RecordingAudioControlState.FromRouting(
+            AudioRouting.DesktopOnly);
+
+        var status = RecorderStatusSnapshot.Create(
+            8,
+            RecorderState.Recording,
+            audio);
+
+        Assert.Same(audio, status.AudioControlState);
+    }
+
     [Theory]
     [InlineData(RecorderState.Booting, RecorderAvailableActions.None)]
     [InlineData(RecorderState.ComplianceFault, RecorderAvailableActions.None)]
