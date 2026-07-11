@@ -1,5 +1,7 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Recording;
@@ -10,6 +12,7 @@ public sealed class ActiveRecordingSessionCoordinator
     private readonly object _gate = new();
     private readonly IRecordingEngine _recordingEngine;
     private readonly RecordingFileFinalizationUseCase _finalization;
+    private readonly IRecordingAudioRoutingGateway _audioRoutingGateway;
     private ActiveSession? _activeSession;
     private RecorderState _state = RecorderState.Ready;
     private RecordingStopReason? _stopReason;
@@ -17,11 +20,25 @@ public sealed class ActiveRecordingSessionCoordinator
     public ActiveRecordingSessionCoordinator(
         IRecordingEngine recordingEngine,
         RecordingFileFinalizationUseCase finalization)
+        : this(
+            recordingEngine,
+            finalization,
+            recordingEngine as IRecordingAudioRoutingGateway ??
+            UnsupportedAudioRoutingGateway.Instance)
+    {
+    }
+
+    public ActiveRecordingSessionCoordinator(
+        IRecordingEngine recordingEngine,
+        RecordingFileFinalizationUseCase finalization,
+        IRecordingAudioRoutingGateway audioRoutingGateway)
     {
         ArgumentNullException.ThrowIfNull(recordingEngine);
         ArgumentNullException.ThrowIfNull(finalization);
+        ArgumentNullException.ThrowIfNull(audioRoutingGateway);
         _recordingEngine = recordingEngine;
         _finalization = finalization;
+        _audioRoutingGateway = audioRoutingGateway;
     }
 
     public RecorderState State
@@ -46,12 +63,36 @@ public sealed class ActiveRecordingSessionCoordinator
         }
     }
 
+    public RecordingAudioControlState? CurrentAudioControlState
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _activeSession?.AudioControlState;
+            }
+        }
+    }
+
     public void Activate(
         RecordingHandle handle,
+        CancellationToken sessionLifetimeToken = default,
+        IRecordingSessionCompletionSink? completionSink = null) =>
+        Activate(
+            handle,
+            AudioRouting.Mixed,
+            sessionLifetimeToken,
+            completionSink);
+
+    public void Activate(
+        RecordingHandle handle,
+        AudioRouting initialAudioRouting,
         CancellationToken sessionLifetimeToken = default,
         IRecordingSessionCompletionSink? completionSink = null)
     {
         ArgumentNullException.ThrowIfNull(handle);
+        var audioControlState = RecordingAudioControlState.FromRouting(
+            initialAudioRouting);
         lock (_gate)
         {
             if (_activeSession is not null)
@@ -67,11 +108,51 @@ public sealed class ActiveRecordingSessionCoordinator
                     handle,
                     _finalization,
                     sessionLifetimeToken),
-                completionSink);
+                completionSink,
+                audioControlState);
             _stopReason = null;
             _state = RecorderStateMachine.Transition(
                 RecorderState.Starting,
                 RecorderTrigger.FirstPacketCommitted);
+        }
+    }
+
+    public async Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+        RecordingAudioCommand command,
+        CancellationToken cancellationToken)
+    {
+        ActiveSession session;
+        RecordingAudioControlState next;
+        lock (_gate)
+        {
+            session = _activeSession ?? throw new InvalidOperationException(
+                "No recording session is active.");
+            if (session.StopTask is not null)
+            {
+                throw new InvalidOperationException(
+                    "The active recording session is stopping.");
+            }
+
+            next = session.AudioControlState.Apply(command);
+        }
+
+        await _audioRoutingGateway
+            .UpdateAudioRoutingAsync(
+                session.Handle,
+                next.EffectiveRouting,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_activeSession, session))
+            {
+                throw new InvalidOperationException(
+                    "The recording session changed during the audio update.");
+            }
+
+            session.AudioControlState = next;
+            return next;
         }
     }
 
@@ -181,7 +262,8 @@ public sealed class ActiveRecordingSessionCoordinator
     private sealed class ActiveSession(
         RecordingHandle handle,
         RecordingSessionStopCoordinator coordinator,
-        IRecordingSessionCompletionSink? completionSink)
+        IRecordingSessionCompletionSink? completionSink,
+        RecordingAudioControlState audioControlState)
     {
         public RecordingHandle Handle { get; } = handle;
 
@@ -193,5 +275,21 @@ public sealed class ActiveRecordingSessionCoordinator
         public RecordingStopReason? StopReason { get; set; }
 
         public Task? StopTask { get; set; }
+
+        public RecordingAudioControlState AudioControlState { get; set; } =
+            audioControlState;
+    }
+
+    private sealed class UnsupportedAudioRoutingGateway
+        : IRecordingAudioRoutingGateway
+    {
+        public static UnsupportedAudioRoutingGateway Instance { get; } = new();
+
+        public Task UpdateAudioRoutingAsync(
+            RecordingHandle handle,
+            AudioRouting routing,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException(
+                "The recording engine does not support runtime audio routing updates.");
     }
 }
