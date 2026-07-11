@@ -872,6 +872,7 @@ public sealed class WpfHostProjectContractTests
             appDirectory,
             "ProductionDesktopRecordingRuntimeFactory.cs"));
         Assert.Contains("CompositeAudioSessionEventSink", factoryCode);
+        Assert.Contains("QueuedAudioSessionEventSink", factoryCode);
         Assert.Contains("audioEvents", factoryCode);
         Assert.Contains(
             "new NativeRecordingEngine(",
@@ -882,9 +883,23 @@ public sealed class WpfHostProjectContractTests
         var nativeEngine = factoryCode.IndexOf(
             "new NativeRecordingEngine(",
             StringComparison.Ordinal);
+        var queuedDelivery = factoryCode.IndexOf(
+            "new QueuedAudioSessionEventSink(",
+            StringComparison.Ordinal);
         Assert.True(
-            audioComposition >= 0 && nativeEngine > audioComposition,
-            "Audio diagnostics/presentation must be composed before the native engine.");
+            audioComposition >= 0 &&
+            queuedDelivery > audioComposition &&
+            nativeEngine > queuedDelivery,
+            "Audio observers must be queued before the native engine callback boundary.");
+        var queuedOwnership = factoryCode.IndexOf(
+            "resources.Add(audioEvents);",
+            StringComparison.Ordinal);
+        var backendOwnership = factoryCode.IndexOf(
+            "resources.Add(nativeBackend);",
+            StringComparison.Ordinal);
+        Assert.True(
+            queuedOwnership >= 0 && backendOwnership > queuedOwnership,
+            "Reverse disposal must stop native callbacks before draining queued audio events.");
 
         var appCode = File.ReadAllText(Path.Combine(
             appDirectory,
