@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
@@ -236,6 +237,44 @@ public sealed class NativeRecordingEngineTests
         Assert.Equal(fault, report.Fault);
     }
 
+    [Fact]
+    public async Task AudioObserversCannotInterruptAnActiveNativeSession()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        backend.Session.BlockFirstStop = false;
+        var audioEvents = new ThrowingAudioSessionEventSink();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink(),
+            audioEvents);
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+        var warning = new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            Domain.Audio.AudioInput.Microphone,
+            FramePosition: 4_800);
+        var recovered = new AudioSessionStatus(
+            AudioSessionStatusKind.InputRecovered,
+            Domain.Audio.AudioInput.Microphone,
+            FramePosition: 9_600);
+
+        var warningFailure = Record.Exception(() =>
+            backend.SignalAudioWarning(warning));
+        var statusFailure = Record.Exception(() =>
+            backend.SignalAudioStatus(recovered));
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Null(warningFailure);
+        Assert.Null(statusFailure);
+        Assert.Equal([warning], audioEvents.Warnings);
+        Assert.Equal([recovered], audioEvents.Statuses);
+        Assert.Equal(CreatePlan().Output, stopped.Recording);
+    }
+
     private static RecordingPlan CreatePlan() =>
         new(
             new StableVideoSignal(320, 180),
@@ -281,6 +320,16 @@ public sealed class NativeRecordingEngineTests
              throw new InvalidOperationException("The backend is not open."))
             .Faulted(fault);
 
+        public void SignalAudioWarning(AudioSessionWarning warning) =>
+            (_callbacks ??
+             throw new InvalidOperationException("The backend is not open."))
+            .AudioWarning!(warning);
+
+        public void SignalAudioStatus(AudioSessionStatus status) =>
+            (_callbacks ??
+             throw new InvalidOperationException("The backend is not open."))
+            .AudioStatus!(status);
+
         public Task WaitUntilOpenedAsync() => _opened.Task;
     }
 
@@ -323,6 +372,8 @@ public sealed class NativeRecordingEngineTests
 
         public Exception? StopFailure { get; set; }
 
+        public bool BlockFirstStop { get; set; } = true;
+
         public string Id => "native-session-001";
 
         public Task AbortAsync(CancellationToken cancellationToken)
@@ -342,7 +393,7 @@ public sealed class NativeRecordingEngineTests
                 throw StopFailure;
             }
 
-            if (StopCallCount == 1)
+            if (BlockFirstStop && StopCallCount == 1)
             {
                 _firstStopStarted.TrySetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
@@ -369,6 +420,26 @@ public sealed class NativeRecordingEngineTests
         public void Report(
             RecordingHandle handle,
             NativeRecordingFault fault) => Reports.Add((handle, fault));
+    }
+
+    private sealed class ThrowingAudioSessionEventSink
+        : IAudioSessionEventSink
+    {
+        public List<AudioSessionWarning> Warnings { get; } = [];
+
+        public List<AudioSessionStatus> Statuses { get; } = [];
+
+        public void Publish(AudioSessionWarning warning)
+        {
+            Warnings.Add(warning);
+            throw new InvalidOperationException("warning observer failed");
+        }
+
+        public void Publish(AudioSessionStatus status)
+        {
+            Statuses.Add(status);
+            throw new InvalidOperationException("status observer failed");
+        }
     }
 
     private sealed class ControllableClock : IMonotonicClock
