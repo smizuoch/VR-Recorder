@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Settings;
 using VRRecorder.Application.Storage;
@@ -548,6 +549,96 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.False(unexpectedFault.Task.IsCompleted);
     }
 
+    [Fact]
+    public async Task AudioDeviceEventsAreTypedAndDoNotCompletePendingStop()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "audio.recording.mp4"),
+            Path.Combine(directory.Path, "audio.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        List<AudioSessionWarning> warnings = [];
+        List<AudioSessionStatus> statuses = [];
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(
+                FirstVideoPacketMuxed: () => { },
+                Faulted: _ => { },
+                AudioWarning: warnings.Add,
+                AudioStatus: statuses.Add),
+            CancellationToken.None);
+
+        controls.SetDesktopAudioEndpointAvailable(
+            available: false,
+            framePosition: 4_800);
+        controls.SetDesktopAudioEndpointAvailable(
+            available: true,
+            framePosition: 9_600);
+        controls.SetMicrophoneAudioEndpointAvailable(
+            available: false,
+            framePosition: 14_400);
+        controls.SetMicrophoneAudioEndpointAvailable(
+            available: true,
+            framePosition: 19_200);
+
+        Assert.Collection(
+            warnings,
+            warning =>
+            {
+                Assert.Equal(
+                    AudioSessionWarningKind.InputUnavailable,
+                    warning.Kind);
+                Assert.Equal(AudioInput.Desktop, warning.Input);
+                Assert.Equal(4_800, warning.FramePosition);
+                Assert.Null(warning.Failure);
+            },
+            warning =>
+            {
+                Assert.Equal(
+                    AudioSessionWarningKind.InputUnavailable,
+                    warning.Kind);
+                Assert.Equal(AudioInput.Microphone, warning.Input);
+                Assert.Equal(14_400, warning.FramePosition);
+                Assert.Null(warning.Failure);
+            });
+        Assert.Collection(
+            statuses,
+            status =>
+            {
+                Assert.Equal(
+                    AudioSessionStatusKind.InputRecovered,
+                    status.Kind);
+                Assert.Equal(AudioInput.Desktop, status.Input);
+                Assert.Equal(9_600, status.FramePosition);
+            },
+            status =>
+            {
+                Assert.Equal(
+                    AudioSessionStatusKind.InputRecovered,
+                    status.Kind);
+                Assert.Equal(AudioInput.Microphone, status.Input);
+                Assert.Equal(19_200, status.FramePosition);
+            });
+
+        var stopping = session.StopAsync(CancellationToken.None);
+        Assert.False(stopping.IsCompleted);
+        controls.CompleteTrailerFlushClose(
+            videoPacketCount: 1,
+            audioPacketCount: 1);
+        Assert.Equal(pending, (await stopping).Recording);
+    }
+
     private static string FixturePath()
     {
         var root = FindRepositoryRoot();
@@ -580,6 +671,10 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly nint _library;
         private readonly CommitDelegate _commit;
         private readonly CompleteDelegate _complete;
+        private readonly AudioEndpointAvailabilityDelegate
+            _desktopAudioEndpointAvailability;
+        private readonly AudioEndpointAvailabilityDelegate
+            _microphoneAudioEndpointAvailability;
         private readonly FailDelegate _fail;
         private readonly EncoderKindDelegate _encoderKind;
         private readonly CopyMediaConfigDelegate _copyMediaConfig;
@@ -602,6 +697,18 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_fail"));
+            _desktopAudioEndpointAvailability =
+                Marshal.GetDelegateForFunctionPointer<
+                    AudioEndpointAvailabilityDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_set_desktop_audio_endpoint_available"));
+            _microphoneAudioEndpointAvailability =
+                Marshal.GetDelegateForFunctionPointer<
+                    AudioEndpointAvailabilityDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_set_microphone_audio_endpoint_available"));
             _encoderKind = Marshal.GetDelegateForFunctionPointer<EncoderKindDelegate>(
                 NativeLibrary.GetExport(
                     _library,
@@ -636,6 +743,16 @@ public sealed class PInvokeNativeRecordingBackendTests
             _complete(videoPacketCount, audioPacketCount);
 
         public void Fail(int status, string message) => _fail(status, message);
+
+        public void SetDesktopAudioEndpointAvailable(
+            bool available,
+            ulong framePosition) =>
+            _desktopAudioEndpointAvailability(available, framePosition);
+
+        public void SetMicrophoneAudioEndpointAvailable(
+            bool available,
+            ulong framePosition) =>
+            _microphoneAudioEndpointAvailability(available, framePosition);
 
         public uint EncoderKind() => _encoderKind();
 
@@ -722,6 +839,11 @@ public sealed class PInvokeNativeRecordingBackendTests
         private delegate void CompleteDelegate(
             ulong videoPacketCount,
             ulong audioPacketCount);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void AudioEndpointAvailabilityDelegate(
+            [MarshalAs(UnmanagedType.U1)] bool available,
+            ulong framePosition);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void FailDelegate(

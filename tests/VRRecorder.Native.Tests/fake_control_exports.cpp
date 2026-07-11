@@ -80,6 +80,26 @@ extern "C" VRREC_TEST_API void vrrec_test_fail(
         message_utf8 == nullptr ? "" : message_utf8);
 }
 
+extern "C" VRREC_TEST_API void
+vrrec_test_set_desktop_audio_endpoint_available(
+    std::uint8_t available,
+    std::uint64_t frame_position)
+{
+    vrrecorder::native::testing::SetDesktopAudioEndpointAvailable(
+        available != 0,
+        frame_position);
+}
+
+extern "C" VRREC_TEST_API void
+vrrec_test_set_microphone_audio_endpoint_available(
+    std::uint8_t available,
+    std::uint64_t frame_position)
+{
+    vrrecorder::native::testing::SetMicrophoneAudioEndpointAvailable(
+        available != 0,
+        frame_position);
+}
+
 extern "C" VRREC_TEST_API std::uint32_t vrrec_test_encoder_kind(void)
 {
     return vrrecorder::native::testing::EncoderKind();
