@@ -2,6 +2,7 @@ using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
@@ -11,6 +12,40 @@ namespace VRRecorder.IntegrationTests.Media;
 
 public sealed class NativeRecordingEngineTests
 {
+    [Fact]
+    public async Task RoutesAudioUpdatesOnlyToAnActiveNativeSession()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        backend.Session.BlockFirstStop = false;
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink());
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+
+        await engine.UpdateAudioRoutingAsync(
+            handle,
+            AudioRouting.DesktopOnly,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [AudioRouting.DesktopOnly],
+            backend.Session.AudioRoutingUpdates);
+        await engine.StopAsync(handle, CancellationToken.None);
+        var inactive = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            engine.UpdateAudioRoutingAsync(
+                handle,
+                AudioRouting.Mixed,
+                CancellationToken.None));
+        Assert.Equal(
+            "Native recording session native-session-001 is not active.",
+            inactive.Message);
+    }
+
     [Fact]
     public async Task DuplicateSessionIdAbortsNewlyOpenedSession()
     {
@@ -453,6 +488,8 @@ public sealed class NativeRecordingEngineTests
 
         public int StopCallCount { get; private set; }
 
+        public List<AudioRouting> AudioRoutingUpdates { get; } = [];
+
         public Exception? AbortFailure { get; set; }
 
         public Exception? StopFailure { get; set; }
@@ -469,6 +506,14 @@ public sealed class NativeRecordingEngineTests
             return AbortFailure is null
                 ? Task.CompletedTask
                 : Task.FromException(AbortFailure);
+        }
+
+        public Task UpdateAudioRoutingAsync(
+            AudioRouting routing,
+            CancellationToken cancellationToken)
+        {
+            AudioRoutingUpdates.Add(routing);
+            return Task.CompletedTask;
         }
 
         public async Task<RecordingStopResult> StopAsync(
