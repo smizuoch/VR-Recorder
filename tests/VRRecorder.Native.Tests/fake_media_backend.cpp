@@ -142,9 +142,32 @@ public:
     vrrec_status_t UpdateAudioRouting(
         vrrec_audio_routing_t routing) noexcept override
     {
-        const std::lock_guard lock(control_mutex_);
-        audio_routing_ = routing;
-        ++audio_routing_update_count_;
+        auto fault = false;
+        {
+            std::unique_lock lock(control_mutex_);
+            audio_routing_ = routing;
+            ++audio_routing_update_count_;
+            if (block_next_audio_routing_update_) {
+                audio_routing_update_entered_ = true;
+                control_condition_.notify_all();
+                control_condition_.wait(lock, [this] {
+                    return release_audio_routing_update_;
+                });
+                block_next_audio_routing_update_ = false;
+                release_audio_routing_update_ = false;
+            }
+
+            fault = fault_during_next_audio_routing_update_;
+            fault_during_next_audio_routing_update_ = false;
+        }
+
+        if (fault) {
+            events_.Faulted(
+                VRREC_STATUS_INTERNAL_ERROR,
+                "audio routing update failed");
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+
         return VRREC_STATUS_OK;
     }
 
@@ -218,6 +241,36 @@ public:
         return audio_routing_update_count_;
     }
 
+    void FaultDuringNextAudioRoutingUpdate() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        fault_during_next_audio_routing_update_ = true;
+    }
+
+    void BlockNextAudioRoutingUpdate() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        block_next_audio_routing_update_ = true;
+        audio_routing_update_entered_ = false;
+        release_audio_routing_update_ = false;
+    }
+
+    bool WaitUntilAudioRoutingUpdateEntered(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(control_mutex_);
+        return control_condition_.wait_for(lock, timeout, [this] {
+            return audio_routing_update_entered_;
+        });
+    }
+
+    void ReleaseAudioRoutingUpdate() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        release_audio_routing_update_ = true;
+        control_condition_.notify_all();
+    }
+
     void SetStatistics(
         const vrrec_session_statistics_v1 &statistics) noexcept
     {
@@ -279,6 +332,10 @@ private:
     bool block_next_video_layout_update_ = false;
     bool video_layout_update_entered_ = false;
     bool release_video_layout_update_ = false;
+    bool fault_during_next_audio_routing_update_ = false;
+    bool block_next_audio_routing_update_ = false;
+    bool audio_routing_update_entered_ = false;
+    bool release_audio_routing_update_ = false;
     std::uint32_t request_stop_call_count_ = 0;
     std::uint32_t audio_routing_update_count_ = 0;
     vrrec_status_t statistics_status_ = VRREC_STATUS_OK;
@@ -612,6 +669,27 @@ std::uint32_t AudioRouting()
 std::uint32_t AudioRoutingUpdateCount()
 {
     return FakeMediaBackend::Active()->AudioRoutingUpdateCount();
+}
+
+void FaultDuringNextAudioRoutingUpdate()
+{
+    FakeMediaBackend::Active()->FaultDuringNextAudioRoutingUpdate();
+}
+
+void BlockNextAudioRoutingUpdate()
+{
+    FakeMediaBackend::Active()->BlockNextAudioRoutingUpdate();
+}
+
+bool WaitUntilAudioRoutingUpdateEntered(std::chrono::milliseconds timeout)
+{
+    return FakeMediaBackend::Active()->WaitUntilAudioRoutingUpdateEntered(
+        timeout);
+}
+
+void ReleaseAudioRoutingUpdate()
+{
+    FakeMediaBackend::Active()->ReleaseAudioRoutingUpdate();
 }
 
 void SetStatistics(const vrrec_session_statistics_v1 &statistics)
