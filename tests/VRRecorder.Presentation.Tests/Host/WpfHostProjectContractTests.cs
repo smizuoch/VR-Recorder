@@ -564,6 +564,9 @@ public sealed class WpfHostProjectContractTests
         }
 
         Assert.Contains("faultStops.Bind(sessions)", factory);
+        Assert.Matches(
+            @"return new DesktopRecordingRuntime\(\s*requests,\s*lifecycle,\s*sessions,\s*sessions,\s*new WpfVrChatInstanceSelectionPrompt\(\),\s*ownedLifetime\);",
+            factory);
         Assert.DoesNotContain(
             "RECORDING_SERVICE_COMPOSITION_UNAVAILABLE",
             factory);
