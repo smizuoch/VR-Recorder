@@ -165,6 +165,7 @@ public sealed class StartRecordingUseCase
             .ConfigureAwait(false);
         _sessionActivator.Activate(
             handle,
+            plan.Media.AudioRouting,
             cancellationToken,
             completionSink);
         var autoStopCompletion = _autoStopScheduler.OnFirstPacketCommittedAsync(
