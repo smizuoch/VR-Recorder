@@ -215,6 +215,60 @@ public sealed class PInvokeNativeRecordingBackendTests
     }
 
     [Fact]
+    public async Task RuntimeAudioRoutingUpdateCrossesManagedNativeAbi()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            new PendingRecording(
+                Path.Combine(directory.Path, "take.recording.mp4"),
+                Path.Combine(directory.Path, "take.mp4")),
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        using var controls = new NativeFixtureControls(FixturePath());
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+
+        foreach (var update in new[]
+                 {
+                     (AudioRouting.DesktopOnly, 2u),
+                     (AudioRouting.MicOnly, 3u),
+                     (AudioRouting.Muted, 4u),
+                     (AudioRouting.Mixed, 1u),
+                 })
+        {
+            await session.UpdateAudioRoutingAsync(
+                update.Item1,
+                CancellationToken.None);
+            Assert.Equal(update.Item2, controls.AudioRouting());
+        }
+
+        Assert.Equal(4u, controls.AudioRoutingUpdateCount());
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.UpdateAudioRoutingAsync(
+                AudioRouting.Muted,
+                cancellation.Token));
+        Assert.Equal(4u, controls.AudioRoutingUpdateCount());
+
+        await session.AbortAsync(CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            session.UpdateAudioRoutingAsync(
+                AudioRouting.Mixed,
+                CancellationToken.None));
+        Assert.Equal(4u, controls.AudioRoutingUpdateCount());
+    }
+
+    [Fact]
     public async Task StatisticsRemainAvailableAfterGracefulStopDestroysHandle()
     {
         if (!OperatingSystem.IsLinux())
@@ -692,6 +746,8 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly CopyVideoLayoutDelegate _copyVideoLayout;
         private readonly SetStatisticsDelegate _setStatistics;
         private readonly SetStatisticsStatusDelegate _setStatisticsStatus;
+        private readonly UIntDelegate _audioRouting;
+        private readonly UIntDelegate _audioRoutingUpdateCount;
 
         public NativeFixtureControls(string path)
         {
@@ -744,6 +800,15 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_set_statistics_status"));
+            _audioRouting = Marshal.GetDelegateForFunctionPointer<UIntDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_audio_routing"));
+            _audioRoutingUpdateCount =
+                Marshal.GetDelegateForFunctionPointer<UIntDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_audio_routing_update_count"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -766,6 +831,10 @@ public sealed class PInvokeNativeRecordingBackendTests
             _microphoneAudioEndpointAvailability(available, framePosition);
 
         public uint EncoderKind() => _encoderKind();
+
+        public uint AudioRouting() => _audioRouting();
+
+        public uint AudioRoutingUpdateCount() => _audioRoutingUpdateCount();
 
         public ObservedMediaConfig MediaConfig()
         {
@@ -863,6 +932,9 @@ public sealed class PInvokeNativeRecordingBackendTests
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint EncoderKindDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate uint UIntDelegate();
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void CopyMediaConfigDelegate(

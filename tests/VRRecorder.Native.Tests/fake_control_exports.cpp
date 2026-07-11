@@ -105,6 +105,17 @@ extern "C" VRREC_TEST_API std::uint32_t vrrec_test_encoder_kind(void)
     return vrrecorder::native::testing::EncoderKind();
 }
 
+extern "C" VRREC_TEST_API std::uint32_t vrrec_test_audio_routing(void)
+{
+    return vrrecorder::native::testing::AudioRouting();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_audio_routing_update_count(void)
+{
+    return vrrecorder::native::testing::AudioRoutingUpdateCount();
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_copy_media_config_v1(
     vrrec_test_media_config_v1 *out_config)
 {
