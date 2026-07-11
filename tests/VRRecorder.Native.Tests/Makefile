@@ -7,7 +7,7 @@ CFLAGS := -std=c17 -Wall -Wextra -Wpedantic -Werror
 CXXFLAGS := -std=c++20 -O0 -g --coverage -Wall -Wextra -Wpedantic -Werror
 LDFLAGS := --coverage -pthread
 
-.PHONY: all clean test export-check managed-fixture
+.PHONY: all clean test export-check cmake-contract-sync managed-fixture
 
 all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/c_header_smoke.o
 
@@ -31,7 +31,13 @@ export-check:
 	diff -u expected_exports.txt $(BUILD_DIR)/exports.actual
 	test -s $(NATIVE_ROOT)/build/vrrecorder_native.map
 
-test: clean all export-check
+cmake-contract-sync:
+	test "$$(wc -l < expected_exports.txt)" -eq 17
+	grep -Fq "if(NOT export_count EQUAL 17)" cmake_build_contract.cmake
+	grep -Fq "if(NOT export_count EQUAL 17)" verify_exports.cmake
+	grep -Fq "Verified exactly 17 native exports" verify_exports.cmake
+
+test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/abi_contract_tests
 
 clean:
