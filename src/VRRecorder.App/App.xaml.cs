@@ -32,6 +32,7 @@ public partial class App : System.Windows.Application, IDisposable
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private System.Windows.Forms.ToolStripMenuItem? _trayStatusMenuItem;
     private System.Windows.Forms.ToolStripMenuItem? _trayToggleMenuItem;
+    private bool _recordingRightsAuthorized;
     private bool _exitRequested;
     private int _disposeStarted;
 
@@ -93,15 +94,27 @@ public partial class App : System.Windows.Application, IDisposable
     internal static bool IsExitRequested =>
         ((App)Current)._exitRequested;
 
-    internal static Task<bool> IsRecordingRightsAcknowledgedAsync(
-        CancellationToken cancellationToken) =>
-        ((App)Current)._recordingRightsGate.IsAcknowledgedAsync(
-            cancellationToken);
+    internal static async Task<bool> IsRecordingRightsAcknowledgedAsync(
+        CancellationToken cancellationToken)
+    {
+        var app = (App)Current;
+        var acknowledged = await app._recordingRightsGate
+            .IsAcknowledgedAsync(cancellationToken);
+        if (acknowledged)
+        {
+            app.AuthorizeRecordingCommands();
+        }
 
-    internal static Task AcknowledgeRecordingRightsAsync(
-        CancellationToken cancellationToken) =>
-        ((App)Current)._recordingRightsGate.AcknowledgeAsync(
-            cancellationToken);
+        return acknowledged;
+    }
+
+    internal static async Task AcknowledgeRecordingRightsAsync(
+        CancellationToken cancellationToken)
+    {
+        var app = (App)Current;
+        await app._recordingRightsGate.AcknowledgeAsync(cancellationToken);
+        app.AuthorizeRecordingCommands();
+    }
 
     internal static void ExitAfterRightsDeclined() =>
         ((App)Current).RequestExit();
@@ -262,7 +275,15 @@ public partial class App : System.Windows.Application, IDisposable
     private void ApplyTrayStatus(RecorderStatusSnapshot status)
     {
         var update = _trayUi.Apply(status);
-        if (update is null ||
+        if (update is not null)
+        {
+            ApplyTraySnapshot(update);
+        }
+    }
+
+    private void ApplyTraySnapshot(DesktopTrayUiSnapshot update)
+    {
+        if (
             _trayStatusMenuItem is null ||
             _trayToggleMenuItem is null ||
             _trayIcon is null)
@@ -274,8 +295,24 @@ public partial class App : System.Windows.Application, IDisposable
         _trayStatusMenuItem.Text = stateLabel;
         _trayToggleMenuItem.Text = LocalizedString(
             update.ActionLabelResourceKey);
-        _trayToggleMenuItem.Enabled = update.IsActionEnabled;
+        _trayToggleMenuItem.Enabled =
+            _recordingRightsAuthorized && update.IsActionEnabled;
         _trayIcon.Text = stateLabel;
+    }
+
+    private void AuthorizeRecordingCommands()
+    {
+        _recordingRightsAuthorized = true;
+        RefreshTrayStatus();
+    }
+
+    private void RefreshTrayStatus()
+    {
+        var current = _trayUi.Current;
+        if (current is not null)
+        {
+            ApplyTraySnapshot(current);
+        }
     }
 
     private string LocalizedString(string resourceKey) =>
