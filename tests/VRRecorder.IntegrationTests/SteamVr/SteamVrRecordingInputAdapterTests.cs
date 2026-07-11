@@ -11,6 +11,44 @@ public sealed class SteamVrRecordingInputAdapterTests
         ["knuckles", "oculus_touch", "vive_controller"];
 
     [Fact]
+    public async Task MicrophoneActionDispatchesOnlyActiveRisingEdges()
+    {
+        var runtime = new ScriptedSteamVrInputRuntime(
+        [
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: false,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+        ]);
+        var commands = new CapturingUiCommandDispatcher();
+        var adapter = new SteamVrMicrophoneInputAdapter(runtime, commands);
+
+        await adapter.RunAsync(CancellationToken.None);
+
+        Assert.Equal(
+            RecordingInputContract.SteamVrToggleMicrophoneActionPath,
+            runtime.RequestedActionPath);
+        Assert.Equal(2, commands.Commands.Count);
+        Assert.All(commands.Commands, command =>
+        {
+            Assert.Equal(UiCommandId.ToggleMicrophone, command.Command);
+            Assert.Equal(UiActivationKind.SteamVrAction, command.ActivationKind);
+        });
+    }
+
+    [Fact]
     public async Task DispatchesCanonicalToggleOnlyForActiveRisingEdges()
     {
         var runtime = new ScriptedSteamVrInputRuntime(
