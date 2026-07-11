@@ -888,6 +888,9 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains(
             "new NativeRecordingEngine(",
             factoryCode);
+        Assert.Contains(
+            "audioEvents,\n                events);",
+            factoryCode);
         var audioComposition = factoryCode.IndexOf(
             "new CompositeAudioSessionEventSink(",
             StringComparison.Ordinal);
