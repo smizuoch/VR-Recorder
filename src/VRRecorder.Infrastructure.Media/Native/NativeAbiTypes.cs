@@ -20,6 +20,10 @@ internal enum NativeEventKind : uint
     FirstVideoPacketMuxed = 1,
     Stopped = 2,
     Faulted = 3,
+    DesktopAudioDeviceLost = 4,
+    DesktopAudioDeviceRecovered = 5,
+    MicrophoneAudioDeviceLost = 6,
+    MicrophoneAudioDeviceRecovered = 7,
 }
 
 internal enum NativeEncoderKind : uint

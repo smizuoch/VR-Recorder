@@ -30,6 +30,8 @@ internal sealed class NativeCallbackState
     public void Process(NativeEventV1 nativeEvent)
     {
         Action? firstPacket = null;
+        AudioSessionStatus? audioStatus = null;
+        AudioSessionWarning? audioWarning = null;
         NativeRecordingFault? fault = null;
         RecordingStopResult? stopped = null;
         lock (_gate)
@@ -65,6 +67,26 @@ internal sealed class NativeCallbackState
                         Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
                         "Native recording failed.");
                     break;
+                case NativeEventKind.DesktopAudioDeviceLost:
+                    audioWarning = CreateAudioWarning(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Desktop);
+                    break;
+                case NativeEventKind.DesktopAudioDeviceRecovered:
+                    audioStatus = CreateAudioStatus(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Desktop);
+                    break;
+                case NativeEventKind.MicrophoneAudioDeviceLost:
+                    audioWarning = CreateAudioWarning(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Microphone);
+                    break;
+                case NativeEventKind.MicrophoneAudioDeviceRecovered:
+                    audioStatus = CreateAudioStatus(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Microphone);
+                    break;
                 default:
                     return;
             }
@@ -73,6 +95,16 @@ internal sealed class NativeCallbackState
         if (firstPacket is not null)
         {
             firstPacket();
+        }
+
+        if (audioWarning is not null)
+        {
+            _callbacks.AudioWarning?.Invoke(audioWarning);
+        }
+
+        if (audioStatus is not null)
+        {
+            _callbacks.AudioStatus?.Invoke(audioStatus);
         }
 
         if (stopped is not null)
@@ -86,6 +118,32 @@ internal sealed class NativeCallbackState
             _callbacks.Faulted(fault);
         }
     }
+
+    private static AudioSessionWarning? CreateAudioWarning(
+        NativeEventV1 nativeEvent,
+        Domain.Audio.AudioInput input) =>
+        HasValidAudioPayload(nativeEvent)
+            ? new AudioSessionWarning(
+                AudioSessionWarningKind.InputUnavailable,
+                input,
+                checked((long)nativeEvent.AudioPacketCount))
+            : null;
+
+    private static AudioSessionStatus? CreateAudioStatus(
+        NativeEventV1 nativeEvent,
+        Domain.Audio.AudioInput input) =>
+        HasValidAudioPayload(nativeEvent)
+            ? new AudioSessionStatus(
+                AudioSessionStatusKind.InputRecovered,
+                input,
+                checked((long)nativeEvent.AudioPacketCount))
+            : null;
+
+    private static bool HasValidAudioPayload(NativeEventV1 nativeEvent) =>
+        nativeEvent.Status == NativeStatus.Ok &&
+        nativeEvent.VideoPacketCount == 0 &&
+        nativeEvent.MessageUtf8 == 0 &&
+        nativeEvent.AudioPacketCount <= long.MaxValue;
 
     private RecordingMediaExpectation CreateMediaExpectation(
         long videoPacketCount)
