@@ -10,6 +10,9 @@
 - [x] schema v1のJSON Schemaをembedded resourceとoffline fileで同梱する
 - [ ] 承認済みのJSON Schema準拠validatorで保存documentを検証する
 - [x] `%LocalAppData%\VR-Recorder\settings.json`をWindows Known Folder経由で解決する
+- [x] desktop UIからtimer／FPS／解像度方針／encoder／qualityを保存し、次回RECで再読込する
+- [x] 保存先変更時は認証済みLegal Bundleのミラー成功後だけ新しいpathを保存する
+- [x] audio routing／gainの明示変更だけを保存し、未変更のendpoint IDと同時更新値を保持する
 
 ## English
 
@@ -21,3 +24,6 @@
 - [x] Ship the schema-v1 JSON Schema as an embedded resource and offline file
 - [ ] Validate saved documents with an approved conforming JSON Schema validator
 - [x] Resolve `%LocalAppData%\VR-Recorder\settings.json` through the Windows Known Folder API
+- [x] Save timer, FPS, resolution policy, encoder, and quality from the desktop UI and reload them for the next REC
+- [x] Persist a changed output path only after mirroring the authenticated Legal Bundle successfully
+- [x] Save only explicit audio-routing and gain edits while preserving endpoint IDs and concurrent unedited values

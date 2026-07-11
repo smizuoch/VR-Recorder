@@ -27,6 +27,7 @@
 - [x] Legal Bundleのミラー失敗・取消では録画開始とcamera writeを行わない
 - [x] install rootからはmanifest認証済みLegal fileだけをミラーし、同居するEXE／DLL等をコピーしない
 - [x] `CURRENT.txt`、`OPEN-NOTICES.html`、過去version、atomic置換、symlink拒否を保存先連携後も維持する
+- [x] settingsの保存先変更時にversion付きLegal Bundleを先にミラーし、失敗時は旧設定を維持する
 
 ## English
 
@@ -55,3 +56,4 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Do not start recording or write camera state when Legal Bundle mirroring fails or is cancelled
 - [x] Mirror only manifest-authenticated Legal files from the install root, never colocated EXE, DLL, or other application payloads
 - [x] Preserve `CURRENT.txt`, `OPEN-NOTICES.html`, prior versions, atomic replacement, and symlink rejection after output integration
+- [x] Mirror the versioned Legal Bundle before persisting a settings output change, preserving the prior setting on failure
