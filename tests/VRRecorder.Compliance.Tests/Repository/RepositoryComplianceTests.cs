@@ -37,7 +37,7 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
-    public void RepositoryComplianceWorkflowWatchesCompleteLegalTemplateInventory()
+    public void RepositoryComplianceWorkflowWatchesDependencyAdmissionInputs()
     {
         var repositoryRoot = FindRepositoryRoot();
         var workflowPath = Path.Combine(
@@ -51,6 +51,16 @@ public sealed class RepositoryComplianceTests
             .ToArray();
 
         Assert.Contains("- legal-template/**", workflowLines);
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- third-party/**"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- '**/packages.lock.json'"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- CMakeLists.txt"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- src/VRRecorder.Native/**"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- tests/VRRecorder.Native.Tests/**"));
     }
 
     [Fact]
