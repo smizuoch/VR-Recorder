@@ -168,10 +168,12 @@ public sealed class StartRecordingUseCaseTests
     {
         var signal = new ControllableVideoSignalGateway();
         var engine = new FakeRecordingEngine();
+        var activator = new FakeRecordingSessionActivator();
         var useCase = CreateUseCase(
             signal,
             new ControllableCountdownTimer(),
-            engine);
+            engine,
+            activator);
         var media = new RecordingMediaConfiguration(
             AudioRouting.DesktopOnly,
             "desktop-endpoint-42",
@@ -202,6 +204,7 @@ public sealed class StartRecordingUseCaseTests
             "session-001",
             MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
         Assert.IsType<StartRecordingResult.Started>(await execution);
+        Assert.Equal([AudioRouting.DesktopOnly], activator.AudioRoutings);
     }
 
     [Fact]
@@ -394,7 +397,8 @@ public sealed class StartRecordingUseCaseTests
     private static StartRecordingUseCase CreateUseCase(
         ControllableVideoSignalGateway signal,
         ControllableCountdownTimer countdown,
-        FakeRecordingEngine engine)
+        FakeRecordingEngine engine,
+        IRecordingSessionActivator? sessionActivator = null)
     {
         var clock = new ControllableMonotonicClock(
             MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
@@ -406,7 +410,7 @@ public sealed class StartRecordingUseCaseTests
             SufficientStorage(),
             SuccessfulEncoderSelector(),
             engine,
-            new FakeRecordingSessionActivator(),
+            sessionActivator ?? new FakeRecordingSessionActivator(),
             new FakeRecordingStorageMonitor(),
             new AutoStopScheduler(clock, new FakeStopRequestSink()));
     }
