@@ -945,6 +945,7 @@ public sealed class WpfHostProjectContractTests
                      "ResolutionPolicyComboBox",
                      "EncoderComboBox",
                      "QualityPresetComboBox",
+                     "AudioRoutingComboBox",
                  })
         {
             var combo = Assert.Single(
@@ -956,6 +957,23 @@ public sealed class WpfHostProjectContractTests
                 combo.Attribute("SelectionChanged")?.Value);
             Assert.NotNull(combo.Attribute("AutomationProperties.Name"));
             Assert.NotNull(combo.Attribute("AutomationProperties.HelpText"));
+        }
+
+        foreach (var sliderName in new[]
+                 {
+                     "DesktopGainSlider",
+                     "MicrophoneGainSlider",
+                 })
+        {
+            var slider = Assert.Single(
+                settingsWindow.Descendants(Presentation + "Slider"),
+                element => element.Attribute(Xaml + "Name")?.Value ==
+                           sliderName);
+            Assert.Equal("-96", slider.Attribute("Minimum")?.Value);
+            Assert.Equal("24", slider.Attribute("Maximum")?.Value);
+            Assert.Equal("OnGainChanged", slider.Attribute("ValueChanged")?.Value);
+            Assert.NotNull(slider.Attribute("AutomationProperties.Name"));
+            Assert.NotNull(slider.Attribute("AutomationProperties.HelpText"));
         }
 
         var rightsNotice = Assert.Single(
@@ -993,6 +1011,10 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("SupportedResolutionChangePolicies", settingsCode);
         Assert.Contains("SupportedEncoders", settingsCode);
         Assert.Contains("SupportedQualityPresets", settingsCode);
+        Assert.Contains("SupportedAudioRoutings", settingsCode);
+        Assert.Contains("AudioRouting =", settingsCode);
+        Assert.Contains("DesktopGainDb =", settingsCode);
+        Assert.Contains("MicrophoneGainDb =", settingsCode);
         Assert.Contains("FolderBrowserDialog", settingsCode);
         Assert.Contains("ResolveOutputPath", settingsCode);
         Assert.Contains("OutputFolder =", settingsCode);
@@ -1033,6 +1055,18 @@ public sealed class WpfHostProjectContractTests
                          "Settings_ResolutionPolicy_Label",
                          "Settings_Encoder_Label",
                          "Settings_Quality_Label",
+                         "Settings_Audio_Heading",
+                         "Settings_AudioRouting_Label",
+                         "Settings_AudioRouting_Tooltip",
+                         "Settings_DesktopGain_Label",
+                         "Settings_DesktopGain_Tooltip",
+                         "Settings_MicrophoneGain_Label",
+                         "Settings_MicrophoneGain_Tooltip",
+                         "Settings_Audio_Mixed",
+                         "Settings_Audio_DesktopOnly",
+                         "Settings_Audio_MicOnly",
+                         "Settings_Audio_Muted",
+                         "Settings_Audio_Gain_Format",
                          "Settings_Save_Label",
                          "Settings_Cancel_Label",
                          "Settings_Load_Error",
