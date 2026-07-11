@@ -6,6 +6,8 @@ using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
 using VRRecorder.Domain.Audio;
+using VRRecorder.Domain.Encoding;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Infrastructure.Storage;
 
@@ -14,11 +16,12 @@ public sealed class StructuredRecordingEventSink
       ISavedRecordingSink,
       ICameraRestoreWarningSink,
       IAudioSessionEventSink,
+      IRecordingMediaEventSink,
       IDisposable
 {
     public const int DefaultAudioQueueCapacity = 64;
-    private readonly Channel<DiagnosticLogEntry> _audioEntries;
-    private readonly Task _audioWorker;
+    private readonly Channel<DiagnosticLogEntry> _queuedEntries;
+    private readonly Task _queuedWorker;
     private readonly IWallClock _clock;
     private readonly IDiagnosticLogWriter _log;
     private int _deliveryThreadId;
@@ -34,7 +37,7 @@ public sealed class StructuredRecordingEventSink
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(audioQueueCapacity);
         _log = log;
         _clock = clock;
-        _audioEntries = Channel.CreateBounded<DiagnosticLogEntry>(
+        _queuedEntries = Channel.CreateBounded<DiagnosticLogEntry>(
             new BoundedChannelOptions(audioQueueCapacity)
             {
                 AllowSynchronousContinuations = false,
@@ -42,7 +45,7 @@ public sealed class StructuredRecordingEventSink
                 SingleReader = true,
                 SingleWriter = false,
             });
-        _audioWorker = Task.Run(WriteAudioEntriesAsync);
+        _queuedWorker = Task.Run(WriteQueuedEntriesAsync);
     }
 
     public Task PublishAsync(
@@ -120,7 +123,7 @@ public sealed class StructuredRecordingEventSink
             fields["failureType"] = warning.Failure.GetType().Name;
         }
 
-        EnqueueAudio(new DiagnosticLogEntry(
+        Enqueue(new DiagnosticLogEntry(
             TimestampUtc(),
             DiagnosticLogLevel.Warning,
             "audio.input_warning",
@@ -145,40 +148,100 @@ public sealed class StructuredRecordingEventSink
                     CultureInfo.InvariantCulture);
         }
 
-        EnqueueAudio(new DiagnosticLogEntry(
+        Enqueue(new DiagnosticLogEntry(
             TimestampUtc(),
             DiagnosticLogLevel.Information,
             "audio.input_status",
             fields));
     }
 
+    public void Publish(RecordingMediaProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            DiagnosticLogLevel.Information,
+            "recording.media_profile",
+            new Dictionary<string, string>
+            {
+                ["encoder"] = EncoderName(profile.Encoder),
+                ["estimatedSourceFramesPerSecond"] =
+                    profile.EstimatedSourceFramesPerSecond.ToString(
+                        "0.###",
+                        CultureInfo.InvariantCulture),
+                ["gpuVendor"] = GpuVendorName(profile.GpuVendor),
+                ["outputFramesPerSecond"] = profile.OutputFramesPerSecond
+                    .ToString(CultureInfo.InvariantCulture),
+                ["outputHeight"] = profile.OutputHeight.ToString(
+                    CultureInfo.InvariantCulture),
+                ["outputWidth"] = profile.OutputWidth.ToString(
+                    CultureInfo.InvariantCulture),
+                ["sourceHeight"] = profile.SourceHeight.ToString(
+                    CultureInfo.InvariantCulture),
+                ["sourcePixelFormat"] = PixelFormatName(
+                    profile.SourcePixelFormat),
+                ["sourceWidth"] = profile.SourceWidth.ToString(
+                    CultureInfo.InvariantCulture),
+            }));
+    }
+
+    public void Publish(RecordingSessionStatistics statistics)
+    {
+        ArgumentNullException.ThrowIfNull(statistics);
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            DiagnosticLogLevel.Information,
+            "recording.media_statistics",
+            new Dictionary<string, string>
+            {
+                ["audioVideoOffsetMicroseconds"] = Microseconds(
+                    statistics.AudioVideoOffset),
+                ["droppedSourceVideoFrameCount"] =
+                    statistics.DroppedSourceVideoFrameCount.ToString(
+                        CultureInfo.InvariantCulture),
+                ["duplicatedOutputVideoFrameCount"] =
+                    statistics.DuplicatedOutputVideoFrameCount.ToString(
+                        CultureInfo.InvariantCulture),
+                ["latestEncodeLatencyMicroseconds"] = Microseconds(
+                    statistics.LatestEncodeLatency),
+                ["maximumEncodeLatencyMicroseconds"] = Microseconds(
+                    statistics.MaximumEncodeLatency),
+                ["muxedAudioPacketCount"] = statistics.MuxedAudioPacketCount
+                    .ToString(CultureInfo.InvariantCulture),
+                ["muxedVideoPacketCount"] = statistics.MuxedVideoPacketCount
+                    .ToString(CultureInfo.InvariantCulture),
+                ["sourceVideoFrameCount"] = statistics.SourceVideoFrameCount
+                    .ToString(CultureInfo.InvariantCulture),
+            }));
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
-            _audioEntries.Writer.TryComplete();
+            _queuedEntries.Writer.TryComplete();
         }
 
         if (Volatile.Read(ref _deliveryThreadId) !=
             Environment.CurrentManagedThreadId)
         {
-            _audioWorker.GetAwaiter().GetResult();
+            _queuedWorker.GetAwaiter().GetResult();
         }
 
         GC.SuppressFinalize(this);
     }
 
-    private void EnqueueAudio(DiagnosticLogEntry entry)
+    private void Enqueue(DiagnosticLogEntry entry)
     {
         if (Volatile.Read(ref _disposed) == 0)
         {
-            _audioEntries.Writer.TryWrite(entry);
+            _queuedEntries.Writer.TryWrite(entry);
         }
     }
 
-    private async Task WriteAudioEntriesAsync()
+    private async Task WriteQueuedEntriesAsync()
     {
-        await foreach (var entry in _audioEntries.Reader.ReadAllAsync())
+        await foreach (var entry in _queuedEntries.Reader.ReadAllAsync())
         {
             try
             {
@@ -289,4 +352,45 @@ public sealed class StructuredRecordingEventSink
                 kind,
                 "The audio status kind is not supported."),
         };
+
+    private static string EncoderName(EncoderKind encoder) => encoder switch
+    {
+        EncoderKind.Nvenc => "nvenc",
+        EncoderKind.Amf => "amf",
+        EncoderKind.Qsv => "qsv",
+        EncoderKind.MediaFoundationSoftware => "media_foundation_software",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(encoder),
+            encoder,
+            "The encoder kind is not supported."),
+    };
+
+    private static string GpuVendorName(GpuVendor vendor) => vendor switch
+    {
+        GpuVendor.Unknown => "unknown",
+        GpuVendor.Nvidia => "nvidia",
+        GpuVendor.Amd => "amd",
+        GpuVendor.Intel => "intel",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(vendor),
+            vendor,
+            "The GPU vendor is not supported."),
+    };
+
+    private static string PixelFormatName(VideoPixelFormat format) =>
+        format switch
+        {
+            VideoPixelFormat.Bgra8 => "bgra8",
+            VideoPixelFormat.Rgba8 => "rgba8",
+            VideoPixelFormat.Nv12 => "nv12",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(format),
+                format,
+                "The source pixel format is not supported."),
+        };
+
+    private static string Microseconds(TimeSpan value) =>
+        value.TotalMicroseconds.ToString(
+            "0.###",
+            CultureInfo.InvariantCulture);
 }
