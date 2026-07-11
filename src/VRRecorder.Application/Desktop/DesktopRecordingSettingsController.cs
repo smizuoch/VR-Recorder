@@ -1,5 +1,7 @@
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 using VRRecorder.Application.Settings;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Video;
@@ -35,6 +37,14 @@ public sealed class DesktopRecordingSettingsController
             VideoQualityPreset.Standard,
             VideoQualityPreset.High,
         ]);
+    private static readonly IReadOnlyList<AudioRouting> AudioRoutingChoices =
+        Array.AsReadOnly(
+        [
+            AudioRouting.Mixed,
+            AudioRouting.DesktopOnly,
+            AudioRouting.MicOnly,
+            AudioRouting.Muted,
+        ]);
 
     private readonly ISettingsStore _settings;
     private readonly RecordingOutputPathResolver _outputPaths;
@@ -69,6 +79,9 @@ public sealed class DesktopRecordingSettingsController
 
     public static IReadOnlyList<VideoQualityPreset> SupportedQualityPresets =>
         QualityChoices;
+
+    public static IReadOnlyList<AudioRouting> SupportedAudioRoutings =>
+        AudioRoutingChoices;
 
     public async Task<DesktopRecordingSettingsDraft> LoadAsync(
         CancellationToken cancellationToken)
@@ -135,6 +148,21 @@ public sealed class DesktopRecordingSettingsController
                     edited.QualityPreset,
                     current.Video.QualityPreset),
             },
+            Audio = current.Audio with
+            {
+                Routing = Merge(
+                    original.AudioRouting,
+                    edited.AudioRouting,
+                    current.Audio.Routing),
+                DesktopGainDb = Merge(
+                    original.DesktopGainDb,
+                    edited.DesktopGainDb,
+                    current.Audio.DesktopGainDb),
+                MicrophoneGainDb = Merge(
+                    original.MicrophoneGainDb,
+                    edited.MicrophoneGainDb,
+                    current.Audio.MicrophoneGainDb),
+            },
         };
         VRRecorderSettingsContract.Validate(updated);
         await _settings
@@ -167,7 +195,10 @@ public sealed class DesktopRecordingSettingsController
             settings.Recording.ResolutionChangePolicy,
             settings.Video.FrameRate,
             settings.Video.Encoder,
-            settings.Video.QualityPreset);
+            settings.Video.QualityPreset,
+            settings.Audio.Routing,
+            settings.Audio.DesktopGainDb,
+            settings.Audio.MicrophoneGainDb);
 
     public OutputPath ResolveOutputPath(string configuredPath) =>
         _outputPaths.Resolve(configuredPath);
@@ -211,6 +242,14 @@ public sealed class DesktopRecordingSettingsController
             throw InvalidChoice("quality preset");
         }
 
+        if (!AudioRoutingChoices.Contains(draft.AudioRouting))
+        {
+            throw InvalidChoice("audio routing");
+        }
+
+        ValidateGain(draft.DesktopGainDb, "desktop gain");
+        ValidateGain(draft.MicrophoneGainDb, "microphone gain");
+
         return outputPath;
     }
 
@@ -221,4 +260,14 @@ public sealed class DesktopRecordingSettingsController
         EqualityComparer<T>.Default.Equals(original, edited)
             ? current
             : edited;
+
+    private static void ValidateGain(double value, string setting)
+    {
+        if (!double.IsFinite(value) ||
+            value is < RecordingMediaConfiguration.MinimumInputGainDb or
+                > RecordingMediaConfiguration.MaximumInputGainDb)
+        {
+            throw InvalidChoice(setting);
+        }
+    }
 }

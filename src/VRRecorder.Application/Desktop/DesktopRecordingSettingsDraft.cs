@@ -1,4 +1,5 @@
 using VRRecorder.Application.Settings;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 
 namespace VRRecorder.Application.Desktop;
@@ -10,4 +11,7 @@ public sealed record DesktopRecordingSettingsDraft(
     ResolutionChangePolicy ResolutionChangePolicy,
     int FrameRate,
     EncoderPreference Encoder,
-    VideoQualityPreset QualityPreset);
+    VideoQualityPreset QualityPreset,
+    AudioRouting AudioRouting,
+    double DesktopGainDb,
+    double MicrophoneGainDb);
