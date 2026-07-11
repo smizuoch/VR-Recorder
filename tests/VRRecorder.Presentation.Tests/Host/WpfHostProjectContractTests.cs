@@ -1240,6 +1240,127 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopExportsDiagnosticsOnlyThroughExplicitAccessibleAction()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var mainWindow = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var diagnosticsWindow = LoadRequiredXaml(
+            appDirectory,
+            "DiagnosticsWindow.xaml");
+
+        var open = Assert.Single(
+            mainWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "DiagnosticsButton");
+        Assert.Equal(
+            "{DynamicResource Diagnostics_Open_AccessibleName}",
+            open.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Diagnostics_Open_Tooltip}",
+            open.Attribute("AutomationProperties.HelpText")?.Value);
+        Assert.Equal(
+            "{DynamicResource Diagnostics_Open_Tooltip}",
+            open.Attribute("ToolTip")?.Value);
+        Assert.Equal("OnDiagnosticsClick", open.Attribute("Click")?.Value);
+
+        Assert.Equal(
+            "VRRecorder.App.DiagnosticsWindow",
+            diagnosticsWindow.Root?.Attribute(Xaml + "Class")?.Value);
+        Assert.Null(diagnosticsWindow.Root?.Attribute("Loaded"));
+        Assert.Equal(
+            "{DynamicResource Layout.FlowDirection}",
+            diagnosticsWindow.Root?.Attribute("FlowDirection")?.Value);
+        Assert.Single(
+            diagnosticsWindow.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute("Text")?.Value ==
+                       "{DynamicResource Diagnostics_Privacy}");
+        var export = Assert.Single(
+            diagnosticsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "ExportDiagnosticsButton");
+        Assert.Equal("OnExport", export.Attribute("Click")?.Value);
+        Assert.NotNull(export.Attribute("AutomationProperties.Name"));
+        Assert.NotNull(export.Attribute("AutomationProperties.HelpText"));
+        var status = Assert.Single(
+            diagnosticsWindow.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "DiagnosticsStatusText");
+        Assert.Equal("Collapsed", status.Attribute("Visibility")?.Value);
+        Assert.Equal(
+            "Polite",
+            status.Attribute("AutomationProperties.LiveSetting")?.Value);
+        Assert.Single(
+            diagnosticsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnClose");
+
+        var diagnosticsCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "DiagnosticsWindow.xaml.cs"));
+        Assert.Contains("DesktopDiagnosticsController", diagnosticsCode);
+        Assert.Contains("SaveFileDialog", diagnosticsCode);
+        Assert.Contains("ShowDialog()", diagnosticsCode);
+        Assert.Contains("_controller.ExportAsync(", diagnosticsCode);
+        Assert.Contains("LastExport?.BundlePath", diagnosticsCode);
+        Assert.Contains("Diagnostics_Export_Success_Format", diagnosticsCode);
+        Assert.Contains("Diagnostics_Export_Failure", diagnosticsCode);
+
+        var mainCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("DiagnosticsWindow", mainCode);
+        Assert.Contains("OpenDiagnosticsWindow", mainCode);
+        Assert.Contains("diagnosticsWindow.Show();", mainCode);
+        Assert.DoesNotContain("diagnosticsWindow.ShowDialog", mainCode);
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("DesktopDiagnosticsController", appCode);
+        Assert.Contains("PrivacySafeDiagnosticBundleExporter", appCode);
+        Assert.Contains("DiagnosticsController", appCode);
+        Assert.DoesNotContain(".ExportAsync(", appCode);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Diagnostics_Open_Label",
+                         "Diagnostics_Open_AccessibleName",
+                         "Diagnostics_Open_Tooltip",
+                         "Diagnostics_Title",
+                         "Diagnostics_Window_AccessibleName",
+                         "Diagnostics_Intro",
+                         "Diagnostics_Privacy",
+                         "Diagnostics_Export_Label",
+                         "Diagnostics_Export_AccessibleName",
+                         "Diagnostics_Export_Tooltip",
+                         "Diagnostics_Export_DialogTitle",
+                         "Diagnostics_Export_Filter",
+                         "Diagnostics_Export_DefaultFileName",
+                         "Diagnostics_Exporting",
+                         "Diagnostics_Export_Success_Format",
+                         "Diagnostics_Export_Failure",
+                         "Diagnostics_Close_Label",
+                         "Diagnostics_Close_AccessibleName",
+                         "Diagnostics_Close_Tooltip",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopAboutAndLegalIsAccessibleExpansionSafeAndModeless()
     {
         var appDirectory = Path.Combine(
