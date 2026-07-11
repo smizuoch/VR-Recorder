@@ -16,7 +16,7 @@ public sealed class StructuredRecordingEventSinkTests
     {
         using var directory = TemporaryDirectory.Create();
         using var log = new RotatingJsonLinesDiagnosticLog(directory.Path);
-        var sink = new StructuredRecordingEventSink(
+        using var sink = new StructuredRecordingEventSink(
             log,
             new FixedWallClock(new DateTimeOffset(
                 2026,
@@ -52,6 +52,7 @@ public sealed class StructuredRecordingEventSinkTests
             AudioSessionStatusKind.InputRecovered,
             AudioInput.Microphone,
             FramePosition: 9_600));
+        sink.Dispose();
 
         var content = await File.ReadAllTextAsync(Path.Combine(
             directory.Path,
@@ -86,9 +87,132 @@ public sealed class StructuredRecordingEventSinkTests
         Assert.Contains("\"framePosition\":\"9600\"", lines[4]);
     }
 
+    [Fact]
+    public async Task AudioPublishDoesNotWaitAndCapturesCallbackTimestamp()
+    {
+        var callbackTime = new DateTimeOffset(
+            2026,
+            7,
+            11,
+            1,
+            2,
+            3,
+            TimeSpan.Zero);
+        var clock = new MutableWallClock(callbackTime);
+        var writer = new BlockingDiagnosticLogWriter();
+        using var sink = new StructuredRecordingEventSink(
+            writer,
+            clock,
+            audioQueueCapacity: 2);
+        var warning = new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            AudioInput.Desktop,
+            FramePosition: 4_800);
+
+        var publishing = Task.Run(() =>
+            ((IAudioSessionEventSink)sink).Publish(warning));
+        try
+        {
+            await writer.FirstWriteStarted.Task.WaitAsync(
+                TimeSpan.FromSeconds(5));
+            await publishing.WaitAsync(TimeSpan.FromSeconds(5));
+            clock.LocalNow = callbackTime.AddMinutes(10);
+        }
+        finally
+        {
+            writer.ReleaseFirstWrite.TrySetResult();
+        }
+
+        sink.Dispose();
+
+        var entry = Assert.Single(writer.Entries);
+        Assert.Equal(callbackTime, entry.TimestampUtc);
+        Assert.Equal("audio.input_warning", entry.EventName);
+    }
+
+    [Fact]
+    public void WriterFailureDoesNotStopQueuedAudioOrEscapeDispose()
+    {
+        var writer = new ThrowingFirstDiagnosticLogWriter();
+        var sink = new StructuredRecordingEventSink(
+            writer,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        ((IAudioSessionEventSink)sink).Publish(new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            AudioInput.Desktop,
+            FramePosition: 4_800));
+        ((IAudioSessionEventSink)sink).Publish(new AudioSessionStatus(
+            AudioSessionStatusKind.InputRecovered,
+            AudioInput.Desktop,
+            FramePosition: 9_600));
+
+        sink.Dispose();
+        sink.Dispose();
+        ((IAudioSessionEventSink)sink).Publish(new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            AudioInput.Microphone,
+            FramePosition: 14_400));
+
+        Assert.Equal(2, writer.Entries.Count);
+        Assert.Equal("audio.input_warning", writer.Entries[0].EventName);
+        Assert.Equal("audio.input_status", writer.Entries[1].EventName);
+    }
+
     private sealed class FixedWallClock(DateTimeOffset localNow) : IWallClock
     {
         public DateTimeOffset LocalNow { get; } = localNow;
+    }
+
+    private sealed class MutableWallClock(DateTimeOffset localNow) : IWallClock
+    {
+        public DateTimeOffset LocalNow { get; set; } = localNow;
+    }
+
+    private sealed class BlockingDiagnosticLogWriter : IDiagnosticLogWriter
+    {
+        private readonly Lock _gate = new();
+
+        public List<DiagnosticLogEntry> Entries { get; } = [];
+
+        public TaskCompletionSource FirstWriteStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseFirstWrite { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task WriteAsync(
+            DiagnosticLogEntry entry,
+            CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                Entries.Add(entry);
+            }
+
+            FirstWriteStarted.TrySetResult();
+            await ReleaseFirstWrite.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class ThrowingFirstDiagnosticLogWriter
+        : IDiagnosticLogWriter
+    {
+        private int _writeCount;
+
+        public List<DiagnosticLogEntry> Entries { get; } = [];
+
+        public Task WriteAsync(
+            DiagnosticLogEntry entry,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Entries.Add(entry);
+            return Interlocked.Increment(ref _writeCount) == 1
+                ? Task.FromException(new IOException(
+                    "diagnostic storage unavailable"))
+                : Task.CompletedTask;
+        }
     }
 
     private sealed class TemporaryDirectory : IDisposable
