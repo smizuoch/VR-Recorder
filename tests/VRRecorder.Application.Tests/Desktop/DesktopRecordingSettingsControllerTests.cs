@@ -73,6 +73,39 @@ public sealed class DesktopRecordingSettingsControllerTests
         Assert.Equal(0, store.SaveCount);
     }
 
+    [Fact]
+    public async Task SaveMergesOnlyUserChangesIntoLatestEditableSettings()
+    {
+        var events = new List<string>();
+        var initial = VRRecorderSettings.CreateDefault();
+        var store = new TrackingSettingsStore(initial, events);
+        var controller = new DesktopRecordingSettingsController(
+            store,
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(AbsolutePath("downloads"))),
+            new TrackingLegalBundleOutputMirror(events));
+        var original = await controller.LoadAsync(CancellationToken.None);
+        store.Replace(initial with
+        {
+            Video = initial.Video with
+            {
+                FrameRate = 120,
+                QualityPreset = VideoQualityPreset.Standard,
+            },
+        });
+
+        await controller.SaveAsync(
+            original,
+            original with { SelfTimerSeconds = 3 },
+            CancellationToken.None);
+
+        Assert.Equal(3, store.Current.Recording.SelfTimerSeconds);
+        Assert.Equal(120, store.Current.Video.FrameRate);
+        Assert.Equal(
+            VideoQualityPreset.Standard,
+            store.Current.Video.QualityPreset);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-settings-controller-tests",
@@ -85,6 +118,8 @@ public sealed class DesktopRecordingSettingsControllerTests
         public VRRecorderSettings Current { get; private set; } = initial;
 
         public int SaveCount { get; private set; }
+
+        public void Replace(VRRecorderSettings settings) => Current = settings;
 
         public Task<VRRecorderSettings> LoadAsync(
             CancellationToken cancellationToken)
