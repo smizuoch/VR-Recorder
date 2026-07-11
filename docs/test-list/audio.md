@@ -17,6 +17,7 @@
 - [x] native device loss／recoveryを入力種別と48 kHz frame位置付きの型付きeventへ変換する
 - [x] desktop／microphoneの喪失／復旧を独立に保持し、一方の復旧で他方のunavailable状態を解除しない
 - [x] 診断／presentation observerの障害で録画sessionを停止しない
+- [x] bounded callback queueの飽和時も入力別の最新availabilityへ収束する
 
 ## English
 
@@ -35,3 +36,4 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Translate native device-loss/recovery callbacks into typed events carrying the input kind and 48 kHz frame position
 - [x] Track desktop/microphone loss and recovery independently without clearing the other input's unavailable state
 - [x] Keep the recording session running when diagnostics or presentation observers fail
+- [x] Converge to each input's latest availability when the bounded callback queue is saturated

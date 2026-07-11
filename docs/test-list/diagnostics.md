@@ -10,6 +10,7 @@
 - [x] desktop UIからlocalizedかつaccessibleな明示操作で保存先を選択する
 - [x] export成功、取消、失敗を別状態として扱い、以前の成功pathを失敗後に再表示しない
 - [x] audio入力の警告／状態を許可済みinput・kind・frame位置・再探索時間・failure typeだけへ再投影し、endpoint情報とmessageを除外する
+- [x] audio eventのtimestamp／fieldをcallback時点で確定し、bounded queueでdisk flushから分離する
 - [ ] app version、OS、GPU、driver、encoder、映像geometry／FPSを構造化eventへ記録する
 - [ ] frame drop／duplicate、encode latency、A/V sync、audio underrun／overrunを記録する
 - [ ] OSC capability／書込み結果とfinalization失敗／隔離をprivacy-safeに記録する
@@ -25,6 +26,7 @@
 - [x] Choose the destination through an explicit localized and accessible desktop action
 - [x] Keep export success, cancellation, and failure distinct without reusing an earlier successful path after failure
 - [x] Reproject audio-input warnings/statuses to allowlisted input, kind, frame position, rediscovery budget, and failure type fields while excluding endpoint data and messages
+- [x] Capture audio timestamps/fields at callback time and isolate disk flushes behind a bounded queue
 - [ ] Record app version, OS, GPU, driver, encoder, video geometry, and FPS as structured events
 - [ ] Record frame drops/duplicates, encode latency, A/V sync, and audio underruns/overruns
 - [ ] Record OSC capability/write outcomes and finalization failure/quarantine without private data

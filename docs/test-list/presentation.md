@@ -20,6 +20,7 @@
 - [x] trayをReady／Recording／Warning／Faultの4状態へ同期し、権利確認前は録画操作を無効にする
 - [x] 診断bundleを明示操作だけでexportするlocalized／accessible windowを提供する
 - [x] desktop／trayへ入力別の音声喪失／復旧を非terminal通知として表示し、両入力同時喪失を保持する
+- [x] 音声availability表示をactive録画sessionへ限定し、終了／取消／失敗で消去して明示的なUIA live-region eventを送る
 - [ ] WindowsでWPF hostのUI Automationを実行する
 
 ## English
@@ -42,4 +43,5 @@
 - [x] Synchronize the tray with Ready/Recording/Warning/Fault and disable recording actions before rights acknowledgement
 - [x] Provide a localized and accessible window that exports diagnostics only through an explicit action
 - [x] Show input-specific audio loss/recovery as nonterminal desktop/tray notifications while preserving simultaneous loss of both inputs
+- [x] Scope audio availability to the active recording session, clear it on completion/cancellation/failure, and raise explicit UIA live-region events
 - [ ] Run WPF host UI Automation on Windows
