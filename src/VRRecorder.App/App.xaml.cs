@@ -37,8 +37,17 @@ public partial class App : System.Windows.Application, IDisposable
         var settingsStore = new JsonFileSettingsStore(
             settingsPath,
             SystemWallClock.Instance);
+        _legalVerifier = new AuthenticatedLegalBundleVerifier(
+            new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
+                typeof(App).Assembly));
         _recordingSettings = new DesktopRecordingSettingsController(
-            settingsStore);
+            settingsStore,
+            new RecordingOutputPathResolver(
+                new WindowsDownloadsOutputPathProvider()),
+            new AuthenticatedLegalBundleOutputMirror(
+                AppContext.BaseDirectory,
+                ProductVersion(),
+                _legalVerifier));
         _recordingHost = new DesktopRecordingCommandHost(
             new ProductionDesktopRecordingRuntimeFactory(settingsStore));
         _recordingRightsStore =
@@ -47,9 +56,6 @@ public partial class App : System.Windows.Application, IDisposable
         _recordingRightsGate = new RecordingRightsGate(
             _recordingRightsStore,
             SystemWallClock.Instance);
-        _legalVerifier = new AuthenticatedLegalBundleVerifier(
-            new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
-                typeof(App).Assembly));
         _legalController = new DesktopLegalController(
             new AuthenticatedLegalCatalogReader(
                 AppContext.BaseDirectory,
@@ -292,6 +298,9 @@ public partial class App : System.Windows.Application, IDisposable
             applicationDataDirectory,
             "recording-rights.json");
     }
+
+    private static string ProductVersion() =>
+        typeof(App).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
 
     private void StartSteamVrInput()
     {

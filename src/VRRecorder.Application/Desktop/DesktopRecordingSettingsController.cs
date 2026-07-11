@@ -1,6 +1,7 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Encoding;
+using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Desktop;
@@ -36,11 +37,20 @@ public sealed class DesktopRecordingSettingsController
         ]);
 
     private readonly ISettingsStore _settings;
+    private readonly RecordingOutputPathResolver _outputPaths;
+    private readonly ILegalBundleOutputMirror _legalBundleMirror;
 
-    public DesktopRecordingSettingsController(ISettingsStore settings)
+    public DesktopRecordingSettingsController(
+        ISettingsStore settings,
+        RecordingOutputPathResolver outputPaths,
+        ILegalBundleOutputMirror legalBundleMirror)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(outputPaths);
+        ArgumentNullException.ThrowIfNull(legalBundleMirror);
         _settings = settings;
+        _outputPaths = outputPaths;
+        _legalBundleMirror = legalBundleMirror;
     }
 
     public static IReadOnlyList<int> SupportedSelfTimerSeconds =>
@@ -73,13 +83,24 @@ public sealed class DesktopRecordingSettingsController
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(draft);
-        ValidateDraft(draft);
+        var resolvedOutputPath = ValidateDraft(draft);
         var current = await LoadValidatedAsync(cancellationToken)
             .ConfigureAwait(false);
+        if (!string.Equals(
+                current.Recording.OutputFolder,
+                draft.OutputFolder,
+                StringComparison.Ordinal))
+        {
+            await _legalBundleMirror
+                .MirrorAsync(resolvedOutputPath, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var updated = current with
         {
             Recording = current.Recording with
             {
+                OutputFolder = draft.OutputFolder,
                 SelfTimerSeconds = draft.SelfTimerSeconds,
                 AutoStopSeconds = draft.AutoStopSeconds,
                 ResolutionChangePolicy = draft.ResolutionChangePolicy,
@@ -116,6 +137,7 @@ public sealed class DesktopRecordingSettingsController
     private static DesktopRecordingSettingsDraft Project(
         VRRecorderSettings settings) =>
         new(
+            settings.Recording.OutputFolder,
             settings.Recording.SelfTimerSeconds,
             settings.Recording.AutoStopSeconds,
             settings.Recording.ResolutionChangePolicy,
@@ -123,8 +145,12 @@ public sealed class DesktopRecordingSettingsController
             settings.Video.Encoder,
             settings.Video.QualityPreset);
 
-    private static void ValidateDraft(DesktopRecordingSettingsDraft draft)
+    public OutputPath ResolveOutputPath(string configuredPath) =>
+        _outputPaths.Resolve(configuredPath);
+
+    private OutputPath ValidateDraft(DesktopRecordingSettingsDraft draft)
     {
+        var outputPath = _outputPaths.Resolve(draft.OutputFolder);
         if (!SelfTimerChoices.Contains(draft.SelfTimerSeconds))
         {
             throw InvalidChoice("self timer");
@@ -160,6 +186,8 @@ public sealed class DesktopRecordingSettingsController
         {
             throw InvalidChoice("quality preset");
         }
+
+        return outputPath;
     }
 
     private static InvalidDataException InvalidChoice(string setting) =>

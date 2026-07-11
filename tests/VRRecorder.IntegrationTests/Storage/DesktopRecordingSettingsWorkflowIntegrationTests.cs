@@ -45,7 +45,7 @@ public sealed class DesktopRecordingSettingsWorkflowIntegrationTests
             },
         };
         await store.SaveAsync(initial, CancellationToken.None);
-        var controller = new DesktopRecordingSettingsController(store);
+        var controller = CreateController(store, directory.Path);
         var draft = await controller.LoadAsync(CancellationToken.None);
 
         var latest = initial with
@@ -132,7 +132,7 @@ public sealed class DesktopRecordingSettingsWorkflowIntegrationTests
                 Video = settings.Video with { FrameRate = 45 },
             },
             CancellationToken.None);
-        var controller = new DesktopRecordingSettingsController(store);
+        var controller = CreateController(store, directory.Path);
         var draft = await controller.LoadAsync(CancellationToken.None);
 
         await controller.SaveAsync(
@@ -152,6 +152,32 @@ public sealed class DesktopRecordingSettingsWorkflowIntegrationTests
     {
         public OutputPath GetDefault() => throw new InvalidOperationException(
             "An absolute configured output path must not use the default provider.");
+    }
+
+    private static DesktopRecordingSettingsController CreateController(
+        ISettingsStore store,
+        string root) =>
+        new(
+            store,
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(
+                    Path.Combine(root, "Downloads"))),
+            new UnexpectedLegalBundleOutputMirror());
+
+    private sealed class FixedDefaultOutputPathProvider(string path)
+        : IDefaultOutputPathProvider
+    {
+        public OutputPath GetDefault() => new(path);
+    }
+
+    private sealed class UnexpectedLegalBundleOutputMirror
+        : ILegalBundleOutputMirror
+    {
+        public Task MirrorAsync(
+            OutputPath outputPath,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "An unchanged output path must not be mirrored during settings save.");
     }
 
     private sealed class TemporaryDirectory : IDisposable
