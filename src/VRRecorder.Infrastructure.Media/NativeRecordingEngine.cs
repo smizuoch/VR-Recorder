@@ -11,6 +11,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
     private readonly INativeRecordingBackend _backend;
     private readonly IMonotonicClock _clock;
     private readonly IAudioSessionEventSink _audioEvents;
+    private readonly IRecordingMediaEventSink _mediaEvents;
     private readonly INativeRecordingRuntimeFaultSink _runtimeFaults;
     private readonly ConcurrentDictionary<string, ActiveSession> _sessions =
         new(StringComparer.Ordinal);
@@ -23,7 +24,8 @@ public sealed class NativeRecordingEngine : IRecordingEngine
             backend,
             clock,
             runtimeFaults,
-            NullAudioSessionEventSink.Instance)
+            NullAudioSessionEventSink.Instance,
+            NullRecordingMediaEventSink.Instance)
     {
     }
 
@@ -32,15 +34,32 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         IMonotonicClock clock,
         INativeRecordingRuntimeFaultSink runtimeFaults,
         IAudioSessionEventSink audioEvents)
+        : this(
+            backend,
+            clock,
+            runtimeFaults,
+            audioEvents,
+            NullRecordingMediaEventSink.Instance)
+    {
+    }
+
+    public NativeRecordingEngine(
+        INativeRecordingBackend backend,
+        IMonotonicClock clock,
+        INativeRecordingRuntimeFaultSink runtimeFaults,
+        IAudioSessionEventSink audioEvents,
+        IRecordingMediaEventSink mediaEvents)
     {
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(runtimeFaults);
         ArgumentNullException.ThrowIfNull(audioEvents);
+        ArgumentNullException.ThrowIfNull(mediaEvents);
         _backend = backend;
         _clock = clock;
         _runtimeFaults = runtimeFaults;
         _audioEvents = audioEvents;
+        _mediaEvents = mediaEvents;
     }
 
     public async Task<RecordingHandle> StartAsync(
@@ -88,6 +107,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 .ConfigureAwait(false);
             var handle = new RecordingHandle(session.Id, committedAt);
             runtimeFaultContext.Activate(handle);
+            PublishMediaBestEffort(plan);
             return handle;
         }
         catch
@@ -152,6 +172,11 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 var result = await activeSession.Session
                     .StopAsync(cancellationToken)
                     .ConfigureAwait(false);
+                if (result.Statistics is { } statistics)
+                {
+                    PublishMediaBestEffort(statistics);
+                }
+
                 _sessions.TryRemove(handle.Id, out _);
                 return result;
             }
@@ -183,6 +208,41 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         }
     }
 
+    private void PublishMediaBestEffort(RecordingPlan plan)
+    {
+        try
+        {
+            var layout = plan.VideoLayout.CurrentLayout;
+            _mediaEvents.Publish(new RecordingMediaProfile(
+                plan.Signal.Width,
+                plan.Signal.Height,
+                plan.Signal.PixelFormat,
+                plan.Signal.EstimatedSourceFramesPerSecond,
+                layout.OutputCanvas.Width,
+                layout.OutputCanvas.Height,
+                plan.FrameRate.Value,
+                plan.Encoder,
+                plan.Signal.GpuVendor));
+        }
+        catch (Exception)
+        {
+            // Diagnostics cannot change a committed recording start.
+        }
+    }
+
+    private void PublishMediaBestEffort(
+        RecordingSessionStatistics statistics)
+    {
+        try
+        {
+            _mediaEvents.Publish(statistics);
+        }
+        catch (Exception)
+        {
+            // Diagnostics cannot change a successful native stop.
+        }
+    }
+
     private sealed class ActiveSession
     {
         public ActiveSession(INativeRecordingSession session)
@@ -193,6 +253,20 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         public INativeRecordingSession Session { get; }
 
         public SemaphoreSlim StopGate { get; } = new(1, 1);
+    }
+
+    private sealed class NullRecordingMediaEventSink
+        : IRecordingMediaEventSink
+    {
+        public static NullRecordingMediaEventSink Instance { get; } = new();
+
+        public void Publish(RecordingMediaProfile profile)
+        {
+        }
+
+        public void Publish(RecordingSessionStatistics statistics)
+        {
+        }
     }
 
     private sealed class RuntimeFaultContext(

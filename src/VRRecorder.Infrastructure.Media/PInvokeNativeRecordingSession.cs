@@ -158,7 +158,12 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
                 }
             }
 
-            return result;
+            return result with
+            {
+                Statistics = _finalStatistics is null
+                    ? null
+                    : ToRecordingStatistics(_finalStatistics),
+            };
         }
         finally
         {
@@ -239,6 +244,18 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
                 exception);
         }
     }
+
+    private static RecordingSessionStatistics ToRecordingStatistics(
+        NativeRecordingSessionStatistics statistics) =>
+        new(
+            statistics.SourceVideoFrameCount,
+            statistics.MuxedVideoPacketCount,
+            statistics.MuxedAudioPacketCount,
+            statistics.DroppedSourceVideoFrameCount,
+            statistics.DuplicatedOutputVideoFrameCount,
+            statistics.LatestEncodeLatency,
+            statistics.MaximumEncodeLatency,
+            statistics.AudioVideoOffset);
 
     private void ThrowIfReleased()
     {

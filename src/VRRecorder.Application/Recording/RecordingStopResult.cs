@@ -6,4 +6,5 @@ public sealed record RecordingStopResult(
     PendingRecording Recording,
     long VideoPacketCount,
     long AudioPacketCount,
-    RecordingMediaExpectation? MediaExpectation = null);
+    RecordingMediaExpectation? MediaExpectation = null,
+    RecordingSessionStatistics? Statistics = null);
