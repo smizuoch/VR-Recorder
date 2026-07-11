@@ -80,8 +80,8 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
             ["README.txt", "diagnostics.jsonl"],
             archive.Entries.Select(entry => entry.FullName));
         Assert.All(archive.Entries, entry => Assert.Equal(
-            new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero),
-            entry.LastWriteTime));
+            new DateTime(1980, 1, 1, 0, 0, 0),
+            entry.LastWriteTime.DateTime));
         var diagnostics = await ReadEntryAsync(
             archive.GetEntry("diagnostics.jsonl")!);
         Assert.Contains("recording.state_transition", diagnostics);
