@@ -38,6 +38,54 @@ public sealed class ActiveRecordingSessionCoordinatorTests
     }
 
     [Fact]
+    public async Task ConcurrentAudioCommandsAreAppliedInAcceptanceOrder()
+    {
+        var gateway = new CapturingAudioRoutingGateway
+        {
+            BlockFirstUpdate = true,
+        };
+        var coordinator = CreateCoordinator(
+            new FakeRecordingEngine(),
+            gateway);
+        var handle = new RecordingHandle(
+            "session-audio-fifo",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        coordinator.Activate(
+            handle,
+            AudioRouting.Mixed,
+            CancellationToken.None);
+
+        var microphoneOff = coordinator.ExecuteAudioCommandAsync(
+            RecordingAudioCommand.ToggleMicrophone,
+            CancellationToken.None);
+        await gateway.WaitUntilFirstUpdateStartedAsync();
+        var muted = coordinator.ExecuteAudioCommandAsync(
+            RecordingAudioCommand.ToggleMuteAll,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [(handle, AudioRouting.DesktopOnly)],
+            gateway.Updates);
+        Assert.False(muted.IsCompleted);
+
+        gateway.CompleteFirstUpdate();
+        var microphoneOffState = await microphoneOff;
+        var mutedState = await muted;
+
+        Assert.Equal(AudioRouting.DesktopOnly, microphoneOffState.EffectiveRouting);
+        Assert.False(mutedState.MicrophoneIncluded);
+        Assert.True(mutedState.MuteAll);
+        Assert.Equal(AudioRouting.Muted, mutedState.EffectiveRouting);
+        Assert.Equal(
+            [
+                (handle, AudioRouting.DesktopOnly),
+                (handle, AudioRouting.Muted),
+            ],
+            gateway.Updates);
+        Assert.Equal(mutedState, coordinator.CurrentAudioControlState);
+    }
+
+    [Fact]
     public async Task CompetingStopReasonsShareOneSafeFinalizationAndRetainFirstReason()
     {
         var engine = new FakeRecordingEngine();
@@ -107,16 +155,53 @@ public sealed class ActiveRecordingSessionCoordinatorTests
     private sealed class CapturingAudioRoutingGateway
         : IRecordingAudioRoutingGateway
     {
-        public List<(RecordingHandle Handle, AudioRouting Routing)> Updates
-        { get; } = [];
+        private readonly object _gate = new();
+        private readonly TaskCompletionSource _firstUpdateStarted = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstUpdate = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<(RecordingHandle Handle, AudioRouting Routing)>
+            _updates = [];
 
-        public Task UpdateAudioRoutingAsync(
+        public bool BlockFirstUpdate { get; init; }
+
+        public List<(RecordingHandle Handle, AudioRouting Routing)> Updates
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _updates];
+                }
+            }
+        }
+
+        public async Task UpdateAudioRoutingAsync(
             RecordingHandle handle,
             AudioRouting routing,
             CancellationToken cancellationToken)
         {
-            Updates.Add((handle, routing));
-            return Task.CompletedTask;
+            var isFirst = false;
+            lock (_gate)
+            {
+                _updates.Add((handle, routing));
+                isFirst = _updates.Count == 1;
+            }
+
+            if (isFirst)
+            {
+                _firstUpdateStarted.TrySetResult();
+                if (BlockFirstUpdate)
+                {
+                    await _releaseFirstUpdate.Task
+                        .WaitAsync(cancellationToken);
+                }
+            }
         }
+
+        public Task WaitUntilFirstUpdateStartedAsync() =>
+            _firstUpdateStarted.Task;
+
+        public void CompleteFirstUpdate() => _releaseFirstUpdate.TrySetResult();
     }
 }
