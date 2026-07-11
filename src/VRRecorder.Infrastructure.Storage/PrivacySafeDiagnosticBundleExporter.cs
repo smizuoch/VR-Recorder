@@ -91,6 +91,26 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         "endpoint_rediscovery_scheduled",
         "input_recovered",
     ];
+    private static readonly HashSet<string> Encoders =
+    [
+        "amf",
+        "media_foundation_software",
+        "nvenc",
+        "qsv",
+    ];
+    private static readonly HashSet<string> GpuVendors =
+    [
+        "amd",
+        "intel",
+        "nvidia",
+        "unknown",
+    ];
+    private static readonly HashSet<string> SourcePixelFormats =
+    [
+        "bgra8",
+        "nv12",
+        "rgba8",
+    ];
     private readonly string _logDirectory;
 
     public PrivacySafeDiagnosticBundleExporter(string logDirectory)
@@ -355,6 +375,8 @@ public sealed class PrivacySafeDiagnosticBundleExporter
             "camera.restore_warning" => SanitizeCameraWarning(fields),
             "audio.input_warning" => SanitizeAudioWarning(fields),
             "audio.input_status" => SanitizeAudioStatus(fields),
+            "recording.media_profile" => SanitizeMediaProfile(fields),
+            "recording.media_statistics" => SanitizeMediaStatistics(fields),
             _ => null,
         };
 
@@ -565,6 +587,127 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         return sanitized;
     }
 
+    private static SortedDictionary<string, string>? SanitizeMediaProfile(
+        IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadAllowedString(
+                fields,
+                "encoder",
+                Encoders,
+                out var encoder) ||
+            !TryReadPositiveDecimal(
+                fields,
+                "estimatedSourceFramesPerSecond",
+                maximum: 1_000,
+                out var estimatedSourceFramesPerSecond) ||
+            !TryReadAllowedString(
+                fields,
+                "gpuVendor",
+                GpuVendors,
+                out var gpuVendor) ||
+            !TryReadPositiveInt(
+                fields,
+                "outputFramesPerSecond",
+                out var outputFramesPerSecond) ||
+            outputFramesPerSecond > 1_000 ||
+            !TryReadPositiveInt(fields, "outputHeight", out var outputHeight) ||
+            !TryReadPositiveInt(fields, "outputWidth", out var outputWidth) ||
+            !TryReadPositiveInt(fields, "sourceHeight", out var sourceHeight) ||
+            !TryReadAllowedString(
+                fields,
+                "sourcePixelFormat",
+                SourcePixelFormats,
+                out var sourcePixelFormat) ||
+            !TryReadPositiveInt(fields, "sourceWidth", out var sourceWidth))
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["encoder"] = encoder,
+            ["estimatedSourceFramesPerSecond"] =
+                estimatedSourceFramesPerSecond.ToString(
+                    "0.###",
+                    CultureInfo.InvariantCulture),
+            ["gpuVendor"] = gpuVendor,
+            ["outputFramesPerSecond"] = outputFramesPerSecond.ToString(
+                CultureInfo.InvariantCulture),
+            ["outputHeight"] = outputHeight.ToString(
+                CultureInfo.InvariantCulture),
+            ["outputWidth"] = outputWidth.ToString(
+                CultureInfo.InvariantCulture),
+            ["sourceHeight"] = sourceHeight.ToString(
+                CultureInfo.InvariantCulture),
+            ["sourcePixelFormat"] = sourcePixelFormat,
+            ["sourceWidth"] = sourceWidth.ToString(
+                CultureInfo.InvariantCulture),
+        };
+    }
+
+    private static SortedDictionary<string, string>? SanitizeMediaStatistics(
+        IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadLong(
+                fields,
+                "audioVideoOffsetMicroseconds",
+                out var audioVideoOffset) ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "droppedSourceVideoFrameCount",
+                out var droppedSourceVideoFrameCount) ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "duplicatedOutputVideoFrameCount",
+                out var duplicatedOutputVideoFrameCount) ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "latestEncodeLatencyMicroseconds",
+                out var latestEncodeLatency) ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "maximumEncodeLatencyMicroseconds",
+                out var maximumEncodeLatency) ||
+            maximumEncodeLatency < latestEncodeLatency ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "muxedAudioPacketCount",
+                out var muxedAudioPacketCount) ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "muxedVideoPacketCount",
+                out var muxedVideoPacketCount) ||
+            !TryReadNonnegativeUlong(
+                fields,
+                "sourceVideoFrameCount",
+                out var sourceVideoFrameCount))
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["audioVideoOffsetMicroseconds"] = audioVideoOffset.ToString(
+                CultureInfo.InvariantCulture),
+            ["droppedSourceVideoFrameCount"] =
+                droppedSourceVideoFrameCount.ToString(
+                    CultureInfo.InvariantCulture),
+            ["duplicatedOutputVideoFrameCount"] =
+                duplicatedOutputVideoFrameCount.ToString(
+                    CultureInfo.InvariantCulture),
+            ["latestEncodeLatencyMicroseconds"] = latestEncodeLatency.ToString(
+                CultureInfo.InvariantCulture),
+            ["maximumEncodeLatencyMicroseconds"] =
+                maximumEncodeLatency.ToString(CultureInfo.InvariantCulture),
+            ["muxedAudioPacketCount"] = muxedAudioPacketCount.ToString(
+                CultureInfo.InvariantCulture),
+            ["muxedVideoPacketCount"] = muxedVideoPacketCount.ToString(
+                CultureInfo.InvariantCulture),
+            ["sourceVideoFrameCount"] = sourceVideoFrameCount.ToString(
+                CultureInfo.InvariantCulture),
+        };
+    }
+
     private static Dictionary<string, JsonElement>? UniqueProperties(
         JsonElement element)
     {
@@ -622,6 +765,66 @@ public sealed class PrivacySafeDiagnosticBundleExporter
                    CultureInfo.InvariantCulture,
                    out value) &&
                value >= 0;
+    }
+
+    private static bool TryReadLong(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        out long value)
+    {
+        value = 0;
+        return TryReadString(properties, name, out var text) &&
+               long.TryParse(
+                   text,
+                   NumberStyles.AllowLeadingSign,
+                   CultureInfo.InvariantCulture,
+                   out value);
+    }
+
+    private static bool TryReadNonnegativeUlong(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        out ulong value)
+    {
+        value = 0;
+        return TryReadString(properties, name, out var text) &&
+               ulong.TryParse(
+                   text,
+                   NumberStyles.None,
+                   CultureInfo.InvariantCulture,
+                   out value);
+    }
+
+    private static bool TryReadPositiveInt(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        out int value)
+    {
+        value = 0;
+        return TryReadString(properties, name, out var text) &&
+               int.TryParse(
+                   text,
+                   NumberStyles.None,
+                   CultureInfo.InvariantCulture,
+                   out value) &&
+               value > 0;
+    }
+
+    private static bool TryReadPositiveDecimal(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        decimal maximum,
+        out decimal value)
+    {
+        value = 0;
+        return TryReadString(properties, name, out var text) &&
+               decimal.TryParse(
+                   text,
+                   NumberStyles.AllowDecimalPoint,
+                   CultureInfo.InvariantCulture,
+                   out value) &&
+               value > 0 &&
+               value <= maximum;
     }
 
     private static bool TryReadString(
