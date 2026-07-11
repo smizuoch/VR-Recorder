@@ -9,7 +9,7 @@ LDFLAGS := --coverage -pthread
 
 .PHONY: all clean test export-check cmake-contract-sync managed-fixture
 
-all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/c_header_smoke.o
+all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/c_header_smoke.o
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -18,6 +18,9 @@ $(BUILD_DIR)/c_header_smoke.o: c_header_smoke.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/abi_contract_tests: abi_contract_tests.cpp fake_media_backend.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/audio_mixer_tests: audio_mixer_tests.cpp $(NATIVE_ROOT)/src/audio_mixer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/libvrrecorder_native_test.so: fake_media_backend.cpp fake_control_exports.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
@@ -39,6 +42,7 @@ cmake-contract-sync:
 
 test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/abi_contract_tests
+	$(BUILD_DIR)/audio_mixer_tests
 
 clean:
 	rm -rf $(BUILD_DIR)
