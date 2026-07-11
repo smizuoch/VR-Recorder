@@ -1,14 +1,42 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Tests.Desktop;
 
 public sealed class DesktopRecordingCommandHostTests
 {
+    [Fact]
+    public async Task RelaysAudioCommandsAndSameStateRuntimeRevisions()
+    {
+        var runtime = new ControllableDesktopRecordingRuntime();
+        await using var host = new DesktopRecordingCommandHost(
+            new StubDesktopRecordingRuntimeFactory(runtime));
+        await host.ActivateAsync(ReadyStartup(), CancellationToken.None);
+        runtime.Publish(
+            RecorderState.Recording,
+            RecordingAudioControlState.FromRouting(
+                AudioRouting.DesktopOnly));
+        var recordingRevision = host.Current.Revision;
+
+        var updated = await host.ExecuteAudioCommandAsync(
+            RecordingAudioCommand.ToggleMicrophone,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [RecordingAudioCommand.ToggleMicrophone],
+            runtime.AudioCommands);
+        Assert.Equal(AudioRouting.Mixed, updated.EffectiveRouting);
+        Assert.Equal(RecorderState.Recording, host.Current.State);
+        Assert.Equal(recordingRevision + 1, host.Current.Revision);
+        Assert.Equal(updated, host.Current.AudioControlState);
+    }
+
     [Fact]
     public async Task RelaysRuntimeStatusWithHostOwnedMonotonicRevisions()
     {
@@ -344,6 +372,8 @@ public sealed class DesktopRecordingCommandHostTests
 
         public int DisposeCallCount { get; private set; }
 
+        public List<RecordingAudioCommand> AudioCommands { get; } = [];
+
         public List<RecordingStopReason> ShutdownReasons { get; } = [];
 
         public RecorderStatusSnapshot Current => _statuses.Current;
@@ -352,10 +382,27 @@ public sealed class DesktopRecordingCommandHostTests
             Action<RecorderStatusSnapshot> subscriber) =>
             _statuses.Subscribe(subscriber);
 
-        public void Publish(RecorderState state) =>
+        public void Publish(
+            RecorderState state,
+            RecordingAudioControlState? audioControlState = null) =>
             _statuses.TryPublish(RecorderStatusSnapshot.Create(
                 ++_statusRevision,
-                state));
+                state,
+                audioControlState));
+
+        public Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+            RecordingAudioCommand command,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AudioCommands.Add(command);
+            var updated = (Current.AudioControlState ??
+                           throw new InvalidOperationException(
+                               "No audio state is active."))
+                .Apply(command);
+            Publish(Current.State, updated);
+            return Task.FromResult(updated);
+        }
 
         public Task ToggleAsync(CancellationToken cancellationToken)
         {
