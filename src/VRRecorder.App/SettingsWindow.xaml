@@ -171,6 +171,57 @@
             </GroupBox>
 
             <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Audio_Heading}">
+                <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                    <TextBlock Text="{DynamicResource Settings_AudioRouting_Label}" />
+                    <ComboBox x:Name="AudioRoutingComboBox"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_AudioRouting_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_AudioRouting_Tooltip}"
+                              ToolTip="{DynamicResource Settings_AudioRouting_Tooltip}" />
+
+                    <DockPanel Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Text="{DynamicResource Settings_DesktopGain_Label}" />
+                        <TextBlock x:Name="DesktopGainValueText"
+                                   HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="DesktopGainSlider"
+                            MinHeight="{StaticResource Interaction.MinimumTarget}"
+                            Minimum="-96"
+                            Maximum="24"
+                            SmallChange="1"
+                            LargeChange="6"
+                            TickFrequency="6"
+                            ValueChanged="OnGainChanged"
+                            AutomationProperties.Name="{DynamicResource Settings_DesktopGain_Label}"
+                            AutomationProperties.HelpText="{DynamicResource Settings_DesktopGain_Tooltip}"
+                            ToolTip="{DynamicResource Settings_DesktopGain_Tooltip}" />
+
+                    <DockPanel Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Text="{DynamicResource Settings_MicrophoneGain_Label}" />
+                        <TextBlock x:Name="MicrophoneGainValueText"
+                                   HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <Slider x:Name="MicrophoneGainSlider"
+                            MinHeight="{StaticResource Interaction.MinimumTarget}"
+                            Minimum="-96"
+                            Maximum="24"
+                            SmallChange="1"
+                            LargeChange="6"
+                            TickFrequency="6"
+                            ValueChanged="OnGainChanged"
+                            AutomationProperties.Name="{DynamicResource Settings_MicrophoneGain_Label}"
+                            AutomationProperties.HelpText="{DynamicResource Settings_MicrophoneGain_Tooltip}"
+                            ToolTip="{DynamicResource Settings_MicrophoneGain_Tooltip}" />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                       Header="{DynamicResource Settings_Rights_Heading}">
                 <TextBlock Margin="{StaticResource Spacing.LayoutGrid}"
                            Text="{DynamicResource Rights_Body}"

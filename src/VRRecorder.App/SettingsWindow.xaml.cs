@@ -5,6 +5,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Settings;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 using WpfComboBox = System.Windows.Controls.ComboBox;
 
@@ -55,6 +56,10 @@ public partial class SettingsWindow : Window, IDisposable
                 _draft.ResolutionChangePolicy);
             SelectValue(EncoderComboBox, _draft.Encoder);
             SelectValue(QualityPresetComboBox, _draft.QualityPreset);
+            SelectValue(AudioRoutingComboBox, _draft.AudioRouting);
+            DesktopGainSlider.Value = _draft.DesktopGainDb;
+            MicrophoneGainSlider.Value = _draft.MicrophoneGainDb;
+            UpdateGainLabels();
             UpdateSaveAvailability();
         }
         catch (OperationCanceledException) when (
@@ -91,6 +96,10 @@ public partial class SettingsWindow : Window, IDisposable
                 Encoder = SelectedValue<EncoderPreference>(EncoderComboBox),
                 QualityPreset = SelectedValue<VideoQualityPreset>(
                     QualityPresetComboBox),
+                AudioRouting = SelectedValue<AudioRouting>(
+                    AudioRoutingComboBox),
+                DesktopGainDb = DesktopGainSlider.Value,
+                MicrophoneGainDb = MicrophoneGainSlider.Value,
             };
             await _controller.SaveAsync(_draft, updated, _lifetime.Token);
             _draft = updated;
@@ -115,6 +124,20 @@ public partial class SettingsWindow : Window, IDisposable
     private void OnSelectionChanged(
         object sender,
         SelectionChangedEventArgs e) => UpdateSaveAvailability();
+
+    private void OnGainChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (DesktopGainValueText is null ||
+            MicrophoneGainValueText is null)
+        {
+            return;
+        }
+
+        UpdateGainLabels();
+        UpdateSaveAvailability();
+    }
 
     private void OnCancel(object sender, RoutedEventArgs e) => Close();
 
@@ -237,6 +260,21 @@ public partial class SettingsWindow : Window, IDisposable
                             "Unsupported quality choice."),
                     })))
                 .ToList();
+        AudioRoutingComboBox.ItemsSource =
+            DesktopRecordingSettingsController.SupportedAudioRoutings
+                .Select(value => new SettingOption(
+                    value,
+                    Resource(value switch
+                    {
+                        AudioRouting.Mixed => "Settings_Audio_Mixed",
+                        AudioRouting.DesktopOnly =>
+                            "Settings_Audio_DesktopOnly",
+                        AudioRouting.MicOnly => "Settings_Audio_MicOnly",
+                        AudioRouting.Muted => "Settings_Audio_Muted",
+                        _ => throw new InvalidDataException(
+                            "Unsupported audio routing choice."),
+                    })))
+                .ToList();
     }
 
     private void SelectFrameRate(int value)
@@ -258,6 +296,16 @@ public partial class SettingsWindow : Window, IDisposable
         var resolved = _controller.ResolveOutputPath(configuredPath);
         _selectedOutputFolder = configuredPath;
         OutputFolderTextBox.Text = resolved.FullPath;
+    }
+
+    private void UpdateGainLabels()
+    {
+        DesktopGainValueText.Text = Format(
+            "Settings_Audio_Gain_Format",
+            DesktopGainSlider.Value);
+        MicrophoneGainValueText.Text = Format(
+            "Settings_Audio_Gain_Format",
+            MicrophoneGainSlider.Value);
     }
 
     private static void SelectValue(WpfComboBox comboBox, object? value) =>
@@ -290,7 +338,8 @@ public partial class SettingsWindow : Window, IDisposable
         FrameRateComboBox.SelectedItem is SettingOption &&
         ResolutionPolicyComboBox.SelectedItem is SettingOption &&
         EncoderComboBox.SelectedItem is SettingOption &&
-        QualityPresetComboBox.SelectedItem is SettingOption;
+        QualityPresetComboBox.SelectedItem is SettingOption &&
+        AudioRoutingComboBox.SelectedItem is SettingOption;
 
     private void UpdateSaveAvailability() =>
         SaveSettingsButton.IsEnabled =
