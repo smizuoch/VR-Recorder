@@ -735,6 +735,106 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopSeparatelySurfacesSavedPathAndCameraRestoreWarnings()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+
+        var saved = Assert.Single(
+            window.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "RecordingSavedText");
+        Assert.Equal("Collapsed", saved.Attribute("Visibility")?.Value);
+        Assert.Equal("Wrap", saved.Attribute("TextWrapping")?.Value);
+        Assert.Equal(
+            "Polite",
+            saved.Attribute("AutomationProperties.LiveSetting")?.Value);
+
+        var cameraWarning = Assert.Single(
+            window.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "CameraRestoreWarningText");
+        Assert.Equal(
+            "Collapsed",
+            cameraWarning.Attribute("Visibility")?.Value);
+        Assert.Equal("Wrap", cameraWarning.Attribute("TextWrapping")?.Value);
+        Assert.Equal(
+            "Assertive",
+            cameraWarning.Attribute("AutomationProperties.LiveSetting")?.Value);
+
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("DesktopRecordingNotificationHub", windowCode);
+        Assert.Contains("_recordingNotificationSubscription", windowCode);
+        Assert.Contains("DesktopRecordingNotification.Saved", windowCode);
+        Assert.Contains("DesktopRecordingNotification.CameraWarning", windowCode);
+        Assert.Contains("Recording.FinalPath", windowCode);
+        Assert.Contains("Recording_Notification_Saved_Format", windowCode);
+        Assert.Contains(
+            "Recording_Notification_CameraRestoreWarning",
+            windowCode);
+        Assert.Contains("OnRecordingNotification", windowCode);
+        Assert.Contains("Dispatcher.InvokeAsync", windowCode);
+        Assert.Contains("ClearRecordingNotifications", windowCode);
+        Assert.Contains("RecorderState.Arming", windowCode);
+        Assert.Contains(
+            "_recordingNotificationSubscription.Dispose()",
+            windowCode);
+        Assert.DoesNotContain("notification.Warning.Failure.Message", windowCode);
+
+        var factoryCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+        Assert.Contains("DesktopRecordingNotificationHub", factoryCode);
+        Assert.Contains("CompositeSavedRecordingSink", factoryCode);
+        Assert.Contains("CompositeCameraRestoreWarningSink", factoryCode);
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("new DesktopRecordingNotificationHub()", appCode);
+        Assert.Contains("RecordingNotifications", appCode);
+        Assert.Contains("_trayNotificationSubscription", appCode);
+        Assert.Contains("OnTrayRecordingNotification", appCode);
+        Assert.Contains("ShowBalloonTip", appCode);
+        var hostDisposal = appCode.IndexOf(
+            "_recordingHost.DisposeAsync()",
+            StringComparison.Ordinal);
+        var notificationDisposal = appCode.IndexOf(
+            "_recordingNotifications.Dispose()",
+            StringComparison.Ordinal);
+        Assert.True(hostDisposal >= 0, "Recording host disposal is missing.");
+        Assert.True(
+            notificationDisposal > hostDisposal,
+            "Recording notifications must outlive recording-host shutdown.");
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Recording_Notification_Saved_Title",
+                         "Recording_Notification_Saved_Format",
+                         "Recording_Notification_CameraRestoreWarning_Title",
+                         "Recording_Notification_CameraRestoreWarning",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopRequiresExplicitRecordingRightsAcknowledgementBeforeHostActivation()
     {
         var appDirectory = Path.Combine(
