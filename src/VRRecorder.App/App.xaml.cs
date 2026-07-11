@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Presentation;
@@ -20,6 +21,7 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly DesktopRecordingNotificationHub _recordingNotifications =
         new DesktopRecordingNotificationHub();
     private readonly DesktopRecordingCommandHost _recordingHost;
+    private readonly IUiCommandDispatcher _uiCommands;
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopDiagnosticsController _diagnosticsController;
     private readonly DesktopRecordingSettingsController _recordingSettings;
@@ -82,14 +84,25 @@ public partial class App : System.Windows.Application, IDisposable
                 new WindowsLegalFolderShell(),
                 LegalBundleVerificationScope.InstallRoot),
             _recordingHost);
-        _recordingInputs = new RecordingInputDispatcher(
-            new RecordingUiCommandDispatcher(
-                (_, cancellationToken) =>
-                    _recordingHost.ToggleAsync(cancellationToken)));
+        _uiCommands = new RecordingUiCommandDispatcher(
+            (_, cancellationToken) =>
+                _recordingHost.ToggleAsync(cancellationToken),
+            (_, cancellationToken) =>
+                _recordingHost.ExecuteAudioCommandAsync(
+                    RecordingAudioCommand.ToggleMicrophone,
+                    cancellationToken),
+            (_, cancellationToken) =>
+                _recordingHost.ExecuteAudioCommandAsync(
+                    RecordingAudioCommand.ToggleMuteAll,
+                    cancellationToken));
+        _recordingInputs = new RecordingInputDispatcher(_uiCommands);
     }
 
     internal static RecordingInputDispatcher RecordingInputs =>
         ((App)Current)._recordingInputs;
+
+    internal static IUiCommandDispatcher UiCommands =>
+        ((App)Current)._uiCommands;
 
     internal static DesktopLegalController LegalController =>
         ((App)Current)._legalController;
@@ -537,13 +550,18 @@ public partial class App : System.Windows.Application, IDisposable
 
     private async Task RunSteamVrInputAsync(string nativeLibraryPath)
     {
+        using var inputLifetime = CancellationTokenSource
+            .CreateLinkedTokenSource(_steamVrInputLifetime.Token);
+        var microphoneInput = RunOptionalSteamVrMicrophoneInputAsync(
+            nativeLibraryPath,
+            inputLifetime.Token);
         try
         {
             var runtime = new NativeSteamVrInputRuntime(
                 nativeLibraryPath,
                 AppContext.BaseDirectory);
             await new SteamVrRecordingInputAdapter(runtime, _recordingInputs)
-                .RunAsync(_steamVrInputLifetime.Token)
+                .RunAsync(inputLifetime.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (
@@ -561,6 +579,43 @@ public partial class App : System.Windows.Application, IDisposable
         {
             System.Diagnostics.Trace.TraceWarning(
                 "SteamVR recording input is unavailable: {0}",
+                exception.Message);
+        }
+        finally
+        {
+            await inputLifetime.CancelAsync().ConfigureAwait(false);
+            await microphoneInput.ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunOptionalSteamVrMicrophoneInputAsync(
+        string nativeLibraryPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var runtime = new NativeSteamVrInputRuntime(
+                nativeLibraryPath,
+                AppContext.BaseDirectory);
+            await new SteamVrMicrophoneInputAdapter(runtime, _uiCommands)
+                .RunAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested)
+        {
+            // Normal recording-input shutdown.
+        }
+        catch (Exception exception) when (
+            exception is SteamVrInputException or
+                FileNotFoundException or
+                DllNotFoundException or
+                BadImageFormatException or
+                IOException or
+                UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "SteamVR microphone input is unavailable: {0}",
                 exception.Message);
         }
     }
