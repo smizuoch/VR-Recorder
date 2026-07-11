@@ -938,6 +938,76 @@ bool UpdatesAudioRoutingOnlyWhileSessionIsActive()
     return true;
 }
 
+bool SynchronousAudioRoutingFaultDoesNotDeadlockTheAbi()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::FaultDuringNextAudioRoutingUpdate();
+    auto update = ValidAudioRoutingUpdate();
+    std::promise<vrrec_status_t> update_result;
+    auto completed = update_result.get_future();
+    std::thread updating([&] {
+        update_result.set_value(
+            vrrec_session_update_audio_routing_v1(session, &update));
+    });
+
+    if (completed.wait_for(std::chrono::milliseconds(250)) !=
+        std::future_status::ready) {
+        updating.detach();
+        std::cerr << __func__
+                  << " timed out waiting for reentrant fault callback\n";
+        return false;
+    }
+
+    updating.join();
+    CHECK(completed.get() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_FAULTED);
+    CHECK(log.events[0].message == "audio routing update failed");
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_STATE);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool StopWaitsForAnInFlightAudioRoutingUpdate()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextAudioRoutingUpdate();
+    auto update = ValidAudioRoutingUpdate();
+    auto updating = std::async(std::launch::async, [&] {
+        return vrrec_session_update_audio_routing_v1(session, &update);
+    });
+    CHECK(vrrecorder::native::testing::WaitUntilAudioRoutingUpdateEntered(
+        std::chrono::milliseconds(250)));
+    auto stopping = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+
+    CHECK(stopping.wait_for(std::chrono::milliseconds(50)) ==
+          std::future_status::timeout);
+    CHECK(vrrecorder::native::testing::RequestStopCallCount() == 0);
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_STATE);
+    vrrecorder::native::testing::ReleaseAudioRoutingUpdate();
+    CHECK(updating.get() == VRREC_STATUS_OK);
+    CHECK(stopping.get() == VRREC_STATUS_OK);
+    CHECK(vrrecorder::native::testing::RequestStopCallCount() == 1);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool FaultIsTerminalAndAbortQuiescesCallbacks()
 {
     EventLog fault_log;
@@ -1728,6 +1798,8 @@ int main()
         !SynchronousLayoutFaultDoesNotDeadlockTheAbi() ||
         !StopWaitsForAnInFlightLayoutUpdateWithoutHoldingTheStateLock() ||
         !UpdatesAudioRoutingOnlyWhileSessionIsActive() ||
+        !SynchronousAudioRoutingFaultDoesNotDeadlockTheAbi() ||
+        !StopWaitsForAnInFlightAudioRoutingUpdate() ||
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
