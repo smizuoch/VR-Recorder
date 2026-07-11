@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Threading.Channels;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
@@ -12,19 +13,36 @@ public sealed class StructuredRecordingEventSink
     : IRecordingStorageStatusSink,
       ISavedRecordingSink,
       ICameraRestoreWarningSink,
-      IAudioSessionEventSink
+      IAudioSessionEventSink,
+      IDisposable
 {
-    private readonly RotatingJsonLinesDiagnosticLog _log;
+    public const int DefaultAudioQueueCapacity = 64;
+    private readonly Channel<DiagnosticLogEntry> _audioEntries;
+    private readonly Task _audioWorker;
     private readonly IWallClock _clock;
+    private readonly IDiagnosticLogWriter _log;
+    private int _deliveryThreadId;
+    private int _disposed;
 
     public StructuredRecordingEventSink(
-        RotatingJsonLinesDiagnosticLog log,
-        IWallClock clock)
+        IDiagnosticLogWriter log,
+        IWallClock clock,
+        int audioQueueCapacity = DefaultAudioQueueCapacity)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(clock);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(audioQueueCapacity);
         _log = log;
         _clock = clock;
+        _audioEntries = Channel.CreateBounded<DiagnosticLogEntry>(
+            new BoundedChannelOptions(audioQueueCapacity)
+            {
+                AllowSynchronousContinuations = false,
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false,
+            });
+        _audioWorker = Task.Run(WriteAudioEntriesAsync);
     }
 
     public Task PublishAsync(
@@ -102,7 +120,7 @@ public sealed class StructuredRecordingEventSink
             fields["failureType"] = warning.Failure.GetType().Name;
         }
 
-        WriteBestEffort(new DiagnosticLogEntry(
+        EnqueueAudio(new DiagnosticLogEntry(
             TimestampUtc(),
             DiagnosticLogLevel.Warning,
             "audio.input_warning",
@@ -127,17 +145,55 @@ public sealed class StructuredRecordingEventSink
                     CultureInfo.InvariantCulture);
         }
 
-        WriteBestEffort(new DiagnosticLogEntry(
+        EnqueueAudio(new DiagnosticLogEntry(
             TimestampUtc(),
             DiagnosticLogLevel.Information,
             "audio.input_status",
             fields));
     }
 
-    private void WriteBestEffort(DiagnosticLogEntry entry) =>
-        WriteBestEffortAsync(entry, CancellationToken.None)
-            .GetAwaiter()
-            .GetResult();
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _audioEntries.Writer.TryComplete();
+        }
+
+        if (Volatile.Read(ref _deliveryThreadId) !=
+            Environment.CurrentManagedThreadId)
+        {
+            _audioWorker.GetAwaiter().GetResult();
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    private void EnqueueAudio(DiagnosticLogEntry entry)
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            _audioEntries.Writer.TryWrite(entry);
+        }
+    }
+
+    private async Task WriteAudioEntriesAsync()
+    {
+        await foreach (var entry in _audioEntries.Reader.ReadAllAsync())
+        {
+            try
+            {
+                Volatile.Write(
+                    ref _deliveryThreadId,
+                    Environment.CurrentManagedThreadId);
+                await WriteBestEffortAsync(entry, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                Volatile.Write(ref _deliveryThreadId, 0);
+            }
+        }
+    }
 
     private async Task WriteBestEffortAsync(
         DiagnosticLogEntry entry,

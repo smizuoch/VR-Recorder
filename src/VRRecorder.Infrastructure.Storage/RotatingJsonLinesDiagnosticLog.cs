@@ -3,7 +3,8 @@ using System.Text.Json;
 
 namespace VRRecorder.Infrastructure.Storage;
 
-public sealed class RotatingJsonLinesDiagnosticLog : IDisposable
+public sealed class RotatingJsonLinesDiagnosticLog
+    : IDiagnosticLogWriter, IDisposable
 {
     public const long DefaultMaximumFileBytes = 10L * 1024 * 1024;
     public const int DefaultMaximumFileCount = 5;
