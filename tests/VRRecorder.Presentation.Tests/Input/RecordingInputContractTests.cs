@@ -27,6 +27,14 @@ public sealed class RecordingInputContractTests
     }
 
     [Fact]
+    public void SteamVrMicrophonePathMatchesActionManifestContract()
+    {
+        Assert.Equal(
+            "/actions/vrrecorder/in/toggle_microphone",
+            RecordingInputContract.SteamVrToggleMicrophoneActionPath);
+    }
+
+    [Fact]
     public void UnknownActivationKindIsRejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
