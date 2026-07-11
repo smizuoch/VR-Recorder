@@ -40,12 +40,20 @@ public sealed class SteamVrMicrophoneInputAdapter
             }
 
             pressIsLatched = true;
-            await _commands
-                .DispatchAsync(
-                    UiCommandId.ToggleMicrophone,
-                    UiActivationKind.SteamVrAction,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await _commands
+                    .DispatchAsync(
+                        UiCommandId.ToggleMicrophone,
+                        UiActivationKind.SteamVrAction,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // Mic is valid only during an active recording. A rejected
+                // press must not end the action observer.
+            }
         }
     }
 }

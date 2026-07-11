@@ -39,11 +39,19 @@ public sealed class SteamVrRecordingInputAdapter
             }
 
             pressIsLatched = true;
-            await _inputs
-                .DispatchAsync(
-                    UiActivationKind.SteamVrAction,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await _inputs
+                    .DispatchAsync(
+                        UiActivationKind.SteamVrAction,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // A state or rights gate can reject one physical press.
+                // The SteamVR action observer must remain available.
+            }
         }
     }
 }
