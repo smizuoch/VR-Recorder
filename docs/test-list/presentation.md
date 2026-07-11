@@ -19,6 +19,7 @@
 - [x] desktop／trayへ保存済みMP4 pathとカメラ復元警告を別通知として表示する
 - [x] trayをReady／Recording／Warning／Faultの4状態へ同期し、権利確認前は録画操作を無効にする
 - [x] 診断bundleを明示操作だけでexportするlocalized／accessible windowを提供する
+- [x] desktop／trayへ入力別の音声喪失／復旧を非terminal通知として表示し、両入力同時喪失を保持する
 - [ ] WindowsでWPF hostのUI Automationを実行する
 
 ## English
@@ -40,4 +41,5 @@
 - [x] Show the saved MP4 path and camera-restore warning as separate desktop/tray notifications
 - [x] Synchronize the tray with Ready/Recording/Warning/Fault and disable recording actions before rights acknowledgement
 - [x] Provide a localized and accessible window that exports diagnostics only through an explicit action
+- [x] Show input-specific audio loss/recovery as nonterminal desktop/tray notifications while preserving simultaneous loss of both inputs
 - [ ] Run WPF host UI Automation on Windows

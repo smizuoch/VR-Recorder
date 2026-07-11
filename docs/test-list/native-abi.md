@@ -22,6 +22,7 @@
 - [x] production placeholder Spout backendは明示的にBACKEND_UNAVAILABLEを返す
 - [x] encoder packet probeへ出力寸法・fps・adapter・16合成frameを固定ABIで渡す
 - [x] native packet probeをmanaged fallback結果へ変換し、Disposeを実行中probeと合流する
+- [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
 - [ ] native branch／line coverageのrelease thresholdを適用する
@@ -48,6 +49,7 @@
 - [x] Return explicit BACKEND_UNAVAILABLE from the production placeholder Spout backend
 - [x] Pass output geometry, frame rate, adapter, and 16 synthetic frames to the encoder packet probe through a fixed ABI
 - [x] Translate native packet probing into managed fallback results and join Dispose with an in-flight probe
+- [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends
 - [ ] Enforce the native branch and line coverage release thresholds

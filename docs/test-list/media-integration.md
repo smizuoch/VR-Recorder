@@ -15,6 +15,7 @@
 - [x] managed P/Invoke sourceを既存の3 frame／300 ms stability gatewayへ接続する
 - [x] native pollのcaller cancellationとDisposeを短いpoll sliceで収束させる
 - [x] forced encoder終了時はpendingを保持しSavedを発行しない
+- [x] native音声device eventを入力別の型付きwarning／recoveryへ変換し、pending Stopを完了せずobserver障害でも録画を中断しない
 
 ## English
 
@@ -31,3 +32,4 @@
 - [x] Connect the managed P/Invoke source to the existing three-frame/300-ms stability gateway
 - [x] Converge caller cancellation and Dispose around native polling through short poll slices
 - [x] Preserve pending output and suppress Saved after forced encoder termination
+- [x] Translate native audio-device events into input-specific typed warnings/recoveries without completing a pending Stop or interrupting recording when observers fail

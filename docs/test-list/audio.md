@@ -14,6 +14,9 @@
 - [x] 48 kHz stereo interleaved frame契約で両channelへ同じ10 ms gain rampを適用する
 - [x] routing変更または早期device復帰時は現在の可聴gainから新しいrampを開始する
 - [x] warning／status sink障害で連続audio timelineを中断しない
+- [x] native device loss／recoveryを入力種別と48 kHz frame位置付きの型付きeventへ変換する
+- [x] desktop／microphoneの喪失／復旧を独立に保持し、一方の復旧で他方のunavailable状態を解除しない
+- [x] 診断／presentation observerの障害で録画sessionを停止しない
 
 ## English
 
@@ -29,3 +32,6 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Apply one 10 ms gain ramp to both channels of the 48 kHz interleaved-stereo frame contract
 - [x] Restart a ramp from the current audible gain after routing changes or early device recovery
 - [x] Keep the continuous audio timeline when warning or status sinks fail
+- [x] Translate native device-loss/recovery callbacks into typed events carrying the input kind and 48 kHz frame position
+- [x] Track desktop/microphone loss and recovery independently without clearing the other input's unavailable state
+- [x] Keep the recording session running when diagnostics or presentation observers fail
