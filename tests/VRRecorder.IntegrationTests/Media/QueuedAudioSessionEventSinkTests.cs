@@ -57,6 +57,34 @@ public sealed class QueuedAudioSessionEventSinkTests
         Assert.Equal([warning, recovered], observer.Events);
     }
 
+    [Fact]
+    public async Task BoundedBacklogConvergesToLatestStateForEachInput()
+    {
+        var observer = new BlockingAudioSessionEventSink();
+        using var sink = new QueuedAudioSessionEventSink(
+            observer,
+            capacity: 2);
+
+        var publishing = Task.Run(() =>
+            sink.Publish(Warning(AudioInput.Desktop, framePosition: 100)));
+        try
+        {
+            await observer.FirstDeliveryStarted.Task.WaitAsync(TestTimeout);
+            await publishing.WaitAsync(TestTimeout);
+            sink.Publish(Recovered(AudioInput.Desktop, framePosition: 200));
+            sink.Publish(Warning(AudioInput.Microphone, framePosition: 300));
+            sink.Publish(Recovered(AudioInput.Microphone, framePosition: 400));
+        }
+        finally
+        {
+            observer.ReleaseFirstDelivery.Set();
+        }
+
+        sink.Dispose();
+
+        Assert.Equal(AudioInputAvailability.None, observer.UnavailableInputs);
+    }
+
     private static AudioSessionWarning Warning(
         AudioInput input,
         long framePosition) =>
@@ -81,6 +109,8 @@ public sealed class QueuedAudioSessionEventSinkTests
 
         public List<object> Events { get; } = [];
 
+        public AudioInputAvailability UnavailableInputs { get; private set; }
+
         public TaskCompletionSource FirstDeliveryStarted { get; } = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -95,6 +125,16 @@ public sealed class QueuedAudioSessionEventSinkTests
             lock (_gate)
             {
                 Events.Add(audioEvent);
+                switch (audioEvent)
+                {
+                    case AudioSessionWarning warning:
+                        UnavailableInputs |= ToAvailability(warning.Input);
+                        break;
+                    case AudioSessionStatus status
+                        when status.Kind == AudioSessionStatusKind.InputRecovered:
+                        UnavailableInputs &= ~ToAvailability(status.Input);
+                        break;
+                }
             }
 
             if (Interlocked.Increment(ref _deliveryCount) == 1)
@@ -103,6 +143,17 @@ public sealed class QueuedAudioSessionEventSinkTests
                 ReleaseFirstDelivery.Wait(TestTimeout);
             }
         }
+
+        private static AudioInputAvailability ToAvailability(
+            AudioInput input) => input switch
+            {
+                AudioInput.Desktop => AudioInputAvailability.Desktop,
+                AudioInput.Microphone => AudioInputAvailability.Microphone,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(input),
+                    input,
+                    "Unsupported audio input."),
+            };
     }
 
     private sealed class ThrowingFirstAudioSessionEventSink
