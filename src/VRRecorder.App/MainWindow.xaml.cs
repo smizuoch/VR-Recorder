@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private readonly IDisposable _recordingStatusSubscription;
     private bool _startupApplied;
     private bool _recordingCommandsAuthorized;
+    private bool _audioCommandPending;
     private DiagnosticsWindow? _diagnosticsWindow;
     private LegalWindow? _legalWindow;
     private SettingsWindow? _settingsWindow;
@@ -296,7 +297,9 @@ public partial class MainWindow : Window
         MuteAllToggleButton.SetCurrentValue(
             ToggleButton.IsCheckedProperty,
             snapshot.IsMuteAllSelected);
-        var isEnabled = _recordingCommandsAuthorized && snapshot.IsEnabled;
+        var isEnabled = _recordingCommandsAuthorized &&
+                        snapshot.IsEnabled &&
+                        !_audioCommandPending;
         MicrophoneToggleButton.IsEnabled = isEnabled;
         MuteAllToggleButton.IsEnabled = isEnabled;
     }
@@ -553,6 +556,22 @@ public partial class MainWindow : Window
 
     private async Task DispatchAudioAsync(UiCommandId command)
     {
+        if (_recordingAudioUi.Current is { } authoritative)
+        {
+            ApplyRecordingAudio(authoritative);
+        }
+
+        if (_audioCommandPending)
+        {
+            return;
+        }
+
+        _audioCommandPending = true;
+        if (_recordingAudioUi.Current is { } pending)
+        {
+            ApplyRecordingAudio(pending);
+        }
+
         try
         {
             await _uiCommands.DispatchAsync(
@@ -573,6 +592,14 @@ public partial class MainWindow : Window
             RecordingStatusText.SetResourceReference(
                 AutomationProperties.NameProperty,
                 "Status_CommandUnavailable");
+        }
+        finally
+        {
+            _audioCommandPending = false;
+            if (_recordingAudioUi.Current is { } current)
+            {
+                ApplyRecordingAudio(current);
+            }
         }
     }
 }

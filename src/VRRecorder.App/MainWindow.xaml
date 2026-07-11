@@ -85,6 +85,7 @@
                           AutomationProperties.Name="{DynamicResource Microphone_Off_AccessibleName}"
                           AutomationProperties.HelpText="{DynamicResource Microphone_Off_Tooltip}"
                           ToolTip="{DynamicResource Microphone_Off_Tooltip}"
+                          IsThreeState="False"
                           IsEnabled="False"
                           Click="OnMicrophoneToggleClick" />
 
@@ -97,6 +98,7 @@
                           AutomationProperties.Name="{DynamicResource Audio_MuteAll_AccessibleName}"
                           AutomationProperties.HelpText="{DynamicResource Audio_MuteAll_Tooltip}"
                           ToolTip="{DynamicResource Audio_MuteAll_Tooltip}"
+                          IsThreeState="False"
                           IsEnabled="False"
                           Click="OnMuteAllToggleClick" />
         </StackPanel>
