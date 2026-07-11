@@ -49,6 +49,7 @@ public sealed class PInvokeEncoderProbeTests
     [InlineData(0, false)]
     [InlineData(4, true)]
     [InlineData(6, true)]
+    [InlineData(8, true)]
     public async Task NoPacketOrBackendProbeFailureMapsToFallback(
         int nativeStatus,
         bool packetProduced)
