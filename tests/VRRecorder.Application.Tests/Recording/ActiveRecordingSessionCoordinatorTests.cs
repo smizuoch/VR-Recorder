@@ -26,7 +26,8 @@ public sealed class ActiveRecordingSessionCoordinatorTests
             handle,
             AudioRouting.DesktopOnly,
             CancellationToken.None);
-        IActiveRecordingAudioCommands audioCommands = coordinator;
+        var audioCommands = Assert.IsAssignableFrom<
+            IActiveRecordingAudioCommands>(coordinator);
 
         var updated = await audioCommands.ExecuteAudioCommandAsync(
             RecordingAudioCommand.ToggleMicrophone,
