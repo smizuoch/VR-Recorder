@@ -9,7 +9,7 @@
 - [x] backendのmux成功通知後だけFIRST_VIDEO_PACKET_MUXEDを1回発行する
 - [x] trailer／flush／close完了通知後だけSTOPPEDをpacket count付きで1回発行する
 - [x] FAULTEDをterminal eventにし、abort後のcallbackを抑止する
-- [x] production shared libraryのexportを承認済み16 symbolに限定しlink mapを生成する
+- [x] production shared libraryのexportを承認済み17 symbolに限定しlink mapを生成する
 - [x] production placeholder backendがC ABIから明示的にBACKEND_UNAVAILABLEを返す
 - [x] SteamVR inputのversioned config/state・create/poll/destroy ABIを固定する
 - [x] managed bridgeがABI v1 callbackをFIRST／STOPPED／FAULTEDへ変換する
@@ -36,7 +36,7 @@
 - [x] Emit one FIRST_VIDEO_PACKET_MUXED event only after the backend reports a successful mux write
 - [x] Emit one STOPPED event with packet counts only after trailer, flush, and close completion
 - [x] Make FAULTED terminal and suppress callbacks after abort
-- [x] Limit the production shared-library exports to 16 approved symbols and generate a link map
+- [x] Limit the production shared-library exports to 17 approved symbols and generate a link map
 - [x] Return explicit BACKEND_UNAVAILABLE from production placeholder backends through the C ABI
 - [x] Freeze the versioned SteamVR input config/state and create/poll/destroy ABI
 - [x] Translate ABI v1 callbacks into managed FIRST, STOPPED, and FAULTED events
