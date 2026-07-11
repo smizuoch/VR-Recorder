@@ -690,6 +690,51 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopTrayTracksReadyRecordingWarningAndFaultStates()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+
+        Assert.Contains("DesktopTrayUiController", appCode);
+        Assert.Contains("_recordingHost.Subscribe", appCode);
+        Assert.Contains("OnTrayStatusChanged", appCode);
+        Assert.Contains("Dispatcher.CheckAccess()", appCode);
+        Assert.Contains("_trayStatusMenuItem", appCode);
+        Assert.Contains("_trayToggleMenuItem", appCode);
+        Assert.Contains("update.StateLabelResourceKey", appCode);
+        Assert.Contains("update.ActionLabelResourceKey", appCode);
+        Assert.Contains("update.IsActionEnabled", appCode);
+        Assert.Contains("_trayIcon.Text", appCode);
+        Assert.Contains("_trayStatusSubscription.Dispose()", appCode);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Tray_State_Ready",
+                         "Tray_State_Recording",
+                         "Tray_State_Warning",
+                         "Tray_State_Fault",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopRequiresExplicitRecordingRightsAcknowledgementBeforeHostActivation()
     {
         var appDirectory = Path.Combine(
