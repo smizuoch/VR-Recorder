@@ -49,6 +49,40 @@ public sealed class SteamVrRecordingInputAdapterTests
     }
 
     [Fact]
+    public async Task RecordingPollingContinuesAfterARejectedCommand()
+    {
+        var runtime = TwoPressesWithRelease();
+        var commands = new RejectingFirstUiCommandDispatcher();
+        var adapter = new SteamVrRecordingInputAdapter(
+            runtime,
+            new RecordingInputDispatcher(commands));
+
+        await adapter.RunAsync(CancellationToken.None);
+
+        Assert.Equal(2, commands.Attempts.Count);
+        Assert.All(commands.Attempts, command => Assert.Equal(
+            UiCommandId.ToggleRecording,
+            command.Command));
+        Assert.Single(commands.Completed);
+    }
+
+    [Fact]
+    public async Task MicrophonePollingContinuesAfterARejectedCommand()
+    {
+        var runtime = TwoPressesWithRelease();
+        var commands = new RejectingFirstUiCommandDispatcher();
+        var adapter = new SteamVrMicrophoneInputAdapter(runtime, commands);
+
+        await adapter.RunAsync(CancellationToken.None);
+
+        Assert.Equal(2, commands.Attempts.Count);
+        Assert.All(commands.Attempts, command => Assert.Equal(
+            UiCommandId.ToggleMicrophone,
+            command.Command));
+        Assert.Single(commands.Completed);
+    }
+
+    [Fact]
     public async Task DispatchesCanonicalToggleOnlyForActiveRisingEdges()
     {
         var runtime = new ScriptedSteamVrInputRuntime(
@@ -232,6 +266,23 @@ public sealed class SteamVrRecordingInputAdapterTests
             "The VR-Recorder repository root was not found.");
     }
 
+    private static ScriptedSteamVrInputRuntime TwoPressesWithRelease() =>
+        new(
+        [
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: false,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+        ]);
+
     private sealed class ScriptedSteamVrInputRuntime : ISteamVrInputRuntime
     {
         private readonly IReadOnlyList<SteamVrDigitalActionState> _states;
@@ -272,6 +323,35 @@ public sealed class SteamVrRecordingInputAdapterTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             Commands.Add((command, activationKind));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RejectingFirstUiCommandDispatcher
+        : IUiCommandDispatcher
+    {
+        public List<(UiCommandId Command, UiActivationKind ActivationKind)>
+            Attempts
+        { get; } = [];
+
+        public List<(UiCommandId Command, UiActivationKind ActivationKind)>
+            Completed
+        { get; } = [];
+
+        public Task DispatchAsync(
+            UiCommandId command,
+            UiActivationKind activationKind,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Attempts.Add((command, activationKind));
+            if (Attempts.Count == 1)
+            {
+                throw new InvalidOperationException(
+                    "The command is not available in the current state.");
+            }
+
+            Completed.Add((command, activationKind));
             return Task.CompletedTask;
         }
     }
