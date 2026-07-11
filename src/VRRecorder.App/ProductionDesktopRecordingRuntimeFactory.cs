@@ -25,6 +25,20 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         TimeSpan.FromSeconds(1);
     private static readonly TimeSpan OscQueryDiscoveryTimeout =
         TimeSpan.FromSeconds(2);
+    private readonly ISettingsStore _settings;
+
+    public ProductionDesktopRecordingRuntimeFactory()
+        : this(new JsonFileSettingsStore(
+            SettingsPath(),
+            SystemWallClock.Instance))
+    {
+    }
+
+    internal ProductionDesktopRecordingRuntimeFactory(ISettingsStore settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _settings = settings;
+    }
 
     public async Task<IDesktopRecordingRuntime> InitializeAsync(
         CancellationToken cancellationToken)
@@ -57,7 +71,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         return ComposeRuntime(nativeLibraryPath, ffprobePath);
     }
 
-    private static DesktopRecordingRuntime ComposeRuntime(
+    private DesktopRecordingRuntime ComposeRuntime(
         string nativeLibraryPath,
         string ffprobePath)
     {
@@ -143,7 +157,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                     typeof(ProductionDesktopRecordingRuntimeFactory).Assembly));
             IDesktopRecordingStartRequestSource requests =
                 new SettingsDesktopRecordingStartRequestSource(
-                    new JsonFileSettingsStore(settingsPath, wallClock),
+                    _settings,
                     new WindowsDownloadsOutputPathProvider());
             requests = new LegalBundleMirroringDesktopRecordingStartRequestSource(
                 requests,
@@ -185,10 +199,10 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         EnsureRecoverySucceeded(result, warnings.Warning);
     }
 
-    private static async Task RecoverStaleRecordingsAsync(
+    private async Task RecoverStaleRecordingsAsync(
         CancellationToken cancellationToken)
     {
-        var settings = await new JsonFileSettingsStore(SettingsPath())
+        var settings = await _settings
             .LoadAsync(cancellationToken);
         var outputPath = new RecordingOutputPathResolver(
                 new WindowsDownloadsOutputPathProvider())

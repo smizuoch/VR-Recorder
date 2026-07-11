@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private bool _startupApplied;
     private bool _recordingCommandsAuthorized;
     private LegalWindow? _legalWindow;
+    private SettingsWindow? _settingsWindow;
 
     public MainWindow()
         : this(App.RecordingInputs, App.RecordingStatuses)
@@ -245,6 +246,26 @@ public partial class MainWindow : Window
         legalWindow.Closed += (_, _) => _legalWindow = null;
         _legalWindow = legalWindow;
         legalWindow.Show();
+    }
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e) =>
+        OpenSettingsWindow();
+
+    internal void OpenSettingsWindow()
+    {
+        if (_settingsWindow is { IsVisible: true })
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        var settingsWindow = new SettingsWindow
+        {
+            Owner = this,
+        };
+        settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow = settingsWindow;
+        settingsWindow.Show();
     }
 
     private async void OnPreviewKeyDown(

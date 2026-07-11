@@ -16,9 +16,9 @@ public partial class App : System.Windows.Application, IDisposable
     private const string LocaleArgumentPrefix = "--ui-locale=";
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
     private readonly object _steamVrInputGate = new();
-    private readonly DesktopRecordingCommandHost _recordingHost = new(
-        new ProductionDesktopRecordingRuntimeFactory());
+    private readonly DesktopRecordingCommandHost _recordingHost;
     private readonly RecordingInputDispatcher _recordingInputs;
+    private readonly DesktopRecordingSettingsController _recordingSettings;
     private readonly AuthenticatedLegalBundleVerifier _legalVerifier;
     private readonly DesktopLegalController _legalController;
     private readonly JsonFileRecordingRightsAcknowledgementStore
@@ -33,9 +33,17 @@ public partial class App : System.Windows.Application, IDisposable
 
     public App()
     {
+        var settingsPath = new WindowsSettingsPathProvider().GetPath();
+        var settingsStore = new JsonFileSettingsStore(
+            settingsPath,
+            SystemWallClock.Instance);
+        _recordingSettings = new DesktopRecordingSettingsController(
+            settingsStore);
+        _recordingHost = new DesktopRecordingCommandHost(
+            new ProductionDesktopRecordingRuntimeFactory(settingsStore));
         _recordingRightsStore =
             new JsonFileRecordingRightsAcknowledgementStore(
-                RecordingRightsPath());
+                RecordingRightsPath(settingsPath));
         _recordingRightsGate = new RecordingRightsGate(
             _recordingRightsStore,
             SystemWallClock.Instance);
@@ -65,6 +73,9 @@ public partial class App : System.Windows.Application, IDisposable
 
     internal static DesktopLegalController LegalController =>
         ((App)Current)._legalController;
+
+    internal static DesktopRecordingSettingsController RecordingSettings =>
+        ((App)Current)._recordingSettings;
 
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
@@ -271,9 +282,9 @@ public partial class App : System.Windows.Application, IDisposable
         Shutdown();
     }
 
-    private static string RecordingRightsPath()
+    private static string RecordingRightsPath(string settingsPath)
     {
-        var settingsPath = new WindowsSettingsPathProvider().GetPath();
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
         var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
                                        throw new InvalidOperationException(
                                            "The settings path has no parent directory.");

@@ -1,0 +1,167 @@
+<Window x:Class="VRRecorder.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Settings_Title}"
+        AutomationProperties.Name="{DynamicResource Settings_Title}"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        FlowDirection="{DynamicResource Layout.FlowDirection}"
+        Loaded="OnLoaded"
+        Closed="OnClosed"
+        Width="720"
+        Height="680"
+        MinWidth="560"
+        MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+            <TextBlock Text="{DynamicResource Settings_Intro}"
+                       TextWrapping="Wrap" />
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Recording_Heading}">
+                <Grid Margin="{StaticResource Spacing.LayoutGrid}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="{StaticResource Spacing.LayoutGrid}" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Text="{DynamicResource Settings_SelfTimer_Label}" />
+                    <ComboBox x:Name="SelfTimerComboBox"
+                              Grid.Row="0"
+                              Grid.Column="2"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_SelfTimer_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_SelfTimer_Tooltip}"
+                              ToolTip="{DynamicResource Settings_SelfTimer_Tooltip}" />
+
+                    <TextBlock Grid.Row="1"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Text="{DynamicResource Settings_AutoStop_Label}" />
+                    <ComboBox x:Name="AutoStopComboBox"
+                              Grid.Row="1"
+                              Grid.Column="2"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_AutoStop_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_AutoStop_Tooltip}"
+                              ToolTip="{DynamicResource Settings_AutoStop_Tooltip}" />
+
+                    <TextBlock Grid.Row="2"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Text="{DynamicResource Settings_FrameRate_Label}" />
+                    <ComboBox x:Name="FrameRateComboBox"
+                              Grid.Row="2"
+                              Grid.Column="2"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_FrameRate_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_FrameRate_Tooltip}"
+                              ToolTip="{DynamicResource Settings_FrameRate_Tooltip}" />
+
+                    <TextBlock Grid.Row="3"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Text="{DynamicResource Settings_ResolutionPolicy_Label}" />
+                    <ComboBox x:Name="ResolutionPolicyComboBox"
+                              Grid.Row="3"
+                              Grid.Column="2"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_ResolutionPolicy_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_ResolutionPolicy_Tooltip}"
+                              ToolTip="{DynamicResource Settings_ResolutionPolicy_Tooltip}" />
+
+                    <TextBlock Grid.Row="4"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Text="{DynamicResource Settings_Encoder_Label}" />
+                    <ComboBox x:Name="EncoderComboBox"
+                              Grid.Row="4"
+                              Grid.Column="2"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_Encoder_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_Encoder_Tooltip}"
+                              ToolTip="{DynamicResource Settings_Encoder_Tooltip}" />
+
+                    <TextBlock Grid.Row="5"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Text="{DynamicResource Settings_Quality_Label}" />
+                    <ComboBox x:Name="QualityPresetComboBox"
+                              Grid.Row="5"
+                              Grid.Column="2"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_Quality_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_Quality_Tooltip}"
+                              ToolTip="{DynamicResource Settings_Quality_Tooltip}" />
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Rights_Heading}">
+                <TextBlock Margin="{StaticResource Spacing.LayoutGrid}"
+                           Text="{DynamicResource Rights_Body}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.Name="{DynamicResource Rights_Body}" />
+            </GroupBox>
+
+            <TextBlock x:Name="SettingsStatusText"
+                       Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                       TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Assertive" />
+
+            <StackPanel Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button Content="{DynamicResource Settings_Cancel_Label}"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        AutomationProperties.Name="{DynamicResource Settings_Cancel_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Settings_Cancel_Tooltip}"
+                        ToolTip="{DynamicResource Settings_Cancel_Tooltip}"
+                        Click="OnCancel" />
+                <Border Width="{StaticResource Spacing.LayoutGrid}" />
+                <Button x:Name="SaveSettingsButton"
+                        Content="{DynamicResource Settings_Save_Label}"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        AutomationProperties.Name="{DynamicResource Settings_Save_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Settings_Save_Tooltip}"
+                        ToolTip="{DynamicResource Settings_Save_Tooltip}"
+                        IsDefault="True"
+                        IsEnabled="False"
+                        Click="OnSave" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>
