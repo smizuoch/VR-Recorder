@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
@@ -7,6 +8,7 @@ namespace VRRecorder.Application.Desktop;
 public sealed class DesktopRecordingNotificationHub :
     ISavedRecordingSink,
     ICameraRestoreWarningSink,
+    IAudioSessionEventSink,
     IDisposable
 {
     private readonly object _gate = new();
@@ -52,6 +54,31 @@ public sealed class DesktopRecordingNotificationHub :
                 revision,
                 warning),
             cancellationToken);
+    }
+
+    void IAudioSessionEventSink.Publish(AudioSessionWarning warning)
+    {
+        ArgumentNullException.ThrowIfNull(warning);
+        _ = Publish(
+            revision => new DesktopRecordingNotification.AudioWarning(
+                revision,
+                warning),
+            CancellationToken.None);
+    }
+
+    void IAudioSessionEventSink.Publish(AudioSessionStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        if (status.Kind != AudioSessionStatusKind.InputRecovered)
+        {
+            return;
+        }
+
+        _ = Publish(
+            revision => new DesktopRecordingNotification.AudioRecovered(
+                revision,
+                status),
+            CancellationToken.None);
     }
 
     public void Dispose()
