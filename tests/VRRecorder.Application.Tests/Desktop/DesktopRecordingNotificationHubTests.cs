@@ -52,6 +52,51 @@ public sealed class DesktopRecordingNotificationHubTests
         Assert.Equal(0, callCount);
     }
 
+    [Fact]
+    public async Task ReentrantPublicationPreservesOrderForEverySubscriber()
+    {
+        using var hub = new DesktopRecordingNotificationHub();
+        List<long> firstRevisions = [];
+        List<long> secondRevisions = [];
+        var warning = new CameraRestoreWarning(
+            CameraRestoreWarningReason.RecordingCompleted,
+            new IOException("camera restore failed"));
+        using var first = hub.Subscribe(notification =>
+        {
+            firstRevisions.Add(notification.Revision);
+            if (notification is DesktopRecordingNotification.Saved)
+            {
+                ((ICameraRestoreWarningSink)hub)
+                    .PublishAsync(warning, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+        });
+        using var second = hub.Subscribe(notification =>
+            secondRevisions.Add(notification.Revision));
+
+        await ((ISavedRecordingSink)hub).PublishAsync(
+            new FinalizedRecording(AbsolutePath("ordered.mp4")),
+            CancellationToken.None);
+
+        Assert.Equal([1, 2], firstRevisions);
+        Assert.Equal([1, 2], secondRevisions);
+    }
+
+    [Fact]
+    public async Task PublicationAfterDisposalCannotInvalidateSavedRecording()
+    {
+        var hub = new DesktopRecordingNotificationHub();
+        hub.Dispose();
+
+        var failure = await Record.ExceptionAsync(() =>
+            ((ISavedRecordingSink)hub).PublishAsync(
+                new FinalizedRecording(AbsolutePath("already-saved.mp4")),
+                CancellationToken.None));
+
+        Assert.Null(failure);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-notification-tests",
