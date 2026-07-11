@@ -62,6 +62,8 @@ std::uint32_t EncoderKind();
 const ObservedMediaSessionConfig &SessionConfig();
 const vrrec_video_layout_v1 &VideoLayout();
 std::uint32_t VideoLayoutUpdateCount();
+std::uint32_t AudioRouting();
+std::uint32_t AudioRoutingUpdateCount();
 void SetStatistics(const vrrec_session_statistics_v1 &statistics);
 void SetStatisticsStatus(std::int32_t status);
 void FaultDuringNextVideoLayoutUpdate();

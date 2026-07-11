@@ -22,6 +22,7 @@ static_assert(offsetof(vrrec_session_config_v1, source_pixel_format) == 160);
 static_assert(offsetof(vrrec_session_config_v1, reserved_v2) == 164);
 static_assert(offsetof(vrrec_session_config_v1, estimated_source_fps) == 168);
 static_assert(sizeof(vrrec_video_layout_v1) == 48);
+static_assert(sizeof(vrrec_audio_routing_update_v1) == 16);
 static_assert(sizeof(vrrec_session_statistics_v1) == 72);
 static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
@@ -140,6 +141,16 @@ vrrec_session_statistics_v1 ValidStatisticsOutput()
         0,
         0,
         0,
+        0,
+    };
+}
+
+vrrec_audio_routing_update_v1 ValidAudioRoutingUpdate()
+{
+    return vrrec_audio_routing_update_v1 {
+        sizeof(vrrec_audio_routing_update_v1),
+        VRREC_ABI_V1,
+        VRREC_AUDIO_ROUTING_DESKTOP_ONLY,
         0,
     };
 }
@@ -863,6 +874,66 @@ bool QueriesVersionedSessionStatistics()
     statistics = ValidStatisticsOutput();
     CHECK(vrrec_session_get_statistics_v1(session, &statistics) ==
           VRREC_STATUS_INVALID_STATE);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool UpdatesAudioRoutingOnlyWhileSessionIsActive()
+{
+    using vrrecorder::native::testing::AudioRouting;
+    using vrrecorder::native::testing::AudioRoutingUpdateCount;
+
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    auto update = ValidAudioRoutingUpdate();
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+
+    for (const auto routing : {
+             VRREC_AUDIO_ROUTING_DESKTOP_ONLY,
+             VRREC_AUDIO_ROUTING_MIC_ONLY,
+             VRREC_AUDIO_ROUTING_MUTED,
+             VRREC_AUDIO_ROUTING_MIXED,
+         }) {
+        update.audio_routing = routing;
+        CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+              VRREC_STATUS_OK);
+        CHECK(AudioRouting() == routing);
+    }
+
+    CHECK(AudioRoutingUpdateCount() == 4);
+    CHECK(vrrec_session_update_audio_routing_v1(nullptr, &update) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_session_update_audio_routing_v1(session, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    update = ValidAudioRoutingUpdate();
+    update.struct_size = sizeof(update) - 1;
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    update = ValidAudioRoutingUpdate();
+    update.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    update = ValidAudioRoutingUpdate();
+    update.audio_routing = UINT32_MAX;
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    update = ValidAudioRoutingUpdate();
+    update.reserved = 1;
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(AudioRoutingUpdateCount() == 4);
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    update = ValidAudioRoutingUpdate();
+    CHECK(vrrec_session_update_audio_routing_v1(session, &update) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(AudioRoutingUpdateCount() == 4);
     vrrec_session_destroy_v1(session);
     return true;
 }
@@ -1656,6 +1727,7 @@ int main()
         !RejectsInvalidRuntimeLayoutAbiInputs() ||
         !SynchronousLayoutFaultDoesNotDeadlockTheAbi() ||
         !StopWaitsForAnInFlightLayoutUpdateWithoutHoldingTheStateLock() ||
+        !UpdatesAudioRoutingOnlyWhileSessionIsActive() ||
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
