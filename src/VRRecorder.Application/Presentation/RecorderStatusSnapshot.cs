@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Presentation;
@@ -5,11 +6,13 @@ namespace VRRecorder.Application.Presentation;
 public sealed record RecorderStatusSnapshot(
     long Revision,
     RecorderState State,
-    RecorderAvailableActions AvailableActions)
+    RecorderAvailableActions AvailableActions,
+    RecordingAudioControlState? AudioControlState = null)
 {
     public static RecorderStatusSnapshot Create(
         long revision,
-        RecorderState state)
+        RecorderState state,
+        RecordingAudioControlState? audioControlState = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(revision);
         if (!Enum.IsDefined(state))
@@ -30,6 +33,10 @@ public sealed record RecorderStatusSnapshot(
             RecorderState.NoSignal => RecorderAvailableActions.Retry,
             _ => RecorderAvailableActions.None,
         };
-        return new RecorderStatusSnapshot(revision, state, actions);
+        return new RecorderStatusSnapshot(
+            revision,
+            state,
+            actions,
+            audioControlState);
     }
 }
