@@ -174,6 +174,87 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopShellHasAccessibleLiveMicrophoneAndMuteToggles()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var toggles = window.Descendants(Presentation + "ToggleButton")
+            .ToDictionary(
+                element => element.Attribute(Xaml + "Name")?.Value ??
+                           string.Empty,
+                StringComparer.Ordinal);
+        var microphone = toggles["MicrophoneToggleButton"];
+        Assert.Equal(
+            "{DynamicResource Microphone_Off_AccessibleName}",
+            microphone.Attribute("Content")?.Value);
+        Assert.Equal(
+            "{DynamicResource Microphone_Off_AccessibleName}",
+            microphone.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Microphone_Off_Tooltip}",
+            microphone.Attribute("AutomationProperties.HelpText")?.Value);
+        Assert.Equal(
+            "{DynamicResource Microphone_Off_Tooltip}",
+            microphone.Attribute("ToolTip")?.Value);
+        Assert.Equal(
+            "{StaticResource Interaction.MinimumTarget}",
+            microphone.Attribute("MinHeight")?.Value);
+        Assert.Equal(
+            "{StaticResource Interaction.MinimumTarget}",
+            microphone.Attribute("MinWidth")?.Value);
+        Assert.Equal("OnMicrophoneToggleClick", microphone.Attribute("Click")?.Value);
+
+        var mute = toggles["MuteAllToggleButton"];
+        Assert.Equal(
+            "{DynamicResource Audio_MuteAll_Short}",
+            mute.Attribute("Content")?.Value);
+        Assert.Equal(
+            "{DynamicResource Audio_MuteAll_AccessibleName}",
+            mute.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Audio_MuteAll_Tooltip}",
+            mute.Attribute("AutomationProperties.HelpText")?.Value);
+        Assert.Equal(
+            "{DynamicResource Audio_MuteAll_Tooltip}",
+            mute.Attribute("ToolTip")?.Value);
+        Assert.Equal("OnMuteAllToggleClick", mute.Attribute("Click")?.Value);
+
+        var code = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("DesktopRecordingAudioUiController", code);
+        Assert.Contains("App.UiCommands", code);
+        Assert.Contains("UiCommandId.ToggleMicrophone", code);
+        Assert.Contains("UiCommandId.ToggleMuteAll", code);
+        Assert.Contains("ToggleButton.IsCheckedProperty", code);
+
+        var requiredKeys = new[]
+        {
+            "Microphone_On_AccessibleName",
+            "Microphone_On_Tooltip",
+            "Microphone_Off_AccessibleName",
+            "Microphone_Off_Tooltip",
+            "Audio_MuteAll_Short",
+            "Audio_MuteAll_AccessibleName",
+            "Audio_MuteAll_Tooltip",
+        };
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            Assert.All(requiredKeys, key => Assert.Contains(key, resources.Keys));
+        }
+    }
+
+    [Fact]
     public void DesktopShellSubscribesToRevisionedRuntimeStateOnDispatcher()
     {
         var appDirectory = Path.Combine(
