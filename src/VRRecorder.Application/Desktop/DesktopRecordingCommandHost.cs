@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
@@ -9,7 +10,8 @@ namespace VRRecorder.Application.Desktop;
 public sealed class DesktopRecordingCommandHost
     : IAsyncDisposable,
       IComplianceFaultSink,
-      IRecorderStatusSource
+      IRecorderStatusSource,
+      IActiveRecordingAudioCommands
 {
     private const string UnexpectedInitializationFailureCode =
         "RECORDING_INITIALIZATION_FAILED";
@@ -21,6 +23,7 @@ public sealed class DesktopRecordingCommandHost
         RecorderStatusSnapshot.Create(0, RecorderState.Booting));
     private Task<DesktopRecordingHostActivation>? _activationTask;
     private Task? _toggleTask;
+    private Task<RecordingAudioControlState>? _audioCommandTask;
     private Task? _shutdownTask;
     private Task? _disposeTask;
     private IDesktopRecordingRuntime? _runtime;
@@ -52,6 +55,9 @@ public sealed class DesktopRecordingCommandHost
     }
 
     public RecorderStatusSnapshot Current => _statuses.Current;
+
+    public RecordingAudioControlState? CurrentAudioControlState =>
+        Current.AudioControlState;
 
     public IDisposable Subscribe(Action<RecorderStatusSnapshot> subscriber) =>
         _statuses.Subscribe(subscriber);
@@ -111,6 +117,32 @@ public sealed class DesktopRecordingCommandHost
         return cancellationToken.CanBeCanceled
             ? toggleTask.WaitAsync(cancellationToken)
             : toggleTask;
+    }
+
+    public Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+        RecordingAudioCommand command,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Task<RecordingAudioControlState> audioCommandTask;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_state != DesktopRecordingHostState.Ready || _runtime is null)
+            {
+                throw new DesktopRecordingUnavailableException(
+                    _state,
+                    _failure);
+            }
+
+            _audioCommandTask = ((IActiveRecordingAudioCommands)_runtime)
+                .ExecuteAudioCommandAsync(command, _lifetime.Token);
+            audioCommandTask = _audioCommandTask;
+        }
+
+        return cancellationToken.CanBeCanceled
+            ? audioCommandTask.WaitAsync(cancellationToken)
+            : audioCommandTask;
     }
 
     public ValueTask DisposeAsync()
@@ -253,7 +285,7 @@ public sealed class DesktopRecordingCommandHost
 
             _state = DesktopRecordingHostState.Ready;
             _runtimeStatusSubscription = runtime.Subscribe(status =>
-                PublishStatus(status.State));
+                PublishStatus(status));
             return new DesktopRecordingHostActivation(
                 _state,
                 Failure: null);
@@ -302,14 +334,18 @@ public sealed class DesktopRecordingCommandHost
             .ConfigureAwait(false);
 
         Task? toggleTask;
+        Task? audioCommandTask;
         IDesktopRecordingRuntime? runtime;
         lock (_gate)
         {
             toggleTask = _toggleTask;
+            audioCommandTask = _audioCommandTask;
             runtime = _runtime;
         }
 
         await ObserveWithoutInterruptingShutdownAsync(toggleTask)
+            .ConfigureAwait(false);
+        await ObserveWithoutInterruptingShutdownAsync(audioCommandTask)
             .ConfigureAwait(false);
         if (runtime is not null)
         {
@@ -331,20 +367,27 @@ public sealed class DesktopRecordingCommandHost
         }
     }
 
-    private void PublishStatus(RecorderState state)
+    private void PublishStatus(RecorderState state) =>
+        PublishStatus(RecorderStatusSnapshot.Create(0, state));
+
+    private void PublishStatus(RecorderStatusSnapshot status)
     {
         lock (_statusGate)
         {
-            if (_terminalStatus || _statuses.Current.State == state)
+            if (_terminalStatus ||
+                (_statuses.Current.State == status.State &&
+                 _statuses.Current.AudioControlState ==
+                 status.AudioControlState))
             {
                 return;
             }
 
-            _terminalStatus = state is
+            _terminalStatus = status.State is
                 RecorderState.Faulted or RecorderState.ComplianceFault;
             _statuses.TryPublish(RecorderStatusSnapshot.Create(
                 checked(++_statusRevision),
-                state));
+                status.State,
+                status.AudioControlState));
         }
     }
 

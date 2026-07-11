@@ -104,6 +104,9 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
 
     public RecorderStatusSnapshot Current => _statuses.Current;
 
+    public RecordingAudioControlState? CurrentAudioControlState =>
+        Current.AudioControlState;
+
     public IDisposable Subscribe(Action<RecorderStatusSnapshot> subscriber) =>
         _statuses.Subscribe(subscriber);
 
@@ -111,6 +114,12 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         RecordingAudioCommand command,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+        }
+
         var state = Current.State;
         if (state is not (RecorderState.Recording or RecorderState.SignalLost))
         {
