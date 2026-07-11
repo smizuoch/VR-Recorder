@@ -1,7 +1,9 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Infrastructure.Storage;
 
@@ -41,6 +43,15 @@ public sealed class StructuredRecordingEventSinkTests
                 CameraRestoreWarningReason.RecordingCompleted,
                 new IOException("secret avatar and user name")),
             CancellationToken.None);
+        ((IAudioSessionEventSink)sink).Publish(new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            AudioInput.Microphone,
+            FramePosition: 4_800,
+            new IOException("secret microphone endpoint")));
+        ((IAudioSessionEventSink)sink).Publish(new AudioSessionStatus(
+            AudioSessionStatusKind.InputRecovered,
+            AudioInput.Microphone,
+            FramePosition: 9_600));
 
         var content = await File.ReadAllTextAsync(Path.Combine(
             directory.Path,
@@ -48,10 +59,14 @@ public sealed class StructuredRecordingEventSinkTests
         Assert.DoesNotContain(directory.Path, content, StringComparison.Ordinal);
         Assert.DoesNotContain("private-user", content, StringComparison.Ordinal);
         Assert.DoesNotContain("secret avatar", content, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "secret microphone",
+            content,
+            StringComparison.Ordinal);
         var lines = content.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(3, lines.Length);
+        Assert.Equal(5, lines.Length);
         Assert.Contains("\"event\":\"recording.storage\"", lines[0]);
         Assert.Contains("\"availableBytes\":\"123456789\"", lines[0]);
         Assert.Contains("\"state\":\"warning\"", lines[0]);
@@ -61,6 +76,14 @@ public sealed class StructuredRecordingEventSinkTests
         Assert.Contains("\"event\":\"camera.restore_warning\"", lines[2]);
         Assert.Contains("\"reason\":\"recording_completed\"", lines[2]);
         Assert.Contains("\"failureType\":\"IOException\"", lines[2]);
+        Assert.Contains("\"event\":\"audio.input_warning\"", lines[3]);
+        Assert.Contains("\"kind\":\"input_unavailable\"", lines[3]);
+        Assert.Contains("\"input\":\"microphone\"", lines[3]);
+        Assert.Contains("\"framePosition\":\"4800\"", lines[3]);
+        Assert.Contains("\"failureType\":\"IOException\"", lines[3]);
+        Assert.Contains("\"event\":\"audio.input_status\"", lines[4]);
+        Assert.Contains("\"kind\":\"input_recovered\"", lines[4]);
+        Assert.Contains("\"framePosition\":\"9600\"", lines[4]);
     }
 
     private sealed class FixedWallClock(DateTimeOffset localNow) : IWallClock
