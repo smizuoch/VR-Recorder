@@ -16,6 +16,9 @@
 - [x] 認証済みLegal Bundleを手首UIの一覧・詳細・全文pageとしてoffline表示する
 - [x] Legal全文のpage移動ごとに再検証し、改ざん時は表示済みtextを消去する
 - [x] Legalの全viewでcanonical 64 dp STOPを1操作に固定する
+- [x] desktop／trayへ保存済みMP4 pathとカメラ復元警告を別通知として表示する
+- [x] trayをReady／Recording／Warning／Faultの4状態へ同期し、権利確認前は録画操作を無効にする
+- [x] 診断bundleを明示操作だけでexportするlocalized／accessible windowを提供する
 - [ ] WindowsでWPF hostのUI Automationを実行する
 
 ## English
@@ -34,4 +37,7 @@
 - [x] Show an authenticated Legal Bundle offline as wrist list, detail, and full-text pages
 - [x] Reverify each legal-text navigation and clear previously visible text after tampering
 - [x] Keep the canonical 64 dp one-operation STOP fixed on every Legal view
+- [x] Show the saved MP4 path and camera-restore warning as separate desktop/tray notifications
+- [x] Synchronize the tray with Ready/Recording/Warning/Fault and disable recording actions before rights acknowledgement
+- [x] Provide a localized and accessible window that exports diagnostics only through an explicit action
 - [ ] Run WPF host UI Automation on Windows
