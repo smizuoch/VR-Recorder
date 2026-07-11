@@ -94,6 +94,16 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             var diagnosticLog = new RotatingJsonLinesDiagnosticLog(
                 LogDirectory(settingsPath));
             resources.Add(diagnosticLog);
+            var wallClock = SystemWallClock.Instance;
+            var events = new StructuredRecordingEventSink(
+                diagnosticLog,
+                wallClock);
+            var audioObservers = new CompositeAudioSessionEventSink(
+                events,
+                _recordingNotifications);
+            var audioEvents = new QueuedAudioSessionEventSink(
+                audioObservers);
+            resources.Add(audioEvents);
             var http = CreateLoopbackHttpInvoker();
             resources.Add(http);
             var cameraLeases = new FileSystemCameraLeaseStore(cameraLeasePath);
@@ -109,13 +119,6 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             resources.Add(nativeBackend);
 
             var clock = new SystemMonotonicClock();
-            var wallClock = SystemWallClock.Instance;
-            var events = new StructuredRecordingEventSink(
-                diagnosticLog,
-                wallClock);
-            var audioEvents = new CompositeAudioSessionEventSink(
-                events,
-                _recordingNotifications);
             var faultStops = new NativeRecordingFaultStopSink();
             var recordingEngine = new NativeRecordingEngine(
                 nativeBackend,
