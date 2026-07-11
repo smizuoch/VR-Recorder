@@ -25,19 +25,25 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         TimeSpan.FromSeconds(1);
     private static readonly TimeSpan OscQueryDiscoveryTimeout =
         TimeSpan.FromSeconds(2);
+    private readonly DesktopRecordingNotificationHub _recordingNotifications;
     private readonly ISettingsStore _settings;
 
     public ProductionDesktopRecordingRuntimeFactory()
         : this(new JsonFileSettingsStore(
             SettingsPath(),
-            SystemWallClock.Instance))
+            SystemWallClock.Instance),
+            new DesktopRecordingNotificationHub())
     {
     }
 
-    internal ProductionDesktopRecordingRuntimeFactory(ISettingsStore settings)
+    internal ProductionDesktopRecordingRuntimeFactory(
+        ISettingsStore settings,
+        DesktopRecordingNotificationHub recordingNotifications)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(recordingNotifications);
         _settings = settings;
+        _recordingNotifications = recordingNotifications;
     }
 
     public async Task<IDesktopRecordingRuntime> InitializeAsync(
@@ -112,11 +118,18 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             var events = new StructuredRecordingEventSink(
                 diagnosticLog,
                 wallClock);
+            var savedEvents = new CompositeSavedRecordingSink(
+                events,
+                _recordingNotifications);
+            var cameraRestoreWarnings =
+                new CompositeCameraRestoreWarningSink(
+                    events,
+                    _recordingNotifications);
             var finalization = new RecordingFileFinalizationUseCase(
                 new SameDirectoryAtomicRecordingFileFinalizer(),
                 new FfprobeRecordingFileValidator(ffprobePath),
                 new FileSystemRecordingRecoveryStore(),
-                events);
+                savedEvents);
             var sessions = new ActiveRecordingSessionCoordinator(
                 recordingEngine,
                 finalization);
@@ -145,7 +158,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 cameraLeases,
                 startRecording,
                 sessions,
-                events,
+                cameraRestoreWarnings,
                 new SystemCameraLeaseIdentitySource(wallClock));
             resources.Add(new RecorderStatusDiagnosticObserver(
                 lifecycle,

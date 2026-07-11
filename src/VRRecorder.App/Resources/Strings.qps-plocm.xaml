@@ -12,6 +12,10 @@
     <system:String x:Key="Tray_State_Recording">⟦VR-Rëcördër: Rëcördïng · VR-Rëcördër: Rëcördïng⟧</system:String>
     <system:String x:Key="Tray_State_Warning">⟦VR-Rëcördër: Wárnïng · VR-Rëcördër: Wárnïng⟧</system:String>
     <system:String x:Key="Tray_State_Fault">⟦VR-Rëcördër: Fáült · VR-Rëcördër: Fáült⟧</system:String>
+    <system:String x:Key="Recording_Notification_Saved_Title">⟦Rëcördïng sávëd · Rëcördïng sávëd⟧</system:String>
+    <system:String x:Key="Recording_Notification_Saved_Format">⟦Sávëd MP4: {0} · Sávëd MP4: {0}⟧</system:String>
+    <system:String x:Key="Recording_Notification_CameraRestoreWarning_Title">⟦Chëck VRChát cámërá sëttïngs · Chëck VRChát cámërá sëttïngs⟧</system:String>
+    <system:String x:Key="Recording_Notification_CameraRestoreWarning">⟦VRChát cámërá sëttïngs cöüld nöt bë rëstörëd áütömátïcálly. Chëck ánd rëstörë thëm mánüálly ïf nëëdëd. Thïs wárnïng döës nöt chángë thë rëcördïng fïlë's sávë rësült. · VRChát cámërá sëttïngs cöüld nöt bë rëstörëd áütömátïcálly. Chëck ánd rëstörë thëm mánüálly ïf nëëdëd. Thïs wárnïng döës nöt chángë thë rëcördïng fïlë's sávë rësült.⟧</system:String>
     <system:String x:Key="Rights_Title">⟦Bëförë yöü rëcörd · Bëförë yöü rëcörd⟧</system:String>
     <system:String x:Key="Rights_Body">⟦Cönfïrm thát yöü hávë thë nëcëssáry cöpyrïght, ïmágë, vöïcë, prïvácy, pártïcïpánt-cönsënt, ánd sërvïcë-tërms përmïssïöns för whát yöü rëcörd. Rëcördïng stárts önly áftër yöür ëxplïcït áctïön ánd rëmáïns vïsïbly ïndïcátëd. · Cönfïrm thát yöü hávë thë nëcëssáry cöpyrïght, ïmágë, vöïcë, prïvácy, pártïcïpánt-cönsënt, ánd sërvïcë-tërms përmïssïöns för whát yöü rëcörd. Rëcördïng stárts önly áftër yöür ëxplïcït áctïön ánd rëmáïns vïsïbly ïndïcátëd.⟧</system:String>
     <system:String x:Key="Rights_Acknowledge_Label">⟦Ï ündërstánd thát Ï ám rëspönsïblë för cönfïrmïng thësë rïghts ánd përmïssïöns. · Ï ündërstánd thát Ï ám rëspönsïblë för cönfïrmïng thësë rïghts ánd përmïssïöns.⟧</system:String>

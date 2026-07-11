@@ -17,6 +17,8 @@ public partial class App : System.Windows.Application, IDisposable
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
     private readonly object _steamVrInputGate = new();
     private readonly DesktopTrayUiController _trayUi = new();
+    private readonly DesktopRecordingNotificationHub _recordingNotifications =
+        new DesktopRecordingNotificationHub();
     private readonly DesktopRecordingCommandHost _recordingHost;
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopRecordingSettingsController _recordingSettings;
@@ -27,6 +29,7 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly RecordingRightsGate _recordingRightsGate;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
+    private IDisposable? _trayNotificationSubscription;
     private IDisposable? _trayStatusSubscription;
     private System.Windows.Forms.ContextMenuStrip? _trayMenu;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -54,7 +57,9 @@ public partial class App : System.Windows.Application, IDisposable
                 ProductVersion(),
                 _legalVerifier));
         _recordingHost = new DesktopRecordingCommandHost(
-            new ProductionDesktopRecordingRuntimeFactory(settingsStore));
+            new ProductionDesktopRecordingRuntimeFactory(
+                settingsStore,
+                _recordingNotifications));
         _recordingRightsStore =
             new JsonFileRecordingRightsAcknowledgementStore(
                 RecordingRightsPath(settingsPath));
@@ -90,6 +95,9 @@ public partial class App : System.Windows.Application, IDisposable
 
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
+
+    internal static DesktopRecordingNotificationHub RecordingNotifications =>
+        ((App)Current)._recordingNotifications;
 
     internal static bool IsExitRequested =>
         ((App)Current)._exitRequested;
@@ -174,6 +182,12 @@ public partial class App : System.Windows.Application, IDisposable
                 _trayStatusSubscription = null;
             }
 
+            if (_trayNotificationSubscription is not null)
+            {
+                _trayNotificationSubscription.Dispose();
+                _trayNotificationSubscription = null;
+            }
+
             if (_trayIcon is not null)
             {
                 _trayIcon.Visible = false;
@@ -201,7 +215,14 @@ public partial class App : System.Windows.Application, IDisposable
             }
             finally
             {
-                _recordingRightsStore.Dispose();
+                try
+                {
+                    _recordingNotifications.Dispose();
+                }
+                finally
+                {
+                    _recordingRightsStore.Dispose();
+                }
             }
         }
 
@@ -256,6 +277,8 @@ public partial class App : System.Windows.Application, IDisposable
         _trayToggleMenuItem = toggleItem;
         _trayStatusSubscription = _recordingHost.Subscribe(
             OnTrayStatusChanged);
+        _trayNotificationSubscription = _recordingNotifications.Subscribe(
+            OnTrayRecordingNotification);
     }
 
     private void OnTrayStatusChanged(RecorderStatusSnapshot status)
@@ -279,6 +302,55 @@ public partial class App : System.Windows.Application, IDisposable
         {
             ApplyTraySnapshot(update);
         }
+    }
+
+    private void OnTrayRecordingNotification(
+        DesktopRecordingNotification notification)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            ApplyTrayRecordingNotification(notification);
+            return;
+        }
+
+        if (!Dispatcher.HasShutdownStarted)
+        {
+            _ = Dispatcher.InvokeAsync(() =>
+                ApplyTrayRecordingNotification(notification));
+        }
+    }
+
+    private void ApplyTrayRecordingNotification(
+        DesktopRecordingNotification notification)
+    {
+        if (_trayIcon is null)
+        {
+            return;
+        }
+
+        switch (notification)
+        {
+            case DesktopRecordingNotification.Saved saved:
+                _trayIcon.BalloonTipTitle = LocalizedString(
+                    "Recording_Notification_Saved_Title");
+                _trayIcon.BalloonTipText = string.Format(
+                    CultureInfo.CurrentCulture,
+                    LocalizedString("Recording_Notification_Saved_Format"),
+                    saved.Recording.FinalPath);
+                _trayIcon.BalloonTipIcon =
+                    System.Windows.Forms.ToolTipIcon.Info;
+                break;
+            case DesktopRecordingNotification.CameraWarning:
+                _trayIcon.BalloonTipTitle = LocalizedString(
+                    "Recording_Notification_CameraRestoreWarning_Title");
+                _trayIcon.BalloonTipText = LocalizedString(
+                    "Recording_Notification_CameraRestoreWarning");
+                _trayIcon.BalloonTipIcon =
+                    System.Windows.Forms.ToolTipIcon.Warning;
+                break;
+        }
+
+        _trayIcon.ShowBalloonTip(5000);
     }
 
     private void ApplyTraySnapshot(DesktopTrayUiSnapshot update)

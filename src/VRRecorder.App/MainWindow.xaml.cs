@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
 {
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopRecordingUiController _recordingUi = new();
+    private readonly IDisposable _recordingNotificationSubscription;
     private readonly IDisposable _recordingStatusSubscription;
     private bool _startupApplied;
     private bool _recordingCommandsAuthorized;
@@ -23,20 +25,27 @@ public partial class MainWindow : Window
     private SettingsWindow? _settingsWindow;
 
     public MainWindow()
-        : this(App.RecordingInputs, App.RecordingStatuses)
+        : this(
+            App.RecordingInputs,
+            App.RecordingStatuses,
+            App.RecordingNotifications)
     {
     }
 
     internal MainWindow(
         RecordingInputDispatcher recordingInputs,
-        IRecorderStatusSource recordingStatuses)
+        IRecorderStatusSource recordingStatuses,
+        DesktopRecordingNotificationHub recordingNotifications)
     {
         ArgumentNullException.ThrowIfNull(recordingInputs);
         ArgumentNullException.ThrowIfNull(recordingStatuses);
+        ArgumentNullException.ThrowIfNull(recordingNotifications);
         _recordingInputs = recordingInputs;
         InitializeComponent();
         _recordingStatusSubscription = recordingStatuses.Subscribe(
             OnRecordingStatusChanged);
+        _recordingNotificationSubscription = recordingNotifications.Subscribe(
+            OnRecordingNotification);
     }
 
     internal void ApplyStartupResult(
@@ -165,6 +174,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _recordingNotificationSubscription.Dispose();
         _recordingStatusSubscription.Dispose();
         base.OnClosed(e);
     }
@@ -199,6 +209,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (update.State == RecorderState.Arming)
+        {
+            ClearRecordingNotifications();
+        }
+
         RecordingStatusText.SetResourceReference(
             TextBlock.TextProperty,
             update.StatusTextResourceKey);
@@ -220,6 +235,69 @@ public partial class MainWindow : Window
         RecordingToggleButton.IsEnabled =
             _recordingCommandsAuthorized && update.IsActionEnabled;
     }
+
+    private void OnRecordingNotification(
+        DesktopRecordingNotification notification)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            ApplyRecordingNotification(notification);
+            return;
+        }
+
+        if (!Dispatcher.HasShutdownStarted)
+        {
+            _ = Dispatcher.InvokeAsync(() =>
+                ApplyRecordingNotification(notification));
+        }
+    }
+
+    private void ApplyRecordingNotification(
+        DesktopRecordingNotification notification)
+    {
+        switch (notification)
+        {
+            case DesktopRecordingNotification.Saved saved:
+                {
+                    var text = string.Format(
+                        CultureInfo.CurrentCulture,
+                        LocalizedString("Recording_Notification_Saved_Format"),
+                        saved.Recording.FinalPath);
+                    RecordingSavedText.Text = text;
+                    AutomationProperties.SetName(RecordingSavedText, text);
+                    RecordingSavedText.Visibility = Visibility.Visible;
+                    break;
+                }
+            case DesktopRecordingNotification.CameraWarning:
+                {
+                    var text = LocalizedString(
+                        "Recording_Notification_CameraRestoreWarning");
+                    CameraRestoreWarningText.Text = text;
+                    AutomationProperties.SetName(
+                        CameraRestoreWarningText,
+                        text);
+                    CameraRestoreWarningText.Visibility = Visibility.Visible;
+                    break;
+                }
+        }
+    }
+
+    private void ClearRecordingNotifications()
+    {
+        RecordingSavedText.Text = string.Empty;
+        AutomationProperties.SetName(RecordingSavedText, string.Empty);
+        RecordingSavedText.Visibility = Visibility.Collapsed;
+        CameraRestoreWarningText.Text = string.Empty;
+        AutomationProperties.SetName(
+            CameraRestoreWarningText,
+            string.Empty);
+        CameraRestoreWarningText.Visibility = Visibility.Collapsed;
+    }
+
+    private string LocalizedString(string resourceKey) =>
+        TryFindResource(resourceKey) as string ??
+        throw new InvalidOperationException(
+            $"The localized resource {resourceKey} is missing.");
 
     private async void OnRecordingToggleClick(
         object sender,

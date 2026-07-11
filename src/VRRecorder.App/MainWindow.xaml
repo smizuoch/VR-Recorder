@@ -17,6 +17,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="RecordingStatusText"
@@ -25,8 +27,22 @@
                    AutomationProperties.Name="{DynamicResource Status_Booting_AccessibleDescription}"
                    AutomationProperties.LiveSetting="Polite" />
 
+        <TextBlock x:Name="RecordingSavedText"
+                   Grid.Row="1"
+                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed"
+                   AutomationProperties.LiveSetting="Polite" />
+
+        <TextBlock x:Name="CameraRestoreWarningText"
+                   Grid.Row="2"
+                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed"
+                   AutomationProperties.LiveSetting="Assertive" />
+
         <Button x:Name="RecordingToggleButton"
-                Grid.Row="1"
+                Grid.Row="3"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -38,7 +54,7 @@
                 Click="OnRecordingToggleClick" />
 
         <Button x:Name="SettingsButton"
-                Grid.Row="2"
+                Grid.Row="4"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -49,7 +65,7 @@
                 Click="OnSettingsClick" />
 
         <Button x:Name="AboutLegalButton"
-                Grid.Row="3"
+                Grid.Row="5"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
