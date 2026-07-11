@@ -1,8 +1,9 @@
 #include "audio_mixer.hpp"
 
-#include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 #include <span>
 #include <vector>
@@ -10,6 +11,15 @@
 namespace {
 
 constexpr float kTolerance = 0.00001F;
+
+#define CHECK(condition)                                                        \
+    do {                                                                        \
+        if (!(condition)) {                                                     \
+            std::cerr << "check failed at " << __FILE__ << ':' << __LINE__      \
+                      << ": " #condition << '\n';                              \
+            std::abort();                                                       \
+        }                                                                       \
+    } while (false)
 
 bool NearlyEqual(float actual, float expected)
 {
@@ -51,11 +61,11 @@ void RequiresAllSteadyRoutingModes()
             2,
             output);
 
-        assert(status == VRREC_STATUS_OK);
+        CHECK(status == VRREC_STATUS_OK);
         for (const auto sample : output) {
-            assert(NearlyEqual(sample, test_case.expected));
+            CHECK(NearlyEqual(sample, test_case.expected));
         }
-        assert(mixer.FramePosition() == 2);
+        CHECK(mixer.FramePosition() == 2);
     }
 }
 
@@ -70,19 +80,49 @@ void RequiresTenMillisecondMicrophoneRamp()
         0.0,
         0.0);
 
-    assert(mixer.SetRouting(VRREC_AUDIO_ROUTING_DESKTOP_ONLY) ==
-           VRREC_STATUS_OK);
-    assert(mixer.Mix(
-               desktop,
-               microphone,
-               scheduled_frames,
-               output) == VRREC_STATUS_OK);
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_DESKTOP_ONLY) ==
+          VRREC_STATUS_OK);
+    CHECK(mixer.Mix(
+              desktop,
+              microphone,
+              scheduled_frames,
+              output) == VRREC_STATUS_OK);
 
-    assert(NearlyEqual(output[0], 0.75F));
-    assert(NearlyEqual(output[240U * 2U], 0.5F));
-    assert(NearlyEqual(output[480U * 2U], 0.25F));
-    assert(NearlyEqual(output[480U * 2U + 1U], 0.25F));
-    assert(mixer.FramePosition() == scheduled_frames);
+    CHECK(NearlyEqual(output[0], 0.75F));
+    CHECK(NearlyEqual(output[240U * 2U], 0.5F));
+    CHECK(NearlyEqual(output[480U * 2U], 0.25F));
+    CHECK(NearlyEqual(output[480U * 2U + 1U], 0.25F));
+    CHECK(mixer.FramePosition() == scheduled_frames);
+}
+
+void RequiresRampReversalFromCurrentGain()
+{
+    const auto desktop = ConstantStereo(721, 0.25F);
+    const auto microphone = ConstantStereo(721, 0.5F);
+    std::vector<float> first_output(240U * 2U);
+    std::vector<float> reversed_output(481U * 2U);
+    vrrecorder::native::StereoAudioMixer mixer(
+        VRREC_AUDIO_ROUTING_MIXED,
+        0.0,
+        0.0);
+
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_DESKTOP_ONLY) ==
+          VRREC_STATUS_OK);
+    CHECK(mixer.Mix(
+              std::span<const float>(desktop).first(first_output.size()),
+              std::span<const float>(microphone).first(first_output.size()),
+              240,
+              first_output) == VRREC_STATUS_OK);
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_MIXED) ==
+          VRREC_STATUS_OK);
+    CHECK(mixer.Mix(
+              std::span<const float>(desktop).subspan(first_output.size()),
+              std::span<const float>(microphone).subspan(first_output.size()),
+              481,
+              reversed_output) == VRREC_STATUS_OK);
+
+    CHECK(NearlyEqual(reversed_output[0], 0.5F));
+    CHECK(NearlyEqual(reversed_output[480U * 2U], 0.75F));
 }
 
 void RequiresUnderrunZeroFillWithoutChangingTimeline()
@@ -95,46 +135,66 @@ void RequiresUnderrunZeroFillWithoutChangingTimeline()
         0.0,
         0.0);
 
-    assert(mixer.Mix(desktop, microphone, 4, output) ==
-           VRREC_STATUS_OK);
+    CHECK(mixer.Mix(desktop, microphone, 4, output) ==
+          VRREC_STATUS_OK);
 
-    assert(NearlyEqual(output[0], 0.25F));
-    assert(NearlyEqual(output[3], 0.25F));
+    CHECK(NearlyEqual(output[0], 0.25F));
+    CHECK(NearlyEqual(output[3], 0.25F));
     for (std::size_t index = 4; index < output.size(); ++index) {
-        assert(NearlyEqual(output[index], 0.0F));
+        CHECK(NearlyEqual(output[index], 0.0F));
     }
-    assert(mixer.FramePosition() == 4);
+    CHECK(mixer.FramePosition() == 4);
 }
 
 void RequiresConfiguredInputGainAndStrictBuffers()
 {
-    const auto desktop = ConstantStereo(1, 1.0F);
-    const auto microphone = ConstantStereo(1, 1.0F);
+    const auto desktop = ConstantStereo(1, 0.25F);
+    const auto microphone = ConstantStereo(1, 0.25F);
     std::vector<float> output(2);
     vrrecorder::native::StereoAudioMixer mixer(
         VRREC_AUDIO_ROUTING_MIXED,
         -6.0,
         -6.0);
 
-    assert(mixer.Mix(desktop, microphone, 1, output) ==
-           VRREC_STATUS_OK);
+    CHECK(mixer.Mix(desktop, microphone, 1, output) ==
+          VRREC_STATUS_OK);
     const auto expected = static_cast<float>(
-        2.0 * std::pow(10.0, -6.0 / 20.0));
-    assert(NearlyEqual(output[0], expected));
+        0.5 * std::pow(10.0, -6.0 / 20.0));
+    CHECK(NearlyEqual(output[0], expected));
 
+    const auto frame_position = mixer.FramePosition();
     std::vector<float> short_output(1);
-    assert(mixer.Mix(desktop, microphone, 1, short_output) ==
-           VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(desktop, microphone, 1, short_output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
     const std::vector<float> odd_input {0.25F};
-    assert(mixer.Mix(odd_input, microphone, 1, output) ==
-           VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(odd_input, microphone, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
     const std::vector<float> non_finite {
         std::numeric_limits<float>::infinity(),
         0.0F,
     };
-    assert(mixer.Mix(non_finite, microphone, 1, output) ==
-           VRREC_STATUS_INVALID_ARGUMENT);
-    assert(mixer.SetRouting(999U) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(non_finite, microphone, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.SetRouting(999U) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.FramePosition() == frame_position);
+}
+
+void RequiresFinitePeakLimitedOutput()
+{
+    const auto desktop = ConstantStereo(2, 1.0F);
+    const auto microphone = ConstantStereo(2, 1.0F);
+    std::vector<float> output(4);
+    vrrecorder::native::StereoAudioMixer mixer(
+        VRREC_AUDIO_ROUTING_MIXED,
+        24.0,
+        24.0);
+
+    CHECK(mixer.Mix(desktop, microphone, 2, output) ==
+          VRREC_STATUS_OK);
+    for (const auto sample : output) {
+        CHECK(std::isfinite(sample));
+        CHECK(std::fabs(sample) <= 1.0F);
+    }
 }
 
 }
@@ -143,7 +203,9 @@ int main()
 {
     RequiresAllSteadyRoutingModes();
     RequiresTenMillisecondMicrophoneRamp();
+    RequiresRampReversalFromCurrentGain();
     RequiresUnderrunZeroFillWithoutChangingTimeline();
     RequiresConfiguredInputGainAndStrictBuffers();
+    RequiresFinitePeakLimitedOutput();
     return 0;
 }
