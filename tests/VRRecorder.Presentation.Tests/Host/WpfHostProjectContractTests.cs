@@ -848,24 +848,35 @@ public sealed class WpfHostProjectContractTests
                        "AudioDeviceStatusText");
         Assert.Equal("Collapsed", audio.Attribute("Visibility")?.Value);
         Assert.Equal("Wrap", audio.Attribute("TextWrapping")?.Value);
+        Assert.Null(audio.Attribute("AutomationProperties.LiveSetting"));
+        var audioAnnouncement = Assert.Single(
+            window.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "AudioDeviceAnnouncementText");
         Assert.Equal(
             "Assertive",
-            audio.Attribute("AutomationProperties.LiveSetting")?.Value);
+            audioAnnouncement.Attribute(
+                "AutomationProperties.LiveSetting")?.Value);
+        Assert.Equal(
+            "0",
+            audioAnnouncement.Attribute("Opacity")?.Value);
+        Assert.Equal(
+            "False",
+            audioAnnouncement.Attribute("IsHitTestVisible")?.Value);
 
         var windowCode = File.ReadAllText(Path.Combine(
             appDirectory,
             "MainWindow.xaml.cs"));
-        Assert.Contains("_unavailableAudioInputs", windowCode);
+        Assert.Contains("DesktopAudioAvailabilityUiController", windowCode);
+        Assert.Contains("DesktopAudioAvailabilityUiSnapshot", windowCode);
+        Assert.DoesNotContain("_unavailableAudioInputs", windowCode);
         Assert.Contains("DesktopRecordingNotification.AudioWarning", windowCode);
         Assert.Contains("DesktopRecordingNotification.AudioRecovered", windowCode);
-        Assert.Contains("AudioInput.Desktop", windowCode);
-        Assert.Contains("AudioInput.Microphone", windowCode);
         Assert.Contains("ApplyAudioAvailability", windowCode);
         Assert.Contains("AutomationLiveSetting.Assertive", windowCode);
         Assert.Contains("AutomationLiveSetting.Polite", windowCode);
-        Assert.Contains(
-            "Recording_Notification_Audio_BothUnavailable",
-            windowCode);
+        Assert.Contains("AutomationEvents.LiveRegionChanged", windowCode);
+        Assert.Contains("RaiseAutomationEvent", windowCode);
         Assert.DoesNotContain("audio.Warning.Failure.Message", windowCode);
 
         var factoryCode = File.ReadAllText(Path.Combine(
