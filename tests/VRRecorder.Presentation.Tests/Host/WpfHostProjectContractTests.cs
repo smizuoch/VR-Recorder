@@ -898,19 +898,24 @@ public sealed class WpfHostProjectContractTests
             "new QueuedAudioSessionEventSink(",
             StringComparison.Ordinal);
         Assert.True(
-            audioComposition >= 0 &&
-            queuedDelivery > audioComposition &&
-            nativeEngine > queuedDelivery,
-            "Audio observers must be queued before the native engine callback boundary.");
+            queuedDelivery >= 0 &&
+            audioComposition > queuedDelivery &&
+            nativeEngine > audioComposition,
+            "Presentation delivery must be queued before composing the native callback observers.");
+        var diagnosticOwnership = factoryCode.IndexOf(
+            "resources.Add(events);",
+            StringComparison.Ordinal);
         var queuedOwnership = factoryCode.IndexOf(
-            "resources.Add(audioEvents);",
+            "resources.Add(presentationAudioEvents);",
             StringComparison.Ordinal);
         var backendOwnership = factoryCode.IndexOf(
             "resources.Add(nativeBackend);",
             StringComparison.Ordinal);
         Assert.True(
-            queuedOwnership >= 0 && backendOwnership > queuedOwnership,
-            "Reverse disposal must stop native callbacks before draining queued audio events.");
+            diagnosticOwnership >= 0 &&
+            queuedOwnership > diagnosticOwnership &&
+            backendOwnership > queuedOwnership,
+            "Reverse disposal must stop native callbacks, drain presentation and diagnostics, then close the log.");
 
         var appCode = File.ReadAllText(Path.Combine(
             appDirectory,
