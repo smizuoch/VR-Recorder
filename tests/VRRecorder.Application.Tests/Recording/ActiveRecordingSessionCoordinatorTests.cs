@@ -5,6 +5,7 @@ using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
+using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
 
 namespace VRRecorder.Application.Tests.Recording;
@@ -83,6 +84,67 @@ public sealed class ActiveRecordingSessionCoordinatorTests
             ],
             gateway.Updates);
         Assert.Equal(mutedState, coordinator.CurrentAudioControlState);
+    }
+
+    [Fact]
+    public async Task StopWaitsForAcceptedAudioUpdateAndRejectsLaterCommands()
+    {
+        var engine = new FakeRecordingEngine();
+        var finalizer = new ControllableRecordingFileFinalizer();
+        var finalization = new RecordingFileFinalizationUseCase(
+            finalizer,
+            new StubRecordingFileValidator(RecordingFileValidation.Valid),
+            new FakeRecordingRecoveryStore(),
+            new FakeSavedRecordingSink());
+        var gateway = new CapturingAudioRoutingGateway
+        {
+            BlockFirstUpdate = true,
+        };
+        var coordinator = new ActiveRecordingSessionCoordinator(
+            engine,
+            finalization,
+            gateway);
+        var handle = new RecordingHandle(
+            "session-audio-stop",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero));
+        coordinator.Activate(
+            handle,
+            AudioRouting.Mixed,
+            CancellationToken.None);
+        var acceptedUpdate = coordinator.ExecuteAudioCommandAsync(
+            RecordingAudioCommand.ToggleMicrophone,
+            CancellationToken.None);
+        await gateway.WaitUntilFirstUpdateStartedAsync();
+
+        var stopping = coordinator.RequestStopAsync(
+            new RecordingStopRequest(
+                handle,
+                RecordingStopReason.UserRequested),
+            CancellationToken.None);
+
+        Assert.Equal(RecorderState.Stopping, coordinator.State);
+        Assert.Equal(0, engine.StopCallCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.ExecuteAudioCommandAsync(
+                RecordingAudioCommand.ToggleMuteAll,
+                CancellationToken.None));
+
+        gateway.CompleteFirstUpdate();
+        await acceptedUpdate;
+        await engine.WaitUntilStopRequestedAsync();
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "audio-stop.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "audio-stop.mp4"));
+        engine.CompleteStop(new RecordingStopResult(
+            pending,
+            VideoPacketCount: 90,
+            AudioPacketCount: 142));
+        await finalizer.WaitUntilRequestedAsync();
+        finalizer.Complete(new FinalizedRecording(pending.FinalPath));
+        await stopping;
+
+        Assert.Equal(RecorderState.Ready, coordinator.State);
+        Assert.Null(coordinator.CurrentAudioControlState);
     }
 
     [Fact]
