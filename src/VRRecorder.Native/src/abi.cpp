@@ -269,6 +269,58 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         });
     }
 
+    void AudioEndpointAvailabilityChanged(
+        vrrecorder::native::AudioEndpointRole role,
+        bool available,
+        std::uint64_t frame_position) noexcept override
+    {
+        const std::lock_guard callback_lock(callback_mutex_);
+        vrrec_event_kind_t kind;
+        std::uint64_t sequence;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (state_ != SessionState::Started || stop_requested_) {
+                return;
+            }
+
+            bool *current_availability;
+            switch (role) {
+            case vrrecorder::native::AudioEndpointRole::Desktop:
+                current_availability = &desktop_audio_available_;
+                kind = available
+                    ? VRREC_EVENT_DESKTOP_AUDIO_DEVICE_RECOVERED
+                    : VRREC_EVENT_DESKTOP_AUDIO_DEVICE_LOST;
+                break;
+            case vrrecorder::native::AudioEndpointRole::Microphone:
+                current_availability = &microphone_audio_available_;
+                kind = available
+                    ? VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_RECOVERED
+                    : VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_LOST;
+                break;
+            default:
+                return;
+            }
+
+            if (*current_availability == available) {
+                return;
+            }
+
+            *current_availability = available;
+            sequence = ++sequence_;
+        }
+
+        Emit(vrrec_event_v1 {
+            sizeof(vrrec_event_v1),
+            VRREC_ABI_V1,
+            kind,
+            VRREC_STATUS_OK,
+            sequence,
+            0,
+            frame_position,
+            nullptr,
+        });
+    }
+
 private:
     void EndRuntimeOperation() noexcept
     {
@@ -300,6 +352,8 @@ private:
     SessionState state_ = SessionState::Created;
     bool stop_requested_ = false;
     bool first_packet_emitted_ = false;
+    bool desktop_audio_available_ = true;
+    bool microphone_audio_available_ = true;
     std::uint64_t sequence_ = 0;
     std::size_t active_runtime_operations_ = 0;
 };

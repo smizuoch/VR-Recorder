@@ -8,6 +8,11 @@
 
 namespace vrrecorder::native {
 
+enum class AudioEndpointRole {
+    Desktop,
+    Microphone,
+};
+
 class MediaEventSink {
 public:
     virtual ~MediaEventSink() = default;
@@ -19,6 +24,10 @@ public:
     virtual void Faulted(
         vrrec_status_t status,
         const char *message_utf8) noexcept = 0;
+    virtual void AudioEndpointAvailabilityChanged(
+        AudioEndpointRole role,
+        bool available,
+        std::uint64_t frame_position) noexcept = 0;
 };
 
 class MediaBackend {

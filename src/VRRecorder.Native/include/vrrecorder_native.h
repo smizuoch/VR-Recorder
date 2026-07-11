@@ -47,6 +47,10 @@ typedef uint32_t vrrec_gpu_vendor_t;
 #define VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED UINT32_C(1)
 #define VRREC_EVENT_STOPPED UINT32_C(2)
 #define VRREC_EVENT_FAULTED UINT32_C(3)
+#define VRREC_EVENT_DESKTOP_AUDIO_DEVICE_LOST UINT32_C(4)
+#define VRREC_EVENT_DESKTOP_AUDIO_DEVICE_RECOVERED UINT32_C(5)
+#define VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_LOST UINT32_C(6)
+#define VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_RECOVERED UINT32_C(7)
 
 #define VRREC_ENCODER_NVENC UINT32_C(1)
 #define VRREC_ENCODER_AMF UINT32_C(2)
@@ -142,6 +146,11 @@ typedef struct vrrec_session_statistics_v1 {
     int64_t audio_video_offset_microseconds;
 } vrrec_session_statistics_v1;
 
+/*
+ * For audio-device lost/recovered events, audio_packet_count carries the
+ * scheduled 48 kHz audio-frame position. video_packet_count is zero,
+ * status is VRREC_STATUS_OK, and message_utf8 is null.
+ */
 typedef struct vrrec_event_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
