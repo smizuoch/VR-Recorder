@@ -1,6 +1,8 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Audio;
 
 namespace VRRecorder.Application.Tests.Desktop;
 
@@ -40,6 +42,39 @@ public sealed class RecordingNotificationFanOutTests
         Assert.Same(warning, second.Warning);
     }
 
+    [Fact]
+    public void AudioEventsArePublishedToBothSinksInOrder()
+    {
+        List<string> calls = [];
+        var first = new AudioSink("diagnostics", calls);
+        var second = new AudioSink("presentation", calls);
+        var sink = new CompositeAudioSessionEventSink(first, second);
+        var warning = new AudioSessionWarning(
+            AudioSessionWarningKind.InputUnavailable,
+            AudioInput.Desktop,
+            FramePosition: 4_800);
+        var status = new AudioSessionStatus(
+            AudioSessionStatusKind.InputRecovered,
+            AudioInput.Desktop,
+            FramePosition: 9_600);
+
+        sink.Publish(warning);
+        sink.Publish(status);
+
+        Assert.Equal(
+            [
+                "diagnostics-warning",
+                "presentation-warning",
+                "diagnostics-status",
+                "presentation-status",
+            ],
+            calls);
+        Assert.Same(warning, first.Warning);
+        Assert.Same(warning, second.Warning);
+        Assert.Same(status, first.Status);
+        Assert.Same(status, second.Status);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-notification-fan-out-tests",
@@ -76,6 +111,27 @@ public sealed class RecordingNotificationFanOutTests
             Warning = warning;
             calls.Add(name);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class AudioSink(
+        string name,
+        List<string> calls) : IAudioSessionEventSink
+    {
+        public AudioSessionWarning? Warning { get; private set; }
+
+        public AudioSessionStatus? Status { get; private set; }
+
+        public void Publish(AudioSessionWarning warning)
+        {
+            Warning = warning;
+            calls.Add($"{name}-warning");
+        }
+
+        public void Publish(AudioSessionStatus status)
+        {
+            Status = status;
+            calls.Add($"{name}-status");
         }
     }
 }
