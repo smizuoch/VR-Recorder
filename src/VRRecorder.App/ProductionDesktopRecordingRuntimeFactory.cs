@@ -125,7 +125,8 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 nativeBackend,
                 clock,
                 faultStops,
-                audioEvents);
+                audioEvents,
+                events);
             var savedEvents = new CompositeSavedRecordingSink(
                 events,
                 _recordingNotifications);
