@@ -247,6 +247,7 @@ public sealed class ActiveRecordingSessionCoordinator
         Exception? primaryFailure = null;
         try
         {
+            await session.AudioCommandTail.ConfigureAwait(false);
             result = await session.Coordinator
                 .StopAsync()
                 .ConfigureAwait(false);
