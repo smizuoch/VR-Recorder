@@ -916,6 +916,27 @@ public sealed class WpfHostProjectContractTests
         Assert.Equal(
             "VRRecorder.App.SettingsWindow",
             settingsWindow.Root?.Attribute(Xaml + "Class")?.Value);
+        var outputFolder = Assert.Single(
+            settingsWindow.Descendants(Presentation + "TextBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "OutputFolderTextBox");
+        Assert.Equal("True", outputFolder.Attribute("IsReadOnly")?.Value);
+        Assert.NotNull(
+            outputFolder.Attribute("AutomationProperties.Name"));
+        Assert.NotNull(
+            outputFolder.Attribute("AutomationProperties.HelpText"));
+        var browseOutput = Assert.Single(
+            settingsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "BrowseOutputFolderButton");
+        Assert.Equal("False", browseOutput.Attribute("IsEnabled")?.Value);
+        Assert.Equal("OnBrowseOutputFolder", browseOutput.Attribute("Click")?.Value);
+        var useDownloads = Assert.Single(
+            settingsWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "UseDownloadsButton");
+        Assert.Equal("False", useDownloads.Attribute("IsEnabled")?.Value);
+        Assert.Equal("OnUseDownloads", useDownloads.Attribute("Click")?.Value);
         foreach (var comboName in new[]
                  {
                      "SelfTimerComboBox",
@@ -972,6 +993,10 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("SupportedResolutionChangePolicies", settingsCode);
         Assert.Contains("SupportedEncoders", settingsCode);
         Assert.Contains("SupportedQualityPresets", settingsCode);
+        Assert.Contains("FolderBrowserDialog", settingsCode);
+        Assert.Contains("ResolveOutputPath", settingsCode);
+        Assert.Contains("OutputFolder =", settingsCode);
+        Assert.Contains("DownloadsKnownFolderToken", settingsCode);
         Assert.Contains("LoadAsync", settingsCode);
         Assert.Contains("SaveAsync", settingsCode);
 
@@ -992,6 +1017,16 @@ public sealed class WpfHostProjectContractTests
                          "Settings_Title",
                          "Settings_Intro",
                          "Settings_Rights_Heading",
+                         "Settings_Output_Heading",
+                         "Settings_OutputFolder_Label",
+                         "Settings_OutputFolder_Tooltip",
+                         "Settings_Output_Browse_Label",
+                         "Settings_Output_Browse_AccessibleName",
+                         "Settings_Output_Browse_Tooltip",
+                         "Settings_Output_Browse_DialogTitle",
+                         "Settings_Output_Downloads_Label",
+                         "Settings_Output_Downloads_AccessibleName",
+                         "Settings_Output_Downloads_Tooltip",
                          "Settings_SelfTimer_Label",
                          "Settings_AutoStop_Label",
                          "Settings_FrameRate_Label",
