@@ -4,7 +4,9 @@ using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
 using VRRecorder.Domain.Audio;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
+using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Storage;
 
 namespace VRRecorder.IntegrationTests.Storage;
@@ -43,6 +45,26 @@ public sealed class StructuredRecordingEventSinkTests
                 CameraRestoreWarningReason.RecordingCompleted,
                 new IOException("secret avatar and user name")),
             CancellationToken.None);
+        ((IRecordingMediaEventSink)sink).Publish(new RecordingMediaProfile(
+            SourceWidth: 1920,
+            SourceHeight: 1080,
+            SourcePixelFormat: VideoPixelFormat.Bgra8,
+            EstimatedSourceFramesPerSecond: 59.94,
+            OutputWidth: 1920,
+            OutputHeight: 1080,
+            OutputFramesPerSecond: 60,
+            Encoder: EncoderKind.Nvenc,
+            GpuVendor: GpuVendor.Nvidia));
+        ((IRecordingMediaEventSink)sink).Publish(
+            new RecordingSessionStatistics(
+                SourceVideoFrameCount: 120,
+                MuxedVideoPacketCount: 90,
+                MuxedAudioPacketCount: 142,
+                DroppedSourceVideoFrameCount: 30,
+                DuplicatedOutputVideoFrameCount: 4,
+                LatestEncodeLatency: TimeSpan.FromMicroseconds(2_400),
+                MaximumEncodeLatency: TimeSpan.FromMicroseconds(8_000),
+                AudioVideoOffset: TimeSpan.FromMicroseconds(-15_000)));
         ((IAudioSessionEventSink)sink).Publish(new AudioSessionWarning(
             AudioSessionWarningKind.InputUnavailable,
             AudioInput.Microphone,
@@ -67,7 +89,7 @@ public sealed class StructuredRecordingEventSinkTests
         var lines = content.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(5, lines.Length);
+        Assert.Equal(7, lines.Length);
         Assert.Contains("\"event\":\"recording.storage\"", lines[0]);
         Assert.Contains("\"availableBytes\":\"123456789\"", lines[0]);
         Assert.Contains("\"state\":\"warning\"", lines[0]);
@@ -77,14 +99,30 @@ public sealed class StructuredRecordingEventSinkTests
         Assert.Contains("\"event\":\"camera.restore_warning\"", lines[2]);
         Assert.Contains("\"reason\":\"recording_completed\"", lines[2]);
         Assert.Contains("\"failureType\":\"IOException\"", lines[2]);
-        Assert.Contains("\"event\":\"audio.input_warning\"", lines[3]);
-        Assert.Contains("\"kind\":\"input_unavailable\"", lines[3]);
-        Assert.Contains("\"input\":\"microphone\"", lines[3]);
-        Assert.Contains("\"framePosition\":\"4800\"", lines[3]);
-        Assert.Contains("\"failureType\":\"IOException\"", lines[3]);
-        Assert.Contains("\"event\":\"audio.input_status\"", lines[4]);
-        Assert.Contains("\"kind\":\"input_recovered\"", lines[4]);
-        Assert.Contains("\"framePosition\":\"9600\"", lines[4]);
+        Assert.Contains("\"event\":\"recording.media_profile\"", lines[3]);
+        Assert.Contains("\"sourceWidth\":\"1920\"", lines[3]);
+        Assert.Contains("\"outputFramesPerSecond\":\"60\"", lines[3]);
+        Assert.Contains("\"estimatedSourceFramesPerSecond\":\"59.94\"", lines[3]);
+        Assert.Contains("\"sourcePixelFormat\":\"bgra8\"", lines[3]);
+        Assert.Contains("\"encoder\":\"nvenc\"", lines[3]);
+        Assert.Contains("\"gpuVendor\":\"nvidia\"", lines[3]);
+        Assert.Contains(
+            "\"event\":\"recording.media_statistics\"",
+            lines[4]);
+        Assert.Contains("\"sourceVideoFrameCount\":\"120\"", lines[4]);
+        Assert.Contains("\"droppedSourceVideoFrameCount\":\"30\"", lines[4]);
+        Assert.Contains("\"duplicatedOutputVideoFrameCount\":\"4\"", lines[4]);
+        Assert.Contains("\"latestEncodeLatencyMicroseconds\":\"2400\"", lines[4]);
+        Assert.Contains("\"maximumEncodeLatencyMicroseconds\":\"8000\"", lines[4]);
+        Assert.Contains("\"audioVideoOffsetMicroseconds\":\"-15000\"", lines[4]);
+        Assert.Contains("\"event\":\"audio.input_warning\"", lines[5]);
+        Assert.Contains("\"kind\":\"input_unavailable\"", lines[5]);
+        Assert.Contains("\"input\":\"microphone\"", lines[5]);
+        Assert.Contains("\"framePosition\":\"4800\"", lines[5]);
+        Assert.Contains("\"failureType\":\"IOException\"", lines[5]);
+        Assert.Contains("\"event\":\"audio.input_status\"", lines[6]);
+        Assert.Contains("\"kind\":\"input_recovered\"", lines[6]);
+        Assert.Contains("\"framePosition\":\"9600\"", lines[6]);
     }
 
     [Fact]

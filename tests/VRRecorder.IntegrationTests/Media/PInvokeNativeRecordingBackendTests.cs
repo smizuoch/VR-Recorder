@@ -250,11 +250,22 @@ public sealed class PInvokeNativeRecordingBackendTests
         var active = await session.GetStatisticsAsync(CancellationToken.None);
         var stopping = session.StopAsync(CancellationToken.None);
         controls.CompleteTrailerFlushClose(90, 142);
-        await stopping;
+        var stopped = await stopping;
         var terminal = await session.GetStatisticsAsync(CancellationToken.None);
 
         Assert.Equal(expected, active);
         Assert.Equal(expected, terminal);
+        Assert.Equal(
+            new RecordingSessionStatistics(
+                expected.SourceVideoFrameCount,
+                expected.MuxedVideoPacketCount,
+                expected.MuxedAudioPacketCount,
+                expected.DroppedSourceVideoFrameCount,
+                expected.DuplicatedOutputVideoFrameCount,
+                expected.LatestEncodeLatency,
+                expected.MaximumEncodeLatency,
+                expected.AudioVideoOffset),
+            stopped.Statistics);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             session.UpdateVideoLayoutAsync(
                 plan.VideoLayout.CurrentLayout,
