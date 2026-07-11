@@ -835,6 +835,92 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopSurfacesAudioLossAndRecoveryWithoutFaultingRecording()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var window = LoadRequiredXaml(appDirectory, "MainWindow.xaml");
+        var audio = Assert.Single(
+            window.Descendants(Presentation + "TextBlock"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "AudioDeviceStatusText");
+        Assert.Equal("Collapsed", audio.Attribute("Visibility")?.Value);
+        Assert.Equal("Wrap", audio.Attribute("TextWrapping")?.Value);
+        Assert.Equal(
+            "Assertive",
+            audio.Attribute("AutomationProperties.LiveSetting")?.Value);
+
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+        Assert.Contains("_unavailableAudioInputs", windowCode);
+        Assert.Contains("DesktopRecordingNotification.AudioWarning", windowCode);
+        Assert.Contains("DesktopRecordingNotification.AudioRecovered", windowCode);
+        Assert.Contains("AudioInput.Desktop", windowCode);
+        Assert.Contains("AudioInput.Microphone", windowCode);
+        Assert.Contains("ApplyAudioAvailability", windowCode);
+        Assert.Contains("AutomationLiveSetting.Assertive", windowCode);
+        Assert.Contains("AutomationLiveSetting.Polite", windowCode);
+        Assert.Contains(
+            "Recording_Notification_Audio_BothUnavailable",
+            windowCode);
+        Assert.DoesNotContain("audio.Warning.Failure.Message", windowCode);
+
+        var factoryCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+        Assert.Contains("CompositeAudioSessionEventSink", factoryCode);
+        Assert.Contains("audioEvents", factoryCode);
+        Assert.Contains(
+            "new NativeRecordingEngine(",
+            factoryCode);
+        var audioComposition = factoryCode.IndexOf(
+            "new CompositeAudioSessionEventSink(",
+            StringComparison.Ordinal);
+        var nativeEngine = factoryCode.IndexOf(
+            "new NativeRecordingEngine(",
+            StringComparison.Ordinal);
+        Assert.True(
+            audioComposition >= 0 && nativeEngine > audioComposition,
+            "Audio diagnostics/presentation must be composed before the native engine.");
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("DesktopRecordingNotification.AudioWarning", appCode);
+        Assert.Contains("DesktopRecordingNotification.AudioRecovered", appCode);
+        Assert.Contains("Recording_Notification_Audio_Warning_Title", appCode);
+        Assert.Contains("Recording_Notification_Audio_Recovered_Title", appCode);
+        Assert.Contains("ShowBalloonTip", appCode);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Recording_Notification_Audio_Warning_Title",
+                         "Recording_Notification_Audio_Recovered_Title",
+                         "Recording_Notification_Audio_DesktopUnavailable",
+                         "Recording_Notification_Audio_MicrophoneUnavailable",
+                         "Recording_Notification_Audio_BothUnavailable",
+                         "Recording_Notification_Audio_DesktopRecovered",
+                         "Recording_Notification_Audio_MicrophoneRecovered",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopRequiresExplicitRecordingRightsAcknowledgementBeforeHostActivation()
     {
         var appDirectory = Path.Combine(
