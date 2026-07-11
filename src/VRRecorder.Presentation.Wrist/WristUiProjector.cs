@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Presentation;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
@@ -27,7 +28,15 @@ public sealed class WristUiProjector
              status.State == RecorderState.SignalLost) &&
             status.AvailableActions.HasFlag(RecorderAvailableActions.Stop))
         {
-            actions = [CreateStopAction()];
+            actions = page == WristPage.Main &&
+                      status.AudioControlState is { } audioControlState
+                ?
+                [
+                    CreateStopAction(),
+                    CreateMicrophoneAction(audioControlState),
+                    CreateMuteAllAction(audioControlState),
+                ]
+                : [CreateStopAction()];
         }
         else if (status.State == RecorderState.NoSignal &&
                  status.AvailableActions.HasFlag(RecorderAvailableActions.Retry))
@@ -83,6 +92,42 @@ public sealed class WristUiProjector
             Tooltip: accessibleName,
             MinimumTargetDp: 64);
     }
+
+    private UiActionSnapshot CreateMicrophoneAction(
+        RecordingAudioControlState state)
+    {
+        var stateKey = state.MicrophoneIncluded ? "on" : "off";
+        return new UiActionSnapshot(
+            SemanticId: $"audio.microphone.{stateKey}",
+            Command: UiCommandId.ToggleMicrophone,
+            IconSemanticId: $"audio.microphone.{stateKey}",
+            ComponentRole: UiComponentRole.FilledTonalIconToggleButton,
+            ColorRole: UiColorRole.Surface,
+            IsEnabled: true,
+            VisibleLabel: _localizer.Resolve(
+                $"audio.microphone.{stateKey}.short"),
+            AccessibleName: _localizer.Resolve(
+                $"audio.microphone.{stateKey}.accessible"),
+            Tooltip: _localizer.Resolve(
+                $"audio.microphone.{stateKey}.tooltip"),
+            MinimumTargetDp: 56,
+            IsSelected: state.MicrophoneIncluded);
+    }
+
+    private UiActionSnapshot CreateMuteAllAction(
+        RecordingAudioControlState state) =>
+        new(
+            SemanticId: "audio.muteAll",
+            Command: UiCommandId.ToggleMuteAll,
+            IconSemanticId: "audio.muteAll",
+            ComponentRole: UiComponentRole.IconToggleButton,
+            ColorRole: UiColorRole.Surface,
+            IsEnabled: true,
+            VisibleLabel: _localizer.Resolve("audio.mute-all.short"),
+            AccessibleName: _localizer.Resolve("audio.mute-all.accessible"),
+            Tooltip: _localizer.Resolve("audio.mute-all.tooltip"),
+            MinimumTargetDp: 56,
+            IsSelected: state.MuteAll);
 
     private UiActionSnapshot CreateRetryAction()
     {

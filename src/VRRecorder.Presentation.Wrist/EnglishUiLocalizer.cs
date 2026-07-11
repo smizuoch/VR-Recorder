@@ -11,6 +11,17 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
             ["recording.start.accessible"] = "Start recording",
             ["recording.stop.short"] = "STOP",
             ["recording.stop.accessible"] = "Stop recording",
+            ["audio.microphone.on.short"] = "MIC ON",
+            ["audio.microphone.on.accessible"] = "Microphone on",
+            ["audio.microphone.on.tooltip"] = "Record microphone audio",
+            ["audio.microphone.off.short"] = "MIC OFF",
+            ["audio.microphone.off.accessible"] = "Microphone off",
+            ["audio.microphone.off.tooltip"] =
+                "Do not record microphone audio",
+            ["audio.mute-all.short"] = "Mute all",
+            ["audio.mute-all.accessible"] =
+                "Mute desktop audio and microphone",
+            ["audio.mute-all.tooltip"] = "Turn off all recorded audio",
             ["camera.retry.short"] = "RETRY",
             ["camera.retry.accessible"] = "Retry camera connection",
             ["state.booting.label"] = "Starting",

@@ -10,4 +10,5 @@ public sealed record UiActionSnapshot(
     LocalizedText VisibleLabel,
     LocalizedText AccessibleName,
     LocalizedText Tooltip,
-    int MinimumTargetDp);
+    int MinimumTargetDp,
+    bool IsSelected = false);

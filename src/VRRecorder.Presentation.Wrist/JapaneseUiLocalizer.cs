@@ -11,6 +11,18 @@ public sealed class JapaneseUiLocalizer : IUiLocalizer
             ["recording.start.accessible"] = "録画を開始",
             ["recording.stop.short"] = "停止",
             ["recording.stop.accessible"] = "録画を停止",
+            ["audio.microphone.on.short"] = "マイク オン",
+            ["audio.microphone.on.accessible"] = "マイク オン",
+            ["audio.microphone.on.tooltip"] = "マイク音声を録音します",
+            ["audio.microphone.off.short"] = "マイク オフ",
+            ["audio.microphone.off.accessible"] = "マイク オフ",
+            ["audio.microphone.off.tooltip"] =
+                "マイク音声を録音しません",
+            ["audio.mute-all.short"] = "全音声オフ",
+            ["audio.mute-all.accessible"] =
+                "デスクトップ音声とマイクをミュート",
+            ["audio.mute-all.tooltip"] =
+                "すべての録音音声をオフにします",
             ["camera.retry.short"] = "再試行",
             ["camera.retry.accessible"] = "カメラ接続を再試行",
             ["state.booting.label"] = "起動中",

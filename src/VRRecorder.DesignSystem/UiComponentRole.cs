@@ -4,4 +4,6 @@ public enum UiComponentRole
 {
     LargeFilledIconButton,
     FilledTonalButton,
+    FilledTonalIconToggleButton,
+    IconToggleButton,
 }
