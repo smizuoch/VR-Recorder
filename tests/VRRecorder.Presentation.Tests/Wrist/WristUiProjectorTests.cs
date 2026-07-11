@@ -1,5 +1,7 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Presentation;
 using VRRecorder.DesignSystem;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Presentation.Wrist;
 
@@ -7,6 +9,68 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 
 public sealed class WristUiProjectorTests
 {
+    [Fact]
+    public void RecordingMainProjectsStopMicrophoneAndMuteControls()
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = RecorderStatusSnapshot.Create(
+            10,
+            RecorderState.Recording,
+            RecordingAudioControlState.FromRouting(
+                AudioRouting.DesktopOnly));
+
+        var snapshot = projector.Project(status, WristPage.Main);
+
+        Assert.Equal(3, snapshot.Actions.Count);
+        var stop = Assert.Single(snapshot.Actions, action =>
+            action.Command == UiCommandId.ToggleRecording);
+        Assert.True(stop.MinimumTargetDp >= 64);
+        var microphone = Assert.Single(snapshot.Actions, action =>
+            action.Command == UiCommandId.ToggleMicrophone);
+        Assert.Equal("audio.microphone.off", microphone.SemanticId);
+        Assert.Equal(
+            UiComponentRole.FilledTonalIconToggleButton,
+            microphone.ComponentRole);
+        Assert.False(microphone.IsSelected);
+        Assert.Equal("Microphone off", microphone.AccessibleName.Value);
+        Assert.Equal(
+            "Do not record microphone audio",
+            microphone.Tooltip.Value);
+        Assert.True(microphone.MinimumTargetDp >= 56);
+        var mute = Assert.Single(snapshot.Actions, action =>
+            action.Command == UiCommandId.ToggleMuteAll);
+        Assert.Equal("audio.muteAll", mute.SemanticId);
+        Assert.Equal(UiComponentRole.IconToggleButton, mute.ComponentRole);
+        Assert.False(mute.IsSelected);
+        Assert.Equal(
+            "Mute desktop audio and microphone",
+            mute.AccessibleName.Value);
+        Assert.Equal("Turn off all recorded audio", mute.Tooltip.Value);
+        Assert.True(mute.MinimumTargetDp >= 56);
+    }
+
+    [Fact]
+    public void MutedRecordingRetainsMicrophoneRestoreSelection()
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var status = RecorderStatusSnapshot.Create(
+            11,
+            RecorderState.Recording,
+            RecordingAudioControlState.FromRouting(AudioRouting.Muted));
+
+        var snapshot = projector.Project(status, WristPage.Main);
+
+        var microphone = Assert.Single(snapshot.Actions, action =>
+            action.Command == UiCommandId.ToggleMicrophone);
+        var mute = Assert.Single(snapshot.Actions, action =>
+            action.Command == UiCommandId.ToggleMuteAll);
+        Assert.Equal("audio.microphone.on", microphone.SemanticId);
+        Assert.True(microphone.IsSelected);
+        Assert.True(mute.IsSelected);
+        Assert.True(microphone.IsEnabled);
+        Assert.True(mute.IsEnabled);
+    }
+
     [Theory]
     [InlineData(RecorderState.Booting, UiColorRole.Surface)]
     [InlineData(RecorderState.ComplianceFault, UiColorRole.Error)]
