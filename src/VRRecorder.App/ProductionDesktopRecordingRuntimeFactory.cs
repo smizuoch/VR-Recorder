@@ -98,12 +98,13 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             var events = new StructuredRecordingEventSink(
                 diagnosticLog,
                 wallClock);
-            var audioObservers = new CompositeAudioSessionEventSink(
-                events,
+            resources.Add(events);
+            var presentationAudioEvents = new QueuedAudioSessionEventSink(
                 _recordingNotifications);
-            var audioEvents = new QueuedAudioSessionEventSink(
-                audioObservers);
-            resources.Add(audioEvents);
+            resources.Add(presentationAudioEvents);
+            var audioEvents = new CompositeAudioSessionEventSink(
+                events,
+                presentationAudioEvents);
             var http = CreateLoopbackHttpInvoker();
             resources.Add(http);
             var cameraLeases = new FileSystemCameraLeaseStore(cameraLeasePath);
