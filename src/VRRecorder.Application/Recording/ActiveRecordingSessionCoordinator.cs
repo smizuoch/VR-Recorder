@@ -117,12 +117,14 @@ public sealed class ActiveRecordingSessionCoordinator
         }
     }
 
-    public async Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+    public Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
         RecordingAudioCommand command,
         CancellationToken cancellationToken)
     {
         ActiveSession session;
-        RecordingAudioControlState next;
+        Task predecessor;
+        var completion = new TaskCompletionSource<RecordingAudioControlState>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
         {
             session = _activeSession ?? throw new InvalidOperationException(
@@ -133,26 +135,71 @@ public sealed class ActiveRecordingSessionCoordinator
                     "The active recording session is stopping.");
             }
 
-            next = session.AudioControlState.Apply(command);
+            predecessor = session.AudioCommandTail;
+            session.AudioCommandTail = ProcessAudioCommandAsync(
+                session,
+                predecessor,
+                command,
+                completion,
+                cancellationToken);
         }
 
-        await _audioRoutingGateway
-            .UpdateAudioRoutingAsync(
-                session.Handle,
-                next.EffectiveRouting,
-                cancellationToken)
-            .ConfigureAwait(false);
+        return completion.Task;
+    }
 
-        lock (_gate)
+    private async Task ProcessAudioCommandAsync(
+        ActiveSession session,
+        Task predecessor,
+        RecordingAudioCommand command,
+        TaskCompletionSource<RecordingAudioControlState> completion,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        await predecessor.ConfigureAwait(false);
+
+        try
         {
-            if (!ReferenceEquals(_activeSession, session))
+            cancellationToken.ThrowIfCancellationRequested();
+            RecordingAudioControlState next;
+            lock (_gate)
             {
-                throw new InvalidOperationException(
-                    "The recording session changed during the audio update.");
+                if (!ReferenceEquals(_activeSession, session))
+                {
+                    throw new InvalidOperationException(
+                        "The recording session changed before the audio update.");
+                }
+
+                next = session.AudioControlState.Apply(command);
             }
 
-            session.AudioControlState = next;
-            return next;
+            await _audioRoutingGateway
+                .UpdateAudioRoutingAsync(
+                    session.Handle,
+                    next.EffectiveRouting,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            lock (_gate)
+            {
+                if (!ReferenceEquals(_activeSession, session))
+                {
+                    throw new InvalidOperationException(
+                        "The recording session changed during the audio update.");
+                }
+
+                session.AudioControlState = next;
+            }
+
+            completion.TrySetResult(next);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            completion.TrySetCanceled(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            completion.TrySetException(exception);
         }
     }
 
@@ -278,6 +325,8 @@ public sealed class ActiveRecordingSessionCoordinator
 
         public RecordingAudioControlState AudioControlState { get; set; } =
             audioControlState;
+
+        public Task AudioCommandTail { get; set; } = Task.CompletedTask;
     }
 
     private sealed class UnsupportedAudioRoutingGateway
