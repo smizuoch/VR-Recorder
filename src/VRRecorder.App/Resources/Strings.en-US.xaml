@@ -132,6 +132,13 @@
     <system:String x:Key="Recording_Stop_Short">STOP</system:String>
     <system:String x:Key="Recording_Stop_AccessibleName">Stop recording</system:String>
     <system:String x:Key="Recording_Stop_Tooltip">Stop recording and save the MP4 file</system:String>
+    <system:String x:Key="Microphone_On_AccessibleName">Microphone on</system:String>
+    <system:String x:Key="Microphone_On_Tooltip">Record microphone audio</system:String>
+    <system:String x:Key="Microphone_Off_AccessibleName">Microphone off</system:String>
+    <system:String x:Key="Microphone_Off_Tooltip">Do not record microphone audio</system:String>
+    <system:String x:Key="Audio_MuteAll_Short">Mute all</system:String>
+    <system:String x:Key="Audio_MuteAll_AccessibleName">Mute desktop audio and microphone</system:String>
+    <system:String x:Key="Audio_MuteAll_Tooltip">Turn off all recorded audio</system:String>
     <system:String x:Key="Recording_Action_Cancel_Short">CANCEL</system:String>
     <system:String x:Key="Recording_Action_Cancel_AccessibleName">Cancel recording start</system:String>
     <system:String x:Key="Recording_Action_Cancel_Tooltip">Cancel the recording countdown or startup</system:String>

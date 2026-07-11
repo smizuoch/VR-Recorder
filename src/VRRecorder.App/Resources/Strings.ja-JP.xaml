@@ -132,6 +132,13 @@
     <system:String x:Key="Recording_Stop_Short">STOP</system:String>
     <system:String x:Key="Recording_Stop_AccessibleName">録画を停止</system:String>
     <system:String x:Key="Recording_Stop_Tooltip">録画を停止してMP4を保存します</system:String>
+    <system:String x:Key="Microphone_On_AccessibleName">マイク オン</system:String>
+    <system:String x:Key="Microphone_On_Tooltip">マイク音声を録音します</system:String>
+    <system:String x:Key="Microphone_Off_AccessibleName">マイク オフ</system:String>
+    <system:String x:Key="Microphone_Off_Tooltip">マイク音声を録音しません</system:String>
+    <system:String x:Key="Audio_MuteAll_Short">全音声オフ</system:String>
+    <system:String x:Key="Audio_MuteAll_AccessibleName">デスクトップ音声とマイクをミュート</system:String>
+    <system:String x:Key="Audio_MuteAll_Tooltip">すべての録音音声をオフにします</system:String>
     <system:String x:Key="Recording_Action_Cancel_Short">取消</system:String>
     <system:String x:Key="Recording_Action_Cancel_AccessibleName">録画開始を取り消す</system:String>
     <system:String x:Key="Recording_Action_Cancel_Tooltip">カウントダウンまたは録画開始処理を取り消します</system:String>

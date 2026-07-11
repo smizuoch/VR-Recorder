@@ -132,6 +132,13 @@
     <system:String x:Key="Recording_Stop_Short">⟦STÖP · STÖP⟧</system:String>
     <system:String x:Key="Recording_Stop_AccessibleName">⟦Stöp rëcördïng · Stöp rëcördïng⟧</system:String>
     <system:String x:Key="Recording_Stop_Tooltip">⟦Stöp rëcördïng ánd sávë thë MP4 fïlë · Stöp rëcördïng ánd sávë thë MP4 fïlë⟧</system:String>
+    <system:String x:Key="Microphone_On_AccessibleName">⟦Mïcröphönë ön · Mïcröphönë ön⟧</system:String>
+    <system:String x:Key="Microphone_On_Tooltip">⟦Rëcörd mïcröphönë áüdïö · Rëcörd mïcröphönë áüdïö⟧</system:String>
+    <system:String x:Key="Microphone_Off_AccessibleName">⟦Mïcröphönë öff · Mïcröphönë öff⟧</system:String>
+    <system:String x:Key="Microphone_Off_Tooltip">⟦Dö nöt rëcörd mïcröphönë áüdïö · Dö nöt rëcörd mïcröphönë áüdïö⟧</system:String>
+    <system:String x:Key="Audio_MuteAll_Short">⟦Mütë áll · Mütë áll⟧</system:String>
+    <system:String x:Key="Audio_MuteAll_AccessibleName">⟦Mütë dësktöp áüdïö ánd mïcröphönë · Mütë dësktöp áüdïö ánd mïcröphönë⟧</system:String>
+    <system:String x:Key="Audio_MuteAll_Tooltip">⟦Türn öff áll rëcördëd áüdïö · Türn öff áll rëcördëd áüdïö⟧</system:String>
     <system:String x:Key="Recording_Action_Cancel_Short">⟦CÁNCËL · CÁNCËL⟧</system:String>
     <system:String x:Key="Recording_Action_Cancel_AccessibleName">⟦Cáncël rëcördïng stárt · Cáncël rëcördïng stárt⟧</system:String>
     <system:String x:Key="Recording_Action_Cancel_Tooltip">⟦Cáncël thë rëcördïng cöüntdöwn ör stártüp · Cáncël thë rëcördïng cöüntdöwn ör stártüp⟧</system:String>

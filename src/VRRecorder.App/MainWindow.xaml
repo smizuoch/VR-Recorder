@@ -21,6 +21,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="RecordingStatusText"
@@ -72,8 +73,36 @@
                 IsEnabled="False"
                 Click="OnRecordingToggleClick" />
 
+        <StackPanel x:Name="AudioControlsPanel"
+                    Grid.Row="5"
+                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    Orientation="Horizontal"
+                    Visibility="Collapsed">
+            <ToggleButton x:Name="MicrophoneToggleButton"
+                          MinHeight="{StaticResource Interaction.MinimumTarget}"
+                          MinWidth="{StaticResource Interaction.MinimumTarget}"
+                          Content="{DynamicResource Microphone_Off_AccessibleName}"
+                          AutomationProperties.Name="{DynamicResource Microphone_Off_AccessibleName}"
+                          AutomationProperties.HelpText="{DynamicResource Microphone_Off_Tooltip}"
+                          ToolTip="{DynamicResource Microphone_Off_Tooltip}"
+                          IsEnabled="False"
+                          Click="OnMicrophoneToggleClick" />
+
+            <Border Width="{StaticResource Spacing.LayoutGrid}" />
+
+            <ToggleButton x:Name="MuteAllToggleButton"
+                          MinHeight="{StaticResource Interaction.MinimumTarget}"
+                          MinWidth="{StaticResource Interaction.MinimumTarget}"
+                          Content="{DynamicResource Audio_MuteAll_Short}"
+                          AutomationProperties.Name="{DynamicResource Audio_MuteAll_AccessibleName}"
+                          AutomationProperties.HelpText="{DynamicResource Audio_MuteAll_Tooltip}"
+                          ToolTip="{DynamicResource Audio_MuteAll_Tooltip}"
+                          IsEnabled="False"
+                          Click="OnMuteAllToggleClick" />
+        </StackPanel>
+
         <Button x:Name="SettingsButton"
-                Grid.Row="5"
+                Grid.Row="6"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -84,7 +113,7 @@
                 Click="OnSettingsClick" />
 
         <Button x:Name="DiagnosticsButton"
-                Grid.Row="6"
+                Grid.Row="7"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
@@ -95,7 +124,7 @@
                 Click="OnDiagnosticsClick" />
 
         <Button x:Name="AboutLegalButton"
-                Grid.Row="7"
+                Grid.Row="8"
                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
@@ -17,7 +18,10 @@ namespace VRRecorder.App;
 public partial class MainWindow : Window
 {
     private readonly RecordingInputDispatcher _recordingInputs;
+    private readonly IUiCommandDispatcher _uiCommands;
     private readonly DesktopRecordingUiController _recordingUi = new();
+    private readonly DesktopRecordingAudioUiController _recordingAudioUi =
+        new();
     private readonly DesktopAudioAvailabilityUiController _audioAvailabilityUi =
         new();
     private readonly IDisposable _recordingNotificationSubscription;
@@ -31,6 +35,7 @@ public partial class MainWindow : Window
     public MainWindow()
         : this(
             App.RecordingInputs,
+            App.UiCommands,
             App.RecordingStatuses,
             App.RecordingNotifications)
     {
@@ -38,13 +43,16 @@ public partial class MainWindow : Window
 
     internal MainWindow(
         RecordingInputDispatcher recordingInputs,
+        IUiCommandDispatcher uiCommands,
         IRecorderStatusSource recordingStatuses,
         DesktopRecordingNotificationHub recordingNotifications)
     {
         ArgumentNullException.ThrowIfNull(recordingInputs);
+        ArgumentNullException.ThrowIfNull(uiCommands);
         ArgumentNullException.ThrowIfNull(recordingStatuses);
         ArgumentNullException.ThrowIfNull(recordingNotifications);
         _recordingInputs = recordingInputs;
+        _uiCommands = uiCommands;
         InitializeComponent();
         _recordingStatusSubscription = recordingStatuses.Subscribe(
             OnRecordingStatusChanged);
@@ -224,6 +232,12 @@ public partial class MainWindow : Window
             ApplyAudioAvailability(audioAvailability);
         }
 
+        var recordingAudio = _recordingAudioUi.Apply(status);
+        if (recordingAudio is not null)
+        {
+            ApplyRecordingAudio(recordingAudio);
+        }
+
         RecordingStatusText.SetResourceReference(
             TextBlock.TextProperty,
             update.StatusTextResourceKey);
@@ -244,6 +258,47 @@ public partial class MainWindow : Window
             update.ActionHelpResourceKey);
         RecordingToggleButton.IsEnabled =
             _recordingCommandsAuthorized && update.IsActionEnabled;
+    }
+
+    private void ApplyRecordingAudio(
+        DesktopRecordingAudioUiSnapshot snapshot)
+    {
+        AudioControlsPanel.Visibility = snapshot.IsVisible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        MicrophoneToggleButton.SetResourceReference(
+            ContentControl.ContentProperty,
+            snapshot.MicrophoneLabelResourceKey);
+        MicrophoneToggleButton.SetResourceReference(
+            AutomationProperties.NameProperty,
+            snapshot.MicrophoneAccessibleNameResourceKey);
+        MicrophoneToggleButton.SetResourceReference(
+            AutomationProperties.HelpTextProperty,
+            snapshot.MicrophoneHelpResourceKey);
+        MicrophoneToggleButton.SetResourceReference(
+            FrameworkElement.ToolTipProperty,
+            snapshot.MicrophoneHelpResourceKey);
+        MicrophoneToggleButton.SetCurrentValue(
+            ToggleButton.IsCheckedProperty,
+            snapshot.IsMicrophoneSelected);
+        MuteAllToggleButton.SetResourceReference(
+            ContentControl.ContentProperty,
+            snapshot.MuteAllLabelResourceKey);
+        MuteAllToggleButton.SetResourceReference(
+            AutomationProperties.NameProperty,
+            snapshot.MuteAllAccessibleNameResourceKey);
+        MuteAllToggleButton.SetResourceReference(
+            AutomationProperties.HelpTextProperty,
+            snapshot.MuteAllHelpResourceKey);
+        MuteAllToggleButton.SetResourceReference(
+            FrameworkElement.ToolTipProperty,
+            snapshot.MuteAllHelpResourceKey);
+        MuteAllToggleButton.SetCurrentValue(
+            ToggleButton.IsCheckedProperty,
+            snapshot.IsMuteAllSelected);
+        var isEnabled = _recordingCommandsAuthorized && snapshot.IsEnabled;
+        MicrophoneToggleButton.IsEnabled = isEnabled;
+        MuteAllToggleButton.IsEnabled = isEnabled;
     }
 
     private void OnRecordingNotification(
@@ -391,6 +446,16 @@ public partial class MainWindow : Window
         RoutedEventArgs e) =>
         await DispatchRecordingAsync(UiActivationKind.DesktopClick);
 
+    private async void OnMicrophoneToggleClick(
+        object sender,
+        RoutedEventArgs e) =>
+        await DispatchAudioAsync(UiCommandId.ToggleMicrophone);
+
+    private async void OnMuteAllToggleClick(
+        object sender,
+        RoutedEventArgs e) =>
+        await DispatchAudioAsync(UiCommandId.ToggleMuteAll);
+
     private void OnAboutLegalClick(object sender, RoutedEventArgs e)
     {
         OpenLegalWindow();
@@ -477,6 +542,31 @@ public partial class MainWindow : Window
         }
         catch (InvalidOperationException)
         {
+            RecordingStatusText.SetResourceReference(
+                TextBlock.TextProperty,
+                "Status_CommandUnavailable");
+            RecordingStatusText.SetResourceReference(
+                AutomationProperties.NameProperty,
+                "Status_CommandUnavailable");
+        }
+    }
+
+    private async Task DispatchAudioAsync(UiCommandId command)
+    {
+        try
+        {
+            await _uiCommands.DispatchAsync(
+                command,
+                UiActivationKind.DesktopClick,
+                CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            if (_recordingAudioUi.Current is { } current)
+            {
+                ApplyRecordingAudio(current);
+            }
+
             RecordingStatusText.SetResourceReference(
                 TextBlock.TextProperty,
                 "Status_CommandUnavailable");
