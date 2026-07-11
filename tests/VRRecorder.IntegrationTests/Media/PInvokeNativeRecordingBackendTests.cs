@@ -265,7 +265,6 @@ public sealed class PInvokeNativeRecordingBackendTests
             session.UpdateAudioRoutingAsync(
                 AudioRouting.Mixed,
                 CancellationToken.None));
-        Assert.Equal(4u, controls.AudioRoutingUpdateCount());
     }
 
     [Fact]

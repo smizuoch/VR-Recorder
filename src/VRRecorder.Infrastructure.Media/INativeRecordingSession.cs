@@ -1,4 +1,5 @@
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Audio;
 
 namespace VRRecorder.Infrastructure.Media;
 
@@ -11,6 +12,12 @@ public interface INativeRecordingSession
         CancellationToken cancellationToken) =>
         throw new NotSupportedException(
             "This native recording session does not support runtime video layout updates.");
+
+    Task UpdateAudioRoutingAsync(
+        AudioRouting routing,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException(
+            "This native recording session does not support runtime audio routing updates.");
 
     Task<NativeRecordingSessionStatistics> GetStatisticsAsync(
         CancellationToken cancellationToken) =>

@@ -120,6 +120,15 @@ internal struct NativeVideoLayoutV1
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct NativeAudioRoutingUpdateV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public NativeAudioRouting AudioRouting;
+    public uint Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct NativeSessionStatisticsV1
 {
     public uint StructSize;

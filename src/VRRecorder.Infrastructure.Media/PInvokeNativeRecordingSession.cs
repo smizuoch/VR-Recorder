@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.Infrastructure.Media;
@@ -116,6 +117,34 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
 
             return Task.FromResult(QueryStatisticsCore());
         }
+    }
+
+    public Task UpdateAudioRoutingAsync(
+        AudioRouting routing,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            ThrowIfReleased();
+            var update = new NativeAudioRoutingUpdateV1
+            {
+                StructSize = checked(
+                    (uint)Marshal.SizeOf<NativeAudioRoutingUpdateV1>()),
+                AbiVersion = NativeAbiLibrary.SupportedAbiVersion,
+                AudioRouting = ToNativeAudioRouting(routing),
+                Reserved = 0,
+            };
+            var status = _library.UpdateAudioRouting(
+                _session.DangerousGetHandle(),
+                ref update);
+            if (status != NativeStatus.Ok)
+            {
+                throw StatusException(status, "update audio routing");
+            }
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task<RecordingStopResult> StopAsync(
@@ -280,6 +309,19 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
                 nameof(background),
                 background,
                 "The canvas background is unsupported by the native ABI."),
+        };
+
+    private static NativeAudioRouting ToNativeAudioRouting(
+        AudioRouting routing) => routing switch
+        {
+            AudioRouting.Mixed => NativeAudioRouting.Mixed,
+            AudioRouting.DesktopOnly => NativeAudioRouting.DesktopOnly,
+            AudioRouting.MicOnly => NativeAudioRouting.MicOnly,
+            AudioRouting.Muted => NativeAudioRouting.Muted,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(routing),
+                routing,
+                "The audio routing is unsupported by the native ABI."),
         };
 
     private static NativeVideoRotation ToNativeRotation(

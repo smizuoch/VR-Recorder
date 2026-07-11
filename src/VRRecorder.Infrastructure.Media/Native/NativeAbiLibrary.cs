@@ -9,6 +9,7 @@ internal sealed class NativeAbiLibrary : IDisposable
     private readonly CreateSessionDelegate _createSession;
     private readonly SessionOperationDelegate _startSession;
     private readonly UpdateVideoLayoutDelegate _updateVideoLayout;
+    private readonly UpdateAudioRoutingDelegate _updateAudioRouting;
     private readonly GetStatisticsDelegate _getStatistics;
     private readonly SessionOperationDelegate _requestStop;
     private readonly SessionOperationDelegate _abortSession;
@@ -43,6 +44,8 @@ internal sealed class NativeAbiLibrary : IDisposable
                 "vrrec_session_start_v1");
             _updateVideoLayout = Resolve<UpdateVideoLayoutDelegate>(
                 "vrrec_session_update_video_layout_v1");
+            _updateAudioRouting = Resolve<UpdateAudioRoutingDelegate>(
+                "vrrec_session_update_audio_routing_v1");
             _getStatistics = Resolve<GetStatisticsDelegate>(
                 "vrrec_session_get_statistics_v1");
             _requestStop = Resolve<SessionOperationDelegate>(
@@ -83,6 +86,11 @@ internal sealed class NativeAbiLibrary : IDisposable
         ref NativeSessionStatisticsV1 statistics) =>
         _getStatistics(session, ref statistics);
 
+    public NativeStatus UpdateAudioRouting(
+        nint session,
+        ref NativeAudioRoutingUpdateV1 update) =>
+        _updateAudioRouting(session, ref update);
+
     public NativeStatus RequestStop(nint session) => _requestStop(session);
 
     public NativeStatus AbortSession(nint session) => _abortSession(session);
@@ -118,6 +126,11 @@ internal sealed class NativeAbiLibrary : IDisposable
     private delegate NativeStatus UpdateVideoLayoutDelegate(
         nint session,
         ref NativeVideoLayoutV1 layout);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeStatus UpdateAudioRoutingDelegate(
+        nint session,
+        ref NativeAudioRoutingUpdateV1 update);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate NativeStatus GetStatisticsDelegate(
