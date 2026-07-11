@@ -133,6 +133,13 @@ typedef struct vrrec_video_layout_v1 {
     vrrec_video_rotation_t rotation;
 } vrrec_video_layout_v1;
 
+typedef struct vrrec_audio_routing_update_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    vrrec_audio_routing_t audio_routing;
+    uint32_t reserved;
+} vrrec_audio_routing_update_v1;
+
 typedef struct vrrec_session_statistics_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -254,6 +261,10 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_session_start_v1(
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_update_video_layout_v1(
     vrrec_session_t *session,
     const vrrec_video_layout_v1 *layout);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_session_update_audio_routing_v1(
+    vrrec_session_t *session,
+    const vrrec_audio_routing_update_v1 *update);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_get_statistics_v1(
     vrrec_session_t *session,

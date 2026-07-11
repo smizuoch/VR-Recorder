@@ -60,6 +60,7 @@ public:
               config.canvas_background,
               config.rotation,
           },
+          audio_routing_(config.audio_routing),
           statistics_ {
               sizeof(vrrec_session_statistics_v1),
               VRREC_ABI_V1,
@@ -138,6 +139,15 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t UpdateAudioRouting(
+        vrrec_audio_routing_t routing) noexcept override
+    {
+        const std::lock_guard lock(control_mutex_);
+        audio_routing_ = routing;
+        ++audio_routing_update_count_;
+        return VRREC_STATUS_OK;
+    }
+
     void Abort() noexcept override
     {
         aborted_ = true;
@@ -196,6 +206,18 @@ public:
         return video_layout_update_count_;
     }
 
+    std::uint32_t AudioRouting() const noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        return audio_routing_;
+    }
+
+    std::uint32_t AudioRoutingUpdateCount() const noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        return audio_routing_update_count_;
+    }
+
     void SetStatistics(
         const vrrec_session_statistics_v1 &statistics) noexcept
     {
@@ -248,15 +270,17 @@ private:
     std::uint32_t encoder_kind_;
     testing::ObservedMediaSessionConfig config_;
     vrrec_video_layout_v1 video_layout_;
+    std::uint32_t audio_routing_;
     vrrec_session_statistics_v1 statistics_;
     std::uint32_t video_layout_update_count_ = 0;
-    std::mutex control_mutex_;
+    mutable std::mutex control_mutex_;
     std::condition_variable control_condition_;
     bool fault_during_next_video_layout_update_ = false;
     bool block_next_video_layout_update_ = false;
     bool video_layout_update_entered_ = false;
     bool release_video_layout_update_ = false;
     std::uint32_t request_stop_call_count_ = 0;
+    std::uint32_t audio_routing_update_count_ = 0;
     vrrec_status_t statistics_status_ = VRREC_STATUS_OK;
     bool aborted_ = false;
     static FakeMediaBackend *active_;
@@ -578,6 +602,16 @@ const vrrec_video_layout_v1 &VideoLayout()
 std::uint32_t VideoLayoutUpdateCount()
 {
     return FakeMediaBackend::Active()->VideoLayoutUpdateCount();
+}
+
+std::uint32_t AudioRouting()
+{
+    return FakeMediaBackend::Active()->AudioRouting();
+}
+
+std::uint32_t AudioRoutingUpdateCount()
+{
+    return FakeMediaBackend::Active()->AudioRoutingUpdateCount();
 }
 
 void SetStatistics(const vrrec_session_statistics_v1 &statistics)

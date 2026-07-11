@@ -148,6 +148,23 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         return status;
     }
 
+    vrrec_status_t UpdateAudioRouting(
+        vrrec_audio_routing_t routing) noexcept
+    {
+        {
+            const std::lock_guard lock(state_mutex_);
+            if (state_ != SessionState::Started || stop_requested_) {
+                return VRREC_STATUS_INVALID_STATE;
+            }
+
+            ++active_runtime_operations_;
+        }
+
+        const auto status = backend_->UpdateAudioRouting(routing);
+        EndRuntimeOperation();
+        return status;
+    }
+
     vrrec_status_t GetStatistics(
         vrrec_session_statistics_v1 &statistics) noexcept
     {
@@ -1185,6 +1202,29 @@ vrrec_session_update_video_layout_v1(
             layout->rotation,
         };
         return session->UpdateVideoLayout(normalized_layout);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_session_update_audio_routing_v1(
+    vrrec_session_t *session,
+    const vrrec_audio_routing_update_v1 *update)
+{
+    if (session == nullptr || update == nullptr ||
+        update->struct_size < sizeof(vrrec_audio_routing_update_v1) ||
+        !IsAudioRoutingSupported(update->audio_routing) ||
+        update->reserved != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (update->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    try {
+        return session->UpdateAudioRouting(update->audio_routing);
     } catch (...) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }
