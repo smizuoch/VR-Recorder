@@ -1,9 +1,11 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Camera;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
@@ -13,6 +15,47 @@ namespace VRRecorder.Application.Tests.Desktop;
 
 public sealed class DesktopRecordingRuntimeTests
 {
+    [Fact]
+    public async Task AudioCommandsPublishARevisionWithoutChangingLifecycleState()
+    {
+        var handle = Handle("session-live-audio");
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("vrc-live-audio"));
+        var lifecycle = new StatusRecordingLifecycle(handle);
+        var stops = new PassiveStopRequestSink(lifecycle);
+        var audioCommands = new StubActiveRecordingAudioCommands(
+            AudioRouting.DesktopOnly);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops,
+            audioCommands);
+        List<RecorderStatusSnapshot> statuses = [];
+        using var subscription = runtime.Subscribe(statuses.Add);
+        await runtime.ToggleAsync(CancellationToken.None);
+        var recordingRevision = runtime.Current.Revision;
+
+        var updated = await runtime.ExecuteAudioCommandAsync(
+            RecordingAudioCommand.ToggleMicrophone,
+            CancellationToken.None);
+
+        Assert.Equal(AudioRouting.Mixed, updated.EffectiveRouting);
+        Assert.Equal(
+            [RecordingAudioCommand.ToggleMicrophone],
+            audioCommands.Commands);
+        Assert.Equal(RecorderState.Recording, runtime.Current.State);
+        Assert.Equal(recordingRevision + 1, runtime.Current.Revision);
+        Assert.Equal(updated, runtime.Current.AudioControlState);
+        Assert.Equal(
+            [RecorderState.Recording, RecorderState.Recording],
+            statuses.TakeLast(2).Select(status => status.State));
+
+        var stopping = runtime.ToggleAsync(CancellationToken.None);
+        await stops.WaitUntilRequestedAsync();
+        stops.Complete();
+        await stopping;
+    }
+
     [Fact]
     public async Task RelaysLifecycleAndOwnsStoppingProjectionWithOneRevisionOrder()
     {
@@ -711,6 +754,28 @@ public sealed class DesktopRecordingRuntimeTests
         }
 
         public Task WaitUntilRequestedAsync() => _requested.Task;
+    }
+
+    private sealed class StubActiveRecordingAudioCommands(
+        AudioRouting initialRouting) : IActiveRecordingAudioCommands
+    {
+        public List<RecordingAudioCommand> Commands { get; } = [];
+
+        public RecordingAudioControlState? CurrentAudioControlState
+        { get; private set; } = RecordingAudioControlState.FromRouting(
+            initialRouting);
+
+        public Task<RecordingAudioControlState> ExecuteAudioCommandAsync(
+            RecordingAudioCommand command,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Commands.Add(command);
+            CurrentAudioControlState = CurrentAudioControlState?.Apply(command)
+                ?? throw new InvalidOperationException(
+                    "No recording audio state is active.");
+            return Task.FromResult(CurrentAudioControlState);
+        }
     }
 
     private sealed class StubVrChatInstanceSelectionPrompt(
