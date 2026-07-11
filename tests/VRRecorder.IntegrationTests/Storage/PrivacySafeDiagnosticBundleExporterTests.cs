@@ -61,6 +61,62 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                         ["username"] = "audio-user-secret",
                     }),
                 LogLine(
+                    "recording.media_profile",
+                    new Dictionary<string, string>
+                    {
+                        ["encoder"] = "nvenc",
+                        ["estimatedSourceFramesPerSecond"] = "59.94",
+                        ["gpuVendor"] = "nvidia",
+                        ["outputFramesPerSecond"] = "60",
+                        ["outputHeight"] = "1080",
+                        ["outputWidth"] = "1920",
+                        ["sourceHeight"] = "1080",
+                        ["sourcePixelFormat"] = "bgra8",
+                        ["sourceWidth"] = "1920",
+                        ["gpuIdentity"] = "private-gpu-identity",
+                    }),
+                LogLine(
+                    "recording.media_statistics",
+                    new Dictionary<string, string>
+                    {
+                        ["audioVideoOffsetMicroseconds"] = "-15000",
+                        ["droppedSourceVideoFrameCount"] = "30",
+                        ["duplicatedOutputVideoFrameCount"] = "4",
+                        ["latestEncodeLatencyMicroseconds"] = "2400",
+                        ["maximumEncodeLatencyMicroseconds"] = "8000",
+                        ["muxedAudioPacketCount"] = "142",
+                        ["muxedVideoPacketCount"] = "90",
+                        ["sourceVideoFrameCount"] = "120",
+                        ["outputPath"] = privatePath,
+                    }),
+                LogLine(
+                    "recording.media_profile",
+                    new Dictionary<string, string>
+                    {
+                        ["encoder"] = "private-unknown-encoder",
+                        ["estimatedSourceFramesPerSecond"] = "60",
+                        ["gpuVendor"] = "nvidia",
+                        ["outputFramesPerSecond"] = "60",
+                        ["outputHeight"] = "1080",
+                        ["outputWidth"] = "1920",
+                        ["sourceHeight"] = "1080",
+                        ["sourcePixelFormat"] = "bgra8",
+                        ["sourceWidth"] = "1920",
+                    }),
+                LogLine(
+                    "recording.media_statistics",
+                    new Dictionary<string, string>
+                    {
+                        ["audioVideoOffsetMicroseconds"] = "0",
+                        ["droppedSourceVideoFrameCount"] = "0",
+                        ["duplicatedOutputVideoFrameCount"] = "0",
+                        ["latestEncodeLatencyMicroseconds"] = "-1",
+                        ["maximumEncodeLatencyMicroseconds"] = "0",
+                        ["muxedAudioPacketCount"] = "0",
+                        ["muxedVideoPacketCount"] = "0",
+                        ["sourceVideoFrameCount"] = "0",
+                    }),
+                LogLine(
                     "recording.saved",
                     new Dictionary<string, string>
                     {
@@ -93,7 +149,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
             CancellationToken.None);
 
         Assert.Equal(destination, result.BundlePath);
-        Assert.Equal(5, result.EventCount);
+        Assert.Equal(7, result.EventCount);
         using var archive = ZipFile.OpenRead(destination);
         Assert.Equal(
             ["README.txt", "diagnostics.jsonl"],
@@ -108,6 +164,16 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         Assert.Contains("camera.restore_warning", diagnostics);
         Assert.Contains("audio.input_warning", diagnostics);
         Assert.Contains("audio.input_status", diagnostics);
+        Assert.Contains("recording.media_profile", diagnostics);
+        Assert.Contains("recording.media_statistics", diagnostics);
+        Assert.Contains("\"encoder\":\"nvenc\"", diagnostics);
+        Assert.Contains("\"sourceWidth\":\"1920\"", diagnostics);
+        Assert.Contains(
+            "\"droppedSourceVideoFrameCount\":\"30\"",
+            diagnostics);
+        Assert.Contains(
+            "\"audioVideoOffsetMicroseconds\":\"-15000\"",
+            diagnostics);
         foreach (var secret in new[]
                  {
                      privatePath,
@@ -115,6 +181,8 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                      "avatar-secret",
                      "private-endpoint-secret",
                      "audio-user-secret",
+                     "private-gpu-identity",
+                     "private-unknown-encoder",
                      "bearer-token-secret",
                      "credential-secret",
                      "world-secret",
@@ -129,7 +197,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         var lines = diagnostics.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(5, lines.Length);
+        Assert.Equal(7, lines.Length);
         Assert.All(lines, line => JsonDocument.Parse(line).Dispose());
     }
 
