@@ -70,6 +70,7 @@ public sealed class DesktopRecordingSettingsWorkflowIntegrationTests
         await store.SaveAsync(latest, CancellationToken.None);
 
         await controller.SaveAsync(
+            draft,
             draft with
             {
                 SelfTimerSeconds = 10,
@@ -136,6 +137,7 @@ public sealed class DesktopRecordingSettingsWorkflowIntegrationTests
         var draft = await controller.LoadAsync(CancellationToken.None);
 
         await controller.SaveAsync(
+            draft,
             draft with { SelfTimerSeconds = 3 },
             CancellationToken.None);
 

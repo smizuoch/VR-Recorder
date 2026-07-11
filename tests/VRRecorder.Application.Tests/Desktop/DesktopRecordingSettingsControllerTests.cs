@@ -24,6 +24,7 @@ public sealed class DesktopRecordingSettingsControllerTests
         var changedOutput = AbsolutePath("selected-output");
 
         await controller.SaveAsync(
+            draft,
             draft with
             {
                 OutputFolder = changedOutput,
@@ -60,6 +61,7 @@ public sealed class DesktopRecordingSettingsControllerTests
 
         var thrown = await Assert.ThrowsAsync<IOException>(() =>
             controller.SaveAsync(
+                draft,
                 draft with
                 {
                     OutputFolder = AbsolutePath("rejected-output"),

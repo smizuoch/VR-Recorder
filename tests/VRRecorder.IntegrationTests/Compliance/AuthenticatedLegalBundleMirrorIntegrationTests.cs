@@ -48,6 +48,7 @@ public sealed class AuthenticatedLegalBundleMirrorIntegrationTests
         var draft = await controller.LoadAsync(CancellationToken.None);
 
         await controller.SaveAsync(
+            draft,
             draft with { OutputFolder = newOutput },
             CancellationToken.None);
 

@@ -79,16 +79,19 @@ public sealed class DesktopRecordingSettingsController
     }
 
     public async Task SaveAsync(
-        DesktopRecordingSettingsDraft draft,
+        DesktopRecordingSettingsDraft original,
+        DesktopRecordingSettingsDraft edited,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(draft);
-        var resolvedOutputPath = ValidateDraft(draft);
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(edited);
+        _ = ValidateDraft(original);
+        var resolvedOutputPath = ValidateDraft(edited);
         var current = await LoadValidatedAsync(cancellationToken)
             .ConfigureAwait(false);
         if (!string.Equals(
-                current.Recording.OutputFolder,
-                draft.OutputFolder,
+                original.OutputFolder,
+                edited.OutputFolder,
                 StringComparison.Ordinal))
         {
             await _legalBundleMirror
@@ -100,16 +103,37 @@ public sealed class DesktopRecordingSettingsController
         {
             Recording = current.Recording with
             {
-                OutputFolder = draft.OutputFolder,
-                SelfTimerSeconds = draft.SelfTimerSeconds,
-                AutoStopSeconds = draft.AutoStopSeconds,
-                ResolutionChangePolicy = draft.ResolutionChangePolicy,
+                OutputFolder = Merge(
+                    original.OutputFolder,
+                    edited.OutputFolder,
+                    current.Recording.OutputFolder),
+                SelfTimerSeconds = Merge(
+                    original.SelfTimerSeconds,
+                    edited.SelfTimerSeconds,
+                    current.Recording.SelfTimerSeconds),
+                AutoStopSeconds = Merge(
+                    original.AutoStopSeconds,
+                    edited.AutoStopSeconds,
+                    current.Recording.AutoStopSeconds),
+                ResolutionChangePolicy = Merge(
+                    original.ResolutionChangePolicy,
+                    edited.ResolutionChangePolicy,
+                    current.Recording.ResolutionChangePolicy),
             },
             Video = current.Video with
             {
-                FrameRate = draft.FrameRate,
-                Encoder = draft.Encoder,
-                QualityPreset = draft.QualityPreset,
+                FrameRate = Merge(
+                    original.FrameRate,
+                    edited.FrameRate,
+                    current.Video.FrameRate),
+                Encoder = Merge(
+                    original.Encoder,
+                    edited.Encoder,
+                    current.Video.Encoder),
+                QualityPreset = Merge(
+                    original.QualityPreset,
+                    edited.QualityPreset,
+                    current.Video.QualityPreset),
             },
         };
         VRRecorderSettingsContract.Validate(updated);
@@ -192,4 +216,9 @@ public sealed class DesktopRecordingSettingsController
 
     private static InvalidDataException InvalidChoice(string setting) =>
         new($"The desktop {setting} choice is not supported.");
+
+    private static T Merge<T>(T original, T edited, T current) =>
+        EqualityComparer<T>.Default.Equals(original, edited)
+            ? current
+            : edited;
 }

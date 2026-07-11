@@ -92,7 +92,7 @@ public partial class SettingsWindow : Window, IDisposable
                 QualityPreset = SelectedValue<VideoQualityPreset>(
                     QualityPresetComboBox),
             };
-            await _controller.SaveAsync(updated, _lifetime.Token);
+            await _controller.SaveAsync(_draft, updated, _lifetime.Token);
             _draft = updated;
             Close();
         }
