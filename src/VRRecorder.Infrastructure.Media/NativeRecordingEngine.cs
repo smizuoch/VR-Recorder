@@ -2,11 +2,13 @@ using System.Collections.Concurrent;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Timing;
 
 namespace VRRecorder.Infrastructure.Media;
 
-public sealed class NativeRecordingEngine : IRecordingEngine
+public sealed class NativeRecordingEngine
+    : IRecordingEngine, IRecordingAudioRoutingGateway
 {
     private readonly INativeRecordingBackend _backend;
     private readonly IMonotonicClock _clock;
@@ -207,6 +209,42 @@ public sealed class NativeRecordingEngine : IRecordingEngine
             activeSession.StopGate.Release();
         }
     }
+
+    public async Task UpdateAudioRoutingAsync(
+        RecordingHandle handle,
+        AudioRouting routing,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(handle);
+        if (!_sessions.TryGetValue(handle.Id, out var activeSession))
+        {
+            throw InactiveSession(handle);
+        }
+
+        await activeSession.StopGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(handle.Id, out var currentSession) ||
+                !ReferenceEquals(activeSession, currentSession))
+            {
+                throw InactiveSession(handle);
+            }
+
+            await activeSession.Session
+                .UpdateAudioRoutingAsync(routing, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            activeSession.StopGate.Release();
+        }
+    }
+
+    private static InvalidOperationException InactiveSession(
+        RecordingHandle handle) => new(
+        $"Native recording session {handle.Id} is not active.");
 
     private void PublishMediaBestEffort(RecordingPlan plan)
     {
