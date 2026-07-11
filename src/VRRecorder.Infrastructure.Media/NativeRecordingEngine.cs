@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Timing;
@@ -9,6 +10,7 @@ public sealed class NativeRecordingEngine : IRecordingEngine
 {
     private readonly INativeRecordingBackend _backend;
     private readonly IMonotonicClock _clock;
+    private readonly IAudioSessionEventSink _audioEvents;
     private readonly INativeRecordingRuntimeFaultSink _runtimeFaults;
     private readonly ConcurrentDictionary<string, ActiveSession> _sessions =
         new(StringComparer.Ordinal);
@@ -17,13 +19,28 @@ public sealed class NativeRecordingEngine : IRecordingEngine
         INativeRecordingBackend backend,
         IMonotonicClock clock,
         INativeRecordingRuntimeFaultSink runtimeFaults)
+        : this(
+            backend,
+            clock,
+            runtimeFaults,
+            NullAudioSessionEventSink.Instance)
+    {
+    }
+
+    public NativeRecordingEngine(
+        INativeRecordingBackend backend,
+        IMonotonicClock clock,
+        INativeRecordingRuntimeFaultSink runtimeFaults,
+        IAudioSessionEventSink audioEvents)
     {
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(runtimeFaults);
+        ArgumentNullException.ThrowIfNull(audioEvents);
         _backend = backend;
         _clock = clock;
         _runtimeFaults = runtimeFaults;
+        _audioEvents = audioEvents;
     }
 
     public async Task<RecordingHandle> StartAsync(
@@ -44,7 +61,9 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 {
                     runtimeFaultContext.Report(fault);
                 }
-            });
+            },
+            AudioWarning: PublishAudioBestEffort,
+            AudioStatus: PublishAudioBestEffort);
         var session = await _backend
             .OpenAsync(
                 plan,
@@ -78,6 +97,30 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 .AbortAsync(CancellationToken.None)
                 .ConfigureAwait(false);
             throw;
+        }
+    }
+
+    private void PublishAudioBestEffort(AudioSessionWarning warning)
+    {
+        try
+        {
+            _audioEvents.Publish(warning);
+        }
+        catch (Exception)
+        {
+            // Audio observers cannot interrupt the native media timeline.
+        }
+    }
+
+    private void PublishAudioBestEffort(AudioSessionStatus status)
+    {
+        try
+        {
+            _audioEvents.Publish(status);
+        }
+        catch (Exception)
+        {
+            // Audio observers cannot interrupt the native media timeline.
         }
     }
 
@@ -204,6 +247,19 @@ public sealed class NativeRecordingEngine : IRecordingEngine
                 // A callback observer must not escape through the native ABI
                 // or replace the encoder failure that owns this session.
             }
+        }
+    }
+
+    private sealed class NullAudioSessionEventSink : IAudioSessionEventSink
+    {
+        public static NullAudioSessionEventSink Instance { get; } = new();
+
+        public void Publish(AudioSessionWarning warning)
+        {
+        }
+
+        public void Publish(AudioSessionStatus status)
+        {
         }
     }
 }
