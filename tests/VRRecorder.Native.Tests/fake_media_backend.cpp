@@ -160,6 +160,17 @@ public:
         events_.Faulted(status, message.c_str());
     }
 
+    void SetAudioEndpointAvailable(
+        AudioEndpointRole role,
+        bool available,
+        std::uint64_t frame_position) noexcept
+    {
+        events_.AudioEndpointAvailabilityChanged(
+            role,
+            available,
+            frame_position);
+    }
+
     static FakeMediaBackend *Active() noexcept
     {
         return active_;
@@ -527,6 +538,26 @@ void CompleteTrailerFlushClose(
 void Fail(std::int32_t status, std::string_view message)
 {
     FakeMediaBackend::Active()->Fail(status, std::string(message));
+}
+
+void SetDesktopAudioEndpointAvailable(
+    bool available,
+    std::uint64_t frame_position)
+{
+    FakeMediaBackend::Active()->SetAudioEndpointAvailable(
+        AudioEndpointRole::Desktop,
+        available,
+        frame_position);
+}
+
+void SetMicrophoneAudioEndpointAvailable(
+    bool available,
+    std::uint64_t frame_position)
+{
+    FakeMediaBackend::Active()->SetAudioEndpointAvailable(
+        AudioEndpointRole::Microphone,
+        available,
+        frame_position);
 }
 
 std::uint32_t EncoderKind()

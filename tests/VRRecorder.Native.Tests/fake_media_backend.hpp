@@ -52,6 +52,12 @@ void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count);
 void Fail(std::int32_t status, std::string_view message);
+void SetDesktopAudioEndpointAvailable(
+    bool available,
+    std::uint64_t frame_position);
+void SetMicrophoneAudioEndpointAvailable(
+    bool available,
+    std::uint64_t frame_position);
 std::uint32_t EncoderKind();
 const ObservedMediaSessionConfig &SessionConfig();
 const vrrec_video_layout_v1 &VideoLayout();

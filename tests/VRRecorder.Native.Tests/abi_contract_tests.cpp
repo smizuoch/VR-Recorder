@@ -13,6 +13,10 @@
 #include "vrrecorder_native.h"
 
 static_assert(VRREC_ABI_V1 == 1);
+static_assert(VRREC_EVENT_DESKTOP_AUDIO_DEVICE_LOST == 4);
+static_assert(VRREC_EVENT_DESKTOP_AUDIO_DEVICE_RECOVERED == 5);
+static_assert(VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_LOST == 6);
+static_assert(VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_RECOVERED == 7);
 static_assert(sizeof(vrrec_session_config_v1) == 176);
 static_assert(offsetof(vrrec_session_config_v1, source_pixel_format) == 160);
 static_assert(offsetof(vrrec_session_config_v1, reserved_v2) == 164);
@@ -557,6 +561,77 @@ bool EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones()
     CHECK(log.events[1].video_packet_count == 90);
     CHECK(log.events[1].audio_packet_count == 142);
 
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool EmitsPrivacySafeNonterminalAudioDeviceEvents()
+{
+    using vrrecorder::native::testing::SetDesktopAudioEndpointAvailable;
+    using vrrecorder::native::testing::SetMicrophoneAudioEndpointAvailable;
+
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    SetDesktopAudioEndpointAvailable(false, 100);
+    CHECK(log.events.empty());
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+
+    SetDesktopAudioEndpointAvailable(false, 4'800);
+    SetDesktopAudioEndpointAvailable(false, 4'900);
+    SetDesktopAudioEndpointAvailable(true, 9'600);
+    SetDesktopAudioEndpointAvailable(true, 9'700);
+    SetMicrophoneAudioEndpointAvailable(false, 14'400);
+    SetMicrophoneAudioEndpointAvailable(true, 19'200);
+
+    CHECK(log.events.size() == 5);
+    CHECK(log.events[0].kind == VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED);
+    const vrrec_event_kind_t expected_kinds[] = {
+        VRREC_EVENT_DESKTOP_AUDIO_DEVICE_LOST,
+        VRREC_EVENT_DESKTOP_AUDIO_DEVICE_RECOVERED,
+        VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_LOST,
+        VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_RECOVERED,
+    };
+    const std::uint64_t expected_positions[] = {
+        4'800,
+        9'600,
+        14'400,
+        19'200,
+    };
+    for (std::size_t index = 0; index < 4; ++index) {
+        const auto &event = log.events[index + 1];
+        CHECK(event.kind == expected_kinds[index]);
+        CHECK(event.status == VRREC_STATUS_OK);
+        CHECK(event.sequence == index + 2);
+        CHECK(event.video_packet_count == 0);
+        CHECK(event.audio_packet_count == expected_positions[index]);
+        CHECK(event.message.empty());
+    }
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    SetDesktopAudioEndpointAvailable(false, 24'000);
+    CHECK(log.events.size() == 5);
+    vrrecorder::native::testing::CompleteTrailerFlushClose(90, 142);
+    CHECK(log.events.size() == 6);
+    CHECK(log.events[5].kind == VRREC_EVENT_STOPPED);
+    CHECK(log.events[5].sequence == 6);
+    SetMicrophoneAudioEndpointAvailable(false, 28'800);
+    CHECK(log.events.size() == 6);
+    vrrec_session_destroy_v1(session);
+
+    EventLog abort_log;
+    callbacks = ValidCallbacks(abort_log);
+    session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    CHECK(vrrec_session_abort_v1(session) == VRREC_STATUS_OK);
+    SetDesktopAudioEndpointAvailable(false, 1);
+    CHECK(abort_log.events.empty());
     vrrec_session_destroy_v1(session);
     return true;
 }
@@ -1583,6 +1658,7 @@ int main()
         !StopWaitsForAnInFlightLayoutUpdateWithoutHoldingTheStateLock() ||
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
+        !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||
