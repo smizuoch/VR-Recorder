@@ -15,6 +15,7 @@ public partial class SettingsWindow : Window, IDisposable
     private readonly DesktopRecordingSettingsController _controller;
     private readonly CancellationTokenSource _lifetime = new();
     private DesktopRecordingSettingsDraft? _draft;
+    private string? _selectedOutputFolder;
     private bool _loadStarted;
     private bool _saving;
     private int _disposeStarted;
@@ -43,6 +44,9 @@ public partial class SettingsWindow : Window, IDisposable
         try
         {
             _draft = await _controller.LoadAsync(_lifetime.Token);
+            SelectOutputFolder(_draft.OutputFolder);
+            BrowseOutputFolderButton.IsEnabled = true;
+            UseDownloadsButton.IsEnabled = true;
             SelectValue(SelfTimerComboBox, _draft.SelfTimerSeconds);
             SelectValue(AutoStopComboBox, _draft.AutoStopSeconds);
             SelectFrameRate(_draft.FrameRate);
@@ -77,6 +81,7 @@ public partial class SettingsWindow : Window, IDisposable
         {
             var updated = _draft with
             {
+                OutputFolder = _selectedOutputFolder!,
                 SelfTimerSeconds = SelectedValue<int>(SelfTimerComboBox),
                 AutoStopSeconds = SelectedNullableInt(AutoStopComboBox),
                 FrameRate = SelectedValue<int>(FrameRateComboBox),
@@ -112,6 +117,38 @@ public partial class SettingsWindow : Window, IDisposable
         SelectionChangedEventArgs e) => UpdateSaveAvailability();
 
     private void OnCancel(object sender, RoutedEventArgs e) => Close();
+
+    private void OnBrowseOutputFolder(object sender, RoutedEventArgs e)
+    {
+        if (_selectedOutputFolder is null)
+        {
+            return;
+        }
+
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = Resource("Settings_Output_Browse_DialogTitle"),
+            SelectedPath = _controller
+                .ResolveOutputPath(_selectedOutputFolder)
+                .FullPath,
+            ShowNewFolderButton = true,
+            UseDescriptionForTitle = true,
+        };
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+        {
+            return;
+        }
+
+        SelectOutputFolder(dialog.SelectedPath);
+        UpdateSaveAvailability();
+    }
+
+    private void OnUseDownloads(object sender, RoutedEventArgs e)
+    {
+        SelectOutputFolder(
+            RecordingOutputPathResolver.DownloadsKnownFolderToken);
+        UpdateSaveAvailability();
+    }
 
     private void OnClosed(object? sender, EventArgs e)
     {
@@ -216,6 +253,13 @@ public partial class SettingsWindow : Window, IDisposable
         SelectValue(FrameRateComboBox, value);
     }
 
+    private void SelectOutputFolder(string configuredPath)
+    {
+        var resolved = _controller.ResolveOutputPath(configuredPath);
+        _selectedOutputFolder = configuredPath;
+        OutputFolderTextBox.Text = resolved.FullPath;
+    }
+
     private static void SelectValue(WpfComboBox comboBox, object? value) =>
         comboBox.SelectedItem = comboBox.Items
             .Cast<SettingOption>()
@@ -240,6 +284,7 @@ public partial class SettingsWindow : Window, IDisposable
                 "The auto-stop choice is not selected.");
 
     private bool HasEverySelection() =>
+        _selectedOutputFolder is not null &&
         SelfTimerComboBox.SelectedItem is SettingOption &&
         AutoStopComboBox.SelectedItem is SettingOption &&
         FrameRateComboBox.SelectedItem is SettingOption &&

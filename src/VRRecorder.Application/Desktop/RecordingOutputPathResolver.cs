@@ -5,7 +5,7 @@ namespace VRRecorder.Application.Desktop;
 
 public sealed class RecordingOutputPathResolver
 {
-    private const string DownloadsKnownFolderToken = "knownfolder:Downloads";
+    public const string DownloadsKnownFolderToken = "knownfolder:Downloads";
     private const string KnownFolderTokenPrefix = "knownfolder:";
     private readonly IDefaultOutputPathProvider _defaultOutputPaths;
 

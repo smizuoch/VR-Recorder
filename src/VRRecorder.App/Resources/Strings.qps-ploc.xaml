@@ -49,6 +49,16 @@
     <system:String x:Key="Settings_Quality_Label">⟦Qüálïty · Qüálïty⟧</system:String>
     <system:String x:Key="Settings_Quality_Tooltip">⟦Chöösë thë rëcördïng qüálïty prësët · Chöösë thë rëcördïng qüálïty prësët⟧</system:String>
     <system:String x:Key="Settings_Rights_Heading">⟦Rëcördïng rïghts ánd cönsënt · Rëcördïng rïghts ánd cönsënt⟧</system:String>
+    <system:String x:Key="Settings_Output_Heading">⟦Öütpüt földër · Öütpüt földër⟧</system:String>
+    <system:String x:Key="Settings_OutputFolder_Label">⟦Rëcördïng öütpüt · Rëcördïng öütpüt⟧</system:String>
+    <system:String x:Key="Settings_OutputFolder_Tooltip">⟦MP4 fïlës ánd thë áüthëntïcátëd Lëgál Bündlë árë störëd hërë · MP4 fïlës ánd thë áüthëntïcátëd Lëgál Bündlë árë störëd hërë⟧</system:String>
+    <system:String x:Key="Settings_Output_Browse_Label">⟦BRÖWSË · BRÖWSË⟧</system:String>
+    <system:String x:Key="Settings_Output_Browse_AccessibleName">⟦Chöösë rëcördïng öütpüt földër · Chöösë rëcördïng öütpüt földër⟧</system:String>
+    <system:String x:Key="Settings_Output_Browse_Tooltip">⟦Chöösë á földër ánd mïrrör thë áüthëntïcátëd Lëgál Bündlë bëförë sávïng · Chöösë á földër ánd mïrrör thë áüthëntïcátëd Lëgál Bündlë bëförë sávïng⟧</system:String>
+    <system:String x:Key="Settings_Output_Browse_DialogTitle">⟦Chöösë thë földër för rëcördïngs ánd öfflïnë lëgál nötïcës · Chöösë thë földër för rëcördïngs ánd öfflïnë lëgál nötïcës⟧</system:String>
+    <system:String x:Key="Settings_Output_Downloads_Label">⟦ÜSË DÖWNLÖÁDS · ÜSË DÖWNLÖÁDS⟧</system:String>
+    <system:String x:Key="Settings_Output_Downloads_AccessibleName">⟦Üsë Wïndöws Döwnlöáds földër · Üsë Wïndöws Döwnlöáds földër⟧</system:String>
+    <system:String x:Key="Settings_Output_Downloads_Tooltip">⟦Störë rëcördïngs ánd öfflïnë lëgál nötïcës ïn thë Wïndöws Döwnlöáds földër · Störë rëcördïngs ánd öfflïnë lëgál nötïcës ïn thë Wïndöws Döwnlöáds földër⟧</system:String>
     <system:String x:Key="Settings_Choice_Off">⟦Öff · Öff⟧</system:String>
     <system:String x:Key="Settings_Choice_Infinite">⟦∞ · ∞⟧</system:String>
     <system:String x:Key="Settings_Choice_Seconds_Format">⟦{0} sëcönds · {0} sëcönds⟧</system:String>

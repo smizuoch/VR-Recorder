@@ -49,6 +49,16 @@
     <system:String x:Key="Settings_Quality_Label">Quality</system:String>
     <system:String x:Key="Settings_Quality_Tooltip">Choose the recording quality preset</system:String>
     <system:String x:Key="Settings_Rights_Heading">Recording rights and consent</system:String>
+    <system:String x:Key="Settings_Output_Heading">Output folder</system:String>
+    <system:String x:Key="Settings_OutputFolder_Label">Recording output</system:String>
+    <system:String x:Key="Settings_OutputFolder_Tooltip">MP4 files and the authenticated Legal Bundle are stored here</system:String>
+    <system:String x:Key="Settings_Output_Browse_Label">BROWSE</system:String>
+    <system:String x:Key="Settings_Output_Browse_AccessibleName">Choose recording output folder</system:String>
+    <system:String x:Key="Settings_Output_Browse_Tooltip">Choose a folder and mirror the authenticated Legal Bundle before saving</system:String>
+    <system:String x:Key="Settings_Output_Browse_DialogTitle">Choose the folder for recordings and offline legal notices</system:String>
+    <system:String x:Key="Settings_Output_Downloads_Label">USE DOWNLOADS</system:String>
+    <system:String x:Key="Settings_Output_Downloads_AccessibleName">Use Windows Downloads folder</system:String>
+    <system:String x:Key="Settings_Output_Downloads_Tooltip">Store recordings and offline legal notices in the Windows Downloads folder</system:String>
     <system:String x:Key="Settings_Choice_Off">Off</system:String>
     <system:String x:Key="Settings_Choice_Infinite">∞</system:String>
     <system:String x:Key="Settings_Choice_Seconds_Format">{0} seconds</system:String>

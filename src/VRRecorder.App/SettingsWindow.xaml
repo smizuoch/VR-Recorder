@@ -20,6 +20,49 @@
                        TextWrapping="Wrap" />
 
             <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Output_Heading}">
+                <Grid Margin="{StaticResource Spacing.LayoutGrid}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="{DynamicResource Settings_OutputFolder_Label}" />
+                    <TextBox x:Name="OutputFolderTextBox"
+                             Grid.Row="1"
+                             Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                             MinHeight="{StaticResource Interaction.MinimumTarget}"
+                             IsReadOnly="True"
+                             AutomationProperties.Name="{DynamicResource Settings_OutputFolder_Label}"
+                             AutomationProperties.HelpText="{DynamicResource Settings_OutputFolder_Tooltip}"
+                             ToolTip="{DynamicResource Settings_OutputFolder_Tooltip}" />
+                    <WrapPanel Grid.Row="2"
+                               Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                        <Button x:Name="BrowseOutputFolderButton"
+                                Margin="0,0,{StaticResource Spacing.LayoutGrid},0"
+                                MinHeight="{StaticResource Interaction.MinimumTarget}"
+                                MinWidth="{StaticResource Interaction.MinimumTarget}"
+                                Content="{DynamicResource Settings_Output_Browse_Label}"
+                                AutomationProperties.Name="{DynamicResource Settings_Output_Browse_AccessibleName}"
+                                AutomationProperties.HelpText="{DynamicResource Settings_Output_Browse_Tooltip}"
+                                ToolTip="{DynamicResource Settings_Output_Browse_Tooltip}"
+                                IsEnabled="False"
+                                Click="OnBrowseOutputFolder" />
+                        <Button x:Name="UseDownloadsButton"
+                                MinHeight="{StaticResource Interaction.MinimumTarget}"
+                                MinWidth="{StaticResource Interaction.MinimumTarget}"
+                                Content="{DynamicResource Settings_Output_Downloads_Label}"
+                                AutomationProperties.Name="{DynamicResource Settings_Output_Downloads_AccessibleName}"
+                                AutomationProperties.HelpText="{DynamicResource Settings_Output_Downloads_Tooltip}"
+                                ToolTip="{DynamicResource Settings_Output_Downloads_Tooltip}"
+                                IsEnabled="False"
+                                Click="OnUseDownloads" />
+                    </WrapPanel>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                       Header="{DynamicResource Settings_Recording_Heading}">
                 <Grid Margin="{StaticResource Spacing.LayoutGrid}">
                     <Grid.ColumnDefinitions>
