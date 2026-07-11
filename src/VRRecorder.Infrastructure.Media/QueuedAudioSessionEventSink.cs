@@ -1,6 +1,6 @@
-using System.Threading.Channels;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
+using VRRecorder.Domain.Audio;
 
 namespace VRRecorder.Infrastructure.Media;
 
@@ -8,27 +8,31 @@ public sealed class QueuedAudioSessionEventSink
     : IAudioSessionEventSink, IDisposable
 {
     public const int DefaultCapacity = 64;
-    private readonly Channel<AudioEvent> _events;
+    private const int MinimumCapacity = 2;
+    private readonly SemaphoreSlim _available = new(0);
+    private readonly int _capacity;
+    private readonly object _gate = new();
+    private readonly LinkedList<AudioEvent> _pending = [];
     private readonly IAudioSessionEventSink _sink;
     private readonly Task _worker;
     private int _deliveryThreadId;
-    private int _disposed;
+    private bool _disposed;
 
     public QueuedAudioSessionEventSink(
         IAudioSessionEventSink sink,
         int capacity = DefaultCapacity)
     {
         ArgumentNullException.ThrowIfNull(sink);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
+        if (capacity < MinimumCapacity)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(capacity),
+                capacity,
+                "The queue must retain the latest state of both audio inputs.");
+        }
+
         _sink = sink;
-        _events = Channel.CreateBounded<AudioEvent>(
-            new BoundedChannelOptions(capacity)
-            {
-                AllowSynchronousContinuations = false,
-                FullMode = BoundedChannelFullMode.DropOldest,
-                SingleReader = true,
-                SingleWriter = false,
-            });
+        _capacity = capacity;
         _worker = Task.Run(DeliverAsync);
     }
 
@@ -46,9 +50,19 @@ public sealed class QueuedAudioSessionEventSink
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        var wakeWorker = false;
+        lock (_gate)
         {
-            _events.Writer.TryComplete();
+            if (!_disposed)
+            {
+                _disposed = true;
+                wakeWorker = true;
+            }
+        }
+
+        if (wakeWorker)
+        {
+            _available.Release();
         }
 
         if (Volatile.Read(ref _deliveryThreadId) !=
@@ -62,46 +76,107 @@ public sealed class QueuedAudioSessionEventSink
 
     private void Enqueue(AudioEvent audioEvent)
     {
-        if (Volatile.Read(ref _disposed) == 0)
+        var wakeWorker = false;
+        lock (_gate)
         {
-            _events.Writer.TryWrite(audioEvent);
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_pending.Count == _capacity)
+            {
+                _pending.Remove(
+                    FindOldestForInput(audioEvent.Input) ?? _pending.First!);
+            }
+
+            wakeWorker = _pending.Count == 0;
+            _pending.AddLast(audioEvent);
+        }
+
+        if (wakeWorker)
+        {
+            _available.Release();
         }
     }
 
     private async Task DeliverAsync()
     {
-        await foreach (var audioEvent in _events.Reader.ReadAllAsync())
+        while (true)
         {
-            try
+            await _available.WaitAsync().ConfigureAwait(false);
+            while (TryTake(out var audioEvent))
             {
-                Volatile.Write(
-                    ref _deliveryThreadId,
-                    Environment.CurrentManagedThreadId);
-                switch (audioEvent)
+                try
                 {
-                    case AudioEvent.Warning warning:
-                        _sink.Publish(warning.Value);
-                        break;
-                    case AudioEvent.Status status:
-                        _sink.Publish(status.Value);
-                        break;
+                    Volatile.Write(
+                        ref _deliveryThreadId,
+                        Environment.CurrentManagedThreadId);
+                    switch (audioEvent)
+                    {
+                        case AudioEvent.Warning warning:
+                            _sink.Publish(warning.Value);
+                            break;
+                        case AudioEvent.Status status:
+                            _sink.Publish(status.Value);
+                            break;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Observer failures cannot interrupt later audio events.
+                }
+                finally
+                {
+                    Volatile.Write(ref _deliveryThreadId, 0);
                 }
             }
-            catch (Exception)
+
+            lock (_gate)
             {
-                // Observer failures cannot interrupt later audio events.
-            }
-            finally
-            {
-                Volatile.Write(ref _deliveryThreadId, 0);
+                if (_disposed && _pending.Count == 0)
+                {
+                    return;
+                }
             }
         }
     }
 
-    private abstract record AudioEvent
+    private LinkedListNode<AudioEvent>? FindOldestForInput(AudioInput input)
     {
-        public sealed record Warning(AudioSessionWarning Value) : AudioEvent;
+        for (var node = _pending.First; node is not null; node = node.Next)
+        {
+            if (node.Value.Input == input)
+            {
+                return node;
+            }
+        }
 
-        public sealed record Status(AudioSessionStatus Value) : AudioEvent;
+        return null;
+    }
+
+    private bool TryTake(out AudioEvent audioEvent)
+    {
+        lock (_gate)
+        {
+            if (_pending.First is null)
+            {
+                audioEvent = null!;
+                return false;
+            }
+
+            audioEvent = _pending.First.Value;
+            _pending.RemoveFirst();
+            return true;
+        }
+    }
+
+    private abstract record AudioEvent(AudioInput Input)
+    {
+        public sealed record Warning(AudioSessionWarning Value) :
+            AudioEvent(Value.Input);
+
+        public sealed record Status(AudioSessionStatus Value) :
+            AudioEvent(Value.Input);
     }
 }
