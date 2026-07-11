@@ -824,10 +824,12 @@ public sealed class WpfHostProjectContractTests
     [Fact]
     public void DesktopKeepsRecordingCommandsDisabledUntilRightsGateCompletes()
     {
-        var windowCode = File.ReadAllText(Path.Combine(
+        var appDirectory = Path.Combine(
             FindRepositoryRoot(),
             "src",
-            "VRRecorder.App",
+            "VRRecorder.App");
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
             "MainWindow.xaml.cs"));
 
         Assert.Contains(
@@ -856,6 +858,20 @@ public sealed class WpfHostProjectContractTests
             authorization > activation && authorization > rightsCheck,
             "Recording commands must be authorized only after host recovery " +
             "and the recording-rights gate complete.");
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains(
+            "private bool _recordingRightsAuthorized;",
+            appCode);
+        Assert.Matches(
+            @"_trayToggleMenuItem\.Enabled\s*=\s*" +
+            @"_recordingRightsAuthorized\s*&&\s*" +
+            @"update\.IsActionEnabled",
+            appCode);
+        Assert.Contains("AuthorizeRecordingCommands", appCode);
+        Assert.Contains("RefreshTrayStatus", appCode);
     }
 
     [Fact]
