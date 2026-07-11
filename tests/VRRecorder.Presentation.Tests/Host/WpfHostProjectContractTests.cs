@@ -199,6 +199,7 @@ public sealed class WpfHostProjectContractTests
         Assert.Equal(
             "{DynamicResource Microphone_Off_Tooltip}",
             microphone.Attribute("ToolTip")?.Value);
+        Assert.Equal("False", microphone.Attribute("IsThreeState")?.Value);
         Assert.Equal(
             "{StaticResource Interaction.MinimumTarget}",
             microphone.Attribute("MinHeight")?.Value);
@@ -220,7 +221,12 @@ public sealed class WpfHostProjectContractTests
         Assert.Equal(
             "{DynamicResource Audio_MuteAll_Tooltip}",
             mute.Attribute("ToolTip")?.Value);
+        Assert.Equal("False", mute.Attribute("IsThreeState")?.Value);
         Assert.Equal("OnMuteAllToggleClick", mute.Attribute("Click")?.Value);
+        Assert.Null(microphone.Attribute("Checked"));
+        Assert.Null(microphone.Attribute("Unchecked"));
+        Assert.Null(mute.Attribute("Checked"));
+        Assert.Null(mute.Attribute("Unchecked"));
 
         var code = File.ReadAllText(Path.Combine(
             appDirectory,
@@ -230,6 +236,8 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("UiCommandId.ToggleMicrophone", code);
         Assert.Contains("UiCommandId.ToggleMuteAll", code);
         Assert.Contains("ToggleButton.IsCheckedProperty", code);
+        Assert.Contains("_audioCommandPending", code);
+        Assert.Contains("ApplyRecordingAudio(current)", code);
 
         var requiredKeys = new[]
         {
