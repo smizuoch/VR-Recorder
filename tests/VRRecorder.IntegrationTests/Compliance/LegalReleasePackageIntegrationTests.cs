@@ -805,6 +805,32 @@ public sealed class LegalReleasePackageIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-025")]
+    public async Task PendingNativeRegistryComponentCannotAdmitReleasePayload()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var binary = await StageFfprobeAsync(
+            payload,
+            registryApprovalStatus: "pending-independent-review");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                FfmpegRequest(payload, packagePath, binary),
+                CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "unapproved-native-artifact-owner");
+        Assert.Contains(result.Issues, issue => issue.Subject == "ffmpeg");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
     public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
     {
         using var directory = TemporaryDirectory.Create();
@@ -1140,7 +1166,8 @@ public sealed class LegalReleasePackageIntegrationTests
         string binarySha256,
         string repositoryCommit = "commit",
         string version = "8.0",
-        int schemaVersion = 1)
+        int schemaVersion = 1,
+        string approvalStatus = "approved")
     {
         const string sourceArchivePath =
             "third-party/source-archives/ffmpeg-source.zip";
@@ -1174,6 +1201,12 @@ public sealed class LegalReleasePackageIntegrationTests
                         url = $"https://example.invalid/{componentId}",
                         commit = repositoryCommit,
                     },
+                    approval = new
+                    {
+                        status = approvalStatus,
+                        id = "LEGAL-FFMPEG-TEST",
+                        reviewer = "independent-native-reviewer",
+                    },
                     nativeArtifacts = new[]
                     {
                         new
@@ -1197,7 +1230,8 @@ public sealed class LegalReleasePackageIntegrationTests
         string? registryBinarySha256 = null,
         string repositoryCommit = "commit",
         string registryVersion = "8.0",
-        int registrySchemaVersion = 1)
+        int registrySchemaVersion = 1,
+        string registryApprovalStatus = "approved")
     {
         const string relativePath = "tools/ffprobe.exe";
         byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
@@ -1213,7 +1247,8 @@ public sealed class LegalReleasePackageIntegrationTests
             registryBinarySha256 ?? Hash(binary),
             repositoryCommit,
             registryVersion,
-            registrySchemaVersion);
+            registrySchemaVersion,
+            registryApprovalStatus);
         return binary;
     }
 
