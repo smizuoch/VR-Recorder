@@ -110,6 +110,11 @@
     <system:String x:Key="Settings_Audio_MicOnly">⟦Mïcröphönë önly · Mïcröphönë önly⟧</system:String>
     <system:String x:Key="Settings_Audio_Muted">⟦Mütë áll · Mütë áll⟧</system:String>
     <system:String x:Key="Settings_Audio_Gain_Format">⟦{0:0.#} dB · {0:0.#} dB⟧</system:String>
+    <system:String x:Key="Settings_Language_Label">⟦Lángüágë · Lángüágë⟧</system:String>
+    <system:String x:Key="Settings_Language_Tooltip">⟦Chöösë thë ápplïcátïön dïspláy lángüágë · Chöösë thë ápplïcátïön dïspláy lángüágë⟧</system:String>
+    <system:String x:Key="Settings_Language_System">⟦Üsë systém lángüágë · Üsë systém lángüágë⟧</system:String>
+    <system:String x:Key="Settings_Language_English">⟦Ënglïsh · Ënglïsh⟧</system:String>
+    <system:String x:Key="Settings_Language_Japanese">⟦Jápánësë · Jápánësë⟧</system:String>
     <system:String x:Key="Settings_Output_Heading">⟦Öütpüt földër · Öütpüt földër⟧</system:String>
     <system:String x:Key="Settings_OutputFolder_Label">⟦Rëcördïng öütpüt · Rëcördïng öütpüt⟧</system:String>
     <system:String x:Key="Settings_OutputFolder_Tooltip">⟦MP4 fïlës ánd thë áüthëntïcátëd Lëgál Bündlë árë störëd hërë · MP4 fïlës ánd thë áüthëntïcátëd Lëgál Bündlë árë störëd hërë⟧</system:String>

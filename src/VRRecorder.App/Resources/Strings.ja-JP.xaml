@@ -110,6 +110,11 @@
     <system:String x:Key="Settings_Audio_MicOnly">マイクのみ</system:String>
     <system:String x:Key="Settings_Audio_Muted">すべてミュート</system:String>
     <system:String x:Key="Settings_Audio_Gain_Format">{0:0.#} dB</system:String>
+    <system:String x:Key="Settings_Language_Label">言語</system:String>
+    <system:String x:Key="Settings_Language_Tooltip">アプリの表示言語を選択します</system:String>
+    <system:String x:Key="Settings_Language_System">システム言語を使用</system:String>
+    <system:String x:Key="Settings_Language_English">英語</system:String>
+    <system:String x:Key="Settings_Language_Japanese">日本語</system:String>
     <system:String x:Key="Settings_Output_Heading">保存先</system:String>
     <system:String x:Key="Settings_OutputFolder_Label">録画保存先</system:String>
     <system:String x:Key="Settings_OutputFolder_Tooltip">MP4ファイルと認証済みLegal Bundleをここへ保存します</system:String>

@@ -4,6 +4,8 @@ using VRRecorder.Application.Audio;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Presentation;
+using VRRecorder.Application.Ports;
+using VRRecorder.Application.Settings;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
@@ -13,7 +15,8 @@ using VRRecorder.Infrastructure.SteamVr;
 
 namespace VRRecorder.App;
 
-public partial class App : System.Windows.Application, IDisposable
+public partial class App
+    : System.Windows.Application, IDisposable, IUiLocaleApplier
 {
     private const string LocaleArgumentPrefix = "--ui-locale=";
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
@@ -26,6 +29,7 @@ public partial class App : System.Windows.Application, IDisposable
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopDiagnosticsController _diagnosticsController;
     private readonly DesktopRecordingSettingsController _recordingSettings;
+    private readonly JsonFileSettingsStore _settings;
     private readonly AuthenticatedLegalBundleVerifier _legalVerifier;
     private readonly DesktopLegalController _legalController;
     private readonly JsonFileRecordingRightsAcknowledgementStore
@@ -49,6 +53,7 @@ public partial class App : System.Windows.Application, IDisposable
         var settingsStore = new JsonFileSettingsStore(
             settingsPath,
             SystemWallClock.Instance);
+        _settings = settingsStore;
         _legalVerifier = new AuthenticatedLegalBundleVerifier(
             new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
                 typeof(App).Assembly));
@@ -60,7 +65,8 @@ public partial class App : System.Windows.Application, IDisposable
                 AppContext.BaseDirectory,
                 ProductVersion(),
                 _legalVerifier),
-            new WindowsAudioEndpointCatalog());
+            new WindowsAudioEndpointCatalog(),
+            this);
         _diagnosticsController = new DesktopDiagnosticsController(
             new PrivacySafeDiagnosticBundleExporter(
                 LogDirectory(settingsPath)));
@@ -173,10 +179,14 @@ public partial class App : System.Windows.Application, IDisposable
             argument.StartsWith(
                 LocaleArgumentPrefix,
                 StringComparison.OrdinalIgnoreCase));
-        SelectLocalizedResources(
-            localeName is null
-                ? CultureInfo.CurrentUICulture.Name
-                : localeName[LocaleArgumentPrefix.Length..]);
+        var configuredLocale = _settings
+            .LoadAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult()
+            .UiLocale;
+        SelectLocalizedResources(localeName is null
+            ? LocaleName(configuredLocale)
+            : localeName[LocaleArgumentPrefix.Length..]);
         base.OnStartup(e);
         InitializeTrayIcon();
     }
@@ -660,6 +670,17 @@ public partial class App : System.Windows.Application, IDisposable
         ReplaceMergedResource("Strings.", stringsPath);
         ReplaceMergedResource("Layout.", layoutPath);
     }
+
+    void IUiLocaleApplier.Apply(UiLocale locale) =>
+        SelectLocalizedResources(LocaleName(locale));
+
+    private static string LocaleName(UiLocale locale) => locale switch
+    {
+        UiLocale.System => CultureInfo.CurrentUICulture.Name,
+        UiLocale.English => "en-US",
+        UiLocale.Japanese => "ja-JP",
+        _ => throw new ArgumentOutOfRangeException(nameof(locale), locale, null),
+    };
 
     private void ReplaceMergedResource(string filePrefix, string resourcePath)
     {

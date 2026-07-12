@@ -63,6 +63,18 @@
             </GroupBox>
 
             <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Language_Label}">
+                <ComboBox x:Name="UiLocaleComboBox"
+                          Margin="{StaticResource Spacing.LayoutGrid}"
+                          MinHeight="{StaticResource Interaction.MinimumTarget}"
+                          DisplayMemberPath="Label"
+                          SelectionChanged="OnSelectionChanged"
+                          AutomationProperties.Name="{DynamicResource Settings_Language_Label}"
+                          AutomationProperties.HelpText="{DynamicResource Settings_Language_Tooltip}"
+                          ToolTip="{DynamicResource Settings_Language_Tooltip}" />
+            </GroupBox>
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                       Header="{DynamicResource Settings_Recording_Heading}">
                 <Grid Margin="{StaticResource Spacing.LayoutGrid}">
                     <Grid.ColumnDefinitions>

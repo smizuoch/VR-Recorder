@@ -110,6 +110,11 @@
     <system:String x:Key="Settings_Audio_MicOnly">Microphone only</system:String>
     <system:String x:Key="Settings_Audio_Muted">Mute all</system:String>
     <system:String x:Key="Settings_Audio_Gain_Format">{0:0.#} dB</system:String>
+    <system:String x:Key="Settings_Language_Label">Language</system:String>
+    <system:String x:Key="Settings_Language_Tooltip">Choose the application display language</system:String>
+    <system:String x:Key="Settings_Language_System">Use system language</system:String>
+    <system:String x:Key="Settings_Language_English">English</system:String>
+    <system:String x:Key="Settings_Language_Japanese">Japanese</system:String>
     <system:String x:Key="Settings_Output_Heading">Output folder</system:String>
     <system:String x:Key="Settings_OutputFolder_Label">Recording output</system:String>
     <system:String x:Key="Settings_OutputFolder_Tooltip">MP4 files and the authenticated Legal Bundle are stored here</system:String>

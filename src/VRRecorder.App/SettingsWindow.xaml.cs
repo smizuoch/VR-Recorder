@@ -60,6 +60,7 @@ public partial class SettingsWindow : Window, IDisposable
             SelectValue(EncoderComboBox, _draft.Encoder);
             SelectValue(QualityPresetComboBox, _draft.QualityPreset);
             SelectValue(AudioRoutingComboBox, _draft.AudioRouting);
+            SelectValue(UiLocaleComboBox, _draft.UiLocale);
             BindEndpointOptions(
                 DesktopEndpointComboBox,
                 endpointOptions.Desktop,
@@ -113,6 +114,7 @@ public partial class SettingsWindow : Window, IDisposable
                     DesktopEndpointComboBox),
                 MicrophoneEndpointId = SelectedEndpoint(
                     MicrophoneEndpointComboBox),
+                UiLocale = SelectedValue<UiLocale>(UiLocaleComboBox),
                 DesktopGainDb = DesktopGainSlider.Value,
                 MicrophoneGainDb = MicrophoneGainSlider.Value,
             };
@@ -290,6 +292,18 @@ public partial class SettingsWindow : Window, IDisposable
                             "Unsupported audio routing choice."),
                     })))
                 .ToList();
+        UiLocaleComboBox.ItemsSource = Enum.GetValues<UiLocale>()
+            .Select(value => new SettingOption(
+                value,
+                Resource(value switch
+                {
+                    UiLocale.System => "Settings_Language_System",
+                    UiLocale.English => "Settings_Language_English",
+                    UiLocale.Japanese => "Settings_Language_Japanese",
+                    _ => throw new InvalidDataException(
+                        "Unsupported UI locale choice."),
+                })))
+            .ToList();
     }
 
     private static void BindEndpointOptions(
@@ -380,6 +394,7 @@ public partial class SettingsWindow : Window, IDisposable
         EncoderComboBox.SelectedItem is SettingOption &&
         QualityPresetComboBox.SelectedItem is SettingOption &&
         AudioRoutingComboBox.SelectedItem is SettingOption &&
+        UiLocaleComboBox.SelectedItem is SettingOption &&
         !string.IsNullOrWhiteSpace(DesktopEndpointComboBox.Text) &&
         !string.IsNullOrWhiteSpace(MicrophoneEndpointComboBox.Text);
 
