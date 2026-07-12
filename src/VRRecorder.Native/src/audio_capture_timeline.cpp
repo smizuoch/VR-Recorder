@@ -23,10 +23,6 @@ AudioTimelineResult StereoCaptureTimeline::Push(
         return AudioTimelineResult::InvalidPacket;
     }
 
-    if (packet.discontinuity) {
-        return AudioTimelineResult::Discontinuity;
-    }
-
     const std::lock_guard lock(mutex_);
     if (aborted_) {
         return AudioTimelineResult::Aborted;
@@ -34,7 +30,8 @@ AudioTimelineResult StereoCaptureTimeline::Push(
 
     if ((has_packet_ &&
          (packet.start_frame_48k < write_end_position_ ||
-          (!allow_device_position_epoch_reset_ &&
+          (!packet.discontinuity &&
+           !allow_device_position_epoch_reset_ &&
            packet.clock.device_position <= last_clock_.device_position) ||
           packet.clock.qpc_ticks < last_clock_.qpc_ticks ||
           packet.clock.qpc_frequency != last_clock_.qpc_frequency)) ||
