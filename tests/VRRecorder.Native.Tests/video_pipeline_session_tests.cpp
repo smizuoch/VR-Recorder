@@ -178,6 +178,7 @@ void RollsBackCaptureWhenEncodingCannotStart()
           VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(order == std::vector<int>({1, 2, 3}));
     CHECK(capture.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
     CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
 }
 
