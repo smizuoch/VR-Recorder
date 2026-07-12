@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
@@ -45,6 +46,8 @@ public partial class SettingsWindow : Window, IDisposable
         try
         {
             _draft = await _controller.LoadAsync(_lifetime.Token);
+            var endpointOptions = await _controller
+                .LoadAudioEndpointOptionsAsync(_draft, _lifetime.Token);
             SelectOutputFolder(_draft.OutputFolder);
             BrowseOutputFolderButton.IsEnabled = true;
             UseDownloadsButton.IsEnabled = true;
@@ -57,11 +60,13 @@ public partial class SettingsWindow : Window, IDisposable
             SelectValue(EncoderComboBox, _draft.Encoder);
             SelectValue(QualityPresetComboBox, _draft.QualityPreset);
             SelectValue(AudioRoutingComboBox, _draft.AudioRouting);
-            SelectEndpoint(
+            BindEndpointOptions(
                 DesktopEndpointComboBox,
+                endpointOptions.Desktop,
                 _draft.DesktopEndpointId);
-            SelectEndpoint(
+            BindEndpointOptions(
                 MicrophoneEndpointComboBox,
+                endpointOptions.Microphone,
                 _draft.MicrophoneEndpointId);
             DesktopGainSlider.Value = _draft.DesktopGainDb;
             MicrophoneGainSlider.Value = _draft.MicrophoneGainDb;
@@ -285,31 +290,27 @@ public partial class SettingsWindow : Window, IDisposable
                             "Unsupported audio routing choice."),
                     })))
                 .ToList();
-        DesktopEndpointComboBox.ItemsSource = new List<string>
-        {
-            "default-render",
-        };
-        MicrophoneEndpointComboBox.ItemsSource = new List<string>
-        {
-            "default-capture",
-        };
     }
 
-    private static void SelectEndpoint(WpfComboBox comboBox, string endpointId)
+    private static void BindEndpointOptions(
+        WpfComboBox comboBox,
+        IReadOnlyList<AudioEndpointOption> endpoints,
+        string endpointId)
     {
-        var endpoints = (List<string>)comboBox.ItemsSource;
-        if (!endpoints.Contains(endpointId, StringComparer.Ordinal))
-        {
-            endpoints.Add(endpointId);
-            comboBox.Items.Refresh();
-        }
-
-        comboBox.Text = endpointId;
+        comboBox.ItemsSource = endpoints;
+        comboBox.SelectedItem = endpoints.Single(endpoint =>
+            string.Equals(endpoint.Id, endpointId, StringComparison.Ordinal));
     }
 
     private static string SelectedEndpoint(WpfComboBox comboBox)
     {
-        var endpointId = comboBox.Text;
+        var endpointId = comboBox.SelectedItem is AudioEndpointOption selected &&
+                         string.Equals(
+                             comboBox.Text,
+                             selected.DisplayName,
+                             StringComparison.Ordinal)
+            ? selected.Id
+            : comboBox.Text;
         return string.IsNullOrWhiteSpace(endpointId)
             ? throw new InvalidDataException(
                 "An audio endpoint must be selected.")

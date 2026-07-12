@@ -8,6 +8,7 @@ using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Infrastructure.Storage;
+using VRRecorder.Infrastructure.Media;
 using VRRecorder.Infrastructure.SteamVr;
 
 namespace VRRecorder.App;
@@ -58,7 +59,8 @@ public partial class App : System.Windows.Application, IDisposable
             new AuthenticatedLegalBundleOutputMirror(
                 AppContext.BaseDirectory,
                 ProductVersion(),
-                _legalVerifier));
+                _legalVerifier),
+            new WindowsAudioEndpointCatalog());
         _diagnosticsController = new DesktopDiagnosticsController(
             new PrivacySafeDiagnosticBundleExporter(
                 LogDirectory(settingsPath)));
