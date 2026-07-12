@@ -192,6 +192,48 @@ public sealed class DesktopRecordingSettingsControllerTests
             store.Current.Audio.MicrophoneEndpointId);
     }
 
+    [Fact]
+    public async Task EndpointOptionsRetainInactiveSelectionAndDeduplicateCatalog()
+    {
+        var events = new List<string>();
+        var defaults = VRRecorderSettings.CreateDefault();
+        var settings = defaults with
+        {
+            Audio = defaults.Audio with
+            {
+                DesktopEndpointId = "saved-render",
+                MicrophoneEndpointId = "saved-capture",
+            },
+        };
+        var catalog = new StubAudioEndpointCatalog(
+            [
+                new AudioEndpointOption("active-render", "Speakers"),
+                new AudioEndpointOption("active-render", "Duplicate"),
+            ],
+            [new AudioEndpointOption("saved-capture", "Studio mic")]);
+        var controller = new DesktopRecordingSettingsController(
+            new TrackingSettingsStore(settings, events),
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(AbsolutePath("downloads"))),
+            new TrackingLegalBundleOutputMirror(events),
+            catalog);
+        var draft = await controller.LoadAsync(CancellationToken.None);
+
+        var options = await controller.LoadAudioEndpointOptionsAsync(
+            draft,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new AudioEndpointOption("saved-render", "saved-render"),
+                new AudioEndpointOption("active-render", "Speakers"),
+            ],
+            options.Desktop);
+        Assert.Equal(
+            [new AudioEndpointOption("saved-capture", "Studio mic")],
+            options.Microphone);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-settings-controller-tests",
@@ -224,6 +266,21 @@ public sealed class DesktopRecordingSettingsControllerTests
             SaveCount++;
             Current = settings;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubAudioEndpointCatalog(
+        IReadOnlyList<AudioEndpointOption> desktop,
+        IReadOnlyList<AudioEndpointOption> microphone)
+        : IAudioEndpointCatalog
+    {
+        public Task<IReadOnlyList<AudioEndpointOption>> GetActiveAsync(
+            AudioInput input,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(
+                input == AudioInput.Desktop ? desktop : microphone);
         }
     }
 
