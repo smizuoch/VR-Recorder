@@ -153,6 +153,70 @@ void PreservesNative48KhzStereoFloatChannels()
         normalized.interleaved_samples.begin()));
 }
 
+void RetainsRationalPhaseWhenTheSecondPacketTimestampIsInvalid()
+{
+    constexpr std::int64_t session_start_qpc_100ns = 4'000'000;
+    const std::vector<float> first_samples(100, 0.25F);
+    const std::vector<float> second_samples(341, 0.25F);
+    const vrrecorder::native::CapturePcmFormat format {
+        44'100,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        4,
+        0x0000'0004,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(
+        session_start_qpc_100ns);
+    vrrecorder::native::CapturedStereoPacket48k first {};
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  1'000,
+                  session_start_qpc_100ns,
+                  first_samples.size(),
+                  std::as_bytes(std::span<const float>(first_samples)),
+                  false,
+                  false,
+                  false,
+              },
+              first) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    const std::vector<float> first_output(
+        first.interleaved_samples.begin(),
+        first.interleaved_samples.end());
+    vrrecorder::native::CapturedStereoPacket48k second {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  1'100,
+                  0,
+                  second_samples.size(),
+                  std::as_bytes(std::span<const float>(second_samples)),
+                  false,
+                  false,
+                  true,
+              },
+              second) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(first.start_frame_48k == 0);
+    CHECK(first.frame_count_48k == 109);
+    CHECK(second.start_frame_48k == 109);
+    CHECK(second.frame_count_48k == 371);
+    CHECK(first.frame_count_48k + second.frame_count_48k == 480);
+    CHECK(second.qpc_100ns > first.qpc_100ns);
+    CHECK(first_output.size() + second.interleaved_samples.size() == 960);
+    for (const auto sample : first_output) {
+        CHECK(NearlyEqual(sample, 0.25F));
+    }
+
+    for (const auto sample : second.interleaved_samples) {
+        CHECK(NearlyEqual(sample, 0.25F));
+    }
+}
+
 }
 
 int main()
@@ -160,5 +224,6 @@ int main()
     ConvertsOne44100HzMonoPacketToAnExact480FrameStereoWindow();
     ConvertsPcm16EndpointsToFiniteStereoFloat();
     PreservesNative48KhzStereoFloatChannels();
+    RetainsRationalPhaseWhenTheSecondPacketTimestampIsInvalid();
     return 0;
 }
