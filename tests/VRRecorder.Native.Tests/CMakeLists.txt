@@ -171,6 +171,26 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_media_stream_pipeline_adapters)
 
 add_executable(
+    vrrecorder_native_media_recording_pipeline
+    media_recording_pipeline_tests.cpp
+    "${native_source_root}/src/media_recording_pipeline.cpp"
+    "${native_source_root}/src/media_stream_pipeline_adapters.cpp"
+    "${native_source_root}/src/media_recording_session.cpp")
+target_compile_features(
+    vrrecorder_native_media_recording_pipeline PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_media_recording_pipeline
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_media_recording_pipeline
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_media_recording_pipeline)
+
+add_executable(
     vrrecorder_native_audio_timeline_buffer
     audio_timeline_buffer_tests.cpp
     "${native_source_root}/src/audio_timeline_buffer.cpp")
@@ -726,6 +746,8 @@ add_test(NAME vrrecorder_native_media_recording_session
     COMMAND vrrecorder_native_media_recording_session)
 add_test(NAME vrrecorder_native_media_stream_pipeline_adapters
     COMMAND vrrecorder_native_media_stream_pipeline_adapters)
+add_test(NAME vrrecorder_native_media_recording_pipeline
+    COMMAND vrrecorder_native_media_recording_pipeline)
 add_test(NAME vrrecorder_native_audio_timeline_buffer
     COMMAND vrrecorder_native_audio_timeline_buffer)
 add_test(NAME vrrecorder_native_audio_capture_timeline
