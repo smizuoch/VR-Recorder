@@ -47,6 +47,7 @@ public sealed class CachedPromptingVideoSenderSelection
         var cachedSenderId = await _store
             .LoadAsync(vrChatServiceId, cancellationToken)
             .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         var cached = ordered.SingleOrDefault(candidate => string.Equals(
             candidate.SenderId,
             cachedSenderId,
