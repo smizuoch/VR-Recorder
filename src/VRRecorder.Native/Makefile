@@ -3,7 +3,7 @@ BUILD_DIR := build
 CPPFLAGS := -DVRRECORDER_NATIVE_EXPORTS -Iinclude -Isrc
 CXXFLAGS := -std=c++20 -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Wpedantic -Werror
 LDFLAGS := -shared -pthread -Wl,--no-undefined -Wl,--version-script=exports.version -Wl,-Map,$(BUILD_DIR)/vrrecorder_native.map
-SOURCES := src/abi.cpp src/audio_mixer.cpp src/audio_timeline_buffer.cpp src/unavailable_encoder_probe_backend.cpp src/unavailable_media_backend.cpp src/unavailable_spout_source_backend.cpp src/unavailable_steamvr_input_backend.cpp
+SOURCES := src/abi.cpp src/audio_capture_timeline.cpp src/audio_mixer.cpp src/audio_timeline_buffer.cpp src/unavailable_encoder_probe_backend.cpp src/unavailable_media_backend.cpp src/unavailable_spout_source_backend.cpp src/unavailable_steamvr_input_backend.cpp
 OBJECTS := $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
