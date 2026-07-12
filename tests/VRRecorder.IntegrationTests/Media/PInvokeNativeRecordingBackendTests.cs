@@ -703,6 +703,49 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(pending, (await stopping).Recording);
     }
 
+    [Fact]
+    public async Task AvDriftEventIsTypedAndDoesNotCompletePendingStop()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "drift.recording.mp4"),
+            Path.Combine(directory.Path, "drift.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        List<NativeAvDriftEvent> driftEvents = [];
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(
+                FirstVideoPacketMuxed: () => { },
+                Faulted: _ => { },
+                AvDrift: driftEvents.Add),
+            CancellationToken.None);
+
+        var stopping = session.StopAsync(CancellationToken.None);
+        controls.EmitAvDrift(
+            videoPtsMicroseconds: 180_001,
+            audioPtsMicroseconds: 100_000);
+
+        var drift = Assert.Single(driftEvents);
+        Assert.Equal(TimeSpan.FromMicroseconds(180_001), drift.VideoPts);
+        Assert.Equal(TimeSpan.FromMicroseconds(100_000), drift.AudioPts);
+        Assert.Equal(TimeSpan.FromMicroseconds(80_001), drift.AbsoluteDrift);
+        Assert.False(stopping.IsCompleted);
+
+        controls.CompleteTrailerFlushClose(1, 1);
+        await stopping;
+    }
+
     private static string FixturePath()
     {
         var root = FindRepositoryRoot();
@@ -747,6 +790,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly SetStatisticsStatusDelegate _setStatisticsStatus;
         private readonly UIntDelegate _audioRouting;
         private readonly UIntDelegate _audioRoutingUpdateCount;
+        private readonly AvDriftDelegate _avDrift;
 
         public NativeFixtureControls(string path)
         {
@@ -807,7 +851,11 @@ public sealed class PInvokeNativeRecordingBackendTests
                 Marshal.GetDelegateForFunctionPointer<UIntDelegate>(
                     NativeLibrary.GetExport(
                         _library,
-                        "vrrec_test_audio_routing_update_count"));
+                    "vrrec_test_audio_routing_update_count"));
+            _avDrift = Marshal.GetDelegateForFunctionPointer<AvDriftDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_emit_av_drift"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -818,6 +866,11 @@ public sealed class PInvokeNativeRecordingBackendTests
             _complete(videoPacketCount, audioPacketCount);
 
         public void Fail(int status, string message) => _fail(status, message);
+
+        public void EmitAvDrift(
+            ulong videoPtsMicroseconds,
+            ulong audioPtsMicroseconds) =>
+            _avDrift(videoPtsMicroseconds, audioPtsMicroseconds);
 
         public void SetDesktopAudioEndpointAvailable(
             bool available,
@@ -918,6 +971,11 @@ public sealed class PInvokeNativeRecordingBackendTests
         private delegate void CompleteDelegate(
             ulong videoPacketCount,
             ulong audioPacketCount);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void AvDriftDelegate(
+            ulong videoPtsMicroseconds,
+            ulong audioPtsMicroseconds);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void AudioEndpointAvailabilityDelegate(
