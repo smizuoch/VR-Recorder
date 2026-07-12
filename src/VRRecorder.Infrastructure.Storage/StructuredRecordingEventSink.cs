@@ -17,6 +17,7 @@ public sealed class StructuredRecordingEventSink
       ICameraRestoreWarningSink,
       IAudioSessionEventSink,
       IRecordingMediaEventSink,
+      IRecordingFinalizationEventSink,
       IDisposable
 {
     public const int DefaultAudioQueueCapacity = 64;
@@ -250,6 +251,18 @@ public sealed class StructuredRecordingEventSink
             }));
     }
 
+    public void Publish(RecordingRecoveryReason reason)
+    {
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            DiagnosticLogLevel.Warning,
+            "recording.finalization_recovery",
+            new Dictionary<string, string>
+            {
+                ["reason"] = RecoveryReasonName(reason),
+            }));
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
@@ -363,6 +376,18 @@ public sealed class StructuredRecordingEventSink
                 nameof(architecture),
                 architecture,
                 "The recording process architecture is not supported."),
+        };
+
+    private static string RecoveryReasonName(
+        RecordingRecoveryReason reason) => reason switch
+        {
+            RecordingRecoveryReason.FinalizationFailed =>
+                "finalization_failed",
+            RecordingRecoveryReason.ValidationFailed => "validation_failed",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(reason),
+                reason,
+                "The recording recovery reason is not supported."),
         };
 
     private static string AudioInputName(AudioInput input) => input switch

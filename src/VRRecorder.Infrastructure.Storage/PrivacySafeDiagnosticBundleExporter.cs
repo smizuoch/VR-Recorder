@@ -111,6 +111,11 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         "nv12",
         "rgba8",
     ];
+    private static readonly HashSet<string> FinalizationRecoveryReasons =
+    [
+        "finalization_failed",
+        "validation_failed",
+    ];
     private static readonly HashSet<string> Architectures =
     [
         "arm64",
@@ -384,8 +389,29 @@ public sealed class PrivacySafeDiagnosticBundleExporter
             "recording.media_statistics" => SanitizeMediaStatistics(fields),
             "application.environment" => SanitizeApplicationEnvironment(
                 fields),
+            "recording.finalization_recovery" =>
+                SanitizeFinalizationRecovery(fields),
             _ => null,
         };
+
+    private static SortedDictionary<string, string>?
+        SanitizeFinalizationRecovery(
+            IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadAllowedString(
+                fields,
+                "reason",
+                FinalizationRecoveryReasons,
+                out var reason))
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["reason"] = reason,
+        };
+    }
 
     private static SortedDictionary<string, string>?
         SanitizeApplicationEnvironment(

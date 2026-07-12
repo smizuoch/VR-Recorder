@@ -147,7 +147,8 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 new SameDirectoryAtomicRecordingFileFinalizer(),
                 new FfprobeRecordingFileValidator(ffprobePath),
                 new FileSystemRecordingRecoveryStore(),
-                savedEvents);
+                savedEvents,
+                events);
             var sessions = new ActiveRecordingSessionCoordinator(
                 recordingEngine,
                 finalization);
