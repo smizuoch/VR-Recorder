@@ -62,6 +62,11 @@ private:
     static bool SameFormat(
         const CapturePcmFormat &left,
         const CapturePcmFormat &right) noexcept;
+    static bool TryGetStereoGains(
+        std::uint32_t speaker_mask,
+        std::size_t channel_index,
+        float &left,
+        float &right) noexcept;
     static bool TryScaleRound(
         std::uint64_t value,
         std::uint64_t numerator,

@@ -1,6 +1,7 @@
 #include "audio_capture_normalizer.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -137,12 +138,11 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
             for (std::size_t frame = 0;
                  frame < packet.frame_count;
                  ++frame) {
-                for (std::size_t output_channel = 0;
-                     output_channel < OutputChannelCount;
-                     ++output_channel) {
-                    const auto source_channel = format.channel_count == 1
-                        ? 0U
-                        : output_channel;
+                float left = 0.0F;
+                float right = 0.0F;
+                for (std::size_t source_channel = 0;
+                     source_channel < format.channel_count;
+                     ++source_channel) {
                     const auto *sample_bytes = packet.bytes.data() +
                         frame * format.block_align +
                         source_channel * bytes_per_sample;
@@ -162,9 +162,33 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                         sample = static_cast<float>(pcm) / 32768.0F;
                     }
 
-                    source_stereo[
-                        frame * OutputChannelCount + output_channel] = sample;
+                    if (format.channel_count == 1) {
+                        left = sample;
+                        right = sample;
+                    } else if (format.channel_count == 2) {
+                        if (source_channel == 0) {
+                            left = sample;
+                        } else {
+                            right = sample;
+                        }
+                    } else {
+                        float left_gain = 0.0F;
+                        float right_gain = 0.0F;
+                        if (!TryGetStereoGains(
+                                format.speaker_mask,
+                                source_channel,
+                                left_gain,
+                                right_gain)) {
+                            return CaptureNormalizationResult::InvalidFormat;
+                        }
+
+                        left += sample * left_gain;
+                        right += sample * right_gain;
+                    }
                 }
+
+                source_stereo[frame * OutputChannelCount] = left;
+                source_stereo[frame * OutputChannelCount + 1U] = right;
             }
 
             for (std::size_t output_frame = 0;
@@ -235,8 +259,11 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
 bool StereoCaptureNormalizer48k::IsFormatSupported(
     const CapturePcmFormat &format) noexcept
 {
+    constexpr std::uint16_t maximum_channel_count = 8;
     if (format.sample_rate_hz == 0 || format.channel_count == 0 ||
-        format.channel_count > OutputChannelCount) {
+        format.channel_count > maximum_channel_count ||
+        (format.channel_count > OutputChannelCount &&
+         std::popcount(format.speaker_mask) != format.channel_count)) {
         return false;
     }
 
@@ -261,6 +288,66 @@ bool StereoCaptureNormalizer48k::SameFormat(
            left.valid_bits == right.valid_bits &&
            left.block_align == right.block_align &&
            left.speaker_mask == right.speaker_mask;
+}
+
+bool StereoCaptureNormalizer48k::TryGetStereoGains(
+    std::uint32_t speaker_mask,
+    std::size_t channel_index,
+    float &left,
+    float &right) noexcept
+{
+    constexpr float minus_3_db = 0.70710678F;
+    constexpr float minus_6_db = 0.5F;
+    std::uint32_t remaining = speaker_mask;
+    for (std::size_t index = 0; index < channel_index; ++index) {
+        if (remaining == 0) {
+            return false;
+        }
+
+        remaining &= remaining - 1U;
+    }
+
+    if (remaining == 0) {
+        return false;
+    }
+
+    const auto speaker = std::uint32_t {1} << std::countr_zero(remaining);
+    switch (speaker) {
+    case 0x0000'0001:
+        left = 1.0F;
+        right = 0.0F;
+        return true;
+    case 0x0000'0002:
+        left = 0.0F;
+        right = 1.0F;
+        return true;
+    case 0x0000'0004:
+        left = minus_3_db;
+        right = minus_3_db;
+        return true;
+    case 0x0000'0008:
+        left = minus_6_db;
+        right = minus_6_db;
+        return true;
+    case 0x0000'0010:
+    case 0x0000'0040:
+    case 0x0000'0200:
+        left = minus_3_db;
+        right = 0.0F;
+        return true;
+    case 0x0000'0020:
+    case 0x0000'0080:
+    case 0x0000'0400:
+        left = 0.0F;
+        right = minus_3_db;
+        return true;
+    case 0x0000'0100:
+        left = minus_6_db;
+        right = minus_6_db;
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool StereoCaptureNormalizer48k::TryScaleRound(
