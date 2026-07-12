@@ -16,6 +16,7 @@
 - [x] desktop／microphone endpoint IDをlocalized／accessibleなeditable selectorへ投影し、明示変更だけを三者マージして次回録画へ反映する
 - [x] Windows Core Audioからactive render／capture endpointのfriendly nameとopaque IDを列挙し、非activeな保存済み選択も失わずselectorへ統合する
 - [x] System／English／Japaneseをoptional schema v1設定として三者マージし、起動時と保存直後にresource dictionaryへ適用する（CLI locale overrideを優先）
+- [x] VR hand／Wrist Dock・World PinとOSC discovery／loopback fallbackをlocalized／accessible controlへ投影し、nested同時更新を保持して個別保存する
 
 ## English
 
@@ -33,3 +34,4 @@
 - [x] Project desktop/microphone endpoint IDs into localized accessible editable selectors and three-way merge only explicit changes into the next recording
 - [x] Enumerate active Windows Core Audio render/capture endpoints by friendly name and opaque ID while retaining inactive persisted selections in the selectors
 - [x] Three-way merge System/English/Japanese as an optional schema-v1 setting and apply it to resource dictionaries at startup and immediately after saving, with the CLI locale override taking precedence
+- [x] Project VR hand/Wrist Dock/World Pin and OSC discovery/loopback fallback into localized accessible controls and persist each explicit change while preserving concurrent nested updates

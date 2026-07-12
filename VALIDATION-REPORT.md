@@ -29,9 +29,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 875件成功、失敗0、skip 0
+- managed: 876件成功、失敗0、skip 0
   - Domain 90
-  - Application 230
+  - Application 231
   - Compliance 186
   - Presentation 85
   - Integration 284
@@ -84,6 +84,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - Windows Core Audio MMDevice COMからactive render／capture endpointのfriendly nameとopaque IDを列挙し、非activeな保存済み選択を保持してlocalized／accessible selectorへ統合、明示変更だけを同時更新へ三者マージして次回native startへ渡すsettings経路
 - `ole32.dll` COM解放call siteをWindowsSystem integrityとしてruntime-load manifestへ明示登録し、第三者配布物へ誤分類しないadmission
 - System／English／Japaneseのoptional schema v1 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
+- VR hand／Wrist Dock・World PinとOSC auto discovery／loopback fallback host・portをlocalized／accessible settings controlへ投影し、overlay transformやportの同時更新を保持して個別保存する経路（OpenVR／fallback snapshot backendへのruntime適用は未実装）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -170,9 +171,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 875 passed, 0 failed, 0 skipped
+- managed: 876 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 230
+  - Application 231
   - Compliance 186
   - Presentation 85
   - Integration 284
@@ -225,6 +226,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A settings path that enumerates active render/capture endpoint friendly names and opaque IDs from Windows Core Audio MMDevice COM, retains inactive persisted selections in localized accessible selectors, three-way merges explicit changes over concurrent updates, and supplies them to the next native start
 - An admission for the `ole32.dll` COM cleanup call site as WindowsSystem integrity in the runtime-load manifest, without misclassifying it as a redistributed third-party component
 - A settings path that three-way merges System/English/Japanese as an optional schema-v1 locale, applies it to WPF string/layout resources at startup with CLI-override precedence, and reapplies it immediately after a successful save
+- A settings path that projects VR hand/Wrist Dock/World Pin and OSC auto-discovery/loopback fallback host/ports into localized accessible controls and persists explicit edits while retaining concurrent overlay-transform or port updates (runtime application to OpenVR and a fallback snapshot backend remains outstanding)
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
