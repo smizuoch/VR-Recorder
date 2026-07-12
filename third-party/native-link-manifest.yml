@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "Threads::Threads",
+      "inputKind": "ToolchainTarget",
+      "platform": "all",
+      "origin": "Toolchain",
+      "componentId": null,
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    }
+  ]
+}
