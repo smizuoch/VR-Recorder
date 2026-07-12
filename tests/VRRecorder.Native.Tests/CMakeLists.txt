@@ -409,6 +409,25 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_video_encoding_worker)
 
+add_executable(
+    vrrecorder_native_spout_capture_pump
+    spout_capture_pump_tests.cpp
+    "${native_source_root}/src/spout_capture_pump.cpp"
+    "${native_source_root}/src/video_cfr_scheduler.cpp")
+target_compile_features(
+    vrrecorder_native_spout_capture_pump PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_spout_capture_pump
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_spout_capture_pump
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_spout_capture_pump)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -447,6 +466,8 @@ add_test(NAME vrrecorder_native_video_encoding_pump
     COMMAND vrrecorder_native_video_encoding_pump)
 add_test(NAME vrrecorder_native_video_encoding_worker
     COMMAND vrrecorder_native_video_encoding_worker)
+add_test(NAME vrrecorder_native_spout_capture_pump
+    COMMAND vrrecorder_native_spout_capture_pump)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
