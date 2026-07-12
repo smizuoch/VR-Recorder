@@ -38,7 +38,10 @@ AudioTimelineResult StereoCaptureTimeline::Push(
           packet.clock.qpc_ticks < last_clock_.qpc_ticks ||
           packet.clock.qpc_frequency != last_clock_.qpc_frequency)) ||
         packet.start_frame_48k < read_position_ ||
-        (!input_available_ && end_position > unavailable_from_)) {
+        (has_unavailable_interval_ &&
+         ((!has_recovery_ && end_position > unavailable_from_) ||
+          (has_recovery_ &&
+           packet.start_frame_48k < recovery_from_)))) {
         return AudioTimelineResult::InvalidPacket;
     }
 
@@ -81,9 +84,13 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
     }
 
     data_available_.wait(lock, [&] {
+        const auto known_silence_completes_read =
+            has_unavailable_interval_ &&
+            unavailable_from_ < end_position &&
+            (!has_recovery_ || end_position <= recovery_from_);
         return aborted_ ||
                (has_packet_ && write_end_position_ >= end_position) ||
-               (!input_available_ && unavailable_from_ < end_position);
+               known_silence_completes_read;
     });
 
     if (aborted_) {
@@ -100,28 +107,45 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
         return AudioTimelineResult::InvalidPacket;
     }
 
+    const auto silent_start = std::max(
+        start_position,
+        unavailable_from_);
+    const auto silent_end = has_recovery_
+        ? std::min(end_position, recovery_from_)
+        : end_position;
     const auto includes_unavailable_frames =
-        !input_available_ && unavailable_from_ < end_position;
+        has_unavailable_interval_ && silent_start < silent_end;
     if (includes_unavailable_frames) {
-        const auto first_silent_frame = unavailable_from_ <= start_position
-            ? 0U
-            : static_cast<std::size_t>(
-                  unavailable_from_ - start_position);
+        const auto first_silent_frame = static_cast<std::size_t>(
+            silent_start - start_position);
+        const auto silent_frame_count = static_cast<std::size_t>(
+            silent_end - silent_start);
         const auto first_silent_sample = first_silent_frame *
+            StereoAudioTimelineBuffer::ChannelCount;
+        const auto silent_sample_count = silent_frame_count *
             StereoAudioTimelineBuffer::ChannelCount;
         std::fill(
             output_interleaved.begin() +
                 static_cast<std::ptrdiff_t>(first_silent_sample),
-            output_interleaved.end(),
+            output_interleaved.begin() + static_cast<std::ptrdiff_t>(
+                first_silent_sample + silent_sample_count),
             0.0F);
     }
 
+    const auto available_at_end =
+        !has_unavailable_interval_ || end_position <= unavailable_from_ ||
+        (has_recovery_ && end_position > recovery_from_);
+
     read = AudioTimelineRead {
         start_position,
-        !includes_unavailable_frames,
+        available_at_end,
         had_missing_frames || includes_unavailable_frames,
     };
     read_position_ = end_position;
+    if (has_recovery_ && read_position_ >= recovery_from_) {
+        has_unavailable_interval_ = false;
+        has_recovery_ = false;
+    }
 
     return AudioTimelineResult::Ready;
 }
@@ -141,15 +165,29 @@ AudioTimelineResult StereoCaptureTimeline::SetAvailable(
         }
 
         if (available) {
+            if (!has_unavailable_interval_ || input_available_ ||
+                effective_frame_48k < unavailable_from_) {
+                return AudioTimelineResult::InvalidPacket;
+            }
+
             input_available_ = true;
+            has_recovery_ = true;
+            recovery_from_ = effective_frame_48k;
         } else {
-            if (!input_available_ &&
-                effective_frame_48k != unavailable_from_) {
+            if (has_unavailable_interval_ &&
+                (!input_available_ || has_recovery_)) {
+                if (!input_available_ && !has_recovery_ &&
+                    effective_frame_48k == unavailable_from_) {
+                    return AudioTimelineResult::Ready;
+                }
+
                 return AudioTimelineResult::InvalidPacket;
             }
 
             input_available_ = false;
+            has_unavailable_interval_ = true;
             unavailable_from_ = effective_frame_48k;
+            has_recovery_ = false;
         }
     }
 

@@ -77,7 +77,10 @@ private:
     CaptureClockAnchor last_clock_ {};
     bool has_packet_ = false;
     bool input_available_ = true;
+    bool has_unavailable_interval_ = false;
     std::uint64_t unavailable_from_ = 0;
+    bool has_recovery_ = false;
+    std::uint64_t recovery_from_ = 0;
     bool aborted_ = false;
 };
 
