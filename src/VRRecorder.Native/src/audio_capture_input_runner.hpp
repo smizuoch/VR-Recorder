@@ -24,6 +24,7 @@ public:
 
     virtual bool Wait(
         std::chrono::milliseconds duration) noexcept = 0;
+    virtual void Abort() noexcept = 0;
 };
 
 enum class AudioCaptureInputResult {

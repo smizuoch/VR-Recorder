@@ -149,6 +149,7 @@ void AudioCaptureInputRunner::Abort() noexcept
         return;
     }
 
+    waiter_.Abort();
     const std::lock_guard lock(active_mutex_);
     if (active_pump_ != nullptr) {
         active_pump_->Abort();

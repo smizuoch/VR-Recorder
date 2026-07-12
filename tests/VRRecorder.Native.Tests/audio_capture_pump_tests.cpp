@@ -126,6 +126,10 @@ public:
         return true;
     }
 
+    void Abort() noexcept override
+    {
+    }
+
     std::size_t wait_calls = 0;
     std::chrono::milliseconds total_wait {0};
 };
