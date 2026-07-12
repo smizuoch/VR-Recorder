@@ -29,10 +29,10 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 862件成功、失敗0、skip 0
+- managed: 863件成功、失敗0、skip 0
   - Domain 90
   - Application 226
-  - Compliance 185
+  - Compliance 186
   - Presentation 85
   - Integration 276
 - WPF `win-x64` cross-build: warning 0、error 0
@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeしてfirst-party nativeのline／branch各90%を独立判定する`coverage-gate` target: gateは接続済み、実測line 85.42%（2776/3250）／branch 68.07%（1580/2321）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.42%（2776/3250）／branch 69.63%（1580/2269）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -160,10 +160,10 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 862 passed, 0 failed, 0 skipped
+- managed: 863 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 226
-  - Compliance 185
+  - Compliance 186
   - Presentation 85
   - Integration 276
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
@@ -171,7 +171,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts and independently enforces 90% first-party native line/branch thresholds; current measurements are 85.42% lines (2776/3250) and 68.07% branches (1580/2321), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.42% lines (2776/3250) and 69.63% branches (1580/2269), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
