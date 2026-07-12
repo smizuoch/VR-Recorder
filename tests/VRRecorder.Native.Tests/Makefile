@@ -9,7 +9,7 @@ LDFLAGS := --coverage -pthread
 
 .PHONY: all clean test export-check cmake-contract-sync managed-fixture
 
-all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_capture_session_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/audio_encoding_pump_tests $(BUILD_DIR)/audio_encoding_worker_tests $(BUILD_DIR)/audio_pipeline_session_tests $(BUILD_DIR)/audio_media_event_adapter_tests $(BUILD_DIR)/video_processing_plan_tests $(BUILD_DIR)/video_cfr_scheduler_tests $(BUILD_DIR)/video_encoding_pump_tests $(BUILD_DIR)/video_encoding_worker_tests $(BUILD_DIR)/spout_capture_pump_tests $(BUILD_DIR)/spout_capture_worker_tests $(BUILD_DIR)/video_pipeline_session_tests $(BUILD_DIR)/c_header_smoke.o
+all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_capture_session_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/audio_encoding_pump_tests $(BUILD_DIR)/audio_encoding_worker_tests $(BUILD_DIR)/audio_pipeline_session_tests $(BUILD_DIR)/audio_media_event_adapter_tests $(BUILD_DIR)/video_processing_plan_tests $(BUILD_DIR)/video_processing_encoder_sink_tests $(BUILD_DIR)/video_cfr_scheduler_tests $(BUILD_DIR)/video_encoding_pump_tests $(BUILD_DIR)/video_encoding_worker_tests $(BUILD_DIR)/spout_capture_pump_tests $(BUILD_DIR)/spout_capture_worker_tests $(BUILD_DIR)/video_pipeline_session_tests $(BUILD_DIR)/c_header_smoke.o
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -68,6 +68,9 @@ $(BUILD_DIR)/video_cfr_scheduler_tests: video_cfr_scheduler_tests.cpp $(NATIVE_R
 $(BUILD_DIR)/video_processing_plan_tests: video_processing_plan_tests.cpp $(NATIVE_ROOT)/src/video_processing_plan.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+$(BUILD_DIR)/video_processing_encoder_sink_tests: video_processing_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/video_processing_encoder_sink.cpp $(NATIVE_ROOT)/src/video_processing_plan.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 $(BUILD_DIR)/video_encoding_pump_tests: video_encoding_pump_tests.cpp $(NATIVE_ROOT)/src/video_encoding_pump.cpp $(NATIVE_ROOT)/src/video_cfr_scheduler.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
@@ -117,6 +120,7 @@ test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/audio_pipeline_session_tests
 	$(BUILD_DIR)/audio_media_event_adapter_tests
 	$(BUILD_DIR)/video_processing_plan_tests
+	$(BUILD_DIR)/video_processing_encoder_sink_tests
 	$(BUILD_DIR)/video_cfr_scheduler_tests
 	$(BUILD_DIR)/video_encoding_pump_tests
 	$(BUILD_DIR)/video_encoding_worker_tests
