@@ -54,6 +54,7 @@ public static class RepositoryComplianceVerifier
 
         VerifyPackageHashes(lockedPackages, registeredPackages, issues);
         VerifyLegalFiles(root, registry.Components, issues);
+        issues.AddRange(RepositoryNativeRuntimeLoadVerifier.Verify(root));
 
         return issues;
     }
