@@ -4,6 +4,8 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <optional>
 
 #include "video_encoding_pump.hpp"
 #include "video_processing_plan.hpp"
@@ -33,6 +35,8 @@ public:
         const ScheduledVideoFrame &frame) noexcept override;
     VideoEncoderWrite Finish() noexcept override;
     void Abort() noexcept override;
+    vrrec_status_t UpdateVideoLayout(
+        const vrrec_video_layout_v1 &layout) noexcept;
 
 private:
     bool IsOutputValid(
@@ -43,6 +47,8 @@ private:
     VideoEncoderSink &encoder_;
     std::uint32_t output_width_;
     std::uint32_t output_height_;
+    mutable std::mutex layout_mutex_;
+    std::optional<vrrec_video_layout_v1> layout_;
     std::atomic_bool aborted_ = false;
 };
 

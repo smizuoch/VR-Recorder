@@ -77,4 +77,31 @@ vrrec_status_t CreateSingleFileVideoProcessingPlan(
     return VRREC_STATUS_OK;
 }
 
+vrrec_status_t CreateExplicitVideoProcessingPlan(
+    const VideoSurfaceDescriptor &source,
+    const vrrec_video_layout_v1 &layout,
+    VideoProcessingPlan &plan) noexcept
+{
+    if (source.width != layout.source_width ||
+        source.height != layout.source_height) {
+        plan = VideoProcessingPlan {};
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    const auto status = CreateSingleFileVideoProcessingPlan(
+        source,
+        layout.canvas_width,
+        layout.canvas_height,
+        plan);
+    if (status != VRREC_STATUS_OK) {
+        return status;
+    }
+
+    plan.destination_width = layout.destination_width;
+    plan.destination_height = layout.destination_height;
+    plan.offset_x = layout.destination_x;
+    plan.offset_y = layout.destination_y;
+    return VRREC_STATUS_OK;
+}
+
 }

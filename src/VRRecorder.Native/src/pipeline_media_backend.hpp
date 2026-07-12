@@ -6,15 +6,9 @@
 
 #include "media_backend.hpp"
 #include "media_recording_pipeline.hpp"
+#include "video_layout_update_port.hpp"
 
 namespace vrrecorder::native {
-
-class VideoLayoutUpdatePort {
-public:
-    virtual ~VideoLayoutUpdatePort() = default;
-    virtual vrrec_status_t UpdateVideoLayout(
-        const vrrec_video_layout_v1 &layout) noexcept = 0;
-};
 
 class PipelineMediaBackend final : public MediaBackend {
 public:

@@ -34,6 +34,11 @@ vrrec_status_t CreateSingleFileVideoProcessingPlan(
     std::uint32_t output_height,
     VideoProcessingPlan &plan) noexcept;
 
+vrrec_status_t CreateExplicitVideoProcessingPlan(
+    const VideoSurfaceDescriptor &source,
+    const vrrec_video_layout_v1 &layout,
+    VideoProcessingPlan &plan) noexcept;
+
 }
 
 #endif

@@ -30,11 +30,18 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
 
     const auto descriptor = frame.surface->Descriptor();
     VideoProcessingPlan plan {};
-    const auto plan_status = CreateSingleFileVideoProcessingPlan(
-        descriptor,
-        output_width_,
-        output_height_,
-        plan);
+    std::optional<vrrec_video_layout_v1> layout;
+    {
+        const std::lock_guard lock(layout_mutex_);
+        layout = layout_;
+    }
+    const auto plan_status = layout.has_value()
+        ? CreateExplicitVideoProcessingPlan(descriptor, *layout, plan)
+        : CreateSingleFileVideoProcessingPlan(
+              descriptor,
+              output_width_,
+              output_height_,
+              plan);
     if (plan_status != VRREC_STATUS_OK) {
         return {plan_status, 0, 0, VideoEncoderFailureStage::Processing};
     }
@@ -70,6 +77,31 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
         write.failure_stage = VideoEncoderFailureStage::Encoding;
     }
     return write;
+}
+
+vrrec_status_t ProcessingVideoEncoderSink::UpdateVideoLayout(
+    const vrrec_video_layout_v1 &layout) noexcept
+{
+    if (layout.struct_size < sizeof(vrrec_video_layout_v1) ||
+        layout.abi_version != VRREC_ABI_V1 ||
+        layout.source_width == 0 || layout.source_height == 0 ||
+        layout.canvas_width != output_width_ ||
+        layout.canvas_height != output_height_ ||
+        layout.destination_width == 0 || layout.destination_height == 0 ||
+        (layout.destination_width & 1U) != 0 ||
+        (layout.destination_height & 1U) != 0 ||
+        layout.destination_x > layout.canvas_width ||
+        layout.destination_y > layout.canvas_height ||
+        layout.destination_width > layout.canvas_width - layout.destination_x ||
+        layout.destination_height > layout.canvas_height - layout.destination_y ||
+        layout.canvas_background != VRREC_CANVAS_BACKGROUND_BLACK ||
+        layout.rotation != VRREC_VIDEO_ROTATION_NONE) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    const std::lock_guard lock(layout_mutex_);
+    layout_ = layout;
+    return VRREC_STATUS_OK;
 }
 
 VideoEncoderWrite ProcessingVideoEncoderSink::Finish() noexcept

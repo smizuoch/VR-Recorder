@@ -8,6 +8,7 @@ SOURCES += src/media_recording_session.cpp
 SOURCES += src/media_stream_pipeline_adapters.cpp
 SOURCES += src/media_recording_pipeline.cpp
 SOURCES += src/pipeline_media_backend.cpp
+SOURCES += src/video_processing_layout_controller.cpp
 OBJECTS := $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
