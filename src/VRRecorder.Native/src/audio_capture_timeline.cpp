@@ -34,7 +34,8 @@ AudioTimelineResult StereoCaptureTimeline::Push(
 
     if ((has_packet_ &&
          (packet.start_frame_48k < write_end_position_ ||
-          packet.clock.device_position < last_clock_.device_position ||
+          (!allow_device_position_epoch_reset_ &&
+           packet.clock.device_position < last_clock_.device_position) ||
           packet.clock.qpc_ticks < last_clock_.qpc_ticks ||
           packet.clock.qpc_frequency != last_clock_.qpc_frequency)) ||
         packet.start_frame_48k < read_position_ ||
@@ -59,6 +60,7 @@ AudioTimelineResult StereoCaptureTimeline::Push(
     write_end_position_ = end_position;
     last_clock_ = packet.clock;
     has_packet_ = true;
+    allow_device_position_epoch_reset_ = false;
     data_available_.notify_one();
     return AudioTimelineResult::Ready;
 }
@@ -173,6 +175,7 @@ AudioTimelineResult StereoCaptureTimeline::SetAvailable(
             input_available_ = true;
             has_recovery_ = true;
             recovery_from_ = effective_frame_48k;
+            allow_device_position_epoch_reset_ = true;
         } else {
             if (has_unavailable_interval_ &&
                 (!input_available_ || has_recovery_)) {

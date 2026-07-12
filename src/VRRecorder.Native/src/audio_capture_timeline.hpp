@@ -81,6 +81,7 @@ private:
     std::uint64_t unavailable_from_ = 0;
     bool has_recovery_ = false;
     std::uint64_t recovery_from_ = 0;
+    bool allow_device_position_epoch_reset_ = false;
     bool aborted_ = false;
 };
 
