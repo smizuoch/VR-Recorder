@@ -22,6 +22,8 @@
 - [x] graceful finishだけが最終fragment、trailer、file flushを順に実行し、Abortではtrailerを書かない
 - [x] video encoderの0 packet bufferingと実packet batchを分離し、実packetだけを共通mux timelineへ投入する
 - [x] mux failure時はpacket統計をcommitせずvideo encoderとmuxerをともにAbortする
+- [x] AAC encoderの0 packet bufferingと実packet batchを分離し、audio packetだけを共有mux timelineへ投入する
+- [x] audio mux failureをencoder failureと分離し、未commit統計を除外してcapture／encoder／muxerを停止する
 
 ## English
 
@@ -45,3 +47,5 @@
 - [x] Run final-fragment, trailer, and file flush in order only for graceful finish, never writing a trailer after abort
 - [x] Distinguish zero-packet video-encoder buffering from real packet batches and submit only real packets to the shared mux timeline
 - [x] On mux failure, commit no packet statistics and abort both the video encoder and muxer
+- [x] Distinguish zero-packet AAC buffering from real packet batches and submit only audio packets to the shared mux timeline
+- [x] Separate audio mux failures from encoder failures, exclude uncommitted statistics, and stop capture, encoder, and muxer
