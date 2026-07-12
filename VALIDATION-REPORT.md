@@ -29,9 +29,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 871件成功、失敗0、skip 0
+- managed: 872件成功、失敗0、skip 0
   - Domain 90
-  - Application 227
+  - Application 228
   - Compliance 186
   - Presentation 85
   - Integration 283
@@ -81,6 +81,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - finalization／validation失敗後のquarantine reasonを録画結果へ影響しないbest-effort eventとして発行し、path／例外messageを除外するproduction診断経路
 - OSCQuery capabilityと確認済みcamera writeの成功／失敗をbest-effort固定語eventとして発行し、service ID／endpoint／avatar値を除外するproduction診断経路
 - capture timeline overrunとmixed-window underrunをinput role／正確な48 kHz frame付きで検出し、48-byte C ABI event、typed P/Invoke callback、bounded structured log、privacy-safe bundleへ伝播するaudio health経路
+- 保存済みdesktop／microphone endpoint IDとdefault role IDをlocalized／accessibleなeditable selectorへ投影し、明示変更だけを同時更新へ三者マージして次回native startへ渡すsettings経路（Windows endpoint catalog providerは未実装）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -132,7 +133,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
-- 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
+- 初回setup、Windows endpoint catalogからのaudio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -167,9 +168,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 871 passed, 0 failed, 0 skipped
+- managed: 872 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 227
+  - Application 228
   - Compliance 186
   - Presentation 85
   - Integration 283
@@ -219,6 +220,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A production diagnostics path that emits the post-failure finalization/validation quarantine reason without changing recording results and excludes paths and exception messages
 - A production diagnostics path that emits OSCQuery capability and confirmed camera-write outcomes as best-effort fixed-term events while excluding service IDs, endpoints, and avatar values
 - An audio-health path that detects capture-timeline overruns and mixed-window underruns with the input role and exact 48 kHz frame and propagates them through the 48-byte C ABI event, typed P/Invoke callback, bounded structured log, and privacy-safe bundle
+- A settings path that projects persisted desktop/microphone endpoint IDs and default role IDs into localized accessible editable selectors, three-way merges explicit changes over concurrent updates, and supplies them to the next native start (a Windows endpoint-catalog provider remains outstanding)
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -270,7 +272,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
-- First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
+- First-run setup, audio-device selection from a Windows endpoint catalog, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
