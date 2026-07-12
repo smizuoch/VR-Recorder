@@ -604,6 +604,31 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopStartupShowsSetupOnlyWhileProgressIsIncomplete()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "MainWindow.xaml.cs"));
+
+        Assert.Contains("App.FirstRunSetupUi.LoadAsync", windowCode);
+        Assert.Contains("setup.RequiresSetup", windowCode);
+        Assert.Contains("new FirstRunSetupWindow", windowCode);
+        var setupLoad = windowCode.IndexOf(
+            "App.FirstRunSetupUi.LoadAsync",
+            StringComparison.Ordinal);
+        var rightsLoad = windowCode.IndexOf(
+            "App.IsRecordingRightsAcknowledgedAsync",
+            StringComparison.Ordinal);
+        Assert.True(
+            setupLoad >= 0 && setupLoad < rightsLoad,
+            "First-run setup must be evaluated before rights authorization.");
+    }
+
+    [Fact]
     public void DesktopProductionFactoryRecoversStaleCameraLeaseBeforeMediaPreflight()
     {
         var appDirectory = Path.Combine(
