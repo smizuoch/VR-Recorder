@@ -41,6 +41,7 @@ vrrec_status_t VideoPipelineSession::Start(
     const auto encoding_status = encoding_.Start();
     if (encoding_status != VRREC_STATUS_OK) {
         capture_.Abort();
+        capture_.Join();
         capture_started_.store(false);
         return encoding_status;
     }
