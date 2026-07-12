@@ -9,7 +9,7 @@ LDFLAGS := --coverage -pthread
 
 .PHONY: all clean test export-check cmake-contract-sync managed-fixture
 
-all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/c_header_smoke.o
+all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_capture_session_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/c_header_smoke.o
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -44,6 +44,9 @@ $(BUILD_DIR)/audio_capture_platform_support_tests: audio_capture_platform_suppor
 $(BUILD_DIR)/audio_capture_input_worker_tests: audio_capture_input_worker_tests.cpp $(NATIVE_ROOT)/src/audio_capture_input_worker.cpp $(NATIVE_ROOT)/src/audio_capture_input_runner.cpp $(NATIVE_ROOT)/src/audio_capture_pump.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+$(BUILD_DIR)/audio_capture_session_tests: audio_capture_session_tests.cpp $(NATIVE_ROOT)/src/audio_capture_session.cpp $(NATIVE_ROOT)/src/audio_capture_input_worker.cpp $(NATIVE_ROOT)/src/audio_capture_input_runner.cpp $(NATIVE_ROOT)/src/audio_capture_pump.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_mix_coordinator.cpp $(NATIVE_ROOT)/src/audio_mixer.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 $(BUILD_DIR)/audio_mix_coordinator_tests: audio_mix_coordinator_tests.cpp $(NATIVE_ROOT)/src/audio_mix_coordinator.cpp $(NATIVE_ROOT)/src/audio_mixer.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
@@ -74,6 +77,7 @@ test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/audio_capture_source_factory_tests
 	$(BUILD_DIR)/audio_capture_platform_support_tests
 	$(BUILD_DIR)/audio_capture_input_worker_tests
+	$(BUILD_DIR)/audio_capture_session_tests
 	$(BUILD_DIR)/audio_mix_coordinator_tests
 
 clean:

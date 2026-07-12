@@ -232,6 +232,31 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_audio_capture_input_worker)
 
 add_executable(
+    vrrecorder_native_audio_capture_session
+    audio_capture_session_tests.cpp
+    "${native_source_root}/src/audio_capture_session.cpp"
+    "${native_source_root}/src/audio_capture_input_worker.cpp"
+    "${native_source_root}/src/audio_capture_input_runner.cpp"
+    "${native_source_root}/src/audio_capture_pump.cpp"
+    "${native_source_root}/src/audio_capture_timeline.cpp"
+    "${native_source_root}/src/audio_mix_coordinator.cpp"
+    "${native_source_root}/src/audio_mixer.cpp"
+    "${native_source_root}/src/audio_timeline_buffer.cpp")
+target_compile_features(
+    vrrecorder_native_audio_capture_session PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_capture_session
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_audio_capture_session
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_audio_capture_session)
+
+add_executable(
     vrrecorder_native_audio_mix_coordinator
     audio_mix_coordinator_tests.cpp
     "${native_source_root}/src/audio_mix_coordinator.cpp"
@@ -272,6 +297,8 @@ add_test(NAME vrrecorder_native_audio_capture_platform_support
     COMMAND vrrecorder_native_audio_capture_platform_support)
 add_test(NAME vrrecorder_native_audio_capture_input_worker
     COMMAND vrrecorder_native_audio_capture_input_worker)
+add_test(NAME vrrecorder_native_audio_capture_session
+    COMMAND vrrecorder_native_audio_capture_session)
 add_test(NAME vrrecorder_native_audio_mix_coordinator
     COMMAND vrrecorder_native_audio_mix_coordinator)
 add_test(NAME vrrecorder_native_exports
