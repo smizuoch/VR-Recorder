@@ -1273,6 +1273,93 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopPromptsAndCachesExactSpoutSenderSelection()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var window = LoadRequiredXaml(
+            appDirectory,
+            "SpoutSenderSelectionWindow.xaml");
+        Assert.Equal(
+            "VRRecorder.App.SpoutSenderSelectionWindow",
+            window.Root?.Attribute(Xaml + "Class")?.Value);
+        var candidates = Assert.Single(
+            window.Descendants(Presentation + "ListBox"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "SpoutSenderList");
+        Assert.Equal(
+            "{DynamicResource Spout_Selection_List_AccessibleName}",
+            candidates.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource Spout_Selection_List_Tooltip}",
+            candidates.Attribute("AutomationProperties.HelpText")?.Value);
+        var accept = Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute(Xaml + "Name")?.Value ==
+                       "AcceptSelectionButton");
+        Assert.Equal("False", accept.Attribute("IsEnabled")?.Value);
+        Assert.Equal("OnAccept", accept.Attribute("Click")?.Value);
+        Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnCancel");
+
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "SpoutSenderSelectionWindow.xaml.cs"));
+        Assert.Contains("SelectedSenderId", windowCode);
+        Assert.Contains("candidate.Width", windowCode);
+        Assert.Contains("candidate.Height", windowCode);
+        Assert.Contains("candidate.GpuIdentity", windowCode);
+        var promptCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "WpfVideoSenderSelectionPrompt.cs"));
+        Assert.Contains("IVideoSenderSelectionPrompt", promptCode);
+        Assert.Contains("Dispatcher", promptCode);
+        Assert.Contains("ShowDialog()", promptCode);
+        Assert.Contains("SelectedSenderId", promptCode);
+        Assert.Contains("cancellationToken.Register", promptCode);
+
+        var factory = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "ProductionDesktopRecordingRuntimeFactory.cs"));
+        Assert.Contains("new CachedPromptingVideoSenderSelection", factory);
+        Assert.Contains("new JsonFileVideoSenderSelectionStore", factory);
+        Assert.Contains("new WpfVideoSenderSelectionPrompt", factory);
+        Assert.Contains("new SpoutVideoSignalGateway(spoutSource, senderSelection)", factory);
+        Assert.Contains("spout-senders.json", factory);
+
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Spout_Selection_Title",
+                         "Spout_Selection_Body",
+                         "Spout_Selection_Item_Format",
+                         "Spout_Selection_List_AccessibleName",
+                         "Spout_Selection_List_Tooltip",
+                         "Spout_Selection_Accept_Label",
+                         "Spout_Selection_Accept_AccessibleName",
+                         "Spout_Selection_Accept_Tooltip",
+                         "Spout_Selection_Cancel_Label",
+                         "Spout_Selection_Cancel_AccessibleName",
+                         "Spout_Selection_Cancel_Tooltip",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopSettingsWindowPersistsSupportedRecordingChoices()
     {
         var appDirectory = Path.Combine(
