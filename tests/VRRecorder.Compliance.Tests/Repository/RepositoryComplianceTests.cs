@@ -187,6 +187,70 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void ThirdPartyRuntimeLoadRequiresNativeArtifactMetadata()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vr-recorder-native-artifact-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "third-party"));
+            Directory.CreateDirectory(Path.Combine(root, "src", "Rogue"));
+            File.WriteAllText(
+                Path.Combine(root, "third-party", "registry.yml"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "registryVersion": 1,
+                  "components": [
+                    {
+                      "id": "openvr"
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(
+                    root,
+                    "third-party",
+                    "runtime-load-manifest.yml"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "entries": [
+                    {
+                      "consumer": "Rogue",
+                      "fileName": "openvr_api.dll",
+                      "mechanism": "NativeLibrary",
+                      "platform": "windows-x64",
+                      "origin": "ThirdParty",
+                      "integrity": "RegistrySha256",
+                      "componentId": "openvr",
+                      "sourcePaths": ["src/Rogue/Loader.cs"]
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(root, "src", "Rogue", "Loader.cs"),
+                "NativeLibrary.Load(fullPath);");
+
+            var issues = RepositoryNativeRuntimeLoadVerifier.Verify(root);
+
+            Assert.Contains(issues, issue =>
+                issue.Code == "missing-native-artifact-registration" &&
+                issue.Subject == "openvr:openvr_api.dll");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
