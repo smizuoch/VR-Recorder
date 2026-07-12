@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -20,6 +21,27 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+
+class FakeVideoSurface final : public VideoSurface {
+public:
+    explicit FakeVideoSurface(VideoSurfaceDescriptor descriptor) noexcept
+        : descriptor_(descriptor)
+    {
+    }
+
+    VideoSurfaceDescriptor Descriptor() const noexcept override
+    {
+        return descriptor_;
+    }
+
+    void *NativeHandle() const noexcept override
+    {
+        return reinterpret_cast<void *>(1);
+    }
+
+private:
+    VideoSurfaceDescriptor descriptor_;
+};
 
 struct PollResult final {
     vrrec_status_t status;
@@ -67,7 +89,7 @@ SpoutFrame Frame(
     std::uint64_t sequence,
     std::int64_t timestamp)
 {
-    return {
+    auto frame = SpoutFrame {
         sender,
         42,
         "gpu",
@@ -79,15 +101,22 @@ SpoutFrame Frame(
         sequence,
         timestamp,
     };
+    frame.surface = std::make_shared<FakeVideoSurface>(
+        VideoSurfaceDescriptor {
+            42,
+            1'920,
+            1'080,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        });
+    return frame;
 }
 
 void AcceptsOnlyTheSelectedSenderIntoTheScheduler()
 {
     ScriptedSpoutBackend backend;
-    backend.polls.push_back({
-        VRREC_STATUS_OK,
-        Frame("selected", 10, 1'000'000),
-    });
+    auto frame = Frame("selected", 10, 1'000'000);
+    const auto surface = frame.surface;
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(frame)});
     VideoCfrScheduler scheduler;
     SpoutCapturePump pump(backend, scheduler, "selected");
 
@@ -98,6 +127,7 @@ void AcceptsOnlyTheSelectedSenderIntoTheScheduler()
     CHECK(scheduler.Schedule(0, output) == VideoScheduleResult::Ready);
     CHECK(output.source_sequence == 10);
     CHECK(output.source_timestamp_microseconds == 1'000'000);
+    CHECK(output.surface == surface);
 }
 
 void KeepsTimeoutSeparateFromSenderLoss()
