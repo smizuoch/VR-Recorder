@@ -27,6 +27,13 @@ public:
     virtual void Abort() noexcept = 0;
 };
 
+class AudioCaptureInputStartSink {
+public:
+    virtual ~AudioCaptureInputStartSink() = default;
+
+    virtual void Started(vrrec_status_t status) noexcept = 0;
+};
+
 enum class AudioCaptureInputResult {
     Aborted,
     RecoveryTimedOut,
@@ -46,6 +53,9 @@ public:
 
     AudioCaptureInputResult Run(
         const AudioCaptureSourceConfig &config) noexcept;
+    AudioCaptureInputResult Run(
+        const AudioCaptureSourceConfig &config,
+        AudioCaptureInputStartSink &start_sink) noexcept;
     void Abort() noexcept;
 
 private:
