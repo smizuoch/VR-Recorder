@@ -25,12 +25,12 @@ dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minim
 make -C tests/VRRecorder.Native.Tests test
 ```
 
-- managed: 857件成功、失敗0、skip 0
+- managed: 858件成功、失敗0、skip 0
   - Domain 90
   - Application 226
   - Compliance 181
   - Presentation 85
-  - Integration 275
+  - Integration 276
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
@@ -40,7 +40,7 @@ make -C tests/VRRecorder.Native.Tests test
 
 ### 直前checkpointの結合テスト単独coverage
 
-設計書18.5に従い、`VRRecorder.IntegrationTests`だけを実行してCoberturaを収集した直前checkpointの値です。runtime Mic／Mute、capture timeline／pump／normalizer／WASAPI factory／dual-input mix、Spout sender選択、native staging／Legal Bundle admission境界を含む857件の回帰は成功していますが、coverageは追加後に再収集していないため、次の表を現在値として扱いません。
+設計書18.5に従い、`VRRecorder.IntegrationTests`だけを実行してCoberturaを収集した直前checkpointの値です。runtime Mic／Mute、capture timeline／pump／normalizer／WASAPI factory／dual-input mix、Spout sender選択、native staging／Legal Bundle admission境界を含む858件の回帰は成功していますが、coverageは追加後に再収集していないため、次の表を現在値として扱いません。
 
 | Assembly | Line | Branch |
 |---|---:|---:|
@@ -99,6 +99,7 @@ make -C tests/VRRecorder.Native.Tests test
 - AAC encoderのbuffering／実packet batchを分離して同じfMP4 timelineへaudio packetを投入し、mux failureをaudio pump／workerまで独立伝播してcapture／encoder／muxerを停止するsink adapter
 - video／audio flush packet投入後のstream完了をbarrier化し、両encoder成功後だけ最終fragment／trailer／file flushを一度実行し、重複完了／flush後packet／片側failureをfail-closed処理する共有mux finalization session
 - mux成功後の最新video／audio PTS差を80 ms閾値で監視し、excursion単位の再arm可能なprivacy-safe eventと最新／最大drift／event数を記録するA/V sync monitor（診断observer結果は録画成否へ影響しない）
+- ABI構造体サイズと17 exportsを変えずにA/V drift eventをnative callbackからtyped P/Invoke callback、best-effort media event sink、privacy-safe structured logへ伝播する経路
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -140,12 +141,12 @@ dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minim
 make -C tests/VRRecorder.Native.Tests test
 ```
 
-- managed: 857 passed, 0 failed, 0 skipped
+- managed: 858 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 226
   - Compliance 181
   - Presentation 85
-  - Integration 275
+  - Integration 276
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
@@ -155,7 +156,7 @@ make -C tests/VRRecorder.Native.Tests test
 
 ### Integration-test-only coverage from the preceding checkpoint
 
-Following design section 18.5, Cobertura coverage was collected by running only `VRRecorder.IntegrationTests` at the preceding checkpoint. The 857-test regression including runtime Mic/Mute, capture timeline/pump/normalizer/WASAPI factory/dual-input mix, Spout-sender selection, and native staging/Legal Bundle admission boundaries passes, but coverage has not been recollected after those additions; the following table is not a current measurement.
+Following design section 18.5, Cobertura coverage was collected by running only `VRRecorder.IntegrationTests` at the preceding checkpoint. The 858-test regression including runtime Mic/Mute, capture timeline/pump/normalizer/WASAPI factory/dual-input mix, Spout-sender selection, and native staging/Legal Bundle admission boundaries passes, but coverage has not been recollected after those additions; the following table is not a current measurement.
 
 | Assembly | Line | Branch |
 |---|---:|---:|
@@ -214,6 +215,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An AAC sink adapter that separates encoder buffering from real packet batches, submits audio packets to the same fMP4 timeline, propagates mux failures distinctly through the audio pump/worker, and stops capture, encoder, and muxer
 - A shared mux finalization session that barriers stream completion after video/audio flush packets, runs final fragment/trailer/file flush once only after both encoders succeed, and fail-closed rejects duplicate completion, post-flush packets, or either-side failure
 - An A/V sync monitor that observes successfully muxed video/audio PTS at an 80 ms threshold, emits rearmable privacy-safe events per excursion, records latest/maximum drift and event count, and never lets diagnostic observer outcomes alter recording success
+- An ABI-size- and 17-export-preserving path that propagates A/V drift events from native callbacks through typed P/Invoke callbacks and a best-effort media-event sink into privacy-safe structured logs
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies

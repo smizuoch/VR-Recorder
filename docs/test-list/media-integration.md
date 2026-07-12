@@ -28,6 +28,7 @@
 - [x] flush済みstreamの追加packet／重複完了を拒否し、片側failure時はtrailerなしで共有muxをAbortする
 - [x] mux成功packetの最新A/V PTS差を監視し、80 ms超のexcursionごとに一度だけprivacy-safe診断eventを発行する
 - [x] A/V差が80 ms以内へ復帰したら再armし、最新／最大driftとevent数を集計する
+- [x] 80 ms超過eventをABIサイズ不変でnative→P/Invoke→typed callback→structured診断へ伝播し、pending Stopを完了しない
 
 ## English
 
@@ -57,3 +58,4 @@
 - [x] Reject packets or duplicate completion from a flushed stream and abort the shared mux without a trailer when either encoder fails
 - [x] Monitor latest A/V PTS drift from successfully muxed packets and emit one privacy-safe diagnostic event per excursion beyond 80 ms
 - [x] Rearm after A/V drift recovers to 80 ms or less and track latest/maximum drift and event count
+- [x] Propagate >80 ms events through native→P/Invoke→typed callback→structured diagnostics without ABI-size changes or completing a pending Stop
