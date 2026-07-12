@@ -18,7 +18,18 @@ struct StereoAudioCaptureSessionConfig final {
     std::int64_t session_start_qpc_100ns;
 };
 
-class StereoAudioCaptureSession final : public StereoAudioMixSource {
+class StereoAudioCaptureSessionPort : public StereoAudioMixSource {
+public:
+    ~StereoAudioCaptureSessionPort() override = default;
+
+    virtual vrrec_status_t Start(
+        const StereoAudioCaptureSessionConfig &config) noexcept = 0;
+    virtual vrrec_status_t SetRouting(
+        vrrec_audio_routing_t routing) noexcept = 0;
+};
+
+class StereoAudioCaptureSession final
+    : public StereoAudioCaptureSessionPort {
 public:
     StereoAudioCaptureSession(
         AudioCaptureSourceProvider &desktop_provider,
@@ -37,13 +48,13 @@ public:
         const StereoAudioCaptureSession &) = delete;
 
     vrrec_status_t Start(
-        const StereoAudioCaptureSessionConfig &config) noexcept;
+        const StereoAudioCaptureSessionConfig &config) noexcept override;
     StereoAudioMixResult MixNext(
         std::size_t frame_count_48k,
         std::span<float> output_interleaved,
         StereoAudioMixRead &read) noexcept override;
     vrrec_status_t SetRouting(
-        vrrec_audio_routing_t routing) noexcept;
+        vrrec_audio_routing_t routing) noexcept override;
     void Abort() noexcept override;
 
 private:
