@@ -248,6 +248,31 @@ public sealed class StructuredRecordingEventSinkTests
     }
 
     [Fact]
+    public async Task RecordsAudioBufferHealthAtExactFrame()
+    {
+        using var directory = TemporaryDirectory.Create();
+        using var log = new RotatingJsonLinesDiagnosticLog(directory.Path);
+        using var sink = new StructuredRecordingEventSink(
+            log,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        ((IRecordingMediaEventSink)sink).Publish(
+            new RecordingAudioBufferHealthEvent(
+                AudioInput.Microphone,
+                AudioBufferHealthKind.Overrun,
+                24_480));
+        sink.Dispose();
+
+        var content = await File.ReadAllTextAsync(Path.Combine(
+            directory.Path,
+            "vr-recorder.jsonl"));
+        Assert.Contains("\"event\":\"audio.buffer_health\"", content);
+        Assert.Contains("\"input\":\"microphone\"", content);
+        Assert.Contains("\"kind\":\"buffer_overrun\"", content);
+        Assert.Contains("\"framePosition\":\"24480\"", content);
+    }
+
+    [Fact]
     public void WriterFailureDoesNotStopQueuedAudioOrEscapeDispose()
     {
         var writer = new ThrowingFirstDiagnosticLogWriter();

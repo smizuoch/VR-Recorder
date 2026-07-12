@@ -118,6 +118,16 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                         ["avatarValue"] = "private-avatar-value-secret",
                     }),
                 LogLine(
+                    "audio.buffer_health",
+                    new Dictionary<string, string>
+                    {
+                        ["input"] = "microphone",
+                        ["kind"] = "buffer_overrun",
+                        ["framePosition"] = "24480",
+                        ["endpointId"] = "private-health-endpoint-secret",
+                        ["samples"] = "private-audio-samples-secret",
+                    }),
+                LogLine(
                     "application.environment",
                     new Dictionary<string, string>
                     {
@@ -188,7 +198,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
             CancellationToken.None);
 
         Assert.Equal(destination, result.BundlePath);
-        Assert.Equal(10, result.EventCount);
+        Assert.Equal(11, result.EventCount);
         using var archive = ZipFile.OpenRead(destination);
         Assert.Equal(
             ["README.txt", "diagnostics.jsonl"],
@@ -211,6 +221,9 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         Assert.Contains("osc.operation", diagnostics);
         Assert.Contains("\"operation\":\"capability_probe\"", diagnostics);
         Assert.Contains("\"outcome\":\"succeeded\"", diagnostics);
+        Assert.Contains("audio.buffer_health", diagnostics);
+        Assert.Contains("\"kind\":\"buffer_overrun\"", diagnostics);
+        Assert.Contains("\"framePosition\":\"24480\"", diagnostics);
         Assert.Contains("\"appVersion\":\"0.3.0\"", diagnostics);
         Assert.Contains("\"osBuild\":\"10.0.26100\"", diagnostics);
         Assert.Contains("\"driverVersion\":\"32.0.15.6094\"", diagnostics);
@@ -238,6 +251,8 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                      "private-version-secret",
                      "private-osc-endpoint-secret",
                      "private-avatar-value-secret",
+                     "private-health-endpoint-secret",
+                     "private-audio-samples-secret",
                      "bearer-token-secret",
                      "credential-secret",
                      "world-secret",
@@ -252,7 +267,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         var lines = diagnostics.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(10, lines.Length);
+        Assert.Equal(11, lines.Length);
         Assert.All(lines, line => JsonDocument.Parse(line).Dispose());
     }
 
