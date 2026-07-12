@@ -299,4 +299,5 @@
     <system:String x:Key="Setup_Step_LocalizationAccessibility_Body">Check Japanese and English, tooltips, accessible names, 200 percent text expansion, and high contrast.</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Title">Verify design assets</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Body">Authenticate the Material Symbols asset and Material 3 conformance manifest hashes.</system:String>
+    <system:String x:Key="Setup_Persistence_Error">First-run setup remains incomplete because its progress could not be read.</system:String>
 </ResourceDictionary>

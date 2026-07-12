@@ -299,4 +299,5 @@
     <system:String x:Key="Setup_Step_LocalizationAccessibility_Body">⟦Chëck Jápánësë ánd Ënglïsh, tööltïps, áccëssïblë námës, 200 përcënt tëxt ëxpánsïön, ánd hïgh cöntrást. · Chëck Jápánësë ánd Ënglïsh, tööltïps, áccëssïblë námës, 200 përcënt tëxt ëxpánsïön, ánd hïgh cöntrást.⟧</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Title">⟦Vërïfy dësïgn ássëts · Vërïfy dësïgn ássëts⟧</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Body">⟦Áüthëntïcátë thë Mátërïál Symböls ássët ánd Mátërïál 3 cönförmáncë mánïfëst háshës. · Áüthëntïcátë thë Mátërïál Symböls ássët ánd Mátërïál 3 cönförmáncë mánïfëst háshës.⟧</system:String>
+    <system:String x:Key="Setup_Persistence_Error">⟦Fïrst-rün sëtüp rëmáïns ïncömplëtë bëcáüsë ïts prögrëss cöüld nöt bë rëád. · Fïrst-rün sëtüp rëmáïns ïncömplëtë bëcáüsë ïts prögrëss cöüld nöt bë rëád.⟧</system:String>
 </ResourceDictionary>

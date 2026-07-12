@@ -299,4 +299,5 @@
     <system:String x:Key="Setup_Step_LocalizationAccessibility_Body">日本語と英語、tooltip、accessible name、200% text expansion、high contrastを確認します。</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Title">design assetを検証</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Body">Material Symbols assetとMaterial 3 conformance manifestのhashを認証します。</system:String>
+    <system:String x:Key="Setup_Persistence_Error">進捗を読み取れなかったため、初回セットアップは未完了のままです。</system:String>
 </ResourceDictionary>

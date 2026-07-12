@@ -129,6 +129,33 @@ public partial class MainWindow : Window
         if (startup.State == RecorderState.Ready &&
             activation.State == DesktopRecordingHostState.Ready)
         {
+            try
+            {
+                var setup = await App.FirstRunSetupUi.LoadAsync(
+                    CancellationToken.None);
+                if (setup.RequiresSetup)
+                {
+                    var setupWindow = new FirstRunSetupWindow
+                    {
+                        Owner = this,
+                    };
+                    setupWindow.ShowDialog();
+                    setup = await App.FirstRunSetupUi.LoadAsync(
+                        CancellationToken.None);
+                    if (setup.RequiresSetup)
+                    {
+                        ApplyStartupResult(startup, activation);
+                        return;
+                    }
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                ApplySetupPersistenceError();
+                return;
+            }
+
             bool rightsAcknowledged;
             try
             {
@@ -183,6 +210,17 @@ public partial class MainWindow : Window
         RecordingStatusText.SetResourceReference(
             AutomationProperties.NameProperty,
             "Rights_Persistence_Error");
+    }
+
+    private void ApplySetupPersistenceError()
+    {
+        RecordingToggleButton.IsEnabled = false;
+        RecordingStatusText.SetResourceReference(
+            TextBlock.TextProperty,
+            "Setup_Persistence_Error");
+        RecordingStatusText.SetResourceReference(
+            AutomationProperties.NameProperty,
+            "Setup_Persistence_Error");
     }
 
     protected override void OnClosed(EventArgs e)
