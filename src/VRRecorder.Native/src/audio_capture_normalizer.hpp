@@ -67,6 +67,10 @@ private:
         std::size_t channel_index,
         float &left,
         float &right) noexcept;
+    static bool TryDecodeSample(
+        const CapturePcmFormat &format,
+        const std::byte *bytes,
+        float &sample) noexcept;
     static bool TryScaleRound(
         std::uint64_t value,
         std::uint64_t numerator,

@@ -147,19 +147,11 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                         frame * format.block_align +
                         source_channel * bytes_per_sample;
                     float sample = 0.0F;
-                    if (format.encoding ==
-                        CaptureSampleEncoding::IeeeFloat) {
-                        std::memcpy(
-                            &sample,
+                    if (!TryDecodeSample(
+                            format,
                             sample_bytes,
-                            sizeof(float));
-                        if (!std::isfinite(sample)) {
-                            return CaptureNormalizationResult::InvalidPacket;
-                        }
-                    } else {
-                        std::int16_t pcm = 0;
-                        std::memcpy(&pcm, sample_bytes, sizeof(pcm));
-                        sample = static_cast<float>(pcm) / 32768.0F;
+                            sample)) {
+                        return CaptureNormalizationResult::InvalidPacket;
                     }
 
                     if (format.channel_count == 1) {
@@ -272,7 +264,8 @@ bool StereoCaptureNormalizer48k::IsFormatSupported(
         (format.encoding == CaptureSampleEncoding::IeeeFloat &&
          format.container_bits == 32 && format.valid_bits == 32) ||
         (format.encoding == CaptureSampleEncoding::PcmSignedInteger &&
-         format.container_bits == 16 && format.valid_bits == 16);
+         ((format.container_bits == 16 && format.valid_bits == 16) ||
+          (format.container_bits == 24 && format.valid_bits == 24)));
     return encoding_supported && format.container_bits % 8U == 0 &&
            format.block_align == bytes_per_sample * format.channel_count;
 }
@@ -348,6 +341,41 @@ bool StereoCaptureNormalizer48k::TryGetStereoGains(
     default:
         return false;
     }
+}
+
+bool StereoCaptureNormalizer48k::TryDecodeSample(
+    const CapturePcmFormat &format,
+    const std::byte *bytes,
+    float &sample) noexcept
+{
+    if (format.encoding == CaptureSampleEncoding::IeeeFloat) {
+        std::memcpy(&sample, bytes, sizeof(float));
+        return std::isfinite(sample);
+    }
+
+    if (format.container_bits == 16 && format.valid_bits == 16) {
+        std::int16_t pcm = 0;
+        std::memcpy(&pcm, bytes, sizeof(pcm));
+        sample = static_cast<float>(pcm) / 32768.0F;
+        return true;
+    }
+
+    if (format.container_bits == 24 && format.valid_bits == 24) {
+        auto pcm = static_cast<std::int32_t>(
+            std::to_integer<std::uint8_t>(bytes[0]) |
+            (static_cast<std::uint32_t>(
+                 std::to_integer<std::uint8_t>(bytes[1])) << 8U) |
+            (static_cast<std::uint32_t>(
+                 std::to_integer<std::uint8_t>(bytes[2])) << 16U));
+        if ((pcm & 0x0080'0000) != 0) {
+            pcm |= static_cast<std::int32_t>(0xff00'0000U);
+        }
+
+        sample = static_cast<float>(pcm) / 8388608.0F;
+        return true;
+    }
+
+    return false;
 }
 
 bool StereoCaptureNormalizer48k::TryScaleRound(
