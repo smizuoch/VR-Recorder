@@ -28,12 +28,17 @@ public:
 
     vrrec_status_t Start(
         const AudioCaptureSourceConfig &config) noexcept;
+    vrrec_status_t StartRecovery(
+        const AudioCaptureSourceConfig &config) noexcept;
     AudioCapturePumpResult PumpOne() noexcept;
     void Abort() noexcept;
 
 private:
     AudioCapturePumpResult AcceptPacket(
         const CapturedStereoPacket48k &packet) noexcept;
+    vrrec_status_t StartCore(
+        const AudioCaptureSourceConfig &config,
+        bool recovering) noexcept;
     static AudioCapturePumpResult MapTimelineResult(
         AudioTimelineResult result) noexcept;
 
@@ -42,6 +47,7 @@ private:
     std::vector<float> silent_samples_;
     std::atomic_bool aborted_ = false;
     bool started_ = false;
+    bool recovering_ = false;
 };
 
 }

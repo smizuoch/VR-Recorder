@@ -15,6 +15,19 @@ AudioCapturePump::AudioCapturePump(
 vrrec_status_t AudioCapturePump::Start(
     const AudioCaptureSourceConfig &config) noexcept
 {
+    return StartCore(config, false);
+}
+
+vrrec_status_t AudioCapturePump::StartRecovery(
+    const AudioCaptureSourceConfig &config) noexcept
+{
+    return StartCore(config, true);
+}
+
+vrrec_status_t AudioCapturePump::StartCore(
+    const AudioCaptureSourceConfig &config,
+    bool recovering) noexcept
+{
     if (started_ || aborted_.load()) {
         return VRREC_STATUS_INVALID_STATE;
     }
@@ -31,6 +44,7 @@ vrrec_status_t AudioCapturePump::Start(
     }
 
     started_ = true;
+    recovering_ = recovering;
     return VRREC_STATUS_OK;
 }
 
@@ -112,7 +126,19 @@ AudioCapturePumpResult AudioCapturePump::AcceptPacket(
         samples = packet.interleaved_samples;
     }
 
-    return MapTimelineResult(timeline_.Push({
+    auto recovery_applied = false;
+    if (recovering_) {
+        const auto availability = MapTimelineResult(
+            timeline_.SetAvailable(true, packet.start_frame_48k));
+        if (availability != AudioCapturePumpResult::PacketAccepted) {
+            return availability;
+        }
+
+        recovering_ = false;
+        recovery_applied = true;
+    }
+
+    const auto result = MapTimelineResult(timeline_.Push({
         packet.start_frame_48k,
         {
             packet.device_position,
@@ -122,6 +148,12 @@ AudioCapturePumpResult AudioCapturePump::AcceptPacket(
         samples,
         packet.discontinuity,
     }));
+    if (result != AudioCapturePumpResult::PacketAccepted &&
+        recovery_applied) {
+        timeline_.Abort();
+    }
+
+    return result;
 }
 
 AudioCapturePumpResult AudioCapturePump::MapTimelineResult(
