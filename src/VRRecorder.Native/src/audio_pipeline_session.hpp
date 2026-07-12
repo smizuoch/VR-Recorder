@@ -15,7 +15,22 @@ struct StereoAudioPipelineStatistics final {
     std::uint64_t muxed_packet_count;
 };
 
-class StereoAudioPipelineSession final {
+class StereoAudioPipelineSessionPort {
+public:
+    virtual ~StereoAudioPipelineSessionPort() = default;
+    virtual vrrec_status_t Start(
+        const StereoAudioCaptureSessionConfig &config,
+        std::size_t encoding_frame_count_48k) noexcept = 0;
+    virtual vrrec_status_t SetRouting(
+        vrrec_audio_routing_t routing) noexcept = 0;
+    virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void Abort() noexcept = 0;
+    virtual StereoAudioEncodingWorkerResult Join() noexcept = 0;
+    virtual StereoAudioPipelineStatistics Statistics() const noexcept = 0;
+};
+
+class StereoAudioPipelineSession final
+    : public StereoAudioPipelineSessionPort {
 public:
     StereoAudioPipelineSession(
         StereoAudioCaptureSessionPort &capture,
@@ -28,13 +43,13 @@ public:
 
     vrrec_status_t Start(
         const StereoAudioCaptureSessionConfig &config,
-        std::size_t encoding_frame_count_48k) noexcept;
+        std::size_t encoding_frame_count_48k) noexcept override;
     vrrec_status_t SetRouting(
-        vrrec_audio_routing_t routing) noexcept;
-    vrrec_status_t RequestStop() noexcept;
-    void Abort() noexcept;
-    StereoAudioEncodingWorkerResult Join() noexcept;
-    StereoAudioPipelineStatistics Statistics() const noexcept;
+        vrrec_audio_routing_t routing) noexcept override;
+    vrrec_status_t RequestStop() noexcept override;
+    void Abort() noexcept override;
+    StereoAudioEncodingWorkerResult Join() noexcept override;
+    StereoAudioPipelineStatistics Statistics() const noexcept override;
 
 private:
     StereoAudioCaptureSessionPort &capture_;

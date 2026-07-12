@@ -4,6 +4,7 @@ add_library(vrrecorder_native SHARED
     src/av_sync_media_event_adapter.cpp
     src/media_mux_pipeline.cpp
     src/media_recording_session.cpp
+    src/media_stream_pipeline_adapters.cpp
     src/audio_encoder_config.cpp
     src/fragmented_mp4_mux_coordinator.cpp
     src/muxing_video_encoder_sink.cpp

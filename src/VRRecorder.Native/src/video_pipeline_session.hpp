@@ -19,7 +19,18 @@ enum class VideoPipelineResult {
     Failed,
 };
 
-class VideoPipelineSession final {
+class VideoPipelineSessionPort {
+public:
+    virtual ~VideoPipelineSessionPort() = default;
+    virtual vrrec_status_t Start(
+        std::chrono::milliseconds poll_timeout) noexcept = 0;
+    virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void Abort() noexcept = 0;
+    virtual VideoPipelineResult Join() noexcept = 0;
+    virtual VideoEncodingStatistics Statistics() const noexcept = 0;
+};
+
+class VideoPipelineSession final : public VideoPipelineSessionPort {
 public:
     VideoPipelineSession(
         SpoutCaptureWorkerPort &capture,
@@ -31,11 +42,11 @@ public:
     VideoPipelineSession &operator=(const VideoPipelineSession &) = delete;
 
     vrrec_status_t Start(
-        std::chrono::milliseconds poll_timeout) noexcept;
-    vrrec_status_t RequestStop() noexcept;
-    void Abort() noexcept;
-    VideoPipelineResult Join() noexcept;
-    VideoEncodingStatistics Statistics() const noexcept;
+        std::chrono::milliseconds poll_timeout) noexcept override;
+    vrrec_status_t RequestStop() noexcept override;
+    void Abort() noexcept override;
+    VideoPipelineResult Join() noexcept override;
+    VideoEncodingStatistics Statistics() const noexcept override;
 
 private:
     SpoutCaptureWorkerPort &capture_;
