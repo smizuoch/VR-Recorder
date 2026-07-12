@@ -5,6 +5,8 @@ using VRRecorder.Compliance.Dependencies;
 namespace VRRecorder.Compliance.Repository;
 
 internal sealed record NativeArtifactRegistry(
+    int SchemaVersion,
+    int RegistryVersion,
     IReadOnlySet<string> ComponentIds,
     IReadOnlyList<RegisteredNativeComponent> Components,
     IReadOnlyList<RegisteredNativeArtifact> Artifacts);
@@ -30,6 +32,12 @@ internal static class NativeArtifactRegistryReader
     {
         var path = Path.Combine(root, "third-party", "registry.yml");
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+        var schemaVersion = OptionalInt32(
+            document.RootElement,
+            "schemaVersion");
+        var registryVersion = OptionalInt32(
+            document.RootElement,
+            "registryVersion");
         var componentIds = new HashSet<string>(StringComparer.Ordinal);
         var components = new List<RegisteredNativeComponent>();
         var artifacts = new List<RegisteredNativeArtifact>();
@@ -79,7 +87,12 @@ internal static class NativeArtifactRegistryReader
             }
         }
 
-        return new NativeArtifactRegistry(componentIds, components, artifacts);
+        return new NativeArtifactRegistry(
+            schemaVersion,
+            registryVersion,
+            componentIds,
+            components,
+            artifacts);
     }
 
     public static ComplianceIssue? ValidateDependency(
@@ -175,6 +188,14 @@ internal static class NativeArtifactRegistryReader
         var value = property.GetString();
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
+
+    private static int OptionalInt32(
+        JsonElement element,
+        string propertyName) =>
+        element.TryGetProperty(propertyName, out var property) &&
+        property.TryGetInt32(out var value)
+            ? value
+            : 0;
 
     private static bool TryResolveRepositoryPath(
         string root,

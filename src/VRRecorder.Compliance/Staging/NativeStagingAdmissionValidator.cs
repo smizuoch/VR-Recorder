@@ -153,6 +153,14 @@ internal static class NativeStagingAdmissionValidator
             return Order(issues);
         }
 
+        if (registry.SchemaVersion != 1 || registry.RegistryVersion < 1)
+        {
+            issues.Add(new ComplianceIssue(
+                "invalid-native-artifact-registry",
+                repositoryRoot));
+            return Order(issues);
+        }
+
         foreach (var componentId in admittedCandidates
                      .Select(candidate => candidate.Registration.ComponentId)
                      .Distinct(StringComparer.Ordinal))
