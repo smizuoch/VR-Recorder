@@ -9,7 +9,7 @@ LDFLAGS := --coverage -pthread
 
 .PHONY: all clean test export-check cmake-contract-sync managed-fixture
 
-all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_capture_session_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/audio_encoding_pump_tests $(BUILD_DIR)/audio_media_event_adapter_tests $(BUILD_DIR)/c_header_smoke.o
+all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_capture_session_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/audio_encoding_pump_tests $(BUILD_DIR)/audio_encoding_worker_tests $(BUILD_DIR)/audio_media_event_adapter_tests $(BUILD_DIR)/c_header_smoke.o
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -53,6 +53,9 @@ $(BUILD_DIR)/audio_mix_coordinator_tests: audio_mix_coordinator_tests.cpp $(NATI
 $(BUILD_DIR)/audio_encoding_pump_tests: audio_encoding_pump_tests.cpp $(NATIVE_ROOT)/src/audio_encoding_pump.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
+$(BUILD_DIR)/audio_encoding_worker_tests: audio_encoding_worker_tests.cpp $(NATIVE_ROOT)/src/audio_encoding_worker.cpp $(NATIVE_ROOT)/src/audio_encoding_pump.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 $(BUILD_DIR)/audio_media_event_adapter_tests: audio_media_event_adapter_tests.cpp $(NATIVE_ROOT)/src/audio_media_event_adapter.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
@@ -86,6 +89,7 @@ test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/audio_capture_session_tests
 	$(BUILD_DIR)/audio_mix_coordinator_tests
 	$(BUILD_DIR)/audio_encoding_pump_tests
+	$(BUILD_DIR)/audio_encoding_worker_tests
 	$(BUILD_DIR)/audio_media_event_adapter_tests
 
 clean:
