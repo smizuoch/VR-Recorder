@@ -25,6 +25,10 @@ internal enum NativeEventKind : uint
     MicrophoneAudioDeviceLost = 6,
     MicrophoneAudioDeviceRecovered = 7,
     AudioVideoDriftExceeded = 8,
+    DesktopAudioBufferUnderrun = 9,
+    DesktopAudioBufferOverrun = 10,
+    MicrophoneAudioBufferUnderrun = 11,
+    MicrophoneAudioBufferOverrun = 12,
 }
 
 internal enum NativeEncoderKind : uint

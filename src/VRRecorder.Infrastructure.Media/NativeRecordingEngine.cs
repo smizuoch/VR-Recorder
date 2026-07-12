@@ -104,7 +104,8 @@ public sealed class NativeRecordingEngine
             },
             AudioWarning: PublishAudioBestEffort,
             AudioStatus: PublishAudioBestEffort,
-            AvDrift: PublishAvDriftBestEffort);
+            AvDrift: PublishAvDriftBestEffort,
+            AudioBufferHealth: PublishAudioBufferHealthBestEffort);
         var session = await _backend
             .OpenAsync(
                 plan,
@@ -318,6 +319,19 @@ public sealed class NativeRecordingEngine
         catch (Exception)
         {
             // Diagnostics cannot interrupt an active recording.
+        }
+    }
+
+    private void PublishAudioBufferHealthBestEffort(
+        RecordingAudioBufferHealthEvent health)
+    {
+        try
+        {
+            _mediaEvents.Publish(health);
+        }
+        catch (Exception)
+        {
+            // Diagnostics cannot change a native callback outcome.
         }
     }
 

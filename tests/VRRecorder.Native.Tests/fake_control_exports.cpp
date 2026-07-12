@@ -89,6 +89,21 @@ extern "C" VRREC_TEST_API void vrrec_test_emit_av_drift(
         audio_pts_microseconds);
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_emit_audio_buffer_health(
+    std::uint32_t role,
+    std::uint32_t health,
+    std::uint64_t frame_position)
+{
+    vrrecorder::native::testing::EmitAudioBufferHealth(
+        role == 0
+            ? vrrecorder::native::AudioEndpointRole::Desktop
+            : vrrecorder::native::AudioEndpointRole::Microphone,
+        health == 0
+            ? vrrecorder::native::AudioBufferHealth::Underrun
+            : vrrecorder::native::AudioBufferHealth::Overrun,
+        frame_position);
+}
+
 extern "C" VRREC_TEST_API void
 vrrec_test_set_desktop_audio_endpoint_available(
     std::uint8_t available,

@@ -7,4 +7,5 @@ public sealed record NativeRecordingCallbacks(
     Action<NativeRecordingFault> Faulted,
     Action<AudioSessionWarning>? AudioWarning = null,
     Action<AudioSessionStatus>? AudioStatus = null,
-    Action<NativeAvDriftEvent>? AvDrift = null);
+    Action<NativeAvDriftEvent>? AvDrift = null,
+    Action<RecordingAudioBufferHealthEvent>? AudioBufferHealth = null);

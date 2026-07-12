@@ -1,4 +1,5 @@
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Audio;
 
 namespace VRRecorder.Application.Ports;
 
@@ -13,6 +14,10 @@ public interface IRecordingMediaEventSink
     }
 
     void Publish(RecordingEnvironmentSnapshot environment)
+    {
+    }
+
+    void Publish(RecordingAudioBufferHealthEvent health)
     {
     }
 }

@@ -33,6 +33,7 @@ internal sealed class NativeCallbackState
         AudioSessionStatus? audioStatus = null;
         AudioSessionWarning? audioWarning = null;
         NativeAvDriftEvent? avDrift = null;
+        RecordingAudioBufferHealthEvent? audioBufferHealth = null;
         NativeRecordingFault? fault = null;
         RecordingStopResult? stopped = null;
         lock (_gate)
@@ -91,6 +92,30 @@ internal sealed class NativeCallbackState
                 case NativeEventKind.AudioVideoDriftExceeded:
                     avDrift = CreateAvDrift(nativeEvent);
                     break;
+                case NativeEventKind.DesktopAudioBufferUnderrun:
+                    audioBufferHealth = CreateAudioBufferHealth(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Desktop,
+                        AudioBufferHealthKind.Underrun);
+                    break;
+                case NativeEventKind.DesktopAudioBufferOverrun:
+                    audioBufferHealth = CreateAudioBufferHealth(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Desktop,
+                        AudioBufferHealthKind.Overrun);
+                    break;
+                case NativeEventKind.MicrophoneAudioBufferUnderrun:
+                    audioBufferHealth = CreateAudioBufferHealth(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Microphone,
+                        AudioBufferHealthKind.Underrun);
+                    break;
+                case NativeEventKind.MicrophoneAudioBufferOverrun:
+                    audioBufferHealth = CreateAudioBufferHealth(
+                        nativeEvent,
+                        Domain.Audio.AudioInput.Microphone,
+                        AudioBufferHealthKind.Overrun);
+                    break;
                 default:
                     return;
             }
@@ -114,6 +139,11 @@ internal sealed class NativeCallbackState
         if (avDrift is not null)
         {
             _callbacks.AvDrift?.Invoke(avDrift);
+        }
+
+        if (audioBufferHealth is not null)
+        {
+            _callbacks.AudioBufferHealth?.Invoke(audioBufferHealth);
         }
 
         if (stopped is not null)
@@ -153,6 +183,17 @@ internal sealed class NativeCallbackState
         nativeEvent.VideoPacketCount == 0 &&
         nativeEvent.MessageUtf8 == 0 &&
         nativeEvent.AudioPacketCount <= long.MaxValue;
+
+    private static RecordingAudioBufferHealthEvent? CreateAudioBufferHealth(
+        NativeEventV1 nativeEvent,
+        Domain.Audio.AudioInput input,
+        AudioBufferHealthKind kind) =>
+        HasValidAudioPayload(nativeEvent)
+            ? new RecordingAudioBufferHealthEvent(
+                input,
+                kind,
+                checked((long)nativeEvent.AudioPacketCount))
+            : null;
 
     private static NativeAvDriftEvent? CreateAvDrift(
         NativeEventV1 nativeEvent)
