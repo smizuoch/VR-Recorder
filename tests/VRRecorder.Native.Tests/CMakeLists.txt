@@ -315,6 +315,26 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_audio_encoding_worker)
 
 add_executable(
+    vrrecorder_native_audio_pipeline_session
+    audio_pipeline_session_tests.cpp
+    "${native_source_root}/src/audio_pipeline_session.cpp"
+    "${native_source_root}/src/audio_encoding_worker.cpp"
+    "${native_source_root}/src/audio_encoding_pump.cpp")
+target_compile_features(
+    vrrecorder_native_audio_pipeline_session PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_pipeline_session
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_audio_pipeline_session
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_audio_pipeline_session)
+
+add_executable(
     vrrecorder_native_audio_media_event_adapter
     audio_media_event_adapter_tests.cpp
     "${native_source_root}/src/audio_media_event_adapter.cpp")
@@ -360,6 +380,8 @@ add_test(NAME vrrecorder_native_audio_encoding_pump
     COMMAND vrrecorder_native_audio_encoding_pump)
 add_test(NAME vrrecorder_native_audio_encoding_worker
     COMMAND vrrecorder_native_audio_encoding_worker)
+add_test(NAME vrrecorder_native_audio_pipeline_session
+    COMMAND vrrecorder_native_audio_pipeline_session)
 add_test(NAME vrrecorder_native_audio_media_event_adapter
     COMMAND vrrecorder_native_audio_media_event_adapter)
 add_test(NAME vrrecorder_native_exports
