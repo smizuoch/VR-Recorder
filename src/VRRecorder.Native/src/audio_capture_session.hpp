@@ -44,7 +44,7 @@ public:
         StereoAudioMixRead &read) noexcept override;
     vrrec_status_t SetRouting(
         vrrec_audio_routing_t routing) noexcept;
-    void Abort() noexcept;
+    void Abort() noexcept override;
 
 private:
     StereoCaptureTimeline desktop_timeline_;

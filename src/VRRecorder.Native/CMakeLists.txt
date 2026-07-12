@@ -8,6 +8,7 @@ add_library(vrrecorder_native SHARED
     src/audio_capture_pump.cpp
     src/audio_capture_timeline.cpp
     src/audio_encoding_pump.cpp
+    src/audio_encoding_worker.cpp
     src/audio_media_event_adapter.cpp
     src/audio_mix_coordinator.cpp
     src/audio_mixer.cpp

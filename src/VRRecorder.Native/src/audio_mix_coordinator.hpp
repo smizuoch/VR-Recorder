@@ -37,6 +37,7 @@ public:
         std::size_t frame_count_48k,
         std::span<float> output_interleaved,
         StereoAudioMixRead &read) noexcept = 0;
+    virtual void Abort() noexcept = 0;
 };
 
 class StereoAudioMixCoordinator final : public StereoAudioMixSource {
@@ -50,7 +51,7 @@ public:
         std::size_t frame_count_48k,
         std::span<float> output_interleaved,
         StereoAudioMixRead &read) noexcept override;
-    void Abort() noexcept;
+    void Abort() noexcept override;
 
 private:
     static StereoAudioMixResult MapTimelineResult(

@@ -23,6 +23,8 @@ public:
     virtual StereoAudioEncoderWrite WritePcm48k(
         std::uint64_t start_frame_48k,
         std::span<const float> interleaved_samples) noexcept = 0;
+    virtual StereoAudioEncoderWrite Finish() noexcept = 0;
+    virtual void Abort() noexcept = 0;
 };
 
 enum class StereoAudioEncodingResult {

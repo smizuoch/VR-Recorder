@@ -51,10 +51,16 @@ public:
         return script.result;
     }
 
+    void Abort() noexcept override
+    {
+        ++abort_calls;
+    }
+
     std::vector<ScriptedMix> scripts;
     std::vector<std::size_t> requested_frame_counts;
     std::size_t next = 0;
     std::size_t calls = 0;
+    std::size_t abort_calls = 0;
 };
 
 struct SinkCall final {
@@ -77,8 +83,21 @@ public:
         return next_write;
     }
 
+    StereoAudioEncoderWrite Finish() noexcept override
+    {
+        ++finish_calls;
+        return {VRREC_STATUS_OK, 0};
+    }
+
+    void Abort() noexcept override
+    {
+        ++abort_calls;
+    }
+
     StereoAudioEncoderWrite next_write {VRREC_STATUS_OK, 0};
     std::vector<SinkCall> calls;
+    std::size_t finish_calls = 0;
+    std::size_t abort_calls = 0;
 };
 
 StereoAudioMixRead Read(
