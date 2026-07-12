@@ -629,6 +629,37 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void FirstRunSetupWindowRunsTheComposedProbeBeforeAdvancing()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var setupWindow = LoadRequiredXaml(
+            appDirectory,
+            "FirstRunSetupWindow.xaml");
+        var verifyButton = Assert.Single(
+            setupWindow.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnVerify");
+        Assert.Equal(
+            "{DynamicResource Setup_Verify_AccessibleName}",
+            verifyButton.Attribute("AutomationProperties.Name")?.Value);
+
+        var windowCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "FirstRunSetupWindow.xaml.cs"));
+        Assert.Contains("FirstRunSetupVerificationController", windowCode);
+        Assert.Contains("VerifyCurrentAsync", windowCode);
+        Assert.Contains("result.Succeeded", windowCode);
+
+        var appCode = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "App.xaml.cs"));
+        Assert.Contains("WindowsSteamVrInstallationProbe", appCode);
+        Assert.Contains("FirstRunSetupVerificationController", appCode);
+    }
+
+    [Fact]
     public void DesktopProductionFactoryRecoversStaleCameraLeaseBeforeMediaPreflight()
     {
         var appDirectory = Path.Combine(
