@@ -2,6 +2,7 @@ add_library(vrrecorder_native SHARED
     src/abi.cpp
     src/av_sync_monitor.cpp
     src/av_sync_media_event_adapter.cpp
+    src/media_mux_pipeline.cpp
     src/audio_encoder_config.cpp
     src/fragmented_mp4_mux_coordinator.cpp
     src/muxing_video_encoder_sink.cpp
