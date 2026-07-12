@@ -425,6 +425,24 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_video_encoder_config)
 
 add_executable(
+    vrrecorder_native_fragmented_mp4_mux_coordinator
+    fragmented_mp4_mux_coordinator_tests.cpp
+    "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp")
+target_compile_features(
+    vrrecorder_native_fragmented_mp4_mux_coordinator PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_fragmented_mp4_mux_coordinator
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_fragmented_mp4_mux_coordinator
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_fragmented_mp4_mux_coordinator)
+
+add_executable(
     vrrecorder_native_video_processing_encoder_sink
     video_processing_encoder_sink_tests.cpp
     "${native_source_root}/src/video_processing_encoder_sink.cpp"
@@ -577,6 +595,8 @@ add_test(NAME vrrecorder_native_video_processing_plan
     COMMAND vrrecorder_native_video_processing_plan)
 add_test(NAME vrrecorder_native_video_encoder_config
     COMMAND vrrecorder_native_video_encoder_config)
+add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator
+    COMMAND vrrecorder_native_fragmented_mp4_mux_coordinator)
 add_test(NAME vrrecorder_native_video_processing_encoder_sink
     COMMAND vrrecorder_native_video_processing_encoder_sink)
 add_test(NAME vrrecorder_native_video_encoding_pump
