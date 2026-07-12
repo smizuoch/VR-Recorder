@@ -1413,6 +1413,8 @@ public sealed class WpfHostProjectContractTests
                      "EncoderComboBox",
                      "QualityPresetComboBox",
                      "AudioRoutingComboBox",
+                     "DesktopEndpointComboBox",
+                     "MicrophoneEndpointComboBox",
                  })
         {
             var combo = Assert.Single(
@@ -1424,6 +1426,10 @@ public sealed class WpfHostProjectContractTests
                 combo.Attribute("SelectionChanged")?.Value);
             Assert.NotNull(combo.Attribute("AutomationProperties.Name"));
             Assert.NotNull(combo.Attribute("AutomationProperties.HelpText"));
+            if (comboName.EndsWith("EndpointComboBox", StringComparison.Ordinal))
+            {
+                Assert.Equal("True", combo.Attribute("IsEditable")?.Value);
+            }
         }
 
         foreach (var sliderName in new[]
@@ -1525,6 +1531,10 @@ public sealed class WpfHostProjectContractTests
                          "Settings_Audio_Heading",
                          "Settings_AudioRouting_Label",
                          "Settings_AudioRouting_Tooltip",
+                         "Settings_DesktopEndpoint_Label",
+                         "Settings_DesktopEndpoint_Tooltip",
+                         "Settings_MicrophoneEndpoint_Label",
+                         "Settings_MicrophoneEndpoint_Tooltip",
                          "Settings_DesktopGain_Label",
                          "Settings_DesktopGain_Tooltip",
                          "Settings_MicrophoneGain_Label",
