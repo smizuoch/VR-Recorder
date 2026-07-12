@@ -300,4 +300,10 @@
     <system:String x:Key="Setup_Step_DesignAssetConformance_Title">design assetを検証</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Body">Material Symbols assetとMaterial 3 conformance manifestのhashを認証します。</system:String>
     <system:String x:Key="Setup_Persistence_Error">進捗を読み取れなかったため、初回セットアップは未完了のままです。</system:String>
+    <system:String x:Key="Setup_Verify_Label">検証</system:String>
+    <system:String x:Key="Setup_Verify_AccessibleName">現在のセットアップ項目を検証</system:String>
+    <system:String x:Key="Setup_Verify_Tooltip">このセットアップ項目の信頼済みプローブを実行します</system:String>
+    <system:String x:Key="Setup_Verifying">このセットアップ項目を検証しています。</system:String>
+    <system:String x:Key="Setup_Verification_Succeeded">検証に成功しました。次の確認へ進みます。</system:String>
+    <system:String x:Key="Setup_Verification_Failed">検証に成功しませんでした。要件を解決して再試行してください。</system:String>
 </ResourceDictionary>

@@ -39,6 +39,8 @@ public partial class App
     private readonly JsonFileFirstRunSetupStore _firstRunSetupStore;
     private readonly FirstRunSetupController _firstRunSetup;
     private readonly FirstRunSetupUiController _firstRunSetupUi;
+    private readonly FirstRunSetupVerificationController
+        _firstRunSetupVerification;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
     private IDisposable? _trayNotificationSubscription;
@@ -88,6 +90,10 @@ public partial class App
             FirstRunSetupPath(settingsPath));
         _firstRunSetup = new FirstRunSetupController(_firstRunSetupStore);
         _firstRunSetupUi = new FirstRunSetupUiController(_firstRunSetup);
+        _firstRunSetupVerification =
+            new FirstRunSetupVerificationController(
+                _firstRunSetup,
+                new WindowsSteamVrInstallationProbe());
         _legalController = new DesktopLegalController(
             new AuthenticatedLegalCatalogReader(
                 AppContext.BaseDirectory,
@@ -134,6 +140,10 @@ public partial class App
 
     internal static FirstRunSetupUiController FirstRunSetupUi =>
         ((App)Current)._firstRunSetupUi;
+
+    internal static FirstRunSetupVerificationController
+        FirstRunSetupVerification =>
+        ((App)Current)._firstRunSetupVerification;
 
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;

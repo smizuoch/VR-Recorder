@@ -9,17 +9,22 @@ namespace VRRecorder.App;
 public partial class FirstRunSetupWindow : Window
 {
     private readonly FirstRunSetupUiController _controller;
+    private readonly FirstRunSetupVerificationController _verification;
     private bool _loaded;
 
     public FirstRunSetupWindow()
-        : this(App.FirstRunSetupUi)
+        : this(App.FirstRunSetupUi, App.FirstRunSetupVerification)
     {
     }
 
-    internal FirstRunSetupWindow(FirstRunSetupUiController controller)
+    internal FirstRunSetupWindow(
+        FirstRunSetupUiController controller,
+        FirstRunSetupVerificationController verification)
     {
         ArgumentNullException.ThrowIfNull(controller);
+        ArgumentNullException.ThrowIfNull(verification);
         _controller = controller;
+        _verification = verification;
         InitializeComponent();
     }
 
@@ -32,6 +37,11 @@ public partial class FirstRunSetupWindow : Window
 
         _loaded = true;
         var view = await _controller.LoadAsync(CancellationToken.None);
+        Apply(view);
+    }
+
+    private void Apply(FirstRunSetupUiSnapshot view)
+    {
         if (!view.RequiresSetup)
         {
             DialogResult = true;
@@ -56,6 +66,39 @@ public partial class FirstRunSetupWindow : Window
             Resource("Setup_Progress_Format"),
             view.StepNumber,
             view.TotalSteps);
+    }
+
+    private async void OnVerify(object sender, RoutedEventArgs e)
+    {
+        VerifySetupButton.IsEnabled = false;
+        ApplyStatus("Setup_Verifying");
+        try
+        {
+            var result = await _verification.VerifyCurrentAsync(
+                CancellationToken.None);
+            ApplyStatus(result.Succeeded
+                ? "Setup_Verification_Succeeded"
+                : "Setup_Verification_Failed");
+            if (result.Succeeded)
+            {
+                Apply(await _controller.LoadAsync(CancellationToken.None));
+            }
+        }
+        finally
+        {
+            VerifySetupButton.IsEnabled = true;
+        }
+    }
+
+    private void ApplyStatus(string resourceKey)
+    {
+        SetupVerificationStatusText.SetResourceReference(
+            TextBlock.TextProperty,
+            resourceKey);
+        SetupVerificationStatusText.SetResourceReference(
+            AutomationProperties.NameProperty,
+            resourceKey);
+        SetupVerificationStatusText.Visibility = Visibility.Visible;
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();

@@ -52,16 +52,33 @@
             <TextBlock Text="{DynamicResource Setup_VerificationPending}"
                        TextWrapping="Wrap"
                        AutomationProperties.Name="{DynamicResource Setup_VerificationPending}" />
-            <Button Margin="0,{StaticResource Spacing.ContentGap},0,0"
-                    HorizontalAlignment="Right"
-                    MinHeight="{StaticResource Interaction.MinimumTarget}"
-                    MinWidth="{StaticResource Interaction.MinimumTarget}"
-                    Content="{DynamicResource Setup_Close_Label}"
-                    AutomationProperties.Name="{DynamicResource Setup_Close_AccessibleName}"
-                    AutomationProperties.HelpText="{DynamicResource Setup_Close_Tooltip}"
-                    ToolTip="{DynamicResource Setup_Close_Tooltip}"
-                    IsCancel="True"
-                    Click="OnClose" />
+            <TextBlock x:Name="SetupVerificationStatusText"
+                       Margin="0,{StaticResource Spacing.ContentGap},0,0"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed"
+                       AutomationProperties.LiveSetting="Assertive" />
+            <StackPanel Margin="0,{StaticResource Spacing.ContentGap},0,0"
+                        HorizontalAlignment="Right"
+                        Orientation="Horizontal">
+                <Button x:Name="VerifySetupButton"
+                        MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        Content="{DynamicResource Setup_Verify_Label}"
+                        AutomationProperties.Name="{DynamicResource Setup_Verify_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Setup_Verify_Tooltip}"
+                        ToolTip="{DynamicResource Setup_Verify_Tooltip}"
+                        IsDefault="True"
+                        Click="OnVerify" />
+                <Border Width="{StaticResource Spacing.LayoutGrid}" />
+                <Button MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        Content="{DynamicResource Setup_Close_Label}"
+                        AutomationProperties.Name="{DynamicResource Setup_Close_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Setup_Close_Tooltip}"
+                        ToolTip="{DynamicResource Setup_Close_Tooltip}"
+                        IsCancel="True"
+                        Click="OnClose" />
+            </StackPanel>
         </StackPanel>
     </Grid>
 </Window>

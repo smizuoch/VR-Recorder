@@ -300,4 +300,10 @@
     <system:String x:Key="Setup_Step_DesignAssetConformance_Title">Verify design assets</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Body">Authenticate the Material Symbols asset and Material 3 conformance manifest hashes.</system:String>
     <system:String x:Key="Setup_Persistence_Error">First-run setup remains incomplete because its progress could not be read.</system:String>
+    <system:String x:Key="Setup_Verify_Label">VERIFY</system:String>
+    <system:String x:Key="Setup_Verify_AccessibleName">Verify the current setup check</system:String>
+    <system:String x:Key="Setup_Verify_Tooltip">Run the trusted probe for this setup check</system:String>
+    <system:String x:Key="Setup_Verifying">Verifying this setup check.</system:String>
+    <system:String x:Key="Setup_Verification_Succeeded">Verification succeeded. Continuing to the next check.</system:String>
+    <system:String x:Key="Setup_Verification_Failed">Verification did not succeed. Resolve the requirement and try again.</system:String>
 </ResourceDictionary>

@@ -300,4 +300,10 @@
     <system:String x:Key="Setup_Step_DesignAssetConformance_Title">⟦Vërïfy dësïgn ássëts · Vërïfy dësïgn ássëts⟧</system:String>
     <system:String x:Key="Setup_Step_DesignAssetConformance_Body">⟦Áüthëntïcátë thë Mátërïál Symböls ássët ánd Mátërïál 3 cönförmáncë mánïfëst háshës. · Áüthëntïcátë thë Mátërïál Symböls ássët ánd Mátërïál 3 cönförmáncë mánïfëst háshës.⟧</system:String>
     <system:String x:Key="Setup_Persistence_Error">⟦Fïrst-rün sëtüp rëmáïns ïncömplëtë bëcáüsë ïts prögrëss cöüld nöt bë rëád. · Fïrst-rün sëtüp rëmáïns ïncömplëtë bëcáüsë ïts prögrëss cöüld nöt bë rëád.⟧</system:String>
+    <system:String x:Key="Setup_Verify_Label">⟦VËRÏFY · VËRÏFY⟧</system:String>
+    <system:String x:Key="Setup_Verify_AccessibleName">⟦Vërïfy thë cürrënt sëtüp chëck · Vërïfy thë cürrënt sëtüp chëck⟧</system:String>
+    <system:String x:Key="Setup_Verify_Tooltip">⟦Rün thë trüstëd pröbë för thïs sëtüp chëck · Rün thë trüstëd pröbë för thïs sëtüp chëck⟧</system:String>
+    <system:String x:Key="Setup_Verifying">⟦Vërïfyïng thïs sëtüp chëck. · Vërïfyïng thïs sëtüp chëck.⟧</system:String>
+    <system:String x:Key="Setup_Verification_Succeeded">⟦Vërïfïcátïön süccëëdëd. Cöntïnüïng tö thë nëxt chëck. · Vërïfïcátïön süccëëdëd. Cöntïnüïng tö thë nëxt chëck.⟧</system:String>
+    <system:String x:Key="Setup_Verification_Failed">⟦Vërïfïcátïön dïd nöt süccëëd. Rësölvë thë rëqüïrëmënt ánd try ágáïn. · Vërïfïcátïön dïd nöt süccëëd. Rësölvë thë rëqüïrëmënt ánd try ágáïn.⟧</system:String>
 </ResourceDictionary>
