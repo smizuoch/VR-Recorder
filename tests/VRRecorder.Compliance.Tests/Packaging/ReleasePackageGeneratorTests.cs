@@ -7,6 +7,12 @@ namespace VRRecorder.Compliance.Tests.Packaging;
 public sealed class ReleasePackageGeneratorTests
 {
     [Fact]
+    public void LowLevelGeneratorIsNotAPublicReleaseSurface()
+    {
+        Assert.False(typeof(ReleasePackageGenerator).IsPublic);
+    }
+
+    [Fact]
     public async Task RegisteredNativeDllWithMatchingHashWritesPackageOnce()
     {
         using var directory = TemporaryDirectory.Create();
