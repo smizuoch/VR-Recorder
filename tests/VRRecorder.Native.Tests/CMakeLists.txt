@@ -352,6 +352,24 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_audio_media_event_adapter)
 
+add_executable(
+    vrrecorder_native_video_cfr_scheduler
+    video_cfr_scheduler_tests.cpp
+    "${native_source_root}/src/video_cfr_scheduler.cpp")
+target_compile_features(
+    vrrecorder_native_video_cfr_scheduler PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_video_cfr_scheduler
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_video_cfr_scheduler
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_video_cfr_scheduler)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -384,6 +402,8 @@ add_test(NAME vrrecorder_native_audio_pipeline_session
     COMMAND vrrecorder_native_audio_pipeline_session)
 add_test(NAME vrrecorder_native_audio_media_event_adapter
     COMMAND vrrecorder_native_audio_media_event_adapter)
+add_test(NAME vrrecorder_native_video_cfr_scheduler
+    COMMAND vrrecorder_native_video_cfr_scheduler)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
