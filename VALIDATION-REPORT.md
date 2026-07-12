@@ -95,6 +95,7 @@ make -C tests/VRRecorder.Native.Tests test
 - 偶数NV12入力、HighからMainへのcapability降格、品質優先VBR、2秒GOP、`width*height*fps*0.14`の8–80 Mbps clampと1.5倍maxrateを整数安全に導出するH.264設定境界
 - AAC-LC、48 kHz、stereo、192 kbpsと既存mixerのFloat32 interleaved source形式を明示し、backend固有sample変換をencoder adapterへ隔離する音声設定境界
 - A/V packetのPTS／DTS／duration／keyframeを直列化し、stream別DTS単調性、1秒以降keyframe優先／2秒上限fragment、graceful fragment→trailer→file flush、Abort時trailer禁止を保証するfMP4 mux coordinator
+- video encoderのbuffering／実packet batchを分離して共通fMP4 timelineへ投入し、mux failureをencoder failureと区別して未commit統計を除外し双方をAbortするsink adapter
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -206,6 +207,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An H.264 configuration boundary that safely derives even NV12 input, High-to-Main capability fallback, quality VBR, a two-second GOP, the clamped 8–80 Mbps `width*height*fps*0.14` target, and a 1.5x maximum rate
 - An audio configuration boundary that fixes AAC-LC, 48 kHz, stereo, 192 kbps, and the mixer's interleaved Float32 source format while isolating backend-specific sample conversion in encoder adapters
 - An fMP4 mux coordinator that serializes A/V packet PTS/DTS/duration/keyframes, enforces per-stream DTS monotonicity, prefers keyframe cuts after one second with a hard two-second fragment limit, orders graceful fragment/trailer/file flush, and forbids trailers after abort
+- A video sink adapter that separates encoder buffering from real packet batches, submits those batches to the shared fMP4 timeline, distinguishes mux from encoder failures, excludes uncommitted statistics, and aborts both sides on failure
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies

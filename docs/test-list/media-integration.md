@@ -20,6 +20,8 @@
 - [x] first packet確定後のmedia profileとgraceful stop後のnative最終統計を録画結果を変えず診断へ発行する
 - [x] A/V packetのPTS/DTSを保持してstream別DTSを検証し、1秒以降のkeyframeまたは2秒上限でfragmentを確定する
 - [x] graceful finishだけが最終fragment、trailer、file flushを順に実行し、Abortではtrailerを書かない
+- [x] video encoderの0 packet bufferingと実packet batchを分離し、実packetだけを共通mux timelineへ投入する
+- [x] mux failure時はpacket統計をcommitせずvideo encoderとmuxerをともにAbortする
 
 ## English
 
@@ -41,3 +43,5 @@
 - [x] Publish the committed media profile and final native statistics without changing recording start/stop outcomes
 - [x] Preserve A/V packet PTS/DTS, validate DTS per stream, and close fragments at a keyframe after one second or at the hard two-second limit
 - [x] Run final-fragment, trailer, and file flush in order only for graceful finish, never writing a trailer after abort
+- [x] Distinguish zero-packet video-encoder buffering from real packet batches and submit only real packets to the shared mux timeline
+- [x] On mux failure, commit no packet statistics and abort both the video encoder and muxer
