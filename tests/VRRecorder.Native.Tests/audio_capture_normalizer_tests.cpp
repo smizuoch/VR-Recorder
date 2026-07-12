@@ -356,6 +356,62 @@ void ConvertsPcm24StoredInA32BitContainer()
     CHECK(NearlyEqual(normalized.interleaved_samples[5], positive));
 }
 
+void RetainsThePacketAfterADevicePositionDiscontinuity()
+{
+    constexpr std::int64_t session_start_qpc_100ns = 8'000'000;
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        4,
+        0x0000'0004,
+    };
+    const std::vector<float> first_samples(2, 0.25F);
+    const std::vector<float> recovered_samples(2, 0.75F);
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(
+        session_start_qpc_100ns);
+    vrrecorder::native::CapturedStereoPacket48k first {};
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  100,
+                  session_start_qpc_100ns,
+                  first_samples.size(),
+                  std::as_bytes(std::span<const float>(first_samples)),
+                  false,
+                  false,
+                  false,
+              },
+              first) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    vrrecorder::native::CapturedStereoPacket48k recovered {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  0,
+                  session_start_qpc_100ns + 10'000,
+                  recovered_samples.size(),
+                  std::as_bytes(std::span<const float>(recovered_samples)),
+                  false,
+                  true,
+                  false,
+              },
+              recovered) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(first.start_frame_48k == 0);
+    CHECK(recovered.start_frame_48k == 48);
+    CHECK(recovered.device_position == 0);
+    CHECK(recovered.frame_count_48k == 2);
+    CHECK(recovered.discontinuity);
+    CHECK(recovered.interleaved_samples.size() == 4);
+    for (const auto sample : recovered.interleaved_samples) {
+        CHECK(NearlyEqual(sample, 0.75F));
+    }
+}
+
 }
 
 int main()
@@ -367,5 +423,6 @@ int main()
     Downmixes51FloatBySpeakerMaskOrder();
     ConvertsPackedPcm24WithSignExtension();
     ConvertsPcm24StoredInA32BitContainer();
+    RetainsThePacketAfterADevicePositionDiscontinuity();
     return 0;
 }
