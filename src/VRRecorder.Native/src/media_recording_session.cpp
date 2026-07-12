@@ -51,11 +51,17 @@ vrrec_status_t MediaRecordingSession::RequestStop() noexcept
         return VRREC_STATUS_OK;
     }
     const auto video_status = video_.RequestStop();
+    if (terminal_.load()) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (video_status != VRREC_STATUS_OK) {
         Abort();
         return video_status;
     }
     const auto audio_status = audio_.RequestStop();
+    if (terminal_.load()) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (audio_status != VRREC_STATUS_OK) {
         Abort();
         return audio_status;
