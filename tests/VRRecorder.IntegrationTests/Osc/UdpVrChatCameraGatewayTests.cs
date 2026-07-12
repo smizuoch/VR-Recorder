@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Diagnostics;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
 using VRRecorder.Infrastructure.Osc;

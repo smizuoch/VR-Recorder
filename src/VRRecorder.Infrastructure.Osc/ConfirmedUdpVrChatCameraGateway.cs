@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Diagnostics;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
 
@@ -16,8 +17,16 @@ public sealed class ConfirmedUdpVrChatCameraGateway
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly OscQueryCameraSnapshotReader? _snapshotReader;
     private readonly IDisposable? _snapshotHttpOwner;
+    private readonly IOscOperationEventSink? _events;
 
     public ConfirmedUdpVrChatCameraGateway(IPEndPoint remoteEndpoint)
+        : this(remoteEndpoint, events: null)
+    {
+    }
+
+    public ConfirmedUdpVrChatCameraGateway(
+        IPEndPoint remoteEndpoint,
+        IOscOperationEventSink? events)
     {
         ArgumentNullException.ThrowIfNull(remoteEndpoint);
         if (!IPAddress.IsLoopback(remoteEndpoint.Address))
@@ -38,6 +47,7 @@ public sealed class ConfirmedUdpVrChatCameraGateway
         _remoteEndpoint = new IPEndPoint(
             remoteEndpoint.Address,
             remoteEndpoint.Port);
+        _events = events;
         _client = new UdpClient(remoteEndpoint.AddressFamily);
         if (remoteEndpoint.AddressFamily == AddressFamily.InterNetworkV6)
         {
@@ -119,6 +129,7 @@ public sealed class ConfirmedUdpVrChatCameraGateway
                 if (await WaitForEchoAsync(packet, cancellationToken)
                         .ConfigureAwait(false))
                 {
+                    PublishBestEffort(OscOperationOutcome.Succeeded);
                     return;
                 }
             }
@@ -128,6 +139,22 @@ public sealed class ConfirmedUdpVrChatCameraGateway
         finally
         {
             _writeGate.Release();
+        }
+    }
+
+    private void PublishBestEffort(OscOperationOutcome outcome)
+    {
+        try
+        {
+            _events?.Publish(new OscOperationEvent(
+                OscOperation.CameraWrite,
+                outcome));
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "OSC operation diagnostics failed: {0}",
+                exception.GetType().Name);
         }
     }
 
