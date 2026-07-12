@@ -28,6 +28,10 @@ AudioTimelineResult StereoCaptureTimeline::Push(
     }
 
     const std::lock_guard lock(mutex_);
+    if (aborted_) {
+        return AudioTimelineResult::Aborted;
+    }
+
     if ((has_packet_ &&
          (packet.start_frame_48k < write_end_position_ ||
           packet.clock.device_position < last_clock_.device_position ||
@@ -78,9 +82,14 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
     }
 
     data_available_.wait(lock, [&] {
-        return (has_packet_ && write_end_position_ >= end_position) ||
+        return aborted_ ||
+               (has_packet_ && write_end_position_ >= end_position) ||
                (!input_available_ && unavailable_from_ < end_position);
     });
+
+    if (aborted_) {
+        return AudioTimelineResult::Aborted;
+    }
 
     const auto start_position = read_position_;
     if (buffer_.Read(
@@ -125,6 +134,10 @@ AudioTimelineResult StereoCaptureTimeline::SetAvailable(
 {
     {
         const std::lock_guard lock(mutex_);
+        if (aborted_) {
+            return AudioTimelineResult::Aborted;
+        }
+
         if (effective_frame_48k < read_position_) {
             return AudioTimelineResult::InvalidPacket;
         }
@@ -144,6 +157,16 @@ AudioTimelineResult StereoCaptureTimeline::SetAvailable(
 
     data_available_.notify_all();
     return AudioTimelineResult::Ready;
+}
+
+void StereoCaptureTimeline::Abort() noexcept
+{
+    {
+        const std::lock_guard lock(mutex_);
+        aborted_ = true;
+    }
+
+    data_available_.notify_all();
 }
 
 std::size_t StereoCaptureTimeline::BufferedFrames() const noexcept

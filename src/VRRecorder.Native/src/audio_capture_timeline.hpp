@@ -54,6 +54,8 @@ public:
         bool available,
         std::uint64_t effective_frame_48k) noexcept;
 
+    void Abort() noexcept;
+
     std::size_t BufferedFrames() const noexcept;
     std::uint64_t FramePosition() const noexcept;
 
@@ -77,6 +79,7 @@ private:
     bool has_gap_ = false;
     bool input_available_ = true;
     std::uint64_t unavailable_from_ = 0;
+    bool aborted_ = false;
 };
 
 }
