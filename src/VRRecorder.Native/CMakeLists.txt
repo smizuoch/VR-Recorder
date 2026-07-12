@@ -10,6 +10,28 @@ add_library(vrrecorder_native SHARED
     src/unavailable_spout_source_backend.cpp
     src/unavailable_steamvr_input_backend.cpp)
 
+if(WIN32)
+    target_sources(
+        vrrecorder_native
+        PRIVATE
+            src/wasapi_audio_capture_source.cpp)
+    target_compile_definitions(
+        vrrecorder_native
+        PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN)
+    target_link_libraries(
+        vrrecorder_native
+        PRIVATE
+            Ole32.lib
+            Uuid.lib)
+else()
+    target_sources(
+        vrrecorder_native
+        PRIVATE
+            src/unavailable_wasapi_audio_capture_source.cpp)
+endif()
+
 add_library(VRRecorder::Native ALIAS vrrecorder_native)
 
 target_compile_features(vrrecorder_native PRIVATE cxx_std_20)

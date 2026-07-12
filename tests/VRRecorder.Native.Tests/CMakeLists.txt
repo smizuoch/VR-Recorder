@@ -153,8 +153,8 @@ if(WIN32)
     target_link_libraries(
         vrrecorder_native_audio_capture_source_factory
         PRIVATE
-            ole32
-            uuid)
+            Ole32.lib
+            Uuid.lib)
 else()
     target_sources(
         vrrecorder_native_audio_capture_source_factory
