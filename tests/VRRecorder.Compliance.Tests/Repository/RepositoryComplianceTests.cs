@@ -133,6 +133,60 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void CandidateVerificationRejectsAnUnregisteredCMakeLinkInput()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vr-recorder-native-link-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "third-party"));
+            Directory.CreateDirectory(Path.Combine(root, "src", "Rogue"));
+            File.WriteAllText(
+                Path.Combine(root, "third-party", "registry.yml"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "registryVersion": 1,
+                  "components": []
+                }
+                """);
+            foreach (var manifestName in new[]
+                     {
+                         "runtime-load-manifest.yml",
+                         "native-link-manifest.yml",
+                     })
+            {
+                File.WriteAllText(
+                    Path.Combine(root, "third-party", manifestName),
+                    """
+                    {
+                      "schemaVersion": 1,
+                      "entries": []
+                    }
+                    """);
+            }
+
+            File.WriteAllText(
+                Path.Combine(root, "src", "Rogue", "CMakeLists.txt"),
+                "target_link_libraries(vrrecorder_native PRIVATE Spout.lib)");
+
+            var issues = RepositoryComplianceVerifier.VerifyCandidateInputs(root);
+
+            Assert.Contains(issues, issue =>
+                issue.Code == "unregistered-native-link" &&
+                issue.Subject == "vrrecorder_native:Spout.lib");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
