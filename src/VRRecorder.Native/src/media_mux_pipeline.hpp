@@ -19,6 +19,7 @@ public:
     void EncoderFailed(MediaStreamKind stream) noexcept;
     void Abort() noexcept override;
     AvSyncSnapshot AvSyncStatistics() const noexcept;
+    std::int64_t AudioVideoOffsetMicroseconds() const noexcept override;
     SharedMuxFinalizationSession &MuxSession() noexcept;
 
 private:

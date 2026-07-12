@@ -14,6 +14,7 @@ MediaRecordingPipeline::MediaRecordingPipeline(
     MediaEventSink &events)
     : video_session_(video),
       audio_session_(audio),
+      mux_session_(mux),
       video_(video_session_, video_poll_timeout),
       audio_(
           audio_session_,
@@ -55,6 +56,7 @@ MediaRecordingPipelineStatistics MediaRecordingPipeline::Statistics()
     return {
         video_session_.Statistics(),
         audio_session_.Statistics(),
+        mux_session_.AudioVideoOffsetMicroseconds(),
     };
 }
 

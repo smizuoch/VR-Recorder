@@ -45,7 +45,7 @@ vrrec_status_t PipelineMediaBackend::GetStatistics(
         current.video.scheduler.duplicated_output_frame_count,
         current.video.latest_encode_latency_microseconds,
         current.video.maximum_encode_latency_microseconds,
-        0,
+        current.audio_video_offset_microseconds,
     };
     return VRREC_STATUS_OK;
 }

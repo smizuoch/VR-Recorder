@@ -39,6 +39,11 @@ AvSyncSnapshot MediaMuxPipeline::AvSyncStatistics() const noexcept
     return monitor_.Snapshot();
 }
 
+std::int64_t MediaMuxPipeline::AudioVideoOffsetMicroseconds() const noexcept
+{
+    return monitor_.Snapshot().latest_audio_video_offset_microseconds;
+}
+
 SharedMuxFinalizationSession &MediaMuxPipeline::MuxSession() noexcept
 {
     return finalization_;

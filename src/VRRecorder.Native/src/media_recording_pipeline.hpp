@@ -11,6 +11,7 @@ namespace vrrecorder::native {
 struct MediaRecordingPipelineStatistics final {
     VideoEncodingStatistics video;
     StereoAudioPipelineStatistics audio;
+    std::int64_t audio_video_offset_microseconds;
 };
 
 class MediaRecordingPipelinePort {
@@ -47,6 +48,7 @@ public:
 private:
     VideoPipelineSessionPort &video_session_;
     StereoAudioPipelineSessionPort &audio_session_;
+    MediaMuxSessionPort &mux_session_;
     VideoMediaStreamPipelineAdapter video_;
     AudioMediaStreamPipelineAdapter audio_;
     MediaRecordingSession recording_;

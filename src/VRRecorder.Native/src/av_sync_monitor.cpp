@@ -37,6 +37,8 @@ vrrec_status_t AvSyncMonitor::Observe(
               video_pts_microseconds_ - audio_pts_microseconds_)
         : static_cast<std::uint64_t>(
               audio_pts_microseconds_ - video_pts_microseconds_);
+    latest_audio_video_offset_microseconds_ =
+        audio_pts_microseconds_ - video_pts_microseconds_;
     latest_absolute_drift_microseconds_ = absolute_drift;
     maximum_absolute_drift_microseconds_ = std::max(
         maximum_absolute_drift_microseconds_,
@@ -66,6 +68,7 @@ AvSyncSnapshot AvSyncMonitor::Snapshot() const noexcept
         maximum_absolute_drift_microseconds_,
         threshold_event_count_,
         has_video_ && has_audio_,
+        latest_audio_video_offset_microseconds_,
     };
 }
 

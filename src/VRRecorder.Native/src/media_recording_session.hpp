@@ -21,6 +21,10 @@ class MediaMuxSessionPort {
 public:
     virtual ~MediaMuxSessionPort() = default;
     virtual void Abort() noexcept = 0;
+    virtual std::int64_t AudioVideoOffsetMicroseconds() const noexcept
+    {
+        return 0;
+    }
 };
 
 class MediaRecordingSession final {

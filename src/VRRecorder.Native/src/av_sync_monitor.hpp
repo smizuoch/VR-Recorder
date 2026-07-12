@@ -23,6 +23,7 @@ struct AvSyncSnapshot final {
     std::uint64_t maximum_absolute_drift_microseconds = 0;
     std::uint64_t threshold_event_count = 0;
     bool has_both_streams = false;
+    std::int64_t latest_audio_video_offset_microseconds = 0;
 };
 
 class AvSyncMonitor final : public EncodedMediaPacketObserver {
@@ -41,6 +42,7 @@ private:
     std::uint64_t latest_absolute_drift_microseconds_ = 0;
     std::uint64_t maximum_absolute_drift_microseconds_ = 0;
     std::uint64_t threshold_event_count_ = 0;
+    std::int64_t latest_audio_video_offset_microseconds_ = 0;
     bool has_video_ = false;
     bool has_audio_ = false;
     bool threshold_active_ = false;
