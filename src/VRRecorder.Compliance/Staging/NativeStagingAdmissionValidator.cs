@@ -195,6 +195,20 @@ internal static class NativeStagingAdmissionValidator
 
             var approvedComponent = approvedComponents[0];
             var registeredComponent = registeredComponents[0];
+            if (!string.Equals(
+                    registeredComponent.ApprovalStatus,
+                    "approved",
+                    StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(registeredComponent.ApprovalId) ||
+                string.IsNullOrWhiteSpace(
+                    registeredComponent.ApprovalReviewer))
+            {
+                issues.Add(new ComplianceIssue(
+                    "unapproved-native-artifact-owner",
+                    componentId));
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(registeredComponent.Version) ||
                 string.IsNullOrWhiteSpace(registeredComponent.RepositoryUrl) ||
                 string.IsNullOrWhiteSpace(registeredComponent.RepositoryCommit))

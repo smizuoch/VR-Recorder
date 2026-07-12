@@ -15,7 +15,10 @@ internal sealed record RegisteredNativeComponent(
     string Id,
     string? Version,
     string? RepositoryUrl,
-    string? RepositoryCommit);
+    string? RepositoryCommit,
+    string? ApprovalStatus,
+    string? ApprovalId,
+    string? ApprovalReviewer);
 
 internal sealed record RegisteredNativeArtifact(
     string ComponentId,
@@ -63,11 +66,25 @@ internal static class NativeArtifactRegistryReader
                 repositoryCommit = OptionalString(repository, "commit");
             }
 
+            string? approvalStatus = null;
+            string? approvalId = null;
+            string? approvalReviewer = null;
+            if (component.TryGetProperty("approval", out var approval) &&
+                approval.ValueKind == JsonValueKind.Object)
+            {
+                approvalStatus = OptionalString(approval, "status");
+                approvalId = OptionalString(approval, "id");
+                approvalReviewer = OptionalString(approval, "reviewer");
+            }
+
             components.Add(new RegisteredNativeComponent(
                 componentId,
                 OptionalString(component, "version"),
                 repositoryUrl,
-                repositoryCommit));
+                repositoryCommit,
+                approvalStatus,
+                approvalId,
+                approvalReviewer));
 
             if (!component.TryGetProperty("nativeArtifacts", out var nativeArtifacts))
             {
