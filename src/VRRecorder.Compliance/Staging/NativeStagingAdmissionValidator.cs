@@ -8,6 +8,27 @@ internal static class NativeStagingAdmissionValidator
 {
     private const string FirstPartyComponentId = "vr-recorder";
     private const string WindowsX64Platform = "windows-x64";
+    private static readonly HashSet<string> FirstPartyExecutables =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "VR-Recorder.exe",
+            "VRRecorder.App.exe",
+        };
+    private static readonly HashSet<string> FirstPartyLibraries =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "VRRecorder.App.dll",
+            "VRRecorder.Application.dll",
+            "VRRecorder.Compliance.dll",
+            "VRRecorder.DesignSystem.dll",
+            "VRRecorder.Domain.dll",
+            "VRRecorder.Infrastructure.Media.dll",
+            "VRRecorder.Infrastructure.Osc.dll",
+            "VRRecorder.Infrastructure.SteamVr.dll",
+            "VRRecorder.Infrastructure.Storage.dll",
+            "VRRecorder.Presentation.Wrist.dll",
+            "vrrecorder_native.dll",
+        };
 
     public static IReadOnlyList<ComplianceIssue> Validate(
         string? repositoryRoot,
@@ -36,18 +57,33 @@ internal static class NativeStagingAdmissionValidator
                     IsNative(registration.Kind)))
             .Where(candidate => candidate.Registrations.Count == 1)
             .ToArray();
-        var thirdPartyCandidates = candidates.Where(candidate =>
-                !string.Equals(
-                    candidate.Registrations[0].ComponentId,
+        var issues = new List<ComplianceIssue>(ValidateKinds(candidates));
+        var thirdPartyCandidates = new List<NativeCandidate>();
+        foreach (var candidate in candidates)
+        {
+            var registration = candidate.Registrations[0];
+            if (!string.Equals(
+                    registration.ComponentId,
                     FirstPartyComponentId,
                     StringComparison.Ordinal))
-            .ToArray();
-        if (thirdPartyCandidates.Length == 0)
-        {
-            return ValidateKinds(candidates);
+            {
+                thirdPartyCandidates.Add(candidate);
+                continue;
+            }
+
+            if (!IsApprovedFirstPartyArtifact(candidate.File))
+            {
+                issues.Add(new ComplianceIssue(
+                    "unregistered-first-party-native-artifact",
+                    $"{FirstPartyComponentId}:{candidate.File.RelativePath}"));
+            }
         }
 
-        var issues = new List<ComplianceIssue>(ValidateKinds(candidates));
+        if (thirdPartyCandidates.Count == 0)
+        {
+            return Order(issues);
+        }
+
         var admittedCandidates = new List<(StagedPayloadFile File,
             RegisteredStagedArtifact Registration)>();
         foreach (var candidate in thirdPartyCandidates)
@@ -161,6 +197,20 @@ internal static class NativeStagingAdmissionValidator
 
     private static bool IsNative(StagedArtifactKind kind) =>
         kind is StagedArtifactKind.NativeLibrary or StagedArtifactKind.Executable;
+
+    private static bool IsApprovedFirstPartyArtifact(
+        StagedPayloadFile file)
+    {
+        var fileName = Path.GetFileName(file.RelativePath);
+        return file.Kind switch
+        {
+            StagedArtifactKind.Executable =>
+                FirstPartyExecutables.Contains(fileName),
+            StagedArtifactKind.NativeLibrary =>
+                FirstPartyLibraries.Contains(fileName),
+            _ => false,
+        };
+    }
 
     private static ComplianceIssue[] Order(
         IEnumerable<ComplianceIssue> issues) =>
