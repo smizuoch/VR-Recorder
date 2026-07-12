@@ -58,12 +58,31 @@ set_target_properties(
         CXX_EXTENSIONS OFF)
 vrrecorder_enable_strict_warnings(vrrecorder_native_audio_mixer)
 
+add_executable(
+    vrrecorder_native_audio_timeline_buffer
+    audio_timeline_buffer_tests.cpp
+    "${native_source_root}/src/audio_timeline_buffer.cpp")
+target_compile_features(
+    vrrecorder_native_audio_timeline_buffer PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_timeline_buffer
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_audio_timeline_buffer
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(vrrecorder_native_audio_timeline_buffer)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
     COMMAND vrrecorder_native_c_header_smoke)
 add_test(NAME vrrecorder_native_audio_mixer
     COMMAND vrrecorder_native_audio_mixer)
+add_test(NAME vrrecorder_native_audio_timeline_buffer
+    COMMAND vrrecorder_native_audio_timeline_buffer)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
