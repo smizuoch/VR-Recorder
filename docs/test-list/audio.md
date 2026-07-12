@@ -29,6 +29,7 @@
 - [x] mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering中もsilent timelineを維持する
 - [x] encoder失敗時は未mux frame／packetを成功統計へ加算しない
 - [x] device loss／recoveryを入力roleと正確な48 kHz frameでproduction MediaEventへ伝播する
+- [x] graceful stopではcapture解除後にencoderをflushし、Abort／encoder failureではflushせず両方を停止する
 
 ## English
 
@@ -59,3 +60,4 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Submit positioned, fixed-size mixed PCM windows to the encoder port while preserving silent timelines during buffering
 - [x] Do not count unmuxed frames or packets as successful after an encoder failure
 - [x] Propagate device loss/recovery into production media events with the input role and exact 48 kHz frame
+- [x] Flush the encoder after releasing capture only on graceful stop, and stop both sides without flushing on abort or encoder failure
