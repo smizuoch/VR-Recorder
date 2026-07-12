@@ -198,8 +198,23 @@ public:
         events[count++] = {role, available, frame_position};
     }
 
+    void BufferHealthChanged(
+        AudioCaptureRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept override
+    {
+        health_role = role;
+        health_kind = health;
+        health_frame = frame_position;
+        ++health_count;
+    }
+
     AvailabilityEvent events[4] {};
     std::size_t count = 0;
+    AudioCaptureRole health_role = AudioCaptureRole::Microphone;
+    AudioBufferHealth health_kind = AudioBufferHealth::Underrun;
+    std::uint64_t health_frame = 0;
+    std::size_t health_count = 0;
 };
 
 AudioCaptureSourceConfig Config()
@@ -269,6 +284,32 @@ void ExpandsSilentPacketsUsingTheirExplicitFrameCount()
     for (const auto sample : output) {
         CHECK(sample == 0.0F);
     }
+}
+
+void ReportsTimelineOverrunAtTheRejectedPacketFrame()
+{
+    FakeAudioCaptureSource source;
+    source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        24'000,
+        300,
+        3'000'000,
+        9,
+        std::vector<float>(18, 0.25F),
+        false,
+        false,
+        0,
+    });
+    StereoCaptureTimeline timeline(8);
+    RecordingAvailabilitySink events;
+    AudioCapturePump pump(source, timeline, &events);
+
+    CHECK(pump.Start(Config()) == VRREC_STATUS_OK);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::Overrun);
+    CHECK(events.health_count == 1);
+    CHECK(events.health_role == AudioCaptureRole::DesktopLoopback);
+    CHECK(events.health_kind == AudioBufferHealth::Overrun);
+    CHECK(events.health_frame == 24'000);
 }
 
 void AppliesLossAtTheExactFrameAndAbortsIdempotently()
@@ -711,6 +752,7 @@ int main()
 {
     StartsAndForwardsAClockedStereoPacket();
     ExpandsSilentPacketsUsingTheirExplicitFrameCount();
+    ReportsTimelineOverrunAtTheRejectedPacketFrame();
     AppliesLossAtTheExactFrameAndAbortsIdempotently();
     RetainsAFlaggedPacketAfterItsExplicitGap();
     RecoversAReplacementSourceAtItsExactFirstFrame();
