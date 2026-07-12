@@ -2,8 +2,10 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -70,10 +72,52 @@ void ConvertsOne44100HzMonoPacketToAnExact480FrameStereoWindow()
     }
 }
 
+void ConvertsPcm16EndpointsToFiniteStereoFloat()
+{
+    std::vector<std::int16_t> mono {
+        std::numeric_limits<std::int16_t>::min(),
+        0,
+        std::numeric_limits<std::int16_t>::max(),
+    };
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::PcmSignedInteger,
+        16,
+        16,
+        2,
+        0x0000'0004,
+    };
+    const vrrecorder::native::RawCapturePacket packet {
+        10,
+        2'000'000,
+        mono.size(),
+        std::as_bytes(std::span<const std::int16_t>(mono)),
+        false,
+        false,
+        false,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(2'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(format, packet, normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(normalized.frame_count_48k == 3);
+    CHECK(normalized.interleaved_samples.size() == 6);
+    CHECK(NearlyEqual(normalized.interleaved_samples[0], -1.0F));
+    CHECK(NearlyEqual(normalized.interleaved_samples[1], -1.0F));
+    CHECK(NearlyEqual(normalized.interleaved_samples[2], 0.0F));
+    CHECK(NearlyEqual(normalized.interleaved_samples[3], 0.0F));
+    const auto positive = 32767.0F / 32768.0F;
+    CHECK(NearlyEqual(normalized.interleaved_samples[4], positive));
+    CHECK(NearlyEqual(normalized.interleaved_samples[5], positive));
+}
+
 }
 
 int main()
 {
     ConvertsOne44100HzMonoPacketToAnExact480FrameStereoWindow();
+    ConvertsPcm16EndpointsToFiniteStereoFloat();
     return 0;
 }
