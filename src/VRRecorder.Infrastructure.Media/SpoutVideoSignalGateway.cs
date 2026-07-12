@@ -13,12 +13,22 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
     private const int StableFrameCount = 3;
     private readonly object _gate = new();
     private readonly ISpoutVideoSource _source;
+    private readonly IVideoSenderSelection _senderSelection;
     private IReadOnlyDictionary<string, ulong>? _baseline;
 
     public SpoutVideoSignalGateway(ISpoutVideoSource source)
+        : this(source, SingleCandidateVideoSenderSelection.Instance)
+    {
+    }
+
+    public SpoutVideoSignalGateway(
+        ISpoutVideoSource source,
+        IVideoSenderSelection senderSelection)
     {
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(senderSelection);
         _source = source;
+        _senderSelection = senderSelection;
     }
 
     public async Task CaptureBaselineAsync(CancellationToken cancellationToken)
@@ -38,6 +48,29 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
     }
 
     public async Task<StableVideoSignal> WaitForStableSignalAsync(
+        TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        await WaitForStableSignalCoreAsync(
+                vrChatServiceId: null,
+                timeout,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<StableVideoSignal> WaitForStableSignalAsync(
+        string vrChatServiceId,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vrChatServiceId);
+        return await WaitForStableSignalCoreAsync(
+                vrChatServiceId,
+                timeout,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<StableVideoSignal> WaitForStableSignalCoreAsync(
+        string? vrChatServiceId,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
@@ -63,6 +96,8 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
                 cancellationToken,
                 timeoutCancellation.Token);
         var candidates = new Dictionary<string, Candidate>(StringComparer.Ordinal);
+        var stableSignals = new Dictionary<string, StableVideoSignal>(
+            StringComparer.Ordinal);
         try
         {
             await foreach (var frame in _source
@@ -82,6 +117,7 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
                     frame.FrameSequence <= baselineSequence)
                 {
                     candidates.Remove(frame.Signal.SenderId);
+                    stableSignals.Remove(frame.Signal.SenderId);
                     continue;
                 }
 
@@ -89,6 +125,7 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
                     !candidate.HasSameSignature(frame.Signal))
                 {
                     candidates[frame.Signal.SenderId] = new Candidate(frame);
+                    stableSignals.Remove(frame.Signal.SenderId);
                     continue;
                 }
 
@@ -96,6 +133,7 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
                     frame.ReceivedAt.Elapsed < candidate.LastReceivedAt.Elapsed)
                 {
                     candidates.Remove(frame.Signal.SenderId);
+                    stableSignals.Remove(frame.Signal.SenderId);
                     continue;
                 }
 
@@ -104,7 +142,15 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
                     frame.ReceivedAt.Elapsed - candidate.FirstReceivedAt.Elapsed >=
                     StabilityDuration)
                 {
-                    return frame.Signal;
+                    stableSignals[frame.Signal.SenderId] = frame.Signal;
+                    if (candidates.Keys.All(stableSignals.ContainsKey))
+                    {
+                        return await SelectStableSignalAsync(
+                                vrChatServiceId,
+                                stableSignals.Values,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
                 }
             }
         }
@@ -112,13 +158,73 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
             timeoutCancellation.IsCancellationRequested &&
             !cancellationToken.IsCancellationRequested)
         {
+            if (stableSignals.Count != 0)
+            {
+                return await SelectStableSignalAsync(
+                        vrChatServiceId,
+                        stableSignals.Values,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             throw new TimeoutException(
                 "No Spout sender produced a stable video signal before the timeout.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (stableSignals.Count != 0)
+        {
+            return await SelectStableSignalAsync(
+                    vrChatServiceId,
+                    stableSignals.Values,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         throw new TimeoutException(
             "The Spout frame source completed before a stable signal was found.");
+    }
+
+    private async Task<StableVideoSignal> SelectStableSignalAsync(
+        string? vrChatServiceId,
+        IEnumerable<StableVideoSignal> stableSignals,
+        CancellationToken cancellationToken)
+    {
+        var candidates = stableSignals
+            .OrderBy(signal => signal.SenderId, StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            throw new InvalidDataException(
+                "Spout sender selection requires at least one stable candidate.");
+        }
+
+        if (vrChatServiceId is null)
+        {
+            if (candidates.Length == 1)
+            {
+                return candidates[0];
+            }
+
+            throw new InvalidOperationException(
+                "Multiple stable Spout senders require a VRChat service scope.");
+        }
+
+        var selectedSenderId = await _senderSelection
+            .SelectAsync(vrChatServiceId, candidates, cancellationToken)
+            .ConfigureAwait(false);
+        if (selectedSenderId is null)
+        {
+            throw new InvalidOperationException(
+                "Spout sender selection was canceled.");
+        }
+
+        var selected = candidates.SingleOrDefault(candidate => string.Equals(
+            candidate.SenderId,
+            selectedSenderId,
+            StringComparison.Ordinal));
+        return selected ?? throw new InvalidDataException(
+            "The selected Spout sender is not an offered stable candidate.");
     }
 
     private sealed class Candidate
@@ -173,5 +279,29 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
                 signal.Width,
                 signal.Height,
                 signal.PixelFormat);
+    }
+
+    private sealed class SingleCandidateVideoSenderSelection
+        : IVideoSenderSelection
+    {
+        public static SingleCandidateVideoSenderSelection Instance { get; } =
+            new();
+
+        public Task<string?> SelectAsync(
+            string vrChatServiceId,
+            IReadOnlyList<StableVideoSignal> candidates,
+            CancellationToken cancellationToken)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(vrChatServiceId);
+            ArgumentNullException.ThrowIfNull(candidates);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (candidates.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "Multiple stable Spout senders require explicit selection.");
+            }
+
+            return Task.FromResult<string?>(candidates[0].SenderId);
+        }
     }
 }
