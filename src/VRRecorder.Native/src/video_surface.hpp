@@ -1,6 +1,7 @@
 #ifndef VRRECORDER_NATIVE_VIDEO_SURFACE_HPP
 #define VRRECORDER_NATIVE_VIDEO_SURFACE_HPP
 
+#include <chrono>
 #include <cstdint>
 
 #include "vrrecorder_native.h"
@@ -14,12 +15,21 @@ struct VideoSurfaceDescriptor final {
     vrrec_source_pixel_format_t pixel_format;
 };
 
+enum class VideoSurfaceAcquireResult {
+    Acquired,
+    Timeout,
+    Failed,
+};
+
 class VideoSurface {
 public:
     virtual ~VideoSurface() = default;
 
     virtual VideoSurfaceDescriptor Descriptor() const noexcept = 0;
     virtual void *NativeHandle() const noexcept = 0;
+    virtual VideoSurfaceAcquireResult AcquireForRead(
+        std::chrono::milliseconds timeout) noexcept = 0;
+    virtual void ReleaseFromRead() noexcept = 0;
 };
 
 }

@@ -150,6 +150,10 @@ void VideoEncodingWorker::Run() noexcept
             continue;
         }
 
+        if (encoding_result == VideoEncodingResult::SurfaceTimeout) {
+            continue;
+        }
+
         clock_.Abort();
         sink_.Abort();
         if (encoding_result == VideoEncodingResult::EncoderFailed) {
@@ -157,6 +161,11 @@ void VideoEncodingWorker::Run() noexcept
                 VideoEncodingWorkerResult::EncoderFailed,
                 read.encoder_status,
                 "video encoder failed while recording");
+        } else if (encoding_result == VideoEncodingResult::SurfaceFailed) {
+            Fail(
+                VideoEncodingWorkerResult::Failed,
+                VRREC_STATUS_BACKEND_UNAVAILABLE,
+                "video surface synchronization failed");
         } else {
             Fail(
                 VideoEncodingWorkerResult::Failed,

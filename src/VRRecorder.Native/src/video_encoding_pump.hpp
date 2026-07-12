@@ -2,6 +2,7 @@
 #define VRRECORDER_NATIVE_VIDEO_ENCODING_PUMP_HPP
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 
 #include "video_cfr_scheduler.hpp"
@@ -27,6 +28,8 @@ public:
 enum class VideoEncodingResult {
     Submitted,
     NoFrame,
+    SurfaceTimeout,
+    SurfaceFailed,
     InvalidTick,
     EncoderFailed,
     Failed,
@@ -51,7 +54,9 @@ class VideoEncodingPump final {
 public:
     VideoEncodingPump(
         VideoCfrScheduler &scheduler,
-        VideoEncoderSink &sink) noexcept;
+        VideoEncoderSink &sink,
+        std::chrono::milliseconds surface_acquire_timeout =
+            std::chrono::milliseconds(5)) noexcept;
 
     VideoEncodingResult PumpTick(
         std::uint64_t output_tick,
@@ -61,6 +66,7 @@ public:
 private:
     VideoCfrScheduler &scheduler_;
     VideoEncoderSink &sink_;
+    std::chrono::milliseconds surface_acquire_timeout_;
     std::atomic<std::uint64_t> muxed_packet_count_ {0};
     std::atomic<std::uint64_t> latest_encode_latency_microseconds_ {0};
     std::atomic<std::uint64_t> maximum_encode_latency_microseconds_ {0};

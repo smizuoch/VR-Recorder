@@ -7,9 +7,11 @@ namespace vrrecorder::native {
 
 VideoEncodingPump::VideoEncodingPump(
     VideoCfrScheduler &scheduler,
-    VideoEncoderSink &sink) noexcept
+    VideoEncoderSink &sink,
+    std::chrono::milliseconds surface_acquire_timeout) noexcept
     : scheduler_(scheduler),
-      sink_(sink)
+      sink_(sink),
+      surface_acquire_timeout_(surface_acquire_timeout)
 {
 }
 
@@ -17,6 +19,7 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
     std::uint64_t output_tick,
     VideoEncodingRead &read) noexcept
 {
+    read = {};
     ScheduledVideoFrame scheduled {};
     const auto schedule_result = scheduler_.Schedule(
         output_tick,
@@ -33,7 +36,22 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
         return VideoEncodingResult::Failed;
     }
 
+    read.scheduled = scheduled;
+    if (scheduled.surface) {
+        const auto acquire = scheduled.surface->AcquireForRead(
+            surface_acquire_timeout_);
+        if (acquire == VideoSurfaceAcquireResult::Timeout) {
+            return VideoEncodingResult::SurfaceTimeout;
+        }
+        if (acquire != VideoSurfaceAcquireResult::Acquired) {
+            return VideoEncodingResult::SurfaceFailed;
+        }
+    }
+
     const auto write = sink_.Write(scheduled);
+    if (scheduled.surface) {
+        scheduled.surface->ReleaseFromRead();
+    }
     read = {
         scheduled,
         write.muxed_packet_count,

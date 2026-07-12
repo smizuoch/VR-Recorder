@@ -39,6 +39,16 @@ public:
         return reinterpret_cast<void *>(1);
     }
 
+    VideoSurfaceAcquireResult AcquireForRead(
+        std::chrono::milliseconds) noexcept override
+    {
+        return VideoSurfaceAcquireResult::Acquired;
+    }
+
+    void ReleaseFromRead() noexcept override
+    {
+    }
+
 private:
     VideoSurfaceDescriptor descriptor_;
 };
