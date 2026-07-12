@@ -766,6 +766,45 @@ public sealed class LegalReleasePackageIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-025")]
+    public async Task PeDllCannotHideBehindAnAssetExtension()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        const string relativePath = "plugins/codec.bin";
+        var binary = MinimalPeDll();
+        var binaryPath = Path.Combine(
+            payload.StagingPath,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
+        await File.WriteAllBytesAsync(binaryPath, binary);
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                Request(
+                    payload.StagingPath,
+                    packagePath,
+                    [
+                        .. payload.Registrations,
+                        new RegisteredStagedArtifact(
+                            "vr-recorder",
+                            relativePath,
+                            Hash(binary),
+                            StagedArtifactKind.Asset),
+                    ]),
+                CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "native-artifact-kind-mismatch");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
     public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
     {
         using var directory = TemporaryDirectory.Create();
@@ -1228,6 +1267,20 @@ public sealed class LegalReleasePackageIntegrationTests
 
     private static string Hash(ReadOnlySpan<byte> content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    private static byte[] MinimalPeDll()
+    {
+        var binary = new byte[128];
+        binary[0] = (byte)'M';
+        binary[1] = (byte)'Z';
+        BitConverter.TryWriteBytes(binary.AsSpan(0x3c, 4), 0x40);
+        binary[0x40] = (byte)'P';
+        binary[0x41] = (byte)'E';
+        binary[0x42] = 0;
+        binary[0x43] = 0;
+        BitConverter.TryWriteBytes(binary.AsSpan(0x56, 2), (ushort)0x2000);
+        return binary;
+    }
 
     private sealed class FixedAuthenticatedAnchorSource(
         AuthenticatedLegalBundleAnchor anchor)
