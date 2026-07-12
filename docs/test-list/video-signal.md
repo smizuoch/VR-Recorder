@@ -12,6 +12,8 @@
 - [x] 新規frameがないtickでは直前frameをduplicateし、最初のframe前は出力しない
 - [x] encoder buffering後の最初のmux packetだけを録画開始確定eventとして識別する
 - [x] runtime encoder failureのpacket／latencyを成功統計へ加算しない
+- [x] video workerはgraceful stopだけをflushし、Abort／runtime failureではflushしない
+- [x] first mux packet callbackをwriteまたはflushの最初の一度だけ発行する
 
 ## English
 
@@ -25,3 +27,5 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Duplicate the previous frame when a tick has no new input, while producing nothing before the first frame
 - [x] Identify only the first muxed packet after encoder buffering as the recording-start commit event
 - [x] Do not commit packet or latency statistics from a runtime encoder failure
+- [x] Flush the video encoder only for graceful stop, not for abort or runtime failure
+- [x] Emit the first-muxed-packet callback only once, whether produced by a write or final flush

@@ -32,7 +32,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: warning 0、error 0
-- native Make ABI／audio pipeline／availability-event／video CFR／encoder-input contract: 成功
+- native Make ABI／audio pipeline／availability-event／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
 - format/analyzer: 差分なし
 
@@ -84,6 +84,7 @@ make -C tests/VRRecorder.Native.Tests test
 - capture初期化後だけencodingを開始し、live routing、冪等stop、rollback、最終frame／packet統計を統合するaudio pipeline session
 - 各CFR tickで最新source frameを採用し、中間frame dropと直前frame duplicateを個別集計するnative video scheduler
 - scheduled frameをvideo encoder Portへ渡し、buffering、first mux packet、runtime failure、最新／最大latencyを集計するpump
+- dedicated CFR clock threadでvideo pumpを実行し、first packet callback、graceful flush、Abort、runtime faultをMediaEventへ統合するworker
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -132,7 +133,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
-- native Make ABI/audio-pipeline/availability-event/video-CFR/encoder-input contracts: passed
+- native Make ABI/audio-pipeline/availability-event/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
 - format/analyzers: no changes required
 
@@ -184,6 +185,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An audio pipeline session that starts encoding only after capture initialization and integrates live routing, idempotent stop, rollback, and final frame/packet statistics
 - A native video scheduler that selects the latest source frame at each CFR tick and separately counts discarded intermediate frames and duplicated previous outputs
 - A video encoding pump that submits scheduled frames through an encoder port and tracks buffering, first muxed packet, runtime failure, and latest/maximum latency
+- A dedicated CFR-clock worker that integrates video pumping, first-packet callbacks, graceful flush, abort, and runtime faults into media events
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
