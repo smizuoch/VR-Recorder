@@ -217,6 +217,55 @@ void RetainsRationalPhaseWhenTheSecondPacketTimestampIsInvalid()
     }
 }
 
+void Downmixes51FloatBySpeakerMaskOrder()
+{
+    const std::vector<float> surround {
+        0.10F,
+        0.20F,
+        0.10F,
+        0.10F,
+        0.20F,
+        0.25F,
+    };
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        6,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        24,
+        0x0000'003f,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(5'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  0,
+                  5'000'000,
+                  1,
+                  std::as_bytes(std::span<const float>(surround)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    constexpr float minus_3_db = 0.70710678F;
+    constexpr float minus_6_db = 0.5F;
+    const auto expected_left =
+        0.10F + 0.10F * minus_3_db + 0.10F * minus_6_db +
+        0.20F * minus_3_db;
+    const auto expected_right =
+        0.20F + 0.10F * minus_3_db + 0.10F * minus_6_db +
+        0.25F * minus_3_db;
+    CHECK(normalized.frame_count_48k == 1);
+    CHECK(normalized.interleaved_samples.size() == 2);
+    CHECK(NearlyEqual(normalized.interleaved_samples[0], expected_left));
+    CHECK(NearlyEqual(normalized.interleaved_samples[1], expected_right));
+}
+
 }
 
 int main()
@@ -225,5 +274,6 @@ int main()
     ConvertsPcm16EndpointsToFiniteStereoFloat();
     PreservesNative48KhzStereoFloatChannels();
     RetainsRationalPhaseWhenTheSecondPacketTimestampIsInvalid();
+    Downmixes51FloatBySpeakerMaskOrder();
     return 0;
 }
