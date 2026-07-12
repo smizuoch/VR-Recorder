@@ -411,6 +411,73 @@ void RecoversAReplacementSourceAtItsExactFirstFrame()
     }
 }
 
+void FailedReplacementStartDoesNotPoisonLaterRecovery()
+{
+    FakeAudioCaptureSource lost_source;
+    lost_source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0,
+        500,
+        2'000'000,
+        2,
+        {0.25F, 0.25F, 0.25F, 0.25F},
+        false,
+        false,
+        0,
+    });
+    lost_source.reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0,
+        0,
+        0,
+        0,
+        {},
+        false,
+        false,
+        2,
+    });
+    StereoCaptureTimeline timeline(12);
+    AudioCapturePump initial(lost_source, timeline);
+    CHECK(initial.Start(Config()) == VRREC_STATUS_OK);
+    CHECK(initial.PumpOne() == AudioCapturePumpResult::PacketAccepted);
+    CHECK(initial.PumpOne() == AudioCapturePumpResult::DeviceLost);
+
+    FakeAudioCaptureSource failed_replacement;
+    failed_replacement.start_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    AudioCapturePump failed(failed_replacement, timeline);
+    CHECK(failed.StartRecovery(Config()) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+
+    FakeAudioCaptureSource recovered_source;
+    recovered_source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        4,
+        0,
+        2'010'000,
+        2,
+        {0.75F, 0.75F, 0.75F, 0.75F},
+        false,
+        false,
+        0,
+    });
+    AudioCapturePump recovered(recovered_source, timeline);
+    CHECK(recovered.StartRecovery(Config()) == VRREC_STATUS_OK);
+    CHECK(recovered.PumpOne() == AudioCapturePumpResult::PacketAccepted);
+
+    std::vector<float> output(12, -1.0F);
+    AudioTimelineRead read {};
+    CHECK(timeline.WaitRead(6, output, read) == AudioTimelineResult::Ready);
+    CHECK(read.input_available);
+    CHECK(read.underrun);
+    for (std::size_t frame = 0; frame < 6; ++frame) {
+        const auto expected = frame < 2
+            ? 0.25F
+            : (frame < 4 ? 0.0F : 0.75F);
+        CHECK(output[frame * 2U] == expected);
+        CHECK(output[frame * 2U + 1U] == expected);
+    }
+}
+
 void StopsDefaultEndpointRediscoveryAfterFiveSeconds()
 {
     auto initial = std::make_unique<FakeAudioCaptureSource>();
@@ -514,6 +581,7 @@ int main()
     AppliesLossAtTheExactFrameAndAbortsIdempotently();
     RetainsAFlaggedPacketAfterItsExplicitGap();
     RecoversAReplacementSourceAtItsExactFirstFrame();
+    FailedReplacementStartDoesNotPoisonLaterRecovery();
     StopsDefaultEndpointRediscoveryAfterFiveSeconds();
     AbortReleasesARecoveryWaitImmediately();
     return 0;
