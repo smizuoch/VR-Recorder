@@ -640,6 +640,68 @@ public sealed class LegalReleasePackageIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-025")]
+    public async Task NativeComponentSourceMustMatchCanonicalRegistryIdentity()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        const string relativePath = "tools/ffprobe.exe";
+        byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
+        var binaryPath = Path.Combine(
+            payload.StagingPath,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
+        await File.WriteAllBytesAsync(binaryPath, binary);
+        await WriteNativeRegistryAsync(
+            payload.Evidence.RepositoryRoot,
+            "ffmpeg",
+            "ffprobe.exe",
+            Hash(binary),
+            repositoryCommit: "registry-commit");
+
+        var graph = Graph();
+        graph = graph with
+        {
+            Components =
+            [
+                .. graph.Components,
+                Component("ffmpeg", "FFmpeg.Process", "8.0") with
+                {
+                    Linkage = "process-boundary",
+                    Packages = [],
+                },
+            ],
+        };
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        var request = Request(
+            payload.StagingPath,
+            packagePath,
+            [
+                .. payload.Registrations,
+                new RegisteredStagedArtifact(
+                    "ffmpeg",
+                    relativePath,
+                    Hash(binary),
+                    StagedArtifactKind.Executable),
+            ]) with
+        {
+            ComponentGraph = graph,
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "native-component-source-mismatch");
+        Assert.Contains(result.Issues, issue => issue.Subject == "ffmpeg");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
     public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
     {
         using var directory = TemporaryDirectory.Create();
@@ -972,7 +1034,8 @@ public sealed class LegalReleasePackageIntegrationTests
         string root,
         string componentId,
         string fileName,
-        string binarySha256)
+        string binarySha256,
+        string repositoryCommit = "commit")
     {
         const string sourceArchivePath =
             "third-party/source-archives/ffmpeg-source.zip";
@@ -1000,6 +1063,12 @@ public sealed class LegalReleasePackageIntegrationTests
                 new
                 {
                     id = componentId,
+                    version = "8.0",
+                    repository = new
+                    {
+                        url = $"https://example.invalid/{componentId}",
+                        commit = repositoryCommit,
+                    },
                     nativeArtifacts = new[]
                     {
                         new
