@@ -6,14 +6,15 @@ using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.Infrastructure.Media;
 
-public sealed class PInvokeEncoderProbe : IEncoderProbe, IDisposable
+public sealed class PInvokeEncoderProbe
+    : IEncoderProbe, IDisposable, IAsyncDisposable
 {
     private const uint SyntheticFrameCount = 16;
     private readonly object _lifetimeGate = new();
     private readonly NativeEncoderProbeLibrary _library;
     private int _activeOperations;
     private bool _disposeStarted;
-    private bool _disposeCompleted;
+    private Task? _disposeTask;
 
     public PInvokeEncoderProbe(string libraryPath)
     {
@@ -56,37 +57,35 @@ public sealed class PInvokeEncoderProbe : IEncoderProbe, IDisposable
 
     public void Dispose()
     {
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    public ValueTask DisposeAsync()
+    {
         lock (_lifetimeGate)
         {
-            if (_disposeStarted)
+            if (_disposeTask is not null)
             {
-                while (!_disposeCompleted)
-                {
-                    Monitor.Wait(_lifetimeGate);
-                }
-
-                return;
+                return new ValueTask(_disposeTask);
             }
 
             _disposeStarted = true;
+            _disposeTask = Task.Run(DisposeCore);
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private void DisposeCore()
+    {
+        lock (_lifetimeGate)
+        {
             while (_activeOperations != 0)
             {
                 Monitor.Wait(_lifetimeGate);
             }
         }
 
-        try
-        {
-            _library.Dispose();
-        }
-        finally
-        {
-            lock (_lifetimeGate)
-            {
-                _disposeCompleted = true;
-                Monitor.PulseAll(_lifetimeGate);
-            }
-        }
+        _library.Dispose();
     }
 
     private EncoderProbeResult ProbeCore(EncoderProbeRequest request)
