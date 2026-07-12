@@ -209,6 +209,27 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_audio_capture_platform_support)
 
+add_executable(
+    vrrecorder_native_audio_mix_coordinator
+    audio_mix_coordinator_tests.cpp
+    "${native_source_root}/src/audio_mix_coordinator.cpp"
+    "${native_source_root}/src/audio_mixer.cpp"
+    "${native_source_root}/src/audio_capture_timeline.cpp"
+    "${native_source_root}/src/audio_timeline_buffer.cpp")
+target_compile_features(
+    vrrecorder_native_audio_mix_coordinator PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_mix_coordinator
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_audio_mix_coordinator
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_audio_mix_coordinator)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -227,6 +248,8 @@ add_test(NAME vrrecorder_native_audio_capture_source_factory
     COMMAND vrrecorder_native_audio_capture_source_factory)
 add_test(NAME vrrecorder_native_audio_capture_platform_support
     COMMAND vrrecorder_native_audio_capture_platform_support)
+add_test(NAME vrrecorder_native_audio_mix_coordinator
+    COMMAND vrrecorder_native_audio_mix_coordinator)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
