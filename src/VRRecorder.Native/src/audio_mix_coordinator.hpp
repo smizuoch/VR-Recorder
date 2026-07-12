@@ -29,7 +29,17 @@ struct StereoAudioMixRead final {
     bool microphone_underrun = false;
 };
 
-class StereoAudioMixCoordinator final {
+class StereoAudioMixSource {
+public:
+    virtual ~StereoAudioMixSource() = default;
+
+    virtual StereoAudioMixResult MixNext(
+        std::size_t frame_count_48k,
+        std::span<float> output_interleaved,
+        StereoAudioMixRead &read) noexcept = 0;
+};
+
+class StereoAudioMixCoordinator final : public StereoAudioMixSource {
 public:
     StereoAudioMixCoordinator(
         StereoCaptureTimeline &desktop,
@@ -39,7 +49,7 @@ public:
     StereoAudioMixResult MixNext(
         std::size_t frame_count_48k,
         std::span<float> output_interleaved,
-        StereoAudioMixRead &read) noexcept;
+        StereoAudioMixRead &read) noexcept override;
     void Abort() noexcept;
 
 private:
