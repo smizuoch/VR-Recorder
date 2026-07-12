@@ -741,6 +741,31 @@ public sealed class LegalReleasePackageIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-025")]
+    public async Task UnknownNativeRegistrySchemaCannotAdmitReleasePayload()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var binary = await StageFfprobeAsync(
+            payload,
+            registrySchemaVersion: 999);
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                FfmpegRequest(payload, packagePath, binary),
+                CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "invalid-native-artifact-registry");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
     public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
     {
         using var directory = TemporaryDirectory.Create();
@@ -1075,7 +1100,8 @@ public sealed class LegalReleasePackageIntegrationTests
         string fileName,
         string binarySha256,
         string repositoryCommit = "commit",
-        string version = "8.0")
+        string version = "8.0",
+        int schemaVersion = 1)
     {
         const string sourceArchivePath =
             "third-party/source-archives/ffmpeg-source.zip";
@@ -1096,7 +1122,7 @@ public sealed class LegalReleasePackageIntegrationTests
         var registryPath = Path.Combine(root, "third-party", "registry.yml");
         var registry = JsonSerializer.Serialize(new
         {
-            schemaVersion = 1,
+            schemaVersion,
             registryVersion = 1,
             components = new[]
             {
@@ -1131,7 +1157,8 @@ public sealed class LegalReleasePackageIntegrationTests
         StagedPayload payload,
         string? registryBinarySha256 = null,
         string repositoryCommit = "commit",
-        string registryVersion = "8.0")
+        string registryVersion = "8.0",
+        int registrySchemaVersion = 1)
     {
         const string relativePath = "tools/ffprobe.exe";
         byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
@@ -1146,7 +1173,8 @@ public sealed class LegalReleasePackageIntegrationTests
             "ffprobe.exe",
             registryBinarySha256 ?? Hash(binary),
             repositoryCommit,
-            registryVersion);
+            registryVersion,
+            registrySchemaVersion);
         return binary;
     }
 
