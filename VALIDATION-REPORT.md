@@ -32,7 +32,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: warning 0、error 0
-- native Make ABI／mixer／timeline／capture-pump／WASAPI factory／worker／stereo session／encoder-input contract: 成功
+- native Make ABI／mixer／timeline／capture-pump／WASAPI factory／worker／stereo session／encoder-input／availability-event contract: 成功
 - native公開symbol allowlist: 17/17一致
 - format/analyzer: 差分なし
 
@@ -80,6 +80,7 @@ make -C tests/VRRecorder.Native.Tests test
 - WASAPI Start／Readを同一専用threadで実行し、初期結果を同期返却して失敗／Abort／destructorで必ずjoinするcapture worker
 - desktop／microphone workerをrollback可能に開始し、timelineを同一48 kHz frame windowで読み、片側切断時だけを無音化し、skewを拒否してmixerへ固定sample数を渡すstereo capture session
 - mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離するaudio encoding pump
+- device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
 - 最終stagingのPE内容、first-party allowlist、runtime scope、台帳schema／承認／version／source commit、binary／source hashを照合し、standalone native componentを全Legal Bundle indexへ反映するfail-closed gate
@@ -127,7 +128,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
-- native Make ABI/mixer/timeline/capture-pump/WASAPI-factory/worker/stereo-session/encoder-input contracts: passed
+- native Make ABI/mixer/timeline/capture-pump/WASAPI-factory/worker/stereo-session/encoder-input/availability-event contracts: passed
 - native public-symbol allowlist: exact 17/17 match
 - format/analyzers: no changes required
 
@@ -175,6 +176,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Joined capture workers that run WASAPI Start/Read on one dedicated thread, synchronously report initialization, and join on failure, abort, or destruction
 - A rollback-safe stereo capture session that starts desktop/microphone workers, reads their timelines over the same 48 kHz frame window, silences only a disconnected side, rejects skew, and passes a fixed sample count into the mixer
 - An audio encoding pump that submits positioned mixed PCM windows through an encoder port and distinguishes buffered zero-packet writes from actual muxed-packet counts
+- An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
 - A fail-closed final-staging gate that reconciles PE content, the first-party allowlist, runtime scope, registry schema/approval/version/source commit, and binary/source hashes, then includes standalone native components in every Legal Bundle index
