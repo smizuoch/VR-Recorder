@@ -98,6 +98,7 @@ make -C tests/VRRecorder.Native.Tests test
 - video encoderのbuffering／実packet batchを分離して共通fMP4 timelineへ投入し、mux failureをencoder failureと区別して未commit統計を除外し双方をAbortするsink adapter
 - AAC encoderのbuffering／実packet batchを分離して同じfMP4 timelineへaudio packetを投入し、mux failureをaudio pump／workerまで独立伝播してcapture／encoder／muxerを停止するsink adapter
 - video／audio flush packet投入後のstream完了をbarrier化し、両encoder成功後だけ最終fragment／trailer／file flushを一度実行し、重複完了／flush後packet／片側failureをfail-closed処理する共有mux finalization session
+- mux成功後の最新video／audio PTS差を80 ms閾値で監視し、excursion単位の再arm可能なprivacy-safe eventと最新／最大drift／event数を記録するA/V sync monitor（診断observer結果は録画成否へ影響しない）
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -212,6 +213,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A video sink adapter that separates encoder buffering from real packet batches, submits those batches to the shared fMP4 timeline, distinguishes mux from encoder failures, excludes uncommitted statistics, and aborts both sides on failure
 - An AAC sink adapter that separates encoder buffering from real packet batches, submits audio packets to the same fMP4 timeline, propagates mux failures distinctly through the audio pump/worker, and stops capture, encoder, and muxer
 - A shared mux finalization session that barriers stream completion after video/audio flush packets, runs final fragment/trailer/file flush once only after both encoders succeed, and fail-closed rejects duplicate completion, post-flush packets, or either-side failure
+- An A/V sync monitor that observes successfully muxed video/audio PTS at an 80 ms threshold, emits rearmable privacy-safe events per excursion, records latest/maximum drift and event count, and never lets diagnostic observer outcomes alter recording success
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies

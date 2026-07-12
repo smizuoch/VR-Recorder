@@ -26,6 +26,8 @@
 - [x] audio mux failureをencoder failureと分離し、未commit統計を除外してcapture／encoder／muxerを停止する
 - [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux fragment／trailer／file flushを実行する
 - [x] flush済みstreamの追加packet／重複完了を拒否し、片側failure時はtrailerなしで共有muxをAbortする
+- [x] mux成功packetの最新A/V PTS差を監視し、80 ms超のexcursionごとに一度だけprivacy-safe診断eventを発行する
+- [x] A/V差が80 ms以内へ復帰したら再armし、最新／最大driftとevent数を集計する
 
 ## English
 
@@ -53,3 +55,5 @@
 - [x] Separate audio mux failures from encoder failures, exclude uncommitted statistics, and stop capture, encoder, and muxer
 - [x] Wait at a barrier for successful video/audio encoder flushes and run mux fragment/trailer/file flush only after the second completion
 - [x] Reject packets or duplicate completion from a flushed stream and abort the shared mux without a trailer when either encoder fails
+- [x] Monitor latest A/V PTS drift from successfully muxed packets and emit one privacy-safe diagnostic event per excursion beyond 80 ms
+- [x] Rearm after A/V drift recovers to 80 ms or less and track latest/maximum drift and event count
