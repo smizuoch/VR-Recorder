@@ -2,8 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -36,6 +39,55 @@ public:
     void Abort() noexcept override { order_.push_back(23); ++abort_calls; }
     std::vector<int> &order_;
     std::size_t abort_calls = 0;
+};
+
+class ConcurrentStreamPipeline final : public MediaStreamPipelinePort {
+public:
+    explicit ConcurrentStreamPipeline(bool block_join) noexcept
+        : block_join_(block_join)
+    {
+    }
+
+    vrrec_status_t Start() noexcept override { return VRREC_STATUS_OK; }
+    vrrec_status_t RequestStop() noexcept override { return VRREC_STATUS_OK; }
+
+    void Abort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            aborted_ = true;
+            ++abort_calls;
+        }
+        changed_.notify_all();
+    }
+
+    vrrec_status_t Join() noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        join_entered_ = true;
+        changed_.notify_all();
+        if (block_join_) {
+            changed_.wait(lock, [this] { return aborted_; });
+        }
+        ++join_calls;
+        return VRREC_STATUS_OK;
+    }
+
+    std::uint64_t MuxedPacketCount() const noexcept override { return 1; }
+
+    void WaitForJoin()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return join_entered_; });
+    }
+
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    bool block_join_;
+    bool join_entered_ = false;
+    bool aborted_ = false;
+    std::size_t abort_calls = 0;
+    std::size_t join_calls = 0;
 };
 
 class RecordingEvents final : public MediaEventSink {
@@ -108,6 +160,30 @@ void StreamFailureAbortsPeerAndMuxWithoutStoppedEvent()
     CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
 }
 
+void AbortDuringJoinSuppressesSuccessfulStoppedCompletion()
+{
+    std::vector<int> order;
+    ConcurrentStreamPipeline video(true);
+    ConcurrentStreamPipeline audio(false);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(video, audio, mux, events);
+    CHECK(session.Start() == VRREC_STATUS_OK);
+    CHECK(session.RequestStop() == VRREC_STATUS_OK);
+
+    auto join_result = VRREC_STATUS_OK;
+    std::thread joiner([&] { join_result = session.Join(); });
+    video.WaitForJoin();
+    session.Abort();
+    joiner.join();
+
+    CHECK(join_result == VRREC_STATUS_INVALID_STATE);
+    CHECK(video.abort_calls == 1);
+    CHECK(audio.abort_calls == 1);
+    CHECK(mux.abort_calls == 1);
+    CHECK(events.stopped_calls == 0);
+}
+
 }
 
 int main()
@@ -115,5 +191,6 @@ int main()
     GracefulStopOrdersVideoBeforeAudioAndPublishesFinalCounts();
     AudioStartFailureRollsBackVideoAndMux();
     StreamFailureAbortsPeerAndMuxWithoutStoppedEvent();
+    AbortDuringJoinSuppressesSuccessfulStoppedCompletion();
     return 0;
 }
