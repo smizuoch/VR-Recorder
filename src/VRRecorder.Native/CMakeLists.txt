@@ -25,6 +25,7 @@ add_library(vrrecorder_native SHARED
 target_sources(vrrecorder_native PRIVATE src/video_encoding_pump.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_encoding_worker.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_pipeline_session.cpp)
+target_sources(vrrecorder_native PRIVATE src/video_processing_plan.cpp)
 
 if(WIN32)
     target_sources(
