@@ -9,12 +9,28 @@ public sealed class RecordingFileFinalizationUseCase
     private readonly IRecordingFileValidator _validator;
     private readonly IRecordingRecoveryStore _recovery;
     private readonly ISavedRecordingSink _savedRecordings;
+    private readonly IRecordingFinalizationEventSink? _events;
 
     public RecordingFileFinalizationUseCase(
         IRecordingFileFinalizer finalizer,
         IRecordingFileValidator validator,
         IRecordingRecoveryStore recovery,
         ISavedRecordingSink savedRecordings)
+        : this(
+            finalizer,
+            validator,
+            recovery,
+            savedRecordings,
+            events: null)
+    {
+    }
+
+    public RecordingFileFinalizationUseCase(
+        IRecordingFileFinalizer finalizer,
+        IRecordingFileValidator validator,
+        IRecordingRecoveryStore recovery,
+        ISavedRecordingSink savedRecordings,
+        IRecordingFinalizationEventSink? events)
     {
         ArgumentNullException.ThrowIfNull(finalizer);
         ArgumentNullException.ThrowIfNull(validator);
@@ -25,6 +41,7 @@ public sealed class RecordingFileFinalizationUseCase
         _validator = validator;
         _recovery = recovery;
         _savedRecordings = savedRecordings;
+        _events = events;
     }
 
     public async Task<RecordingFinalizationResult> ExecuteAsync(
@@ -69,6 +86,8 @@ public sealed class RecordingFileFinalizationUseCase
                     exception.RecoveryCandidate,
                     cancellationToken)
                 .ConfigureAwait(false);
+            PublishRecoveryBestEffort(
+                RecordingRecoveryReason.FinalizationFailed);
             return new RecordingFinalizationResult.RecoveryRequired(
                 RecordingRecoveryReason.FinalizationFailed,
                 quarantined);
@@ -91,6 +110,8 @@ public sealed class RecordingFileFinalizationUseCase
                     new RecoverableRecording(finalized.FinalPath),
                     cancellationToken)
                 .ConfigureAwait(false);
+            PublishRecoveryBestEffort(
+                RecordingRecoveryReason.ValidationFailed);
             return new RecordingFinalizationResult.RecoveryRequired(
                 RecordingRecoveryReason.ValidationFailed,
                 quarantined);
@@ -101,5 +122,19 @@ public sealed class RecordingFileFinalizationUseCase
             .ConfigureAwait(false);
 
         return new RecordingFinalizationResult.Saved(finalized);
+    }
+
+    private void PublishRecoveryBestEffort(RecordingRecoveryReason reason)
+    {
+        try
+        {
+            _events?.Publish(reason);
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "Recording finalization diagnostics failed: {0}",
+                exception.GetType().Name);
+        }
     }
 }
