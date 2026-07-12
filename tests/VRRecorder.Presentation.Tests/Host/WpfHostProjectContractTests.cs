@@ -1416,6 +1416,9 @@ public sealed class WpfHostProjectContractTests
                      "DesktopEndpointComboBox",
                      "MicrophoneEndpointComboBox",
                      "UiLocaleComboBox",
+                     "VrHandComboBox",
+                     "OverlayPlacementComboBox",
+                     "OscAutoDiscoverComboBox",
                  })
         {
             var combo = Assert.Single(
@@ -1451,6 +1454,21 @@ public sealed class WpfHostProjectContractTests
             Assert.Equal("OnGainChanged", slider.Attribute("ValueChanged")?.Value);
             Assert.NotNull(slider.Attribute("AutomationProperties.Name"));
             Assert.NotNull(slider.Attribute("AutomationProperties.HelpText"));
+        }
+
+        foreach (var textBoxName in new[]
+                 {
+                     "OscFallbackHostTextBox",
+                     "OscFallbackSendPortTextBox",
+                     "OscFallbackReceivePortTextBox",
+                 })
+        {
+            var textBox = Assert.Single(
+                settingsWindow.Descendants(Presentation + "TextBox"),
+                element => element.Attribute(Xaml + "Name")?.Value ==
+                           textBoxName);
+            Assert.NotNull(textBox.Attribute("AutomationProperties.Name"));
+            Assert.NotNull(textBox.Attribute("AutomationProperties.HelpText"));
         }
 
         var rightsNotice = Assert.Single(
@@ -1492,6 +1510,10 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("SupportedAudioRoutings", settingsCode);
         Assert.Contains("UiLocaleComboBox", settingsCode);
         Assert.Contains("UiLocale =", settingsCode);
+        Assert.Contains("VrHand =", settingsCode);
+        Assert.Contains("OverlayPlacement =", settingsCode);
+        Assert.Contains("OscAutoDiscover =", settingsCode);
+        Assert.Contains("OscFallbackHost =", settingsCode);
         Assert.Contains("LoadAudioEndpointOptionsAsync", settingsCode);
         Assert.Contains("AudioEndpointOption", settingsCode);
         Assert.Contains("AudioRouting =", settingsCode);
@@ -1558,6 +1580,18 @@ public sealed class WpfHostProjectContractTests
                          "Settings_Language_System",
                          "Settings_Language_English",
                          "Settings_Language_Japanese",
+                         "Settings_Vr_Heading",
+                         "Settings_VrHand_Label",
+                         "Settings_VrHand_Tooltip",
+                         "Settings_OverlayPlacement_Label",
+                         "Settings_OverlayPlacement_Tooltip",
+                         "Settings_Osc_Heading",
+                         "Settings_OscAutoDiscover_Label",
+                         "Settings_OscAutoDiscover_Tooltip",
+                         "Settings_OscFallbackHost_Label",
+                         "Settings_OscFallbackHost_Tooltip",
+                         "Settings_OscFallbackSendPort_Label",
+                         "Settings_OscFallbackReceivePort_Label",
                          "Settings_Save_Label",
                          "Settings_Cancel_Label",
                          "Settings_Load_Error",
