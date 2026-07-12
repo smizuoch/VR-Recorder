@@ -54,11 +54,18 @@ public static class NativeGcovCoverageGate
                     var branchIndex = 0;
                     foreach (var branch in sourceBranches.EnumerateArray())
                     {
+                        var currentBranchIndex = branchIndex++;
+                        if (branch.TryGetProperty("throw", out var throwEdge) &&
+                            throwEdge.ValueKind == JsonValueKind.True)
+                        {
+                            continue;
+                        }
+
                         var branchCount = RequiredInt64(branch, "count");
                         var branchKey = new BranchKey(
                             path,
                             lineNumber,
-                            branchIndex++);
+                            currentBranchIndex);
                         branches[branchKey] =
                             branches.GetValueOrDefault(branchKey) ||
                             branchCount > 0;
