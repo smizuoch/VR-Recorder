@@ -9,10 +9,18 @@
 
 namespace vrrecorder::native {
 
+enum class VideoEncoderFailureStage {
+    None,
+    Processing,
+    Encoding,
+};
+
 struct VideoEncoderWrite final {
     vrrec_status_t status;
     std::uint64_t muxed_packet_count;
     std::uint64_t encode_latency_microseconds;
+    VideoEncoderFailureStage failure_stage =
+        VideoEncoderFailureStage::None;
 };
 
 class VideoEncoderSink {
@@ -30,6 +38,7 @@ enum class VideoEncodingResult {
     NoFrame,
     SurfaceTimeout,
     SurfaceFailed,
+    ProcessorFailed,
     InvalidTick,
     EncoderFailed,
     Failed,

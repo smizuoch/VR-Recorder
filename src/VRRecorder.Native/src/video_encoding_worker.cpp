@@ -161,6 +161,11 @@ void VideoEncodingWorker::Run() noexcept
                 VideoEncodingWorkerResult::EncoderFailed,
                 read.encoder_status,
                 "video encoder failed while recording");
+        } else if (encoding_result == VideoEncodingResult::ProcessorFailed) {
+            Fail(
+                VideoEncodingWorkerResult::Failed,
+                read.encoder_status,
+                "video frame processing failed while recording");
         } else if (encoding_result == VideoEncodingResult::SurfaceFailed) {
             Fail(
                 VideoEncodingWorkerResult::Failed,

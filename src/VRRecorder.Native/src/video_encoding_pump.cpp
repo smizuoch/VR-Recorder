@@ -60,7 +60,9 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
         false,
     };
     if (write.status != VRREC_STATUS_OK) {
-        return VideoEncodingResult::EncoderFailed;
+        return write.failure_stage == VideoEncoderFailureStage::Processing
+            ? VideoEncodingResult::ProcessorFailed
+            : VideoEncodingResult::EncoderFailed;
     }
 
     const auto muxed = muxed_packet_count_.load();
