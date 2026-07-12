@@ -117,12 +117,20 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                  frame < packet.frame_count;
                  ++frame) {
                 float sample = 0.0F;
-                std::memcpy(
-                    &sample,
-                    packet.bytes.data() + frame * format.block_align,
-                    sizeof(float));
-                if (!std::isfinite(sample)) {
-                    return CaptureNormalizationResult::InvalidPacket;
+                const auto *sample_bytes =
+                    packet.bytes.data() + frame * format.block_align;
+                if (format.encoding == CaptureSampleEncoding::IeeeFloat) {
+                    std::memcpy(
+                        &sample,
+                        sample_bytes,
+                        sizeof(float));
+                    if (!std::isfinite(sample)) {
+                        return CaptureNormalizationResult::InvalidPacket;
+                    }
+                } else {
+                    std::int16_t pcm = 0;
+                    std::memcpy(&pcm, sample_bytes, sizeof(pcm));
+                    sample = static_cast<float>(pcm) / 32768.0F;
                 }
 
                 source_stereo[frame * OutputChannelCount] = sample;
@@ -197,13 +205,18 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
 bool StereoCaptureNormalizer48k::IsFormatSupported(
     const CapturePcmFormat &format) noexcept
 {
-    if (format.sample_rate_hz == 0 || format.channel_count != 1 ||
-        format.encoding != CaptureSampleEncoding::IeeeFloat ||
-        format.container_bits != 32 || format.valid_bits != 32) {
+    if (format.sample_rate_hz == 0 || format.channel_count != 1) {
         return false;
     }
 
-    return format.block_align == sizeof(float) * format.channel_count;
+    const auto bytes_per_sample = format.container_bits / 8U;
+    const auto encoding_supported =
+        (format.encoding == CaptureSampleEncoding::IeeeFloat &&
+         format.container_bits == 32 && format.valid_bits == 32) ||
+        (format.encoding == CaptureSampleEncoding::PcmSignedInteger &&
+         format.container_bits == 16 && format.valid_bits == 16);
+    return encoding_supported && format.container_bits % 8U == 0 &&
+           format.block_align == bytes_per_sample * format.channel_count;
 }
 
 bool StereoCaptureNormalizer48k::SameFormat(
