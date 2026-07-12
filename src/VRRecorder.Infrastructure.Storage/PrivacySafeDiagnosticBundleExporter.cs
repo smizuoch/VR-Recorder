@@ -91,6 +91,11 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         "endpoint_rediscovery_scheduled",
         "input_recovered",
     ];
+    private static readonly HashSet<string> AudioBufferHealthKinds =
+    [
+        "buffer_overrun",
+        "buffer_underrun",
+    ];
     private static readonly HashSet<string> Encoders =
     [
         "amf",
@@ -402,8 +407,39 @@ public sealed class PrivacySafeDiagnosticBundleExporter
             "recording.finalization_recovery" =>
                 SanitizeFinalizationRecovery(fields),
             "osc.operation" => SanitizeOscOperation(fields),
+            "audio.buffer_health" => SanitizeAudioBufferHealth(fields),
             _ => null,
         };
+
+    private static SortedDictionary<string, string>? SanitizeAudioBufferHealth(
+        IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadNonnegativeLong(
+                fields,
+                "framePosition",
+                out var framePosition) ||
+            !TryReadAllowedString(
+                fields,
+                "input",
+                AudioInputs,
+                out var input) ||
+            !TryReadAllowedString(
+                fields,
+                "kind",
+                AudioBufferHealthKinds,
+                out var kind))
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["framePosition"] = framePosition.ToString(
+                CultureInfo.InvariantCulture),
+            ["input"] = input,
+            ["kind"] = kind,
+        };
+    }
 
     private static SortedDictionary<string, string>? SanitizeOscOperation(
         IReadOnlyDictionary<string, JsonElement> fields)

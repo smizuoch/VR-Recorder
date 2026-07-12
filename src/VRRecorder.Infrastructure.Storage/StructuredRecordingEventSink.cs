@@ -281,6 +281,22 @@ public sealed class StructuredRecordingEventSink
             }));
     }
 
+    public void Publish(RecordingAudioBufferHealthEvent health)
+    {
+        ArgumentNullException.ThrowIfNull(health);
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            DiagnosticLogLevel.Warning,
+            "audio.buffer_health",
+            new Dictionary<string, string>
+            {
+                ["framePosition"] = health.FramePosition.ToString(
+                    CultureInfo.InvariantCulture),
+                ["input"] = AudioInputName(health.Input),
+                ["kind"] = AudioBufferHealthName(health.Kind),
+            }));
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
@@ -428,6 +444,17 @@ public sealed class StructuredRecordingEventSink
                 nameof(outcome),
                 outcome,
                 "The OSC operation outcome is not supported."),
+        };
+
+    private static string AudioBufferHealthName(
+        AudioBufferHealthKind health) => health switch
+        {
+            AudioBufferHealthKind.Underrun => "buffer_underrun",
+            AudioBufferHealthKind.Overrun => "buffer_overrun",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(health),
+                health,
+                "The audio buffer health kind is not supported."),
         };
 
     private static string AudioInputName(AudioInput input) => input switch
