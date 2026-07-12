@@ -108,6 +108,35 @@ public sealed class RecordingFileFinalizationUseCaseTests
         Assert.Empty(savedRecordings.Recordings);
     }
 
+    [Fact]
+    public async Task RecoveryDiagnosticFailureCannotChangeQuarantinedResult()
+    {
+        var recovery = new FakeRecordingRecoveryStore();
+        var diagnostics = new ThrowingRecordingFinalizationEventSink();
+        var useCase = new RecordingFileFinalizationUseCase(
+            new FailingRecordingFileFinalizer(),
+            new UnexpectedRecordingFileValidator(),
+            recovery,
+            new FakeSavedRecordingSink(),
+            diagnostics);
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "recording.mp4"));
+
+        var result = await useCase.ExecuteAsync(
+            pending,
+            CancellationToken.None);
+
+        var recoveryRequired =
+            Assert.IsType<RecordingFinalizationResult.RecoveryRequired>(result);
+        Assert.Equal(
+            RecordingRecoveryReason.FinalizationFailed,
+            recoveryRequired.Reason);
+        Assert.Equal(
+            [RecordingRecoveryReason.FinalizationFailed],
+            diagnostics.Reasons);
+    }
+
     private sealed class FailingRecordingFileFinalizer : IRecordingFileFinalizer
     {
         public Task<FinalizedRecording> FinalizeAsync(
@@ -127,5 +156,17 @@ public sealed class RecordingFileFinalizationUseCaseTests
             FinalizedRecording recording,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Validation was not expected.");
+    }
+
+    private sealed class ThrowingRecordingFinalizationEventSink
+        : IRecordingFinalizationEventSink
+    {
+        public List<RecordingRecoveryReason> Reasons { get; } = [];
+
+        public void Publish(RecordingRecoveryReason reason)
+        {
+            Reasons.Add(reason);
+            throw new IOException("diagnostic storage unavailable");
+        }
     }
 }
