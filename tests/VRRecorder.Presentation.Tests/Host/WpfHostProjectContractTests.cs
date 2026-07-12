@@ -1415,6 +1415,7 @@ public sealed class WpfHostProjectContractTests
                      "AudioRoutingComboBox",
                      "DesktopEndpointComboBox",
                      "MicrophoneEndpointComboBox",
+                     "UiLocaleComboBox",
                  })
         {
             var combo = Assert.Single(
@@ -1489,6 +1490,8 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("SupportedEncoders", settingsCode);
         Assert.Contains("SupportedQualityPresets", settingsCode);
         Assert.Contains("SupportedAudioRoutings", settingsCode);
+        Assert.Contains("UiLocaleComboBox", settingsCode);
+        Assert.Contains("UiLocale =", settingsCode);
         Assert.Contains("LoadAudioEndpointOptionsAsync", settingsCode);
         Assert.Contains("AudioEndpointOption", settingsCode);
         Assert.Contains("AudioRouting =", settingsCode);
@@ -1550,6 +1553,11 @@ public sealed class WpfHostProjectContractTests
                          "Settings_Audio_MicOnly",
                          "Settings_Audio_Muted",
                          "Settings_Audio_Gain_Format",
+                         "Settings_Language_Label",
+                         "Settings_Language_Tooltip",
+                         "Settings_Language_System",
+                         "Settings_Language_English",
+                         "Settings_Language_Japanese",
                          "Settings_Save_Label",
                          "Settings_Cancel_Label",
                          "Settings_Load_Error",
