@@ -129,6 +129,45 @@ set_target_properties(
         CXX_EXTENSIONS OFF)
 vrrecorder_enable_strict_warnings(vrrecorder_native_audio_capture_normalizer)
 
+add_executable(
+    vrrecorder_native_audio_capture_source_factory
+    audio_capture_source_factory_tests.cpp)
+target_compile_features(
+    vrrecorder_native_audio_capture_source_factory PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_capture_source_factory
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+if(WIN32)
+    target_sources(
+        vrrecorder_native_audio_capture_source_factory
+        PRIVATE
+            "${native_source_root}/src/audio_capture_normalizer.cpp"
+            "${native_source_root}/src/wasapi_audio_capture_source.cpp")
+    target_compile_definitions(
+        vrrecorder_native_audio_capture_source_factory
+        PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN)
+    target_link_libraries(
+        vrrecorder_native_audio_capture_source_factory
+        PRIVATE
+            ole32
+            uuid)
+else()
+    target_sources(
+        vrrecorder_native_audio_capture_source_factory
+        PRIVATE
+            "${native_source_root}/src/unavailable_wasapi_audio_capture_source.cpp")
+endif()
+set_target_properties(
+    vrrecorder_native_audio_capture_source_factory
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_audio_capture_source_factory)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -143,6 +182,8 @@ add_test(NAME vrrecorder_native_audio_capture_pump
     COMMAND vrrecorder_native_audio_capture_pump)
 add_test(NAME vrrecorder_native_audio_capture_normalizer
     COMMAND vrrecorder_native_audio_capture_normalizer)
+add_test(NAME vrrecorder_native_audio_capture_source_factory
+    COMMAND vrrecorder_native_audio_capture_source_factory)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
