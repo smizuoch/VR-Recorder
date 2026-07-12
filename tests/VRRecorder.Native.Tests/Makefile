@@ -12,6 +12,7 @@ LDFLAGS := --coverage -pthread
 all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/av_sync_monitor_tests $(BUILD_DIR)/av_sync_media_event_adapter_tests $(BUILD_DIR)/audio_encoder_config_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/audio_capture_source_factory_tests $(BUILD_DIR)/audio_capture_platform_support_tests $(BUILD_DIR)/audio_capture_input_worker_tests $(BUILD_DIR)/audio_capture_session_tests $(BUILD_DIR)/audio_mix_coordinator_tests $(BUILD_DIR)/audio_encoding_pump_tests $(BUILD_DIR)/audio_encoding_worker_tests $(BUILD_DIR)/audio_pipeline_session_tests $(BUILD_DIR)/audio_media_event_adapter_tests $(BUILD_DIR)/fragmented_mp4_mux_coordinator_tests $(BUILD_DIR)/media_mux_pipeline_tests $(BUILD_DIR)/shared_mux_finalization_session_tests $(BUILD_DIR)/muxing_audio_encoder_sink_tests $(BUILD_DIR)/muxing_video_encoder_sink_tests $(BUILD_DIR)/video_encoder_config_tests $(BUILD_DIR)/video_processing_plan_tests $(BUILD_DIR)/video_processing_encoder_sink_tests $(BUILD_DIR)/video_cfr_scheduler_tests $(BUILD_DIR)/video_encoding_pump_tests $(BUILD_DIR)/video_encoding_worker_tests $(BUILD_DIR)/spout_capture_pump_tests $(BUILD_DIR)/spout_capture_worker_tests $(BUILD_DIR)/video_pipeline_session_tests $(BUILD_DIR)/c_header_smoke.o
 
 all: $(BUILD_DIR)/media_recording_session_tests
+all: $(BUILD_DIR)/media_stream_pipeline_adapter_tests
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -38,6 +39,9 @@ $(BUILD_DIR)/media_mux_pipeline_tests: media_mux_pipeline_tests.cpp $(NATIVE_ROO
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/media_recording_session_tests: media_recording_session_tests.cpp $(NATIVE_ROOT)/src/media_recording_session.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/media_stream_pipeline_adapter_tests: media_stream_pipeline_adapter_tests.cpp $(NATIVE_ROOT)/src/media_stream_pipeline_adapters.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/fragmented_mp4_mux_coordinator_tests: fragmented_mp4_mux_coordinator_tests.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
@@ -157,6 +161,7 @@ test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/fragmented_mp4_mux_coordinator_tests
 	$(BUILD_DIR)/media_mux_pipeline_tests
 	$(BUILD_DIR)/media_recording_session_tests
+	$(BUILD_DIR)/media_stream_pipeline_adapter_tests
 	$(BUILD_DIR)/shared_mux_finalization_session_tests
 	$(BUILD_DIR)/muxing_audio_encoder_sink_tests
 	$(BUILD_DIR)/muxing_video_encoder_sink_tests
