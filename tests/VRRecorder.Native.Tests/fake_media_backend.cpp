@@ -217,6 +217,14 @@ public:
             drift);
     }
 
+    void EmitAudioBufferHealth(
+        AudioEndpointRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept
+    {
+        events_.AudioBufferHealthChanged(role, health, frame_position);
+    }
+
     static FakeMediaBackend *Active() noexcept
     {
         return active_;
@@ -641,6 +649,17 @@ void EmitAvDrift(
     FakeMediaBackend::Active()->EmitAvDrift(
         video_pts_microseconds,
         audio_pts_microseconds);
+}
+
+void EmitAudioBufferHealth(
+    AudioEndpointRole role,
+    AudioBufferHealth health,
+    std::uint64_t frame_position)
+{
+    FakeMediaBackend::Active()->EmitAudioBufferHealth(
+        role,
+        health,
+        frame_position);
 }
 
 void SetDesktopAudioEndpointAvailable(

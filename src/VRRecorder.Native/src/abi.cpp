@@ -365,6 +365,48 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         });
     }
 
+    void AudioBufferHealthChanged(
+        vrrecorder::native::AudioEndpointRole role,
+        vrrecorder::native::AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept override
+    {
+        const std::lock_guard callback_lock(callback_mutex_);
+        vrrec_event_kind_t kind;
+        std::uint64_t sequence;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (state_ != SessionState::Started || stop_requested_) {
+                return;
+            }
+
+            if (role == vrrecorder::native::AudioEndpointRole::Desktop) {
+                kind = health == vrrecorder::native::AudioBufferHealth::Underrun
+                    ? VRREC_EVENT_DESKTOP_AUDIO_BUFFER_UNDERRUN
+                    : VRREC_EVENT_DESKTOP_AUDIO_BUFFER_OVERRUN;
+            } else if (
+                role == vrrecorder::native::AudioEndpointRole::Microphone) {
+                kind = health == vrrecorder::native::AudioBufferHealth::Underrun
+                    ? VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_UNDERRUN
+                    : VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN;
+            } else {
+                return;
+            }
+
+            sequence = ++sequence_;
+        }
+
+        Emit(vrrec_event_v1 {
+            sizeof(vrrec_event_v1),
+            VRREC_ABI_V1,
+            kind,
+            VRREC_STATUS_OK,
+            sequence,
+            0,
+            frame_position,
+            nullptr,
+        });
+    }
+
 private:
     void EndRuntimeOperation() noexcept
     {
