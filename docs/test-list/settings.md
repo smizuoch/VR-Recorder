@@ -15,6 +15,7 @@
 - [x] audio routing／gainの明示変更だけを保存し、未変更のendpoint IDと同時更新値を保持する
 - [x] desktop／microphone endpoint IDをlocalized／accessibleなeditable selectorへ投影し、明示変更だけを三者マージして次回録画へ反映する
 - [x] Windows Core Audioからactive render／capture endpointのfriendly nameとopaque IDを列挙し、非activeな保存済み選択も失わずselectorへ統合する
+- [x] System／English／Japaneseをoptional schema v1設定として三者マージし、起動時と保存直後にresource dictionaryへ適用する（CLI locale overrideを優先）
 
 ## English
 
@@ -31,3 +32,4 @@
 - [x] Save only explicit audio-routing and gain edits while preserving endpoint IDs and concurrent unedited values
 - [x] Project desktop/microphone endpoint IDs into localized accessible editable selectors and three-way merge only explicit changes into the next recording
 - [x] Enumerate active Windows Core Audio render/capture endpoints by friendly name and opaque ID while retaining inactive persisted selections in the selectors
+- [x] Three-way merge System/English/Japanese as an optional schema-v1 setting and apply it to resource dictionaries at startup and immediately after saving, with the CLI locale override taking precedence
