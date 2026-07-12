@@ -3,11 +3,12 @@
 
 #include "av_sync_media_event_adapter.hpp"
 #include "fragmented_mp4_mux_coordinator.hpp"
+#include "media_recording_session.hpp"
 #include "shared_mux_finalization_session.hpp"
 
 namespace vrrecorder::native {
 
-class MediaMuxPipeline final {
+class MediaMuxPipeline final : public MediaMuxSessionPort {
 public:
     MediaMuxPipeline(
         FragmentedMp4Muxer &muxer,
@@ -16,7 +17,7 @@ public:
     Mp4MuxResult Submit(const EncodedMediaPacket &packet) noexcept;
     vrrec_status_t EncoderFinished(MediaStreamKind stream) noexcept;
     void EncoderFailed(MediaStreamKind stream) noexcept;
-    void Abort() noexcept;
+    void Abort() noexcept override;
     AvSyncSnapshot AvSyncStatistics() const noexcept;
     SharedMuxFinalizationSession &MuxSession() noexcept;
 
