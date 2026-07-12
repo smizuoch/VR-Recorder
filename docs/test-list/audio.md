@@ -24,6 +24,8 @@
 - [x] replacement endpointのStart失敗後もtimelineを破棄せず再接続を継続する
 - [x] desktop／microphoneを同一48 kHz frame windowでmixし、片側lossだけを無音化する
 - [x] 二入力のframe skewをmix前に拒否し、blocked readをAbortで解除する
+- [x] WASAPI Start／Readを同一専用threadで実行し、初期化失敗時とAbort時にjoinする
+- [x] microphone初期化失敗時は開始済みdesktop workerをrollbackし、部分開始sessionを残さない
 
 ## English
 
@@ -49,3 +51,5 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Keep the timeline recoverable after a replacement endpoint fails to start
 - [x] Mix desktop and microphone over the same 48 kHz frame window while silencing only a lost side
 - [x] Reject dual-input frame skew before mixing and release blocked reads on abort
+- [x] Run WASAPI Start/Read on one dedicated thread and join it after initialization failure or abort
+- [x] Roll back a started desktop worker when microphone initialization fails, leaving no partially started session
