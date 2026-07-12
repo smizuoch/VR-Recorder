@@ -21,6 +21,32 @@ namespace {
 
 using namespace vrrecorder::native;
 
+class RecordingAudioHealthSink final : public AudioCaptureAvailabilitySink {
+public:
+    void AvailabilityChanged(
+        AudioCaptureRole,
+        bool,
+        std::uint64_t) noexcept override
+    {
+    }
+
+    void BufferHealthChanged(
+        AudioCaptureRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept override
+    {
+        event_role = role;
+        event_health = health;
+        event_frame = frame_position;
+        ++event_count;
+    }
+
+    AudioCaptureRole event_role = AudioCaptureRole::DesktopLoopback;
+    AudioBufferHealth event_health = AudioBufferHealth::Overrun;
+    std::uint64_t event_frame = 0;
+    std::size_t event_count = 0;
+};
+
 std::vector<float> ConstantStereo(
     std::size_t frame_count,
     float sample)
@@ -74,7 +100,12 @@ void SilencesOnlyTheUnavailableInputAtTheScheduledWindow()
     StereoCaptureTimeline desktop(16);
     StereoCaptureTimeline microphone(16);
     StereoAudioMixer mixer(VRREC_AUDIO_ROUTING_MIXED, 0.0, 0.0);
-    StereoAudioMixCoordinator coordinator(desktop, microphone, mixer);
+    RecordingAudioHealthSink events;
+    StereoAudioMixCoordinator coordinator(
+        desktop,
+        microphone,
+        mixer,
+        &events);
     const auto desktop_samples = ConstantStereo(4, 0.25F);
     const auto microphone_samples = ConstantStereo(2, 0.5F);
     Push(desktop, 0, 100, 1'000'000, desktop_samples);
@@ -94,6 +125,10 @@ void SilencesOnlyTheUnavailableInputAtTheScheduledWindow()
     CHECK(!read.microphone_available);
     CHECK(!read.desktop_underrun);
     CHECK(read.microphone_underrun);
+    CHECK(events.event_count == 1);
+    CHECK(events.event_role == AudioCaptureRole::Microphone);
+    CHECK(events.event_health == AudioBufferHealth::Underrun);
+    CHECK(events.event_frame == 2);
     for (const auto sample : output) {
         CHECK(sample == 0.25F);
     }
