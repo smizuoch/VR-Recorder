@@ -13,6 +13,7 @@ enum class VideoEncoderFailureStage {
     None,
     Processing,
     Encoding,
+    Muxing,
 };
 
 struct VideoEncoderWrite final {
@@ -39,6 +40,7 @@ enum class VideoEncodingResult {
     SurfaceTimeout,
     SurfaceFailed,
     ProcessorFailed,
+    MuxFailed,
     InvalidTick,
     EncoderFailed,
     Failed,

@@ -60,9 +60,13 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
         false,
     };
     if (write.status != VRREC_STATUS_OK) {
-        return write.failure_stage == VideoEncoderFailureStage::Processing
-            ? VideoEncodingResult::ProcessorFailed
-            : VideoEncodingResult::EncoderFailed;
+        if (write.failure_stage == VideoEncoderFailureStage::Processing) {
+            return VideoEncodingResult::ProcessorFailed;
+        }
+        if (write.failure_stage == VideoEncoderFailureStage::Muxing) {
+            return VideoEncodingResult::MuxFailed;
+        }
+        return VideoEncodingResult::EncoderFailed;
     }
 
     const auto muxed = muxed_packet_count_.load();

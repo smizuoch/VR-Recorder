@@ -166,6 +166,11 @@ void VideoEncodingWorker::Run() noexcept
                 VideoEncodingWorkerResult::Failed,
                 read.encoder_status,
                 "video frame processing failed while recording");
+        } else if (encoding_result == VideoEncodingResult::MuxFailed) {
+            Fail(
+                VideoEncodingWorkerResult::Failed,
+                read.encoder_status,
+                "video packet muxing failed while recording");
         } else if (encoding_result == VideoEncodingResult::SurfaceFailed) {
             Fail(
                 VideoEncodingWorkerResult::Failed,
