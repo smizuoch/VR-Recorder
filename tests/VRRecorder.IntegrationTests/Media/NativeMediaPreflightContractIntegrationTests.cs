@@ -264,6 +264,51 @@ public sealed class NativeMediaPreflightContractIntegrationTests
         Assert.Equal(59.94, (await waiting).EstimatedSourceFramesPerSecond);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MultipleStableSendersUseServiceScopedSelectionNotThirdFrameOrder(
+        bool senderBStabilizesFirst)
+    {
+        var source = new ControllableSpoutVideoSource([]);
+        var selection = new CapturingVideoSenderSelection("sender-b");
+        var gateway = new SpoutVideoSignalGateway(source, selection);
+        await gateway.CaptureBaselineAsync(CancellationToken.None);
+        var waiting = gateway.WaitForStableSignalAsync(
+            "vrchat-service-42",
+            TimeSpan.FromSeconds(1),
+            CancellationToken.None);
+        await source.WaitUntilObservingAsync().WaitAsync(TimeSpan.FromSeconds(1));
+
+        source.Publish(Frame(1, 1_000, AdapterLuid, senderId: "sender-a"));
+        source.Publish(Frame(1, 1_000, AdapterLuid, senderId: "sender-b"));
+        source.Publish(Frame(2, 1_150, AdapterLuid, senderId: "sender-a"));
+        source.Publish(Frame(2, 1_150, AdapterLuid, senderId: "sender-b"));
+        var firstThirdSender = senderBStabilizesFirst ? "sender-b" : "sender-a";
+        var secondThirdSender = senderBStabilizesFirst ? "sender-a" : "sender-b";
+        source.Publish(Frame(
+            3,
+            1_300,
+            AdapterLuid,
+            senderId: firstThirdSender));
+        await Task.Yield();
+        Assert.False(waiting.IsCompleted);
+
+        source.Publish(Frame(
+            3,
+            1_300,
+            AdapterLuid,
+            senderId: secondThirdSender));
+        var selected = await waiting;
+
+        Assert.Equal("sender-b", selected.SenderId);
+        Assert.Equal("vrchat-service-42", selection.ServiceId);
+        Assert.Equal(1, selection.CallCount);
+        Assert.Equal(
+            ["sender-a", "sender-b"],
+            selection.Candidates.Select(candidate => candidate.SenderId));
+    }
+
     [Fact]
     public async Task DuplicateFrameSequenceRestartsCandidateStability()
     {
@@ -632,6 +677,29 @@ public sealed class NativeMediaPreflightContractIntegrationTests
             cancellation.Cancel();
             await Task.Yield();
             yield break;
+        }
+    }
+
+    private sealed class CapturingVideoSenderSelection(string selectedSenderId)
+        : IVideoSenderSelection
+    {
+        public int CallCount { get; private set; }
+
+        public string? ServiceId { get; private set; }
+
+        public IReadOnlyList<StableVideoSignal> Candidates { get; private set; } =
+            [];
+
+        public Task<string?> SelectAsync(
+            string vrChatServiceId,
+            IReadOnlyList<StableVideoSignal> candidates,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CallCount++;
+            ServiceId = vrChatServiceId;
+            Candidates = candidates.ToArray();
+            return Task.FromResult<string?>(selectedSenderId);
         }
     }
 
