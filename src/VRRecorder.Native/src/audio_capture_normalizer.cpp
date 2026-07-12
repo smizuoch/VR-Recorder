@@ -113,28 +113,38 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         if (!packet.silent) {
             std::vector<float> source_stereo(
                 packet.frame_count * OutputChannelCount);
+            const auto bytes_per_sample = format.container_bits / 8U;
             for (std::size_t frame = 0;
                  frame < packet.frame_count;
                  ++frame) {
-                float sample = 0.0F;
-                const auto *sample_bytes =
-                    packet.bytes.data() + frame * format.block_align;
-                if (format.encoding == CaptureSampleEncoding::IeeeFloat) {
-                    std::memcpy(
-                        &sample,
-                        sample_bytes,
-                        sizeof(float));
-                    if (!std::isfinite(sample)) {
-                        return CaptureNormalizationResult::InvalidPacket;
+                for (std::size_t output_channel = 0;
+                     output_channel < OutputChannelCount;
+                     ++output_channel) {
+                    const auto source_channel = format.channel_count == 1
+                        ? 0U
+                        : output_channel;
+                    const auto *sample_bytes = packet.bytes.data() +
+                        frame * format.block_align +
+                        source_channel * bytes_per_sample;
+                    float sample = 0.0F;
+                    if (format.encoding ==
+                        CaptureSampleEncoding::IeeeFloat) {
+                        std::memcpy(
+                            &sample,
+                            sample_bytes,
+                            sizeof(float));
+                        if (!std::isfinite(sample)) {
+                            return CaptureNormalizationResult::InvalidPacket;
+                        }
+                    } else {
+                        std::int16_t pcm = 0;
+                        std::memcpy(&pcm, sample_bytes, sizeof(pcm));
+                        sample = static_cast<float>(pcm) / 32768.0F;
                     }
-                } else {
-                    std::int16_t pcm = 0;
-                    std::memcpy(&pcm, sample_bytes, sizeof(pcm));
-                    sample = static_cast<float>(pcm) / 32768.0F;
-                }
 
-                source_stereo[frame * OutputChannelCount] = sample;
-                source_stereo[frame * OutputChannelCount + 1U] = sample;
+                    source_stereo[
+                        frame * OutputChannelCount + output_channel] = sample;
+                }
             }
 
             for (std::size_t output_frame = 0;
@@ -205,7 +215,8 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
 bool StereoCaptureNormalizer48k::IsFormatSupported(
     const CapturePcmFormat &format) noexcept
 {
-    if (format.sample_rate_hz == 0 || format.channel_count != 1) {
+    if (format.sample_rate_hz == 0 || format.channel_count == 0 ||
+        format.channel_count > OutputChannelCount) {
         return false;
     }
 
