@@ -29,12 +29,12 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 863件成功、失敗0、skip 0
+- managed: 867件成功、失敗0、skip 0
   - Domain 90
-  - Application 226
+  - Application 227
   - Compliance 186
   - Presentation 85
-  - Integration 276
+  - Integration 279
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
@@ -78,6 +78,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 明示操作だけで生成し、未知field・media・認証情報・private値・symlinkを除外するatomic診断bundle
 - app／OS build／GPU vendor／driver metadataを列挙値と数値versionへ制限し、未知fieldと自由文字列を除外する診断bundle sanitizer
 - first packet確定後にapp version／OS build／process architecture／canonical PCI GPU model／driverをbest-effort構造化eventへ発行するproduction環境sourceとdesktop composition
+- finalization／validation失敗後のquarantine reasonを録画結果へ影響しないbest-effort eventとして発行し、path／例外messageを除外するproduction診断経路
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -130,7 +131,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
-- 継続A/V閾値、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
+- 継続A/V閾値、audio underrun／overrun、OSCを網羅する構造化診断event
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -165,12 +166,12 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 863 passed, 0 failed, 0 skipped
+- managed: 867 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 226
+  - Application 227
   - Compliance 186
   - Presentation 85
-  - Integration 276
+  - Integration 279
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
@@ -214,6 +215,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Atomic diagnostic bundles generated only by explicit action while excluding unknown fields, media, credentials, private values, and symlinks
 - A diagnostic-bundle sanitizer that restricts app/OS-build/GPU-vendor/driver metadata to enumerated values and numeric versions and excludes unknown fields and free-form strings
 - A production environment source and desktop composition that emit app version, OS build, process architecture, canonical PCI GPU model, and driver as a best-effort structured event after the first packet is committed
+- A production diagnostics path that emits the post-failure finalization/validation quarantine reason without changing recording results and excludes paths and exception messages
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -266,7 +268,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
-- Complete structured diagnostics for continuous A/V thresholds, audio underruns/overruns, OSC, and finalization failures
+- Complete structured diagnostics for continuous A/V thresholds, audio underruns/overruns, and OSC
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
