@@ -169,6 +169,37 @@ public sealed class StructuredRecordingEventSinkTests
     }
 
     [Fact]
+    public async Task RecordsApplicationEnvironmentMetadata()
+    {
+        using var directory = TemporaryDirectory.Create();
+        using var log = new RotatingJsonLinesDiagnosticLog(directory.Path);
+        using var sink = new StructuredRecordingEventSink(
+            log,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+        var snapshot = new RecordingEnvironmentSnapshot(
+            "0.3.0",
+            "10.0.26100",
+            RecordingProcessArchitecture.X64,
+            "ven_10de&dev_2684",
+            GpuVendor.Nvidia,
+            "32.0.15.6094");
+
+        ((IRecordingMediaEventSink)sink).Publish(snapshot);
+        sink.Dispose();
+
+        var content = await File.ReadAllTextAsync(Path.Combine(
+            directory.Path,
+            "vr-recorder.jsonl"));
+        Assert.Contains("\"event\":\"application.environment\"", content);
+        Assert.Contains("\"appVersion\":\"0.3.0\"", content);
+        Assert.Contains("\"architecture\":\"x64\"", content);
+        Assert.Contains("\"gpuModel\":\"ven_10de&dev_2684\"", content);
+        Assert.Contains("\"gpuVendor\":\"nvidia\"", content);
+        Assert.Contains("\"osBuild\":\"10.0.26100\"", content);
+        Assert.Contains("\"driverVersion\":\"32.0.15.6094\"", content);
+    }
+
+    [Fact]
     public void WriterFailureDoesNotStopQueuedAudioOrEscapeDispose()
     {
         var writer = new ThrowingFirstDiagnosticLogWriter();
