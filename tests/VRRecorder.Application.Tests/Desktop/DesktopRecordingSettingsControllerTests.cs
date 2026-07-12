@@ -235,6 +235,34 @@ public sealed class DesktopRecordingSettingsControllerTests
             options.Microphone);
     }
 
+    [Fact]
+    public async Task ExplicitLocaleChangePersistsBeforeRuntimeApplication()
+    {
+        var events = new List<string>();
+        var store = new TrackingSettingsStore(
+            VRRecorderSettings.CreateDefault(),
+            events);
+        var locales = new TrackingUiLocaleApplier(events);
+        var controller = new DesktopRecordingSettingsController(
+            store,
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(AbsolutePath("downloads"))),
+            new TrackingLegalBundleOutputMirror(events),
+            audioEndpoints: null,
+            locales);
+        var original = await controller.LoadAsync(CancellationToken.None);
+        events.Clear();
+
+        await controller.SaveAsync(
+            original,
+            original with { UiLocale = UiLocale.Japanese },
+            CancellationToken.None);
+
+        Assert.Equal(["load", "save", "locale"], events);
+        Assert.Equal(UiLocale.Japanese, store.Current.UiLocale);
+        Assert.Equal([UiLocale.Japanese], locales.Applied);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-settings-controller-tests",
@@ -282,6 +310,18 @@ public sealed class DesktopRecordingSettingsControllerTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(
                 input == AudioInput.Desktop ? desktop : microphone);
+        }
+    }
+
+    private sealed class TrackingUiLocaleApplier(List<string> events)
+        : IUiLocaleApplier
+    {
+        public List<UiLocale> Applied { get; } = [];
+
+        public void Apply(UiLocale locale)
+        {
+            events.Add("locale");
+            Applied.Add(locale);
         }
     }
 
