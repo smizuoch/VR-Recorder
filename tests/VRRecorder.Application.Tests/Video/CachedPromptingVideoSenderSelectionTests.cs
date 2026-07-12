@@ -26,6 +26,23 @@ public sealed class CachedPromptingVideoSenderSelectionTests
         Assert.Equal(0, prompt.CallCount);
     }
 
+    [Fact]
+    public async Task CancellationAfterCacheReadNeverSelectsAStaleResult()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var store = new CancelingSelectionStore(cancellation, "sender-b");
+        var prompt = new CapturingSelectionPrompt("sender-a");
+        var selection = new CachedPromptingVideoSenderSelection(store, prompt);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            selection.SelectAsync(
+                "vrchat-service-42",
+                [Signal("sender-a"), Signal("sender-b")],
+                cancellation.Token));
+
+        Assert.Equal(0, prompt.CallCount);
+    }
+
     private static StableVideoSignal Signal(string senderId) => new(
         senderId,
         adapterLuid: 42,
@@ -77,5 +94,24 @@ public sealed class CachedPromptingVideoSenderSelectionTests
             CallCount++;
             return Task.FromResult(selectedSenderId);
         }
+    }
+
+    private sealed class CancelingSelectionStore(
+        CancellationTokenSource cancellation,
+        string cachedSenderId) : IVideoSenderSelectionStore
+    {
+        public Task<string?> LoadAsync(
+            string vrChatServiceId,
+            CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            return Task.FromResult<string?>(cachedSenderId);
+        }
+
+        public Task SaveAsync(
+            string vrChatServiceId,
+            string senderId,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Save was not expected.");
     }
 }
