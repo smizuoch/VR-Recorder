@@ -446,6 +446,24 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_spout_capture_worker)
 
+add_executable(
+    vrrecorder_native_video_pipeline_session
+    video_pipeline_session_tests.cpp
+    "${native_source_root}/src/video_pipeline_session.cpp")
+target_compile_features(
+    vrrecorder_native_video_pipeline_session PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_video_pipeline_session
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_video_pipeline_session
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_video_pipeline_session)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -488,6 +506,8 @@ add_test(NAME vrrecorder_native_spout_capture_pump
     COMMAND vrrecorder_native_spout_capture_pump)
 add_test(NAME vrrecorder_native_spout_capture_worker
     COMMAND vrrecorder_native_spout_capture_worker)
+add_test(NAME vrrecorder_native_video_pipeline_session
+    COMMAND vrrecorder_native_video_pipeline_session)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
