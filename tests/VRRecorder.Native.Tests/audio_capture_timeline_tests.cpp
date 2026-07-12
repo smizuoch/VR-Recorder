@@ -234,6 +234,43 @@ void RecoveryKeepsSilenceUntilItsExactEffectiveFrame()
     }
 }
 
+void RejectsDuplicateDeviceClockAnchorsWithoutMutation()
+{
+    vrrecorder::native::StereoCaptureTimeline timeline(480);
+    const auto first = ConstantStereo(160, 0.25F);
+    CHECK(timeline.Push({
+              0,
+              {100, 1'000'000, 10'000'000},
+              first,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::Ready);
+    const auto duplicate = ConstantStereo(160, 0.9F);
+    CHECK(timeline.Push({
+              160,
+              {100, 1'010'000, 10'000'000},
+              duplicate,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::InvalidPacket);
+    const auto second = ConstantStereo(160, 0.5F);
+    CHECK(timeline.Push({
+              160,
+              {260, 1'020'000, 10'000'000},
+              second,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::Ready);
+
+    std::vector<float> output(320U * 2U, -1.0F);
+    vrrecorder::native::AudioTimelineRead read {};
+    CHECK(timeline.WaitRead(320, output, read) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(!read.underrun);
+    for (std::size_t frame = 0; frame < 320; ++frame) {
+        const auto expected = frame < 160 ? 0.25F : 0.5F;
+        CHECK(NearlyEqual(output[frame * 2U], expected));
+        CHECK(NearlyEqual(output[frame * 2U + 1U], expected));
+    }
+}
+
 }
 
 int main()
@@ -243,5 +280,6 @@ int main()
     AbortWakesAReaderWithoutAdvancingTheTimeline();
     ReportsOnlyGapsInsideTheCurrentReadWindow();
     RecoveryKeepsSilenceUntilItsExactEffectiveFrame();
+    RejectsDuplicateDeviceClockAnchorsWithoutMutation();
     return 0;
 }
