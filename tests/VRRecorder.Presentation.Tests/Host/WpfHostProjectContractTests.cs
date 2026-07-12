@@ -1429,6 +1429,9 @@ public sealed class WpfHostProjectContractTests
             if (comboName.EndsWith("EndpointComboBox", StringComparison.Ordinal))
             {
                 Assert.Equal("True", combo.Attribute("IsEditable")?.Value);
+                Assert.Equal(
+                    "DisplayName",
+                    combo.Attribute("DisplayMemberPath")?.Value);
             }
         }
 
@@ -1469,6 +1472,7 @@ public sealed class WpfHostProjectContractTests
             "App.xaml.cs"));
         Assert.Contains("JsonFileSettingsStore", appCode);
         Assert.Contains("DesktopRecordingSettingsController", appCode);
+        Assert.Contains("new WindowsAudioEndpointCatalog()", appCode);
         Assert.Contains("RecordingSettings", appCode);
         var mainCode = File.ReadAllText(Path.Combine(
             appDirectory,
@@ -1485,6 +1489,8 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("SupportedEncoders", settingsCode);
         Assert.Contains("SupportedQualityPresets", settingsCode);
         Assert.Contains("SupportedAudioRoutings", settingsCode);
+        Assert.Contains("LoadAudioEndpointOptionsAsync", settingsCode);
+        Assert.Contains("AudioEndpointOption", settingsCode);
         Assert.Contains("AudioRouting =", settingsCode);
         Assert.Contains("DesktopGainDb =", settingsCode);
         Assert.Contains("MicrophoneGainDb =", settingsCode);
