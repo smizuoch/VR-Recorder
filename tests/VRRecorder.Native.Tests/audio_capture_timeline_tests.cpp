@@ -1,8 +1,10 @@
 #include "audio_capture_timeline.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <future>
 #include <iostream>
 #include <vector>
 
@@ -70,10 +72,53 @@ void JoinsArbitraryPacketBoundariesOnOne48KhzTimeline()
     }
 }
 
+void DeviceLossWakesAReaderAndCompletesWithSilence()
+{
+    using namespace std::chrono_literals;
+
+    vrrecorder::native::StereoCaptureTimeline timeline(960);
+    const auto captured = ConstantStereo(160, 0.25F);
+    const vrrecorder::native::NormalizedStereoPacket packet {
+        0,
+        {0, 1'000'000, 10'000'000},
+        captured,
+        false,
+    };
+    CHECK(timeline.Push(packet) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    std::vector<float> output(480U * 2U, -1.0F);
+    vrrecorder::native::AudioTimelineRead read {};
+    std::promise<void> reader_started;
+    auto reader_started_future = reader_started.get_future();
+    auto waiting = std::async(std::launch::async, [&] {
+        reader_started.set_value();
+        return timeline.WaitRead(480, output, read);
+    });
+    reader_started_future.wait();
+
+    CHECK(waiting.wait_for(20ms) == std::future_status::timeout);
+    CHECK(timeline.SetAvailable(false, 160) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(waiting.wait_for(1s) == std::future_status::ready);
+    CHECK(waiting.get() ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+
+    CHECK(read.start_frame_48k == 0);
+    CHECK(!read.input_available);
+    CHECK(read.underrun);
+    CHECK(timeline.FramePosition() == 480);
+    for (std::size_t frame = 0; frame < 480; ++frame) {
+        const auto expected = frame < 160 ? 0.25F : 0.0F;
+        CHECK(NearlyEqual(output[frame * 2U], expected));
+        CHECK(NearlyEqual(output[frame * 2U + 1U], expected));
+    }
+}
+
 }
 
 int main()
 {
     JoinsArbitraryPacketBoundariesOnOne48KhzTimeline();
+    DeviceLossWakesAReaderAndCompletesWithSilence();
     return 0;
 }
