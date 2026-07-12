@@ -511,6 +511,24 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopShellComposesDurableFirstRunSetupWorkflow()
+    {
+        var appCode = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "App.xaml.cs"));
+
+        Assert.Contains("JsonFileFirstRunSetupStore", appCode);
+        Assert.Contains("FirstRunSetupController", appCode);
+        Assert.Contains("FirstRunSetupPath(settingsPath)", appCode);
+        Assert.Contains("_firstRunSetupStore.Dispose()", appCode);
+        Assert.Contains(
+            "internal static FirstRunSetupController FirstRunSetup",
+            appCode);
+    }
+
+    [Fact]
     public void DesktopProductionFactoryRecoversStaleCameraLeaseBeforeMediaPreflight()
     {
         var appDirectory = Path.Combine(
