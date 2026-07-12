@@ -37,6 +37,7 @@
 - [x] configured video／audio adaptersとrecording coordinatorを安全な所有順序で合成し、Start、live audio routing、graceful Stop、両stream統計を一つのpipeline境界へ集約する
 - [x] recording pipelineをC ABI MediaBackendへ接続し、layout／routing、全統計field、冪等な非同期stop／joinとdestructor回収を保証する
 - [x] mux成功packetから最新の符号付きA/V offsetを`audio PTS - video PTS`で計算し、mux／recording pipelineを通してC ABI最終統計へ伝播する
+- [x] 非同期stop Joinとforced Abortをatomic terminal遷移で仲裁し、Abortが先行した場合はStopped／Saved相当の成功完了を抑止する
 
 ## English
 
@@ -75,3 +76,4 @@
 - [x] Compose configured video/audio adapters and the recording coordinator in safe ownership order, exposing start, live audio routing, graceful stop, and both stream statistics through one pipeline boundary
 - [x] Adapt the recording pipeline to the C ABI MediaBackend, preserving layout/routing, every statistics field, and idempotent asynchronous stop/join with destructor reclamation
 - [x] Compute the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` and propagate it through mux/recording pipelines into final C ABI statistics
+- [x] Arbitrate asynchronous stop/join against forced abort with an atomic terminal transition, suppressing Stopped/Saved-equivalent success when abort wins

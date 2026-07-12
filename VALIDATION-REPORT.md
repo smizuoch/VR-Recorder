@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.50%（2783/3255）／branch 69.82%（1587/2273）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.65%（2793/3261）／branch 69.81%（1598/2289）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -115,6 +115,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 既存のvideo／stereo audio pipelineへpoll timeout、endpoint、session QPC、encoding frame windowを固定して渡し、終了理由を安定C ABI statusへ、packet統計を共通recording sessionへ変換するconfigured stream adapters
 - configured video／audio adaptersとrecording coordinatorをlifetime-safeに所有し、Start／live routing／graceful Stop／video・audio統計を単一APIへ集約するmedia recording pipeline composition（backend実体は未実装）
 - recording pipelineをC ABI MediaBackendへ変換し、video layout／audio routing、ABI統計、冪等な非同期stop workerとAbort／destructorでの確実なjoinを提供するadapter
+- 非同期stop Joinとforced Abortのterminal状態をatomicに仲裁し、各stream join後もAbortを再検査して、Abort先行時にStopped／Saved相当eventを発行しないrecording session境界
 - mux成功packetの最新A/V offsetを`audio PTS - video PTS`の符号付き値としてmonitorからmux／recording pipeline／C ABI最終統計まで伝播する経路（閾値event用absolute driftとは分離）
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
@@ -172,7 +173,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.50% lines (2783/3255) and 69.82% branches (1587/2273), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.65% lines (2793/3261) and 69.81% branches (1598/2289), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -247,6 +248,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Configured stream adapters that pass poll timeout, endpoints, session QPC, and encoding frame windows into the existing video/stereo-audio pipelines, mapping their completion reasons to stable C ABI statuses and packet statistics to the common recording session
 - A lifetime-safe media recording-pipeline composition that owns the configured video/audio adapters and recording coordinator and exposes start, live routing, graceful stop, and video/audio statistics through one API (backend implementations remain outstanding)
 - An adapter from the recording pipeline to the C ABI MediaBackend that supplies video layout/audio routing, ABI statistics, an idempotent asynchronous stop worker, and guaranteed joining on abort or destruction
+- A recording-session boundary that atomically arbitrates terminal state between asynchronous stop/join and forced abort, rechecks abort after each stream join, and never emits Stopped/Saved-equivalent success when abort wins
 - A path that carries the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` through the monitor, mux and recording pipelines into final C ABI statistics, separately from absolute drift used for threshold events
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
