@@ -34,7 +34,10 @@ vrrec_status_t AudioCapturePump::StartCore(
 
     const auto status = source_.Start(config);
     if (status != VRREC_STATUS_OK) {
-        timeline_.Abort();
+        if (!recovering) {
+            timeline_.Abort();
+        }
+
         return status;
     }
 
