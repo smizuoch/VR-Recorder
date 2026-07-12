@@ -23,4 +23,19 @@ void MediaAudioCaptureAvailabilitySink::AvailabilityChanged(
         frame_position);
 }
 
+void MediaAudioCaptureAvailabilitySink::BufferHealthChanged(
+    AudioCaptureRole role,
+    AudioBufferHealth health,
+    std::uint64_t frame_position) noexcept
+{
+    const auto endpoint_role =
+        role == AudioCaptureRole::DesktopLoopback
+        ? AudioEndpointRole::Desktop
+        : AudioEndpointRole::Microphone;
+    events_.AudioBufferHealthChanged(
+        endpoint_role,
+        health,
+        frame_position);
+}
+
 }

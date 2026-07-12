@@ -16,6 +16,10 @@ public:
         AudioCaptureRole role,
         bool available,
         std::uint64_t frame_position) noexcept override;
+    void BufferHealthChanged(
+        AudioCaptureRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept override;
 
 private:
     MediaEventSink &events_;

@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "vrrecorder_native.h"
+#include "audio_capture_pump.hpp"
 
 namespace vrrecorder::native {
 
@@ -28,6 +29,15 @@ public:
         AudioEndpointRole role,
         bool available,
         std::uint64_t frame_position) noexcept = 0;
+    virtual void AudioBufferHealthChanged(
+        AudioEndpointRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept
+    {
+        (void)role;
+        (void)health;
+        (void)frame_position;
+    }
     virtual void AvSyncDriftExceeded(
         std::uint64_t video_pts_microseconds,
         std::uint64_t audio_pts_microseconds,
