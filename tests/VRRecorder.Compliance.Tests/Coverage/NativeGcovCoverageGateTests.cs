@@ -64,6 +64,27 @@ public sealed class NativeGcovCoverageGateTests
         Assert.Contains("line coverage", exception.Message);
     }
 
+    [Fact]
+    public void ExcludesCompilerGeneratedThrowEdgesFromSourceBranchCoverage()
+    {
+        var document = Document(
+            "/repo/src/VRRecorder.Native/src/exception.cpp",
+            """
+            {"line_number":10,"count":1,"branches":[
+              {"count":1,"throw":false},
+              {"count":0,"throw":true}
+            ]}
+            """);
+
+        var summary = NativeGcovCoverageGate.Evaluate(
+            [document],
+            "/src/VRRecorder.Native/src/");
+
+        Assert.Equal(1, summary.TotalBranches);
+        Assert.Equal(1, summary.CoveredBranches);
+        Assert.Equal(100, summary.BranchPercentage);
+    }
+
     private static string Document(string file, string lines) => $$"""
         {
           "format_version":"1",
