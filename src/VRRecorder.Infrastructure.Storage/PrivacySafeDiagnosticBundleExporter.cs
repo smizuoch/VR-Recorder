@@ -111,6 +111,11 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         "nv12",
         "rgba8",
     ];
+    private static readonly HashSet<string> Architectures =
+    [
+        "arm64",
+        "x64",
+    ];
     private readonly string _logDirectory;
 
     public PrivacySafeDiagnosticBundleExporter(string logDirectory)
@@ -377,8 +382,46 @@ public sealed class PrivacySafeDiagnosticBundleExporter
             "audio.input_status" => SanitizeAudioStatus(fields),
             "recording.media_profile" => SanitizeMediaProfile(fields),
             "recording.media_statistics" => SanitizeMediaStatistics(fields),
+            "application.environment" => SanitizeApplicationEnvironment(
+                fields),
             _ => null,
         };
+
+    private static SortedDictionary<string, string>?
+        SanitizeApplicationEnvironment(
+            IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadNumericVersion(fields, "appVersion", 3, 4, out var appVersion) ||
+            !TryReadAllowedString(
+                fields,
+                "architecture",
+                Architectures,
+                out var architecture) ||
+            !TryReadAllowedString(
+                fields,
+                "gpuVendor",
+                GpuVendors,
+                out var gpuVendor) ||
+            !TryReadNumericVersion(fields, "osBuild", 3, 4, out var osBuild) ||
+            !TryReadNumericVersion(
+                fields,
+                "driverVersion",
+                4,
+                4,
+                out var driverVersion))
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["appVersion"] = appVersion,
+            ["architecture"] = architecture,
+            ["driverVersion"] = driverVersion,
+            ["gpuVendor"] = gpuVendor,
+            ["osBuild"] = osBuild,
+        };
+    }
 
     private static SortedDictionary<string, string>? SanitizeStateTransition(
         IReadOnlyDictionary<string, JsonElement> fields)
@@ -825,6 +868,38 @@ public sealed class PrivacySafeDiagnosticBundleExporter
                    out value) &&
                value > 0 &&
                value <= maximum;
+    }
+
+    private static bool TryReadNumericVersion(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        string name,
+        int minimumComponents,
+        int maximumComponents,
+        out string value)
+    {
+        value = string.Empty;
+        if (!TryReadString(properties, name, out var text))
+        {
+            return false;
+        }
+
+        var components = text.Split('.');
+        if (components.Length < minimumComponents ||
+            components.Length > maximumComponents ||
+            components.Any(component =>
+                component.Length == 0 ||
+                (component.Length > 1 && component[0] == '0') ||
+                !uint.TryParse(
+                    component,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out _)))
+        {
+            return false;
+        }
+
+        value = text;
+        return true;
     }
 
     private static bool TryReadString(
