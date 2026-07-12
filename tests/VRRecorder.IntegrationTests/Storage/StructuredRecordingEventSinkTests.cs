@@ -200,6 +200,29 @@ public sealed class StructuredRecordingEventSinkTests
     }
 
     [Fact]
+    public async Task RecordsFinalizationRecoveryWithoutQuarantinePath()
+    {
+        using var directory = TemporaryDirectory.Create();
+        using var log = new RotatingJsonLinesDiagnosticLog(directory.Path);
+        using var sink = new StructuredRecordingEventSink(
+            log,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        ((IRecordingFinalizationEventSink)sink).Publish(
+            RecordingRecoveryReason.ValidationFailed);
+        sink.Dispose();
+
+        var content = await File.ReadAllTextAsync(Path.Combine(
+            directory.Path,
+            "vr-recorder.jsonl"));
+        Assert.Contains(
+            "\"event\":\"recording.finalization_recovery\"",
+            content);
+        Assert.Contains("\"reason\":\"validation_failed\"", content);
+        Assert.DoesNotContain("path", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void WriterFailureDoesNotStopQueuedAudioOrEscapeDispose()
     {
         var writer = new ThrowingFirstDiagnosticLogWriter();
