@@ -707,6 +707,40 @@ public sealed class LegalReleasePackageIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-025")]
+    public async Task BuildOnlyNativeComponentCannotEnterReleaseStaging()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var binary = await StageFfprobeAsync(payload);
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        var request = FfmpegRequest(payload, packagePath, binary);
+        request = request with
+        {
+            ComponentGraph = request.ComponentGraph with
+            {
+                Components = request.ComponentGraph.Components.Select(
+                    component => component.Id == "ffmpeg"
+                        ? component with { Scope = NoticeScope.BuildOnly }
+                        : component).ToArray(),
+            },
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "staged-component-scope-mismatch");
+        Assert.Contains(result.Issues, issue =>
+            issue.Subject == "ffmpeg:tools/ffprobe.exe");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
     public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
     {
         using var directory = TemporaryDirectory.Create();
