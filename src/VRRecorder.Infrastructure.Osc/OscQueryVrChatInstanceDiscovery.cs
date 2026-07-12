@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Diagnostics;
 using VRRecorder.Application.Ports;
 
 namespace VRRecorder.Infrastructure.Osc;
@@ -17,11 +18,21 @@ public sealed class OscQueryVrChatInstanceDiscovery
     private readonly IOscQueryServiceBrowser _browser;
     private readonly HttpMessageInvoker _http;
     private readonly TimeSpan _timeout;
+    private readonly IOscOperationEventSink? _events;
 
     public OscQueryVrChatInstanceDiscovery(
         IOscQueryServiceBrowser browser,
         HttpMessageInvoker http,
         TimeSpan timeout)
+        : this(browser, http, timeout, events: null)
+    {
+    }
+
+    public OscQueryVrChatInstanceDiscovery(
+        IOscQueryServiceBrowser browser,
+        HttpMessageInvoker http,
+        TimeSpan timeout,
+        IOscOperationEventSink? events)
     {
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(http);
@@ -36,6 +47,7 @@ public sealed class OscQueryVrChatInstanceDiscovery
         _browser = browser;
         _http = http;
         _timeout = timeout;
+        _events = events;
     }
 
     public async Task<IReadOnlyList<VrChatInstanceCandidate>> DiscoverAsync(
@@ -55,19 +67,46 @@ public sealed class OscQueryVrChatInstanceDiscovery
                 .Select(advertisement =>
                     ProbeAsync(advertisement, timeout.Token));
             var candidates = await Task.WhenAll(probes).ConfigureAwait(false);
-            return candidates
+            var result = candidates
                 .Where(candidate => candidate is not null)
                 .Select(candidate => candidate!)
                 .OrderBy(
                     candidate => candidate.ServiceId,
                     StringComparer.Ordinal)
                 .ToArray();
+            PublishBestEffort(
+                result.Length > 0
+                    ? OscOperationOutcome.Succeeded
+                    : OscOperationOutcome.Failed);
+            return result;
         }
         catch (OperationCanceledException exception) when (
             !cancellationToken.IsCancellationRequested &&
             timeout.IsCancellationRequested)
         {
+            PublishBestEffort(OscOperationOutcome.Failed);
             throw new OscQueryTimeoutException(_timeout, exception);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            PublishBestEffort(OscOperationOutcome.Failed);
+            throw;
+        }
+    }
+
+    private void PublishBestEffort(OscOperationOutcome outcome)
+    {
+        try
+        {
+            _events?.Publish(new OscOperationEvent(
+                OscOperation.CapabilityProbe,
+                outcome));
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "OSC capability diagnostics failed: {0}",
+                exception.GetType().Name);
         }
     }
 

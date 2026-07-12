@@ -134,6 +134,7 @@ public sealed class ConfirmedUdpVrChatCameraGateway
                 }
             }
 
+            PublishBestEffort(OscOperationOutcome.Failed);
             throw new CameraWriteConfirmationException(attempts: 2);
         }
         finally
