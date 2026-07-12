@@ -584,50 +584,15 @@ public sealed class LegalReleasePackageIntegrationTests
     {
         using var directory = TemporaryDirectory.Create();
         var payload = await StagePayloadAsync(directory.Path, "staging");
-        const string relativePath = "tools/ffprobe.exe";
-        byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
-        var binaryPath = Path.Combine(
-            payload.StagingPath,
-            relativePath.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
-        await File.WriteAllBytesAsync(binaryPath, binary);
-        await WriteNativeRegistryAsync(
-            payload.Evidence.RepositoryRoot,
-            "ffmpeg",
-            "ffprobe.exe",
+        var binary = await StageFfprobeAsync(
+            payload,
             Hash([0x4d, 0x5a, 0x54, 0x41, 0x4d, 0x50, 0x45, 0x52]));
-
-        var graph = Graph();
-        graph = graph with
-        {
-            Components =
-            [
-                .. graph.Components,
-                Component("ffmpeg", "FFmpeg.Process", "8.0") with
-                {
-                    Linkage = "process-boundary",
-                    Packages = [],
-                },
-            ],
-        };
         var packagePath = Path.Combine(directory.Path, "release.zip");
-        var request = Request(
-            payload.StagingPath,
-            packagePath,
-            [
-                .. payload.Registrations,
-                new RegisteredStagedArtifact(
-                    "ffmpeg",
-                    relativePath,
-                    Hash(binary),
-                    StagedArtifactKind.Executable),
-            ]) with
-        {
-            ComponentGraph = graph,
-        };
 
         var result = await new LegalReleasePackageOrchestrator()
-            .GenerateAsync(request, CancellationToken.None);
+            .GenerateAsync(
+                FfmpegRequest(payload, packagePath, binary),
+                CancellationToken.None);
 
         AssertRejected(
             result,
@@ -644,51 +609,15 @@ public sealed class LegalReleasePackageIntegrationTests
     {
         using var directory = TemporaryDirectory.Create();
         var payload = await StagePayloadAsync(directory.Path, "staging");
-        const string relativePath = "tools/ffprobe.exe";
-        byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
-        var binaryPath = Path.Combine(
-            payload.StagingPath,
-            relativePath.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
-        await File.WriteAllBytesAsync(binaryPath, binary);
-        await WriteNativeRegistryAsync(
-            payload.Evidence.RepositoryRoot,
-            "ffmpeg",
-            "ffprobe.exe",
-            Hash(binary),
+        var binary = await StageFfprobeAsync(
+            payload,
             repositoryCommit: "registry-commit");
-
-        var graph = Graph();
-        graph = graph with
-        {
-            Components =
-            [
-                .. graph.Components,
-                Component("ffmpeg", "FFmpeg.Process", "8.0") with
-                {
-                    Linkage = "process-boundary",
-                    Packages = [],
-                },
-            ],
-        };
         var packagePath = Path.Combine(directory.Path, "release.zip");
-        var request = Request(
-            payload.StagingPath,
-            packagePath,
-            [
-                .. payload.Registrations,
-                new RegisteredStagedArtifact(
-                    "ffmpeg",
-                    relativePath,
-                    Hash(binary),
-                    StagedArtifactKind.Executable),
-            ]) with
-        {
-            ComponentGraph = graph,
-        };
 
         var result = await new LegalReleasePackageOrchestrator()
-            .GenerateAsync(request, CancellationToken.None);
+            .GenerateAsync(
+                FfmpegRequest(payload, packagePath, binary),
+                CancellationToken.None);
 
         AssertRejected(
             result,
@@ -1085,6 +1014,62 @@ public sealed class LegalReleasePackageIntegrationTests
             },
         });
         await File.WriteAllTextAsync(registryPath, registry);
+    }
+
+    private static async Task<byte[]> StageFfprobeAsync(
+        StagedPayload payload,
+        string? registryBinarySha256 = null,
+        string repositoryCommit = "commit")
+    {
+        const string relativePath = "tools/ffprobe.exe";
+        byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
+        var binaryPath = Path.Combine(
+            payload.StagingPath,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
+        await File.WriteAllBytesAsync(binaryPath, binary);
+        await WriteNativeRegistryAsync(
+            payload.Evidence.RepositoryRoot,
+            "ffmpeg",
+            "ffprobe.exe",
+            registryBinarySha256 ?? Hash(binary),
+            repositoryCommit);
+        return binary;
+    }
+
+    private static ReleaseLegalPackageRequest FfmpegRequest(
+        StagedPayload payload,
+        string packagePath,
+        byte[] binary,
+        string graphVersion = "8.0")
+    {
+        var graph = Graph();
+        graph = graph with
+        {
+            Components =
+            [
+                .. graph.Components,
+                Component("ffmpeg", "FFmpeg.Process", graphVersion) with
+                {
+                    Linkage = "process-boundary",
+                    Packages = [],
+                },
+            ],
+        };
+        return Request(
+            payload.StagingPath,
+            packagePath,
+            [
+                .. payload.Registrations,
+                new RegisteredStagedArtifact(
+                    "ffmpeg",
+                    "tools/ffprobe.exe",
+                    Hash(binary),
+                    StagedArtifactKind.Executable),
+            ]) with
+        {
+            ComponentGraph = graph,
+        };
     }
 
     private static void AssertRejected(
