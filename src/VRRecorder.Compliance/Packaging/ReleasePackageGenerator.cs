@@ -2,7 +2,7 @@ using VRRecorder.Compliance.Staging;
 
 namespace VRRecorder.Compliance.Packaging;
 
-public sealed class ReleasePackageGenerator
+internal sealed class ReleasePackageGenerator
 {
     private readonly IStagingInventoryReader _inventoryReader;
     private readonly IReleasePackageWriter _packageWriter;
