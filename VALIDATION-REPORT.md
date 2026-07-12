@@ -6,7 +6,7 @@
 
 実装進行中であり、release適格ではありません。2026-07-12現在、Linux／WSL2で実行できるmanagedテスト、Windows x64向けWPF cross-build、Linux native ABIを検証しています。Windows上でのWPF実行、Spout2、D3D11、WASAPI、FFmpeg、OpenVR、実VRChat、Windows 10／11、GPU／HMDの検証は未実施です。
 
-desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、VRChat service単位のSpout sender前回選択と曖昧時のdesktop prompt、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、media profile／最終native統計を含むprivacy-safe診断bundleの明示exportも配線済みです。録画中のMic／Muteはnative ABIからdesktop／wrist／SteamVR入力まで復元可能な状態を保って配線済みです。native内部には48 kHz stereo mixer、packet境界／gap／device loss／recovery／Abortを扱うcapture timeline、およびclock付きpacketとsilent packetをtimelineへ渡す1入力capture pumpがあります。ただしproduction native media／SteamVR backend自体は意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
+desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、VRChat service単位のSpout sender前回選択と曖昧時のdesktop prompt、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、media profile／最終native統計を含むprivacy-safe診断bundleの明示exportも配線済みです。録画中のMic／Muteはnative ABIからdesktop／wrist／SteamVR入力まで復元可能な状態を保って配線済みです。native内部にはPCM／floatとsample rate／channel差を48 kHz stereoへ正規化する処理、event-driven WASAPI loopback／microphone source、packet境界／gap／device loss／recovery／Abortを扱うcapture timelineと再探索runner、desktop／microphoneの同一frame windowをmixerへ渡すcoordinatorがあります。ただしこれらをencoder／muxerへ接続するproduction native media backendとSteamVR backendは意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
 
 第三者台帳の現在のentryはtest-only NuGet依存のcandidateです。version、NuGet content hash、package archive SHA-256、上流commit、license全文hashを固定していますが、全entryの`approval.status`は`pending-independent-review`です。native link／runtime-load manifestは現行のfirst-party、Windows system、toolchain call siteを照合し、未登録追加をcandidate gateで拒否します。最終staging gateはPE内容、所有者、runtime scope、台帳schema／承認、component version／source commit、binary／source archive hashをLegal Bundle生成前に照合し、standalone native componentをTXT noticeとSPDXへ含めます。ただし承認済み第三者native componentはまだ0件です。署名・公開・end-user Legal Bundleの承認を意味しません。
 
@@ -25,22 +25,22 @@ dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minim
 make -C tests/VRRecorder.Native.Tests test
 ```
 
-- managed: 856件成功、失敗0、skip 0
+- managed: 857件成功、失敗0、skip 0
   - Domain 90
   - Application 226
-  - Compliance 180
+  - Compliance 181
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: warning 0、error 0
-- native Make ABI／mixer／timeline／capture-pump contract: 成功
+- native Make ABI／mixer／timeline／capture-pump／WASAPI factory／dual-input mix contract: 成功
 - native公開symbol allowlist: 17/17一致
 - format/analyzer: 差分なし
 
-現在の環境には`cmake`がないため、2026-07-12の変更に対してCMake/CTestは再実行していません。2026-07-10のCMake/CTest 4/4は新しいaudio timeline／capture target追加前の結果であり、現在のCMake構成の成功証拠としては扱いません。Windows MSVC workflowはrepositoryにありますが、この報告ではremote実行成功を主張しません。
+現在の環境には`cmake`がないため、2026-07-12の変更に対してCMake/CTestは再実行していません。2026-07-10のCMake/CTest 4/4は新しいaudio timeline／capture／mix target追加前の結果であり、現在のCMake構成の成功証拠としては扱いません。Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
 ### 直前checkpointの結合テスト単独coverage
 
-設計書18.5に従い、`VRRecorder.IntegrationTests`だけを実行してCoberturaを収集した直前checkpointの値です。今回追加したruntime Mic／Mute、capture timeline／pump、Spout sender選択、native staging／Legal Bundle admission境界を含む856件の回帰は成功していますが、coverageは追加後に再収集していないため、次の表を現在値として扱いません。
+設計書18.5に従い、`VRRecorder.IntegrationTests`だけを実行してCoberturaを収集した直前checkpointの値です。runtime Mic／Mute、capture timeline／pump／normalizer／WASAPI factory／dual-input mix、Spout sender選択、native staging／Legal Bundle admission境界を含む857件の回帰は成功していますが、coverageは追加後に再収集していないため、次の表を現在値として扱いません。
 
 | Assembly | Line | Branch |
 |---|---:|---:|
@@ -74,14 +74,17 @@ make -C tests/VRRecorder.Native.Tests test
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
 - 可変packetを48 kHz絶対frameへ再構成し、gap／device lossを無音化し、正確なrecovery frameとclock epoch、Abort wakeを保つnative capture timeline
-- clock付き48 kHz stereo packet、WASAPI silent相当の明示frame数、正確なdevice-loss frame、冪等Abortをcapture timelineへ渡すportable 1入力pump
+- PCM16／packed PCM24／PCM32／float、mono／stereo／speaker-mask付きmultichannel、sample rate差を48 kHz stereoへ正規化し、packet間のrational phaseとtimestamp-error／discontinuity epochを保つportable normalizer
+- event callback、loopback／capture endpoint、device position／QPC、silent／discontinuity／timestamp-error flag、同一threadのGetBuffer／ReleaseBuffer、冪等Abortを扱うWindows WASAPI source境界
+- clock付き48 kHz stereo packet、WASAPI silent相当の明示frame数、正確なdevice-loss frame、失敗したreplacement後の再試行、最大5秒のdefault endpoint再探索、待機中Abortを扱うcapture pump／runner
+- desktop／microphone timelineを同一48 kHz frame windowで読み、片側切断時だけを無音化し、skewを拒否してmixerへ固定sample数を渡すdual-input coordinator
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
 - 最終stagingのPE内容、first-party allowlist、runtime scope、台帳schema／承認／version／source commit、binary／source hashを照合し、standalone native componentを全Legal Bundle indexへ反映するfail-closed gate
 
 ### 未完了の主要release gate
 
-- 実Spout2／D3D11／WASAPI／encoder／muxer backend
+- 実Spout2／D3D11、WASAPI capture sessionからencoderへの接続、encoder／muxer backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - app／OS／GPU model／driver、継続A/V閾値、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
@@ -96,7 +99,7 @@ make -C tests/VRRecorder.Native.Tests test
 
 Implementation is in progress and is not release-eligible. As of 2026-07-12, validation covers managed tests runnable on Linux/WSL2, a Windows x64 WPF cross-build, and the Linux native ABI. Running WPF on Windows and validating Spout2, D3D11, WASAPI, FFmpeg, OpenVR, real VRChat, Windows 10/11, GPUs, and HMDs remain outstanding.
 
-The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, service-scoped previous Spout-sender selection with a desktop ambiguity prompt, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export including the media profile/final native statistics are also wired. Live Mic/Mute control now preserves reversible state from the native ABI through desktop, wrist, and SteamVR input. Native internals include a 48 kHz stereo mixer, a capture timeline covering packet boundaries, gaps, device loss/recovery, and abort, and a single-input pump that forwards clocked and silent packets into that timeline. The production native media and SteamVR backends themselves still intentionally return `BACKEND_UNAVAILABLE`, and approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is therefore a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
+The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, service-scoped previous Spout-sender selection with a desktop ambiguity prompt, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export including the media profile/final native statistics are also wired. Live Mic/Mute control now preserves reversible state from the native ABI through desktop, wrist, and SteamVR input. Native internals include PCM/float sample-rate and channel normalization to 48 kHz stereo, event-driven WASAPI loopback/microphone sources, capture timelines and recovery runners covering packet boundaries, gaps, device loss/recovery, and abort, plus a coordinator that feeds aligned desktop/microphone frame windows into the mixer. The production native media backend that connects these boundaries to an encoder/muxer, and the SteamVR backend, still intentionally return `BACKEND_UNAVAILABLE`; approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is therefore a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
 
 The current third-party registry entries are candidates for test-only NuGet dependencies. Versions, NuGet content hashes, package-archive SHA-256 values, upstream commits, and full-license-text hashes are pinned, but every entry has `approval.status` set to `pending-independent-review`. Native link and runtime-load manifests reconcile current first-party, Windows-system, and toolchain call sites and reject unregistered additions at the candidate gate. The final-staging gate now checks PE content, ownership, runtime scope, registry schema/approval, component version/source commit, and binary/source-archive hashes before Legal Bundle generation, and includes standalone native components in text notices and SPDX. There are still zero approved third-party native components. This is not approval for signing, publication, or an end-user Legal Bundle.
 
@@ -115,22 +118,22 @@ dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minim
 make -C tests/VRRecorder.Native.Tests test
 ```
 
-- managed: 856 passed, 0 failed, 0 skipped
+- managed: 857 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 226
-  - Compliance 180
+  - Compliance 181
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
-- native Make ABI/mixer/timeline/capture-pump contracts: passed
+- native Make ABI/mixer/timeline/capture-pump/WASAPI-factory/dual-input-mix contracts: passed
 - native public-symbol allowlist: exact 17/17 match
 - format/analyzers: no changes required
 
-`cmake` is unavailable in the current environment, so CMake/CTest was not rerun for the 2026-07-12 changes. The 2026-07-10 CMake/CTest 4/4 result predates the new audio timeline/capture targets and is not treated as evidence for the current CMake graph. A Windows MSVC workflow is present in the repository, but this report does not claim a successful remote run.
+`cmake` is unavailable in the current environment, so CMake/CTest was not rerun for the 2026-07-12 changes. The 2026-07-10 CMake/CTest 4/4 result predates the new audio timeline/capture/mix targets and is not treated as evidence for the current CMake graph. A Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
 ### Integration-test-only coverage from the preceding checkpoint
 
-Following design section 18.5, Cobertura coverage was collected by running only `VRRecorder.IntegrationTests` at the preceding checkpoint. The 856-test regression including the runtime Mic/Mute, capture-timeline/pump, Spout-sender-selection, and native staging/Legal Bundle admission boundaries passes, but coverage has not been recollected after those additions; the following table is not a current measurement.
+Following design section 18.5, Cobertura coverage was collected by running only `VRRecorder.IntegrationTests` at the preceding checkpoint. The 857-test regression including runtime Mic/Mute, capture timeline/pump/normalizer/WASAPI factory/dual-input mix, Spout-sender selection, and native staging/Legal Bundle admission boundaries passes, but coverage has not been recollected after those additions; the following table is not a current measurement.
 
 | Assembly | Line | Branch |
 |---|---:|---:|
@@ -164,14 +167,17 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
 - A native capture timeline that reconstructs variable packets on absolute 48 kHz frames, zero-fills gaps/device loss, preserves exact recovery frames and clock epochs, and wakes safely on abort
-- A portable single-input pump that forwards clocked 48 kHz stereo packets, explicit WASAPI-style silent-frame counts, exact device-loss frames, and idempotent aborts into the capture timeline
+- A portable normalizer for PCM16, packed PCM24, PCM32, float, mono, stereo, speaker-masked multichannel, and sample-rate differences that retains rational phase across packets and timestamp-error/discontinuity epochs
+- A Windows WASAPI source boundary covering event callbacks, loopback/capture endpoints, device position/QPC, silent/discontinuity/timestamp-error flags, same-thread GetBuffer/ReleaseBuffer, and idempotent abort
+- Capture pumps/runners covering clocked 48 kHz packets, explicit WASAPI-style silent-frame counts, exact device-loss frames, recovery after a failed replacement, bounded five-second default-endpoint rediscovery, and abortable waits
+- A dual-input coordinator that reads desktop/microphone timelines over the same 48 kHz frame window, silences only a disconnected side, rejects skew, and passes a fixed sample count into the mixer
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
 - A fail-closed final-staging gate that reconciles PE content, the first-party allowlist, runtime scope, registry schema/approval/version/source commit, and binary/source hashes, then includes standalone native components in every Legal Bundle index
 
 ### Major outstanding release gates
 
-- Real Spout2/D3D11/WASAPI/encoder/muxer backends
+- Real Spout2/D3D11, connection of the WASAPI capture session to encoding, and encoder/muxer backends
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Complete structured diagnostics for app/OS/GPU model/driver, continuous A/V thresholds, audio underruns/overruns, OSC, and finalization failures

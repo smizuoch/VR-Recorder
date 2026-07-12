@@ -18,6 +18,12 @@
 - [x] desktop／microphoneの喪失／復旧を独立に保持し、一方の復旧で他方のunavailable状態を解除しない
 - [x] 診断／presentation observerの障害で録画sessionを停止しない
 - [x] bounded callback queueの飽和時も入力別の最新availabilityへ収束する
+- [x] float／PCM16／packed PCM24／PCM32とmono／stereo／multichannelを48 kHz stereoへ正規化する
+- [x] packetをまたぐsample-rate変換phaseとtimestamp-error／discontinuity epochを保持する
+- [x] event-driven WASAPI sourceがloopback／microphone、QPC、silent／loss flag、同一thread release、Abortを扱う
+- [x] replacement endpointのStart失敗後もtimelineを破棄せず再接続を継続する
+- [x] desktop／microphoneを同一48 kHz frame windowでmixし、片側lossだけを無音化する
+- [x] 二入力のframe skewをmix前に拒否し、blocked readをAbortで解除する
 
 ## English
 
@@ -37,3 +43,9 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Track desktop/microphone loss and recovery independently without clearing the other input's unavailable state
 - [x] Keep the recording session running when diagnostics or presentation observers fail
 - [x] Converge to each input's latest availability when the bounded callback queue is saturated
+- [x] Normalize float, PCM16, packed PCM24, PCM32, mono, stereo, and multichannel capture into 48 kHz stereo
+- [x] Preserve sample-rate conversion phase and timestamp-error/discontinuity epochs across packets
+- [x] Cover loopback/microphone, QPC, silent/loss flags, same-thread release, and abort in the event-driven WASAPI source
+- [x] Keep the timeline recoverable after a replacement endpoint fails to start
+- [x] Mix desktop and microphone over the same 48 kHz frame window while silencing only a lost side
+- [x] Reject dual-input frame skew before mixing and release blocked reads on abort
