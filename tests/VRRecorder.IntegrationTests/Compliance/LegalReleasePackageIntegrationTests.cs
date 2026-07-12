@@ -579,6 +579,66 @@ public sealed class LegalReleasePackageIntegrationTests
     }
 
     [Fact]
+    [Trait("Scenario", "IT-025")]
+    public async Task NativeBinaryMustMatchCanonicalRegistryHashBeforePackaging()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        const string relativePath = "tools/ffprobe.exe";
+        byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
+        var binaryPath = Path.Combine(
+            payload.StagingPath,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
+        await File.WriteAllBytesAsync(binaryPath, binary);
+        await WriteNativeRegistryAsync(
+            payload.Evidence.RepositoryRoot,
+            "ffmpeg",
+            "ffprobe.exe",
+            Hash([0x4d, 0x5a, 0x54, 0x41, 0x4d, 0x50, 0x45, 0x52]));
+
+        var graph = Graph();
+        graph = graph with
+        {
+            Components =
+            [
+                .. graph.Components,
+                Component("ffmpeg", "FFmpeg.Process", "8.0") with
+                {
+                    Linkage = "process-boundary",
+                    Packages = [],
+                },
+            ],
+        };
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+        var request = Request(
+            payload.StagingPath,
+            packagePath,
+            [
+                .. payload.Registrations,
+                new RegisteredStagedArtifact(
+                    "ffmpeg",
+                    relativePath,
+                    Hash(binary),
+                    StagedArtifactKind.Executable),
+            ]) with
+        {
+            ComponentGraph = graph,
+        };
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(request, CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "native-artifact-binary-hash-mismatch");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
     public async Task MissingMaterialSymbolsManifestProducesNoReleaseArtifacts()
     {
         using var directory = TemporaryDirectory.Create();
@@ -865,6 +925,56 @@ public sealed class LegalReleasePackageIntegrationTests
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, content);
         }
+    }
+
+    private static async Task WriteNativeRegistryAsync(
+        string root,
+        string componentId,
+        string fileName,
+        string binarySha256)
+    {
+        const string sourceArchivePath =
+            "third-party/source-archives/ffmpeg-source.zip";
+        const string buildRecipePath =
+            "third-party/build-recipes/ffmpeg-windows-x64.md";
+        byte[] sourceArchive = [0x50, 0x4b, 0x03, 0x04];
+        var sourcePath = Path.Combine(
+            root,
+            sourceArchivePath.Replace('/', Path.DirectorySeparatorChar));
+        var recipePath = Path.Combine(
+            root,
+            buildRecipePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(recipePath)!);
+        await File.WriteAllBytesAsync(sourcePath, sourceArchive);
+        await File.WriteAllTextAsync(recipePath, "Synthetic build recipe.\n");
+
+        var registryPath = Path.Combine(root, "third-party", "registry.yml");
+        var registry = JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            registryVersion = 1,
+            components = new[]
+            {
+                new
+                {
+                    id = componentId,
+                    nativeArtifacts = new[]
+                    {
+                        new
+                        {
+                            platform = "windows-x64",
+                            fileName,
+                            binarySha256,
+                            sourceArchivePath,
+                            sourceArchiveSha256 = Hash(sourceArchive),
+                            buildRecipePath,
+                        },
+                    },
+                },
+            },
+        });
+        await File.WriteAllTextAsync(registryPath, registry);
     }
 
     private static void AssertRejected(
