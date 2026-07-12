@@ -23,6 +23,14 @@ struct EncodedMediaPacket final {
     std::size_t payload_size;
 };
 
+class EncodedMediaPacketObserver {
+public:
+    virtual ~EncodedMediaPacketObserver() = default;
+
+    virtual vrrec_status_t Observe(
+        const EncodedMediaPacket &packet) noexcept = 0;
+};
+
 class FragmentedMp4Muxer {
 public:
     virtual ~FragmentedMp4Muxer() = default;
@@ -45,7 +53,8 @@ enum class Mp4MuxResult {
 class FragmentedMp4MuxCoordinator final {
 public:
     explicit FragmentedMp4MuxCoordinator(
-        FragmentedMp4Muxer &muxer) noexcept;
+        FragmentedMp4Muxer &muxer,
+        EncodedMediaPacketObserver *observer = nullptr) noexcept;
     ~FragmentedMp4MuxCoordinator();
 
     FragmentedMp4MuxCoordinator(
@@ -62,6 +71,7 @@ private:
     void AbortLocked() noexcept;
 
     FragmentedMp4Muxer &muxer_;
+    EncodedMediaPacketObserver *observer_;
     std::mutex mutex_;
     std::int64_t last_video_dts_ = 0;
     std::int64_t last_audio_dts_ = 0;

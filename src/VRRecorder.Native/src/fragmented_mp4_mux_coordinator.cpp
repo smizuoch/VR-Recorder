@@ -3,8 +3,10 @@
 namespace vrrecorder::native {
 
 FragmentedMp4MuxCoordinator::FragmentedMp4MuxCoordinator(
-    FragmentedMp4Muxer &muxer) noexcept
-    : muxer_(muxer)
+    FragmentedMp4Muxer &muxer,
+    EncodedMediaPacketObserver *observer) noexcept
+    : muxer_(muxer),
+      observer_(observer)
 {
 }
 
@@ -46,6 +48,9 @@ Mp4MuxResult FragmentedMp4MuxCoordinator::Submit(
     if (muxer_.WritePacket(packet) != VRREC_STATUS_OK) {
         AbortLocked();
         return Mp4MuxResult::MuxFailed;
+    }
+    if (observer_ != nullptr) {
+        static_cast<void>(observer_->Observe(packet));
     }
 
     if (!has_fragment_) {
