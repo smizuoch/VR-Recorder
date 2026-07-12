@@ -26,6 +26,8 @@
 - [x] 二入力のframe skewをmix前に拒否し、blocked readをAbortで解除する
 - [x] WASAPI Start／Readを同一専用threadで実行し、初期化失敗時とAbort時にjoinする
 - [x] microphone初期化失敗時は開始済みdesktop workerをrollbackし、部分開始sessionを残さない
+- [x] mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering中もsilent timelineを維持する
+- [x] encoder失敗時は未mux frame／packetを成功統計へ加算しない
 
 ## English
 
@@ -53,3 +55,5 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Reject dual-input frame skew before mixing and release blocked reads on abort
 - [x] Run WASAPI Start/Read on one dedicated thread and join it after initialization failure or abort
 - [x] Roll back a started desktop worker when microphone initialization fails, leaving no partially started session
+- [x] Submit positioned, fixed-size mixed PCM windows to the encoder port while preserving silent timelines during buffering
+- [x] Do not count unmuxed frames or packets as successful after an encoder failure

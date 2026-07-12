@@ -32,7 +32,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: warning 0、error 0
-- native Make ABI／mixer／timeline／capture-pump／WASAPI factory／worker／stereo session contract: 成功
+- native Make ABI／mixer／timeline／capture-pump／WASAPI factory／worker／stereo session／encoder-input contract: 成功
 - native公開symbol allowlist: 17/17一致
 - format/analyzer: 差分なし
 
@@ -79,13 +79,14 @@ make -C tests/VRRecorder.Native.Tests test
 - clock付き48 kHz stereo packet、WASAPI silent相当の明示frame数、正確なdevice-loss frame、失敗したreplacement後の再試行、最大5秒のdefault endpoint再探索、待機中Abortを扱うcapture pump／runner
 - WASAPI Start／Readを同一専用threadで実行し、初期結果を同期返却して失敗／Abort／destructorで必ずjoinするcapture worker
 - desktop／microphone workerをrollback可能に開始し、timelineを同一48 kHz frame windowで読み、片側切断時だけを無音化し、skewを拒否してmixerへ固定sample数を渡すstereo capture session
+- mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離するaudio encoding pump
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
 - 最終stagingのPE内容、first-party allowlist、runtime scope、台帳schema／承認／version／source commit、binary／source hashを照合し、standalone native componentを全Legal Bundle indexへ反映するfail-closed gate
 
 ### 未完了の主要release gate
 
-- 実Spout2／D3D11、WASAPI capture sessionからencoderへの接続、encoder／muxer backend
+- 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - app／OS／GPU model／driver、継続A/V閾値、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
@@ -126,7 +127,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
-- native Make ABI/mixer/timeline/capture-pump/WASAPI-factory/worker/stereo-session contracts: passed
+- native Make ABI/mixer/timeline/capture-pump/WASAPI-factory/worker/stereo-session/encoder-input contracts: passed
 - native public-symbol allowlist: exact 17/17 match
 - format/analyzers: no changes required
 
@@ -173,13 +174,14 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Capture pumps/runners covering clocked 48 kHz packets, explicit WASAPI-style silent-frame counts, exact device-loss frames, recovery after a failed replacement, bounded five-second default-endpoint rediscovery, and abortable waits
 - Joined capture workers that run WASAPI Start/Read on one dedicated thread, synchronously report initialization, and join on failure, abort, or destruction
 - A rollback-safe stereo capture session that starts desktop/microphone workers, reads their timelines over the same 48 kHz frame window, silences only a disconnected side, rejects skew, and passes a fixed sample count into the mixer
+- An audio encoding pump that submits positioned mixed PCM windows through an encoder port and distinguishes buffered zero-packet writes from actual muxed-packet counts
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
 - A fail-closed final-staging gate that reconciles PE content, the first-party allowlist, runtime scope, registry schema/approval/version/source commit, and binary/source hashes, then includes standalone native components in every Legal Bundle index
 
 ### Major outstanding release gates
 
-- Real Spout2/D3D11, connection of the WASAPI capture session to encoding, and encoder/muxer backends
+- Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Complete structured diagnostics for app/OS/GPU model/driver, continuous A/V thresholds, audio underruns/overruns, OSC, and finalization failures
