@@ -22,9 +22,11 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         return CaptureNormalizationResult::InvalidFormat;
     }
 
-    if (packet.frame_count == 0 || packet.qpc_100ns < 0 ||
-        session_start_qpc_100ns_ < 0 ||
-        packet.qpc_100ns < session_start_qpc_100ns_ ||
+    if (packet.frame_count == 0 || session_start_qpc_100ns_ < 0 ||
+        (!packet.timestamp_error &&
+         (packet.qpc_100ns < 0 ||
+          packet.qpc_100ns < session_start_qpc_100ns_)) ||
+        (!initialized_ && packet.timestamp_error) ||
         packet.frame_count >
             std::numeric_limits<std::uint64_t>::max()) {
         return CaptureNormalizationResult::InvalidPacket;
@@ -102,6 +104,24 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                 start_frame_48k)) {
             return CaptureNormalizationResult::InvalidPacket;
         }
+    }
+
+    auto normalized_qpc_100ns = packet.qpc_100ns;
+    if (packet.timestamp_error) {
+        std::uint64_t qpc_delta = 0;
+        if (!TryScaleRound(
+                start_frame_48k,
+                10'000'000,
+                OutputSampleRate,
+                qpc_delta) ||
+            qpc_delta > static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max() -
+                session_start_qpc_100ns_)) {
+            return CaptureNormalizationResult::InvalidPacket;
+        }
+
+        normalized_qpc_100ns = session_start_qpc_100ns_ +
+            static_cast<std::int64_t>(qpc_delta);
     }
 
     const auto output_frame_count = static_cast<std::size_t>(
@@ -201,7 +221,7 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
     normalized = CapturedStereoPacket48k {
         start_frame_48k,
         packet.device_position,
-        packet.qpc_100ns,
+        normalized_qpc_100ns,
         output_frame_count,
         packet.silent
             ? std::span<const float> {}
