@@ -43,10 +43,25 @@ public:
         ++availability_calls;
     }
 
+    void AudioBufferHealthChanged(
+        AudioEndpointRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept override
+    {
+        last_health_role = role;
+        last_health = health;
+        last_health_frame = frame_position;
+        ++health_calls;
+    }
+
     AudioEndpointRole last_role = AudioEndpointRole::Desktop;
     bool last_available = true;
     std::uint64_t last_frame = 0;
     std::size_t availability_calls = 0;
+    AudioEndpointRole last_health_role = AudioEndpointRole::Desktop;
+    AudioBufferHealth last_health = AudioBufferHealth::Underrun;
+    std::uint64_t last_health_frame = 0;
+    std::size_t health_calls = 0;
 };
 
 void MapsCaptureRolesToMediaEndpointEvents()
@@ -73,10 +88,35 @@ void MapsCaptureRolesToMediaEndpointEvents()
     CHECK(events.last_frame == 12'480);
 }
 
+void MapsBufferHealthWithoutLosingTheExactFrame()
+{
+    RecordingMediaEvents events;
+    MediaAudioCaptureAvailabilitySink sink(events);
+
+    sink.BufferHealthChanged(
+        AudioCaptureRole::DesktopLoopback,
+        AudioBufferHealth::Overrun,
+        24'000);
+    CHECK(events.health_calls == 1);
+    CHECK(events.last_health_role == AudioEndpointRole::Desktop);
+    CHECK(events.last_health == AudioBufferHealth::Overrun);
+    CHECK(events.last_health_frame == 24'000);
+
+    sink.BufferHealthChanged(
+        AudioCaptureRole::Microphone,
+        AudioBufferHealth::Underrun,
+        24'480);
+    CHECK(events.health_calls == 2);
+    CHECK(events.last_health_role == AudioEndpointRole::Microphone);
+    CHECK(events.last_health == AudioBufferHealth::Underrun);
+    CHECK(events.last_health_frame == 24'480);
+}
+
 }
 
 int main()
 {
     MapsCaptureRolesToMediaEndpointEvents();
+    MapsBufferHealthWithoutLosingTheExactFrame();
     return 0;
 }
