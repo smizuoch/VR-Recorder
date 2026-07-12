@@ -3,6 +3,7 @@ using VRRecorder.Application.Camera;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Video;
 using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Application.Desktop;
@@ -222,6 +223,11 @@ public sealed class DesktopRecordingRuntime : IDesktopRecordingRuntime
         {
             await ToggleCoreAsync(operationCancellation.Token)
                 .ConfigureAwait(false);
+        }
+        catch (VideoSenderSelectionCanceledException) when (isStart)
+        {
+            // Closing the ambiguous-sender prompt is a completed user choice.
+            // The lifecycle has already restored the owned camera state.
         }
         catch (OperationCanceledException) when (
             isStart &&

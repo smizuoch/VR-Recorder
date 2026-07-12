@@ -1,5 +1,6 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Video;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
@@ -215,8 +216,7 @@ public sealed class SpoutVideoSignalGateway : IVideoSignalGateway
             .ConfigureAwait(false);
         if (selectedSenderId is null)
         {
-            throw new InvalidOperationException(
-                "Spout sender selection was canceled.");
+            throw new VideoSenderSelectionCanceledException();
         }
 
         var selected = candidates.SingleOrDefault(candidate => string.Equals(
