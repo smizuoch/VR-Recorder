@@ -43,11 +43,13 @@ public:
         std::shared_ptr<SourceState> state,
         vrrec_status_t start_status,
         float sample,
-        std::size_t frame_count)
+        std::size_t frame_count,
+        bool lose_after_packet = false)
         : state_(std::move(state)),
           start_status_(start_status),
           samples_(frame_count * 2U, sample),
-          frame_count_(frame_count)
+          frame_count_(frame_count),
+          lose_after_packet_(lose_after_packet)
     {
     }
 
@@ -81,6 +83,11 @@ public:
             };
         }
 
+        if (lose_after_packet_ && !loss_returned_) {
+            loss_returned_ = true;
+            return {AudioCaptureReadResult::DeviceLost, {}, frame_count_};
+        }
+
         std::unique_lock lock(state_->mutex);
         state_->changed.wait(lock, [&] { return state_->aborted; });
         return {AudioCaptureReadResult::Aborted, {}, 0};
@@ -103,6 +110,8 @@ private:
     std::vector<float> samples_;
     std::size_t frame_count_;
     bool packet_returned_ = false;
+    bool lose_after_packet_ = false;
+    bool loss_returned_ = false;
 };
 
 class SingleSourceProvider final : public AudioCaptureSourceProvider {
@@ -140,6 +149,38 @@ public:
     }
 
     std::atomic_int abort_calls = 0;
+};
+
+class BlockingAvailabilitySink final : public AudioCaptureAvailabilitySink {
+public:
+    void AvailabilityChanged(
+        AudioCaptureRole role,
+        bool available,
+        std::uint64_t frame_position) noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex);
+            event_role = role;
+            event_available = available;
+            event_frame = frame_position;
+            ++event_count;
+        }
+
+        changed.notify_all();
+    }
+
+    void WaitForEvent()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return event_count > 0; });
+    }
+
+    std::mutex mutex;
+    std::condition_variable changed;
+    AudioCaptureRole event_role = AudioCaptureRole::Microphone;
+    bool event_available = true;
+    std::uint64_t event_frame = 0;
+    std::size_t event_count = 0;
 };
 
 StereoAudioCaptureSessionConfig Config()
@@ -282,6 +323,51 @@ void RejectsInvalidRoutingBeforeStartingInputs()
     CHECK(microphone_state->start_calls == 0);
 }
 
+void PropagatesDesktopLossWithItsExactFrame()
+{
+    auto desktop_state = std::make_shared<SourceState>();
+    auto microphone_state = std::make_shared<SourceState>();
+    SingleSourceProvider desktop_provider(
+        std::make_unique<PacketThenBlockingSource>(
+            desktop_state,
+            VRREC_STATUS_OK,
+            0.25F,
+            2,
+            true));
+    SingleSourceProvider microphone_provider(
+        std::make_unique<PacketThenBlockingSource>(
+            microphone_state,
+            VRREC_STATUS_OK,
+            0.5F,
+            2));
+    RecordingWaiter desktop_waiter;
+    RecordingWaiter microphone_waiter;
+    BlockingAvailabilitySink availability;
+    StereoAudioCaptureSession session(
+        desktop_provider,
+        desktop_waiter,
+        microphone_provider,
+        microphone_waiter,
+        16,
+        VRREC_AUDIO_ROUTING_MIXED,
+        0.0,
+        0.0,
+        &availability);
+
+    CHECK(session.Start(Config()) == VRREC_STATUS_OK);
+    availability.WaitForEvent();
+    {
+        const std::lock_guard lock(availability.mutex);
+        CHECK(availability.event_count == 1);
+        CHECK(availability.event_role ==
+              AudioCaptureRole::DesktopLoopback);
+        CHECK(!availability.event_available);
+        CHECK(availability.event_frame == 2);
+    }
+
+    session.Abort();
+}
+
 }
 
 int main()
@@ -289,5 +375,6 @@ int main()
     StartsBothInputsAndMixesOneScheduledWindow();
     RollsBackDesktopWhenMicrophoneStartFails();
     RejectsInvalidRoutingBeforeStartingInputs();
+    PropagatesDesktopLossWithItsExactFrame();
     return 0;
 }
