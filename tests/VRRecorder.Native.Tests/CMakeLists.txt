@@ -636,6 +636,7 @@ add_executable(
     vrrecorder_native_video_processing_encoder_sink
     video_processing_encoder_sink_tests.cpp
     "${native_source_root}/src/video_processing_encoder_sink.cpp"
+    "${native_source_root}/src/video_processing_layout_controller.cpp"
     "${native_source_root}/src/video_processing_plan.cpp")
 target_compile_features(
     vrrecorder_native_video_processing_encoder_sink PRIVATE cxx_std_20)

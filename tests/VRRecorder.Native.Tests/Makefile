@@ -112,7 +112,7 @@ $(BUILD_DIR)/video_processing_plan_tests: video_processing_plan_tests.cpp $(NATI
 $(BUILD_DIR)/video_encoder_config_tests: video_encoder_config_tests.cpp $(NATIVE_ROOT)/src/video_encoder_config.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/video_processing_encoder_sink_tests: video_processing_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/video_processing_encoder_sink.cpp $(NATIVE_ROOT)/src/video_processing_plan.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/video_processing_encoder_sink_tests: video_processing_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/video_processing_encoder_sink.cpp $(NATIVE_ROOT)/src/video_processing_layout_controller.cpp $(NATIVE_ROOT)/src/video_processing_plan.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/video_encoding_pump_tests: video_encoding_pump_tests.cpp $(NATIVE_ROOT)/src/video_encoding_pump.cpp $(NATIVE_ROOT)/src/video_cfr_scheduler.cpp | $(BUILD_DIR)
