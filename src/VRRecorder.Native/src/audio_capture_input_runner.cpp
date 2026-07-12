@@ -50,10 +50,12 @@ bool TryCreateRecoveryConfig(
 AudioCaptureInputRunner::AudioCaptureInputRunner(
     AudioCaptureSourceProvider &provider,
     AudioCaptureRecoveryWaiter &waiter,
-    StereoCaptureTimeline &timeline) noexcept
+    StereoCaptureTimeline &timeline,
+    AudioCaptureAvailabilitySink *availability_sink) noexcept
     : provider_(provider),
       waiter_(waiter),
-      timeline_(timeline)
+      timeline_(timeline),
+      availability_sink_(availability_sink)
 {
 }
 
@@ -110,7 +112,7 @@ AudioCaptureInputResult AudioCaptureInputRunner::Run(
             continue;
         }
 
-        AudioCapturePump pump(*source, timeline_);
+        AudioCapturePump pump(*source, timeline_, availability_sink_);
         SetActivePump(&pump);
         const auto start_status = recovering
             ? pump.StartRecovery(recovery_config)

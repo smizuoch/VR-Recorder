@@ -14,7 +14,8 @@ public:
     AudioCaptureInputWorker(
         AudioCaptureSourceProvider &provider,
         AudioCaptureRecoveryWaiter &waiter,
-        StereoCaptureTimeline &timeline) noexcept;
+        StereoCaptureTimeline &timeline,
+        AudioCaptureAvailabilitySink *availability_sink = nullptr) noexcept;
     ~AudioCaptureInputWorker();
 
     AudioCaptureInputWorker(const AudioCaptureInputWorker &) = delete;

@@ -8,8 +8,9 @@ namespace vrrecorder::native {
 AudioCaptureInputWorker::AudioCaptureInputWorker(
     AudioCaptureSourceProvider &provider,
     AudioCaptureRecoveryWaiter &waiter,
-    StereoCaptureTimeline &timeline) noexcept
-    : runner_(provider, waiter, timeline)
+    StereoCaptureTimeline &timeline,
+    AudioCaptureAvailabilitySink *availability_sink) noexcept
+    : runner_(provider, waiter, timeline, availability_sink)
 {
 }
 

@@ -20,11 +20,22 @@ enum class AudioCapturePumpResult {
     Failed,
 };
 
+class AudioCaptureAvailabilitySink {
+public:
+    virtual ~AudioCaptureAvailabilitySink() = default;
+
+    virtual void AvailabilityChanged(
+        AudioCaptureRole role,
+        bool available,
+        std::uint64_t frame_position) noexcept = 0;
+};
+
 class AudioCapturePump final {
 public:
     AudioCapturePump(
         AudioCaptureSource &source,
-        StereoCaptureTimeline &timeline) noexcept;
+        StereoCaptureTimeline &timeline,
+        AudioCaptureAvailabilitySink *availability_sink = nullptr) noexcept;
 
     vrrec_status_t Start(
         const AudioCaptureSourceConfig &config) noexcept;
@@ -44,8 +55,10 @@ private:
 
     AudioCaptureSource &source_;
     StereoCaptureTimeline &timeline_;
+    AudioCaptureAvailabilitySink *availability_sink_;
     std::vector<float> silent_samples_;
     std::atomic_bool aborted_ = false;
+    AudioCaptureRole role_ = AudioCaptureRole::DesktopLoopback;
     bool started_ = false;
     bool recovering_ = false;
 };

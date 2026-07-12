@@ -28,7 +28,8 @@ public:
         std::size_t timeline_capacity_frames,
         vrrec_audio_routing_t initial_routing,
         double desktop_gain_db,
-        double microphone_gain_db);
+        double microphone_gain_db,
+        AudioCaptureAvailabilitySink *availability_sink = nullptr);
     ~StereoAudioCaptureSession();
 
     StereoAudioCaptureSession(const StereoAudioCaptureSession &) = delete;

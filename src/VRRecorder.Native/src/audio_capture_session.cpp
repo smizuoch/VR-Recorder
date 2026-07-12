@@ -12,18 +12,21 @@ StereoAudioCaptureSession::StereoAudioCaptureSession(
     std::size_t timeline_capacity_frames,
     vrrec_audio_routing_t initial_routing,
     double desktop_gain_db,
-    double microphone_gain_db)
+    double microphone_gain_db,
+    AudioCaptureAvailabilitySink *availability_sink)
     : desktop_timeline_(timeline_capacity_frames),
       microphone_timeline_(timeline_capacity_frames),
       mixer_(initial_routing, desktop_gain_db, microphone_gain_db),
       desktop_worker_(
           desktop_provider,
           desktop_waiter,
-          desktop_timeline_),
+          desktop_timeline_,
+          availability_sink),
       microphone_worker_(
           microphone_provider,
           microphone_waiter,
-          microphone_timeline_),
+          microphone_timeline_,
+          availability_sink),
       mix_coordinator_(
           desktop_timeline_,
           microphone_timeline_,

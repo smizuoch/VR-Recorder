@@ -6,9 +6,11 @@ namespace vrrecorder::native {
 
 AudioCapturePump::AudioCapturePump(
     AudioCaptureSource &source,
-    StereoCaptureTimeline &timeline) noexcept
+    StereoCaptureTimeline &timeline,
+    AudioCaptureAvailabilitySink *availability_sink) noexcept
     : source_(source),
-      timeline_(timeline)
+      timeline_(timeline),
+      availability_sink_(availability_sink)
 {
 }
 
@@ -46,6 +48,7 @@ vrrec_status_t AudioCapturePump::StartCore(
         return VRREC_STATUS_INVALID_STATE;
     }
 
+    role_ = config.role;
     started_ = true;
     recovering_ = recovering;
     return VRREC_STATUS_OK;
@@ -73,9 +76,18 @@ AudioCapturePumpResult AudioCapturePump::PumpOne() noexcept
         const auto availability = MapTimelineResult(timeline_.SetAvailable(
             false,
             read.effective_frame_48k));
-        return availability == AudioCapturePumpResult::PacketAccepted
-            ? AudioCapturePumpResult::DeviceLost
-            : availability;
+        if (availability != AudioCapturePumpResult::PacketAccepted) {
+            return availability;
+        }
+
+        if (availability_sink_ != nullptr) {
+            availability_sink_->AvailabilityChanged(
+                role_,
+                false,
+                read.effective_frame_48k);
+        }
+
+        return AudioCapturePumpResult::DeviceLost;
     }
     case AudioCaptureReadResult::Aborted:
         timeline_.Abort();
@@ -154,6 +166,12 @@ AudioCapturePumpResult AudioCapturePump::AcceptPacket(
     if (result != AudioCapturePumpResult::PacketAccepted &&
         recovery_applied) {
         timeline_.Abort();
+    } else if (result == AudioCapturePumpResult::PacketAccepted &&
+               recovery_applied && availability_sink_ != nullptr) {
+        availability_sink_->AvailabilityChanged(
+            role_,
+            true,
+            packet.start_frame_48k);
     }
 
     return result;

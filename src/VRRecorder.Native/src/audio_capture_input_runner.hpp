@@ -49,7 +49,8 @@ public:
     AudioCaptureInputRunner(
         AudioCaptureSourceProvider &provider,
         AudioCaptureRecoveryWaiter &waiter,
-        StereoCaptureTimeline &timeline) noexcept;
+        StereoCaptureTimeline &timeline,
+        AudioCaptureAvailabilitySink *availability_sink = nullptr) noexcept;
 
     AudioCaptureInputResult Run(
         const AudioCaptureSourceConfig &config) noexcept;
@@ -66,6 +67,7 @@ private:
     AudioCaptureSourceProvider &provider_;
     AudioCaptureRecoveryWaiter &waiter_;
     StereoCaptureTimeline &timeline_;
+    AudioCaptureAvailabilitySink *availability_sink_;
     std::mutex active_mutex_;
     AudioCapturePump *active_pump_ = nullptr;
     std::atomic_bool aborted_ = false;
