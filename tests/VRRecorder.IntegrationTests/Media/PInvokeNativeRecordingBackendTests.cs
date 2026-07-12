@@ -746,6 +746,55 @@ public sealed class PInvokeNativeRecordingBackendTests
         await stopping;
     }
 
+    [Fact]
+    public async Task AudioBufferHealthEventsAreTypedAndNonterminal()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "health.recording.mp4"),
+            Path.Combine(directory.Path, "health.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        List<RecordingAudioBufferHealthEvent> healthEvents = [];
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(
+                FirstVideoPacketMuxed: () => { },
+                Faulted: _ => { },
+                AudioBufferHealth: healthEvents.Add),
+            CancellationToken.None);
+
+        controls.EmitAudioBufferHealth(0, 0, 24_000);
+        controls.EmitAudioBufferHealth(1, 1, 24_480);
+
+        Assert.Equal(
+            [
+                new RecordingAudioBufferHealthEvent(
+                    AudioInput.Desktop,
+                    AudioBufferHealthKind.Underrun,
+                    24_000),
+                new RecordingAudioBufferHealthEvent(
+                    AudioInput.Microphone,
+                    AudioBufferHealthKind.Overrun,
+                    24_480),
+            ],
+            healthEvents);
+        var stopping = session.StopAsync(CancellationToken.None);
+        Assert.False(stopping.IsCompleted);
+        controls.CompleteTrailerFlushClose(1, 1);
+        await stopping;
+    }
+
     private static string FixturePath()
     {
         var root = FindRepositoryRoot();
@@ -791,6 +840,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly UIntDelegate _audioRouting;
         private readonly UIntDelegate _audioRoutingUpdateCount;
         private readonly AvDriftDelegate _avDrift;
+        private readonly AudioBufferHealthDelegate _audioBufferHealth;
 
         public NativeFixtureControls(string path)
         {
@@ -856,6 +906,10 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_emit_av_drift"));
+            _audioBufferHealth = Marshal.GetDelegateForFunctionPointer<
+                AudioBufferHealthDelegate>(NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_emit_audio_buffer_health"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -871,6 +925,12 @@ public sealed class PInvokeNativeRecordingBackendTests
             ulong videoPtsMicroseconds,
             ulong audioPtsMicroseconds) =>
             _avDrift(videoPtsMicroseconds, audioPtsMicroseconds);
+
+        public void EmitAudioBufferHealth(
+            uint role,
+            uint health,
+            ulong framePosition) =>
+            _audioBufferHealth(role, health, framePosition);
 
         public void SetDesktopAudioEndpointAvailable(
             bool available,
@@ -980,6 +1040,12 @@ public sealed class PInvokeNativeRecordingBackendTests
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void AudioEndpointAvailabilityDelegate(
             [MarshalAs(UnmanagedType.U1)] bool available,
+            ulong framePosition);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void AudioBufferHealthDelegate(
+            uint role,
+            uint health,
             ulong framePosition);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
