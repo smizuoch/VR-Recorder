@@ -24,6 +24,7 @@ internal enum NativeEventKind : uint
     DesktopAudioDeviceRecovered = 5,
     MicrophoneAudioDeviceLost = 6,
     MicrophoneAudioDeviceRecovered = 7,
+    AudioVideoDriftExceeded = 8,
 }
 
 internal enum NativeEncoderKind : uint

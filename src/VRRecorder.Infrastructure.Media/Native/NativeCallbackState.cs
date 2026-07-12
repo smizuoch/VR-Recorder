@@ -32,6 +32,7 @@ internal sealed class NativeCallbackState
         Action? firstPacket = null;
         AudioSessionStatus? audioStatus = null;
         AudioSessionWarning? audioWarning = null;
+        NativeAvDriftEvent? avDrift = null;
         NativeRecordingFault? fault = null;
         RecordingStopResult? stopped = null;
         lock (_gate)
@@ -87,6 +88,9 @@ internal sealed class NativeCallbackState
                         nativeEvent,
                         Domain.Audio.AudioInput.Microphone);
                     break;
+                case NativeEventKind.AudioVideoDriftExceeded:
+                    avDrift = CreateAvDrift(nativeEvent);
+                    break;
                 default:
                     return;
             }
@@ -105,6 +109,11 @@ internal sealed class NativeCallbackState
         if (audioStatus is not null)
         {
             _callbacks.AudioStatus?.Invoke(audioStatus);
+        }
+
+        if (avDrift is not null)
+        {
+            _callbacks.AvDrift?.Invoke(avDrift);
         }
 
         if (stopped is not null)
@@ -144,6 +153,26 @@ internal sealed class NativeCallbackState
         nativeEvent.VideoPacketCount == 0 &&
         nativeEvent.MessageUtf8 == 0 &&
         nativeEvent.AudioPacketCount <= long.MaxValue;
+
+    private static NativeAvDriftEvent? CreateAvDrift(
+        NativeEventV1 nativeEvent)
+    {
+        if (nativeEvent.Status != NativeStatus.Ok ||
+            nativeEvent.MessageUtf8 != 0 ||
+            nativeEvent.VideoPacketCount > long.MaxValue ||
+            nativeEvent.AudioPacketCount > long.MaxValue)
+        {
+            return null;
+        }
+
+        var video = checked((long)nativeEvent.VideoPacketCount);
+        var audio = checked((long)nativeEvent.AudioPacketCount);
+        var absolute = video >= audio ? video - audio : audio - video;
+        return new NativeAvDriftEvent(
+            TimeSpan.FromMicroseconds(video),
+            TimeSpan.FromMicroseconds(audio),
+            TimeSpan.FromMicroseconds(absolute));
+    }
 
     private RecordingMediaExpectation CreateMediaExpectation(
         long videoPacketCount)

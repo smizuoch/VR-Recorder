@@ -84,7 +84,8 @@ public sealed class NativeRecordingEngine
                 }
             },
             AudioWarning: PublishAudioBestEffort,
-            AudioStatus: PublishAudioBestEffort);
+            AudioStatus: PublishAudioBestEffort,
+            AvDrift: PublishAvDriftBestEffort);
         var session = await _backend
             .OpenAsync(
                 plan,
@@ -278,6 +279,21 @@ public sealed class NativeRecordingEngine
         catch (Exception)
         {
             // Diagnostics cannot change a successful native stop.
+        }
+    }
+
+    private void PublishAvDriftBestEffort(NativeAvDriftEvent drift)
+    {
+        try
+        {
+            _mediaEvents.Publish(new RecordingAvDriftEvent(
+                drift.VideoPts,
+                drift.AudioPts,
+                drift.AbsoluteDrift));
+        }
+        catch (Exception)
+        {
+            // Diagnostics cannot interrupt an active recording.
         }
     }
 

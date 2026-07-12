@@ -731,7 +731,6 @@ public sealed class PInvokeNativeRecordingBackendTests
                 AvDrift: driftEvents.Add),
             CancellationToken.None);
 
-        var stopping = session.StopAsync(CancellationToken.None);
         controls.EmitAvDrift(
             videoPtsMicroseconds: 180_001,
             audioPtsMicroseconds: 100_000);
@@ -740,6 +739,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         Assert.Equal(TimeSpan.FromMicroseconds(180_001), drift.VideoPts);
         Assert.Equal(TimeSpan.FromMicroseconds(100_000), drift.AudioPts);
         Assert.Equal(TimeSpan.FromMicroseconds(80_001), drift.AbsoluteDrift);
+        var stopping = session.StopAsync(CancellationToken.None);
         Assert.False(stopping.IsCompleted);
 
         controls.CompleteTrailerFlushClose(1, 1);

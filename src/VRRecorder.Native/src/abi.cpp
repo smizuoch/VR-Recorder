@@ -338,6 +338,33 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         });
     }
 
+    void AvSyncDriftExceeded(
+        std::uint64_t video_pts_microseconds,
+        std::uint64_t audio_pts_microseconds,
+        std::uint64_t) noexcept override
+    {
+        const std::lock_guard callback_lock(callback_mutex_);
+        std::uint64_t sequence;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (state_ != SessionState::Started || stop_requested_) {
+                return;
+            }
+            sequence = ++sequence_;
+        }
+
+        Emit(vrrec_event_v1 {
+            sizeof(vrrec_event_v1),
+            VRREC_ABI_V1,
+            VRREC_EVENT_AUDIO_VIDEO_DRIFT_EXCEEDED,
+            VRREC_STATUS_OK,
+            sequence,
+            video_pts_microseconds,
+            audio_pts_microseconds,
+            nullptr,
+        });
+    }
+
 private:
     void EndRuntimeOperation() noexcept
     {

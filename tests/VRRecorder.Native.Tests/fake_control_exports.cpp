@@ -80,6 +80,15 @@ extern "C" VRREC_TEST_API void vrrec_test_fail(
         message_utf8 == nullptr ? "" : message_utf8);
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_emit_av_drift(
+    std::uint64_t video_pts_microseconds,
+    std::uint64_t audio_pts_microseconds)
+{
+    vrrecorder::native::testing::EmitAvDrift(
+        video_pts_microseconds,
+        audio_pts_microseconds);
+}
+
 extern "C" VRREC_TEST_API void
 vrrec_test_set_desktop_audio_endpoint_available(
     std::uint8_t available,

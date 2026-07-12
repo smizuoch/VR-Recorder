@@ -7,4 +7,8 @@ public interface IRecordingMediaEventSink
     void Publish(RecordingMediaProfile profile);
 
     void Publish(RecordingSessionStatistics statistics);
+
+    void Publish(RecordingAvDriftEvent drift)
+    {
+    }
 }

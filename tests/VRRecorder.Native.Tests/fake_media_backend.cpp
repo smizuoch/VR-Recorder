@@ -204,6 +204,19 @@ public:
             frame_position);
     }
 
+    void EmitAvDrift(
+        std::uint64_t video_pts_microseconds,
+        std::uint64_t audio_pts_microseconds) noexcept
+    {
+        const auto drift = video_pts_microseconds >= audio_pts_microseconds
+            ? video_pts_microseconds - audio_pts_microseconds
+            : audio_pts_microseconds - video_pts_microseconds;
+        events_.AvSyncDriftExceeded(
+            video_pts_microseconds,
+            audio_pts_microseconds,
+            drift);
+    }
+
     static FakeMediaBackend *Active() noexcept
     {
         return active_;
@@ -619,6 +632,15 @@ void CompleteTrailerFlushClose(
 void Fail(std::int32_t status, std::string_view message)
 {
     FakeMediaBackend::Active()->Fail(status, std::string(message));
+}
+
+void EmitAvDrift(
+    std::uint64_t video_pts_microseconds,
+    std::uint64_t audio_pts_microseconds)
+{
+    FakeMediaBackend::Active()->EmitAvDrift(
+        video_pts_microseconds,
+        audio_pts_microseconds);
 }
 
 void SetDesktopAudioEndpointAvailable(

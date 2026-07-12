@@ -52,6 +52,9 @@ void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count);
 void Fail(std::int32_t status, std::string_view message);
+void EmitAvDrift(
+    std::uint64_t video_pts_microseconds,
+    std::uint64_t audio_pts_microseconds);
 void SetDesktopAudioEndpointAvailable(
     bool available,
     std::uint64_t frame_position);

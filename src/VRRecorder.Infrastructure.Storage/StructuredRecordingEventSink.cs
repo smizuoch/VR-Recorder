@@ -215,6 +215,22 @@ public sealed class StructuredRecordingEventSink
             }));
     }
 
+    public void Publish(RecordingAvDriftEvent drift)
+    {
+        ArgumentNullException.ThrowIfNull(drift);
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            DiagnosticLogLevel.Warning,
+            "recording.av_drift_exceeded",
+            new Dictionary<string, string>
+            {
+                ["absoluteDriftMicroseconds"] = Microseconds(
+                    drift.AbsoluteDrift),
+                ["audioPtsMicroseconds"] = Microseconds(drift.AudioPts),
+                ["videoPtsMicroseconds"] = Microseconds(drift.VideoPts),
+            }));
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
