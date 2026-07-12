@@ -1,3 +1,4 @@
+using System.Net;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
@@ -234,6 +235,36 @@ public sealed class DesktopRecordingSettingsController
                     edited.MicrophoneGainDb,
                     current.Audio.MicrophoneGainDb),
             },
+            Vr = current.Vr with
+            {
+                Hand = Merge(
+                    original.VrHand,
+                    edited.VrHand,
+                    current.Vr.Hand),
+                PlacementMode = Merge(
+                    original.OverlayPlacement,
+                    edited.OverlayPlacement,
+                    current.Vr.PlacementMode),
+            },
+            Osc = current.Osc with
+            {
+                AutoDiscover = Merge(
+                    original.OscAutoDiscover,
+                    edited.OscAutoDiscover,
+                    current.Osc.AutoDiscover),
+                FallbackHost = Merge(
+                    original.OscFallbackHost,
+                    edited.OscFallbackHost,
+                    current.Osc.FallbackHost),
+                FallbackSendPort = Merge(
+                    original.OscFallbackSendPort,
+                    edited.OscFallbackSendPort,
+                    current.Osc.FallbackSendPort),
+                FallbackReceivePort = Merge(
+                    original.OscFallbackReceivePort,
+                    edited.OscFallbackReceivePort,
+                    current.Osc.FallbackReceivePort),
+            },
         };
         VRRecorderSettingsContract.Validate(updated);
         await _settings
@@ -276,7 +307,13 @@ public sealed class DesktopRecordingSettingsController
             settings.Audio.MicrophoneGainDb,
             settings.Audio.DesktopEndpointId,
             settings.Audio.MicrophoneEndpointId,
-            settings.UiLocale);
+            settings.UiLocale,
+            settings.Vr.Hand,
+            settings.Vr.PlacementMode,
+            settings.Osc.AutoDiscover,
+            settings.Osc.FallbackHost,
+            settings.Osc.FallbackSendPort,
+            settings.Osc.FallbackReceivePort);
 
     public OutputPath ResolveOutputPath(string configuredPath) =>
         _outputPaths.Resolve(configuredPath);
@@ -333,6 +370,26 @@ public sealed class DesktopRecordingSettingsController
         {
             throw InvalidChoice("UI locale");
         }
+        if (!Enum.IsDefined(draft.VrHand))
+        {
+            throw InvalidChoice("VR hand");
+        }
+
+        if (!Enum.IsDefined(draft.OverlayPlacement))
+        {
+            throw InvalidChoice("overlay placement");
+        }
+
+        if (!IPAddress.TryParse(draft.OscFallbackHost, out var oscAddress) ||
+            !IPAddress.IsLoopback(oscAddress))
+        {
+            throw InvalidChoice("OSC fallback host");
+        }
+
+        ValidatePort(draft.OscFallbackSendPort, "OSC fallback send port");
+        ValidatePort(
+            draft.OscFallbackReceivePort,
+            "OSC fallback receive port");
 
         ValidateGain(draft.DesktopGainDb, "desktop gain");
         ValidateGain(draft.MicrophoneGainDb, "microphone gain");
@@ -361,6 +418,14 @@ public sealed class DesktopRecordingSettingsController
     private static void ValidateEndpointId(string value, string setting)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl))
+        {
+            throw InvalidChoice(setting);
+        }
+    }
+
+    private static void ValidatePort(int value, string setting)
+    {
+        if (value is < 1 or > 65535)
         {
             throw InvalidChoice(setting);
         }
