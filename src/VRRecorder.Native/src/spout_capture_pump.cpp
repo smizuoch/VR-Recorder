@@ -60,6 +60,7 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
     const auto push_status = scheduler_.Push({
         frame.frame_sequence,
         frame.monotonic_timestamp_microseconds,
+        frame.surface,
     });
     return push_status == VRREC_STATUS_OK
         ? SpoutCaptureResult::FrameAccepted
@@ -86,8 +87,17 @@ bool SpoutCapturePump::IsFrameValid(const SpoutFrame &frame) noexcept
         frame.pixel_format == VRREC_SOURCE_PIXEL_FORMAT_BGRA8 ||
         frame.pixel_format == VRREC_SOURCE_PIXEL_FORMAT_RGBA8 ||
         frame.pixel_format == VRREC_SOURCE_PIXEL_FORMAT_NV12;
+    if (!frame.surface || frame.surface->NativeHandle() == nullptr) {
+        return false;
+    }
+
+    const auto descriptor = frame.surface->Descriptor();
     return !frame.sender_id.empty() && !frame.gpu_identity.empty() &&
            frame.width > 0 && frame.height > 0 &&
+           descriptor.adapter_luid == frame.adapter_luid &&
+           descriptor.width == frame.width &&
+           descriptor.height == frame.height &&
+           descriptor.pixel_format == frame.pixel_format &&
            vendor_defined && format_defined &&
            std::isfinite(frame.estimated_source_fps) &&
            frame.estimated_source_fps > 0.0 &&

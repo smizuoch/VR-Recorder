@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "vrrecorder_native.h"
+#include "video_surface.hpp"
 
 namespace vrrecorder::native {
 
@@ -27,6 +28,7 @@ struct SpoutFrame {
     double estimated_source_fps;
     std::uint64_t frame_sequence;
     std::int64_t monotonic_timestamp_microseconds;
+    std::shared_ptr<VideoSurface> surface {};
 };
 
 class SpoutSourceBackend {

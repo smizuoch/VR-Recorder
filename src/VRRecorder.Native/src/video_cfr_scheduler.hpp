@@ -2,15 +2,18 @@
 #define VRRECORDER_NATIVE_VIDEO_CFR_SCHEDULER_HPP
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 
 #include "vrrecorder_native.h"
+#include "video_surface.hpp"
 
 namespace vrrecorder::native {
 
 struct SourceVideoFrame final {
     std::uint64_t sequence;
     std::int64_t timestamp_microseconds;
+    std::shared_ptr<VideoSurface> surface {};
 };
 
 struct ScheduledVideoFrame final {
@@ -19,6 +22,7 @@ struct ScheduledVideoFrame final {
     std::int64_t source_timestamp_microseconds = 0;
     std::uint64_t dropped_before_output = 0;
     bool duplicated = false;
+    std::shared_ptr<VideoSurface> surface {};
 };
 
 enum class VideoScheduleResult {

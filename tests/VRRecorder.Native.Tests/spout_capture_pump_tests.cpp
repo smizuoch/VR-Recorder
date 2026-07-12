@@ -160,6 +160,26 @@ void RejectsFramesFromAnotherSender()
     CHECK(scheduler.Statistics().source_frame_count == 0);
 }
 
+void RejectsSurfaceMetadataThatDoesNotMatchTheTexture()
+{
+    ScriptedSpoutBackend backend;
+    auto frame = Frame("selected", 21, 2'100'000);
+    frame.surface = std::make_shared<FakeVideoSurface>(
+        VideoSurfaceDescriptor {
+            42,
+            1'280,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        });
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(frame)});
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(scheduler.Statistics().source_frame_count == 0);
+}
+
 void AbortStopsPollingAndReleasesTheBackend()
 {
     ScriptedSpoutBackend backend;
@@ -181,6 +201,7 @@ int main()
     AcceptsOnlyTheSelectedSenderIntoTheScheduler();
     KeepsTimeoutSeparateFromSenderLoss();
     RejectsFramesFromAnotherSender();
+    RejectsSurfaceMetadataThatDoesNotMatchTheTexture();
     AbortStopsPollingAndReleasesTheBackend();
     return 0;
 }

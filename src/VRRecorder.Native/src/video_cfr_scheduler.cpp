@@ -69,6 +69,7 @@ VideoScheduleResult VideoCfrScheduler::Schedule(
             last_output_.timestamp_microseconds,
             dropped_before_next_output_,
             false,
+            last_output_.surface,
         };
         dropped_before_next_output_ = 0;
     } else {
@@ -84,6 +85,7 @@ VideoScheduleResult VideoCfrScheduler::Schedule(
             last_output_.timestamp_microseconds,
             0,
             true,
+            last_output_.surface,
         };
     }
 
