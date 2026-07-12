@@ -9,6 +9,7 @@ using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 using WpfComboBox = System.Windows.Controls.ComboBox;
+using WpfTextBox = System.Windows.Controls.TextBox;
 
 namespace VRRecorder.App;
 
@@ -61,6 +62,18 @@ public partial class SettingsWindow : Window, IDisposable
             SelectValue(QualityPresetComboBox, _draft.QualityPreset);
             SelectValue(AudioRoutingComboBox, _draft.AudioRouting);
             SelectValue(UiLocaleComboBox, _draft.UiLocale);
+            SelectValue(VrHandComboBox, _draft.VrHand);
+            SelectValue(
+                OverlayPlacementComboBox,
+                _draft.OverlayPlacement);
+            SelectValue(
+                OscAutoDiscoverComboBox,
+                _draft.OscAutoDiscover);
+            OscFallbackHostTextBox.Text = _draft.OscFallbackHost;
+            OscFallbackSendPortTextBox.Text = _draft.OscFallbackSendPort
+                .ToString(CultureInfo.InvariantCulture);
+            OscFallbackReceivePortTextBox.Text = _draft.OscFallbackReceivePort
+                .ToString(CultureInfo.InvariantCulture);
             BindEndpointOptions(
                 DesktopEndpointComboBox,
                 endpointOptions.Desktop,
@@ -115,6 +128,16 @@ public partial class SettingsWindow : Window, IDisposable
                 MicrophoneEndpointId = SelectedEndpoint(
                     MicrophoneEndpointComboBox),
                 UiLocale = SelectedValue<UiLocale>(UiLocaleComboBox),
+                VrHand = SelectedValue<VrHand>(VrHandComboBox),
+                OverlayPlacement =
+                    SelectedValue<OverlayPlacementMode>(
+                        OverlayPlacementComboBox),
+                OscAutoDiscover = SelectedValue<bool>(
+                    OscAutoDiscoverComboBox),
+                OscFallbackHost = OscFallbackHostTextBox.Text,
+                OscFallbackSendPort = ParsePort(OscFallbackSendPortTextBox),
+                OscFallbackReceivePort = ParsePort(
+                    OscFallbackReceivePortTextBox),
                 DesktopGainDb = DesktopGainSlider.Value,
                 MicrophoneGainDb = MicrophoneGainSlider.Value,
             };
@@ -304,6 +327,26 @@ public partial class SettingsWindow : Window, IDisposable
                         "Unsupported UI locale choice."),
                 })))
             .ToList();
+        VrHandComboBox.ItemsSource = Enum.GetValues<VrHand>()
+            .Select(value => new SettingOption(
+                value,
+                Resource(value == VrHand.Left
+                    ? "Settings_VrHand_Left"
+                    : "Settings_VrHand_Right")))
+            .ToList();
+        OverlayPlacementComboBox.ItemsSource =
+            Enum.GetValues<OverlayPlacementMode>()
+                .Select(value => new SettingOption(
+                    value,
+                    Resource(value == OverlayPlacementMode.WristDock
+                        ? "Settings_OverlayPlacement_WristDock"
+                        : "Settings_OverlayPlacement_WorldPin")))
+                .ToList();
+        OscAutoDiscoverComboBox.ItemsSource = new[]
+        {
+            new SettingOption(true, Resource("Settings_Osc_Auto")),
+            new SettingOption(false, Resource("Settings_Osc_Fallback")),
+        };
     }
 
     private static void BindEndpointOptions(
@@ -385,6 +428,19 @@ public partial class SettingsWindow : Window, IDisposable
             : throw new InvalidDataException(
                 "The auto-stop choice is not selected.");
 
+    private static int ParsePort(WpfTextBox textBox) =>
+        int.TryParse(
+            textBox.Text,
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var port)
+            ? port
+            : throw new InvalidDataException("The OSC port is invalid.");
+
+    private void OnSettingsTextChanged(
+        object sender,
+        TextChangedEventArgs e) => UpdateSaveAvailability();
+
     private bool HasEverySelection() =>
         _selectedOutputFolder is not null &&
         SelfTimerComboBox.SelectedItem is SettingOption &&
@@ -395,6 +451,12 @@ public partial class SettingsWindow : Window, IDisposable
         QualityPresetComboBox.SelectedItem is SettingOption &&
         AudioRoutingComboBox.SelectedItem is SettingOption &&
         UiLocaleComboBox.SelectedItem is SettingOption &&
+        VrHandComboBox.SelectedItem is SettingOption &&
+        OverlayPlacementComboBox.SelectedItem is SettingOption &&
+        OscAutoDiscoverComboBox.SelectedItem is SettingOption &&
+        !string.IsNullOrWhiteSpace(OscFallbackHostTextBox.Text) &&
+        !string.IsNullOrWhiteSpace(OscFallbackSendPortTextBox.Text) &&
+        !string.IsNullOrWhiteSpace(OscFallbackReceivePortTextBox.Text) &&
         !string.IsNullOrWhiteSpace(DesktopEndpointComboBox.Text) &&
         !string.IsNullOrWhiteSpace(MicrophoneEndpointComboBox.Text);
 

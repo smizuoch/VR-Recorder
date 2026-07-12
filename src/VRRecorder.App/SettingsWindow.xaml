@@ -257,6 +257,68 @@
             </GroupBox>
 
             <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Vr_Heading}">
+                <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                    <TextBlock Text="{DynamicResource Settings_VrHand_Label}" />
+                    <ComboBox x:Name="VrHandComboBox"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_VrHand_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_VrHand_Tooltip}"
+                              ToolTip="{DynamicResource Settings_VrHand_Tooltip}" />
+                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                               Text="{DynamicResource Settings_OverlayPlacement_Label}" />
+                    <ComboBox x:Name="OverlayPlacementComboBox"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_OverlayPlacement_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_OverlayPlacement_Tooltip}"
+                              ToolTip="{DynamicResource Settings_OverlayPlacement_Tooltip}" />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Header="{DynamicResource Settings_Osc_Heading}">
+                <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                    <TextBlock Text="{DynamicResource Settings_OscAutoDiscover_Label}" />
+                    <ComboBox x:Name="OscAutoDiscoverComboBox"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              DisplayMemberPath="Label"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_OscAutoDiscover_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_OscAutoDiscover_Tooltip}"
+                              ToolTip="{DynamicResource Settings_OscAutoDiscover_Tooltip}" />
+                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                               Text="{DynamicResource Settings_OscFallbackHost_Label}" />
+                    <TextBox x:Name="OscFallbackHostTextBox"
+                             MinHeight="{StaticResource Interaction.MinimumTarget}"
+                             TextChanged="OnSettingsTextChanged"
+                             AutomationProperties.Name="{DynamicResource Settings_OscFallbackHost_Label}"
+                             AutomationProperties.HelpText="{DynamicResource Settings_OscFallbackHost_Tooltip}"
+                             ToolTip="{DynamicResource Settings_OscFallbackHost_Tooltip}" />
+                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                               Text="{DynamicResource Settings_OscFallbackSendPort_Label}" />
+                    <TextBox x:Name="OscFallbackSendPortTextBox"
+                             MinHeight="{StaticResource Interaction.MinimumTarget}"
+                             TextChanged="OnSettingsTextChanged"
+                             AutomationProperties.Name="{DynamicResource Settings_OscFallbackSendPort_Label}"
+                             AutomationProperties.HelpText="{DynamicResource Settings_OscFallbackSendPort_Label}" />
+                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                               Text="{DynamicResource Settings_OscFallbackReceivePort_Label}" />
+                    <TextBox x:Name="OscFallbackReceivePortTextBox"
+                             MinHeight="{StaticResource Interaction.MinimumTarget}"
+                             TextChanged="OnSettingsTextChanged"
+                             AutomationProperties.Name="{DynamicResource Settings_OscFallbackReceivePort_Label}"
+                             AutomationProperties.HelpText="{DynamicResource Settings_OscFallbackReceivePort_Label}" />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                       Header="{DynamicResource Settings_Rights_Heading}">
                 <TextBlock Margin="{StaticResource Spacing.LayoutGrid}"
                            Text="{DynamicResource Rights_Body}"
