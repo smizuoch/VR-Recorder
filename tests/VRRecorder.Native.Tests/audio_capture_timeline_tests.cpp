@@ -192,7 +192,7 @@ void RecoveryKeepsSilenceUntilItsExactEffectiveFrame()
     const auto initial = ConstantStereo(160, 0.25F);
     CHECK(timeline.Push({
               0,
-              {0, 1'000'000, 10'000'000},
+              {10'000, 1'000'000, 10'000'000},
               initial,
               false,
           }) == vrrecorder::native::AudioTimelineResult::Ready);
