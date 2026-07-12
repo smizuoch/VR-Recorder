@@ -46,7 +46,10 @@ public sealed class UdpVrChatCameraGatewayTests
         using var fakeVrChat = new UdpClient(
             new IPEndPoint(IPAddress.Loopback, 0));
         var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
-        await using var gateway = new ConfirmedUdpVrChatCameraGateway(endpoint);
+        var events = new CapturingOscOperationEventSink();
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(
+            endpoint,
+            events);
 
         var firstWrite = gateway.SetStreamingAsync(true, timeout.Token);
         var firstRequest = await fakeVrChat.ReceiveAsync(timeout.Token);
@@ -82,7 +85,10 @@ public sealed class UdpVrChatCameraGatewayTests
         using var fakeVrChat = new UdpClient(
             new IPEndPoint(IPAddress.Loopback, 0));
         var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
-        await using var gateway = new ConfirmedUdpVrChatCameraGateway(endpoint);
+        var events = new CapturingOscOperationEventSink();
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(
+            endpoint,
+            events);
 
         var write = gateway.SetModeAsync(CameraMode.Stream, timeout.Token);
         var first = await fakeVrChat.ReceiveAsync(timeout.Token);
@@ -93,6 +99,11 @@ public sealed class UdpVrChatCameraGatewayTests
         Assert.Equal(ModeStreamPacket, first.Buffer);
         Assert.Equal(ModeStreamPacket, second.Buffer);
         Assert.Equal(2, exception.Attempts);
+        Assert.Equal(
+            [new OscOperationEvent(
+                OscOperation.CameraWrite,
+                OscOperationOutcome.Failed)],
+            events.Events);
         await Task.Delay(TimeSpan.FromMilliseconds(250), timeout.Token);
         Assert.Equal(0, fakeVrChat.Available);
     }

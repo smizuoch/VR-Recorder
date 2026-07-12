@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Diagnostics;
 using VRRecorder.Application.Ports;
 using VRRecorder.Domain.Camera;
 using VRRecorder.Infrastructure.Osc;
@@ -129,10 +130,12 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             [second.HttpPort] = new Fixture(second.InstanceName, OscPort: 9010),
         });
         using var invoker = new HttpMessageInvoker(http);
+        var events = new CapturingOscOperationEventSink();
         var discovery = new OscQueryVrChatInstanceDiscovery(
             browser,
             invoker,
-            TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(1),
+            events);
         var resolver = new VrChatTargetResolver(discovery);
 
         var result = await resolver.ResolveAsync(
@@ -154,6 +157,11 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         Assert.Equal(
             8,
             http.Requests.Count);
+        Assert.Equal(
+            [new OscOperationEvent(
+                OscOperation.CapabilityProbe,
+                OscOperationOutcome.Succeeded)],
+            events.Events);
     }
 
     [Fact]
@@ -261,10 +269,12 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                     OscPort: 9030,
                     MissingPath: "/usercamera/Streaming"),
             }));
+        var events = new CapturingOscOperationEventSink();
         var discovery = new OscQueryVrChatInstanceDiscovery(
             browser,
             invoker,
-            TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(1),
+            events);
 
         var exception = await Assert.ThrowsAsync<
             VrChatCameraEndpointMissingException>(() =>
@@ -272,6 +282,11 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
 
         Assert.Equal(advertisement.ServiceId, exception.ServiceId);
         Assert.Equal("/usercamera/Streaming", exception.EndpointPath);
+        Assert.Equal(
+            [new OscOperationEvent(
+                OscOperation.CapabilityProbe,
+                OscOperationOutcome.Failed)],
+            events.Events);
     }
 
     [Fact]
@@ -499,6 +514,15 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             throw new InvalidOperationException(
                 "An infinite OSCQuery request unexpectedly completed.");
         }
+    }
+
+    private sealed class CapturingOscOperationEventSink
+        : IOscOperationEventSink
+    {
+        public List<OscOperationEvent> Events { get; } = [];
+
+        public void Publish(OscOperationEvent operation) =>
+            Events.Add(operation);
     }
 
     private sealed record Fixture(
