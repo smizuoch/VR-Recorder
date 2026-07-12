@@ -205,7 +205,7 @@ public static partial class RepositoryNativeLinkVerifier
                     consumer,
                     input,
                     InferInputKind(input),
-                    "all")));
+                    InferPlatform(content, match.Index))));
             }
         }
 
@@ -234,6 +234,85 @@ public static partial class RepositoryNativeLinkVerifier
         }
 
         return NativeLinkInputKind.ToolchainTarget;
+    }
+
+    private static string InferPlatform(string content, int callSiteIndex)
+    {
+        var scopes = new List<CMakeCondition>();
+        foreach (Match match in CMakeConditionRegex().Matches(content))
+        {
+            if (match.Index >= callSiteIndex)
+            {
+                break;
+            }
+
+            var directive = match.Groups["directive"].Value;
+            if (string.Equals(
+                    directive,
+                    "if",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                scopes.Add(ParseCondition(
+                    match.Groups["expression"].Value));
+            }
+            else if (string.Equals(
+                         directive,
+                         "elseif",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                if (scopes.Count != 0)
+                {
+                    scopes[^1] = ParseCondition(
+                        match.Groups["expression"].Value);
+                }
+            }
+            else if (string.Equals(
+                         directive,
+                         "else",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                if (scopes.Count != 0)
+                {
+                    scopes[^1] = scopes[^1] switch
+                    {
+                        CMakeCondition.Windows => CMakeCondition.NotWindows,
+                        CMakeCondition.NotWindows => CMakeCondition.Windows,
+                        _ => CMakeCondition.Other,
+                    };
+                }
+            }
+            else if (scopes.Count != 0)
+            {
+                scopes.RemoveAt(scopes.Count - 1);
+            }
+        }
+
+        return scopes.Contains(CMakeCondition.Windows) &&
+               !scopes.Contains(CMakeCondition.NotWindows)
+            ? "windows-x64"
+            : "all";
+    }
+
+    private static CMakeCondition ParseCondition(string expression)
+    {
+        var normalized = Regex.Replace(expression, @"\s+", string.Empty);
+        if (string.Equals(
+                normalized,
+                "WIN32",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return CMakeCondition.Windows;
+        }
+
+        if (string.Equals(
+                normalized,
+                "NOTWIN32",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return CMakeCondition.NotWindows;
+        }
+
+        return CMakeCondition.Other;
     }
 
     private static bool TryResolveSourcePath(
@@ -275,6 +354,18 @@ public static partial class RepositoryNativeLinkVerifier
         @"target_link_libraries\s*\(\s*([^\s\)]+)(.*?)\)",
         RegexOptions.Singleline)]
     private static partial Regex TargetLinkLibrariesRegex();
+
+    [GeneratedRegex(
+        @"\b(?<directive>elseif|endif|else|if)\s*\((?<expression>[^\)]*)\)",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex CMakeConditionRegex();
+
+    private enum CMakeCondition
+    {
+        Other,
+        Windows,
+        NotWindows,
+    }
 
     private sealed record NativeLinkManifestDocument(
         int SchemaVersion,

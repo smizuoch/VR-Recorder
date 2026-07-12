@@ -14,7 +14,7 @@
       "consumerTarget": "vrrecorder_native",
       "inputIdentity": "Ole32.lib",
       "inputKind": "ImportLibrary",
-      "platform": "all",
+      "platform": "windows-x64",
       "origin": "WindowsSystem",
       "componentId": null,
       "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
@@ -23,7 +23,7 @@
       "consumerTarget": "vrrecorder_native",
       "inputIdentity": "Uuid.lib",
       "inputKind": "ImportLibrary",
-      "platform": "all",
+      "platform": "windows-x64",
       "origin": "WindowsSystem",
       "componentId": null,
       "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
