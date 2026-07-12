@@ -1,5 +1,6 @@
 #include "audio_capture_timeline.hpp"
 
+#include <algorithm>
 #include <limits>
 
 namespace vrrecorder::native {
@@ -32,7 +33,8 @@ AudioTimelineResult StereoCaptureTimeline::Push(
           packet.clock.device_position < last_clock_.device_position ||
           packet.clock.qpc_ticks < last_clock_.qpc_ticks ||
           packet.clock.qpc_frequency != last_clock_.qpc_frequency)) ||
-        packet.start_frame_48k < read_position_) {
+        packet.start_frame_48k < read_position_ ||
+        (!input_available_ && end_position > unavailable_from_)) {
         return AudioTimelineResult::InvalidPacket;
     }
 
@@ -76,7 +78,8 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
     }
 
     data_available_.wait(lock, [&] {
-        return has_packet_ && write_end_position_ >= end_position;
+        return (has_packet_ && write_end_position_ >= end_position) ||
+               (!input_available_ && unavailable_from_ < end_position);
     });
 
     const auto start_position = read_position_;
@@ -87,16 +90,59 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
         return AudioTimelineResult::InvalidPacket;
     }
 
+    const auto includes_unavailable_frames =
+        !input_available_ && unavailable_from_ < end_position;
+    if (includes_unavailable_frames) {
+        const auto first_silent_frame = unavailable_from_ <= start_position
+            ? 0U
+            : static_cast<std::size_t>(
+                  unavailable_from_ - start_position);
+        const auto first_silent_sample = first_silent_frame *
+            StereoAudioTimelineBuffer::ChannelCount;
+        std::fill(
+            output_interleaved.begin() +
+                static_cast<std::ptrdiff_t>(first_silent_sample),
+            output_interleaved.end(),
+            0.0F);
+    }
+
     read = AudioTimelineRead {
         start_position,
-        true,
-        has_gap_,
+        !includes_unavailable_frames,
+        has_gap_ || includes_unavailable_frames,
     };
     read_position_ = end_position;
     if (read_position_ >= write_end_position_) {
         has_gap_ = false;
     }
 
+    return AudioTimelineResult::Ready;
+}
+
+AudioTimelineResult StereoCaptureTimeline::SetAvailable(
+    bool available,
+    std::uint64_t effective_frame_48k) noexcept
+{
+    {
+        const std::lock_guard lock(mutex_);
+        if (effective_frame_48k < read_position_) {
+            return AudioTimelineResult::InvalidPacket;
+        }
+
+        if (available) {
+            input_available_ = true;
+        } else {
+            if (!input_available_ &&
+                effective_frame_48k != unavailable_from_) {
+                return AudioTimelineResult::InvalidPacket;
+            }
+
+            input_available_ = false;
+            unavailable_from_ = effective_frame_48k;
+        }
+    }
+
+    data_available_.notify_all();
     return AudioTimelineResult::Ready;
 }
 
