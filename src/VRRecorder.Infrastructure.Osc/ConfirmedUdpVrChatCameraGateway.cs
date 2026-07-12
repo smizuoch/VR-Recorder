@@ -65,8 +65,9 @@ public sealed class ConfirmedUdpVrChatCameraGateway
         IPEndPoint remoteEndpoint,
         VrChatInstanceCandidate candidate,
         HttpMessageInvoker snapshotHttp,
-        IDisposable? snapshotHttpOwner)
-        : this(remoteEndpoint)
+        IDisposable? snapshotHttpOwner,
+        IOscOperationEventSink? events)
+        : this(remoteEndpoint, events)
     {
         try
         {

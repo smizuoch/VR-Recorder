@@ -117,7 +117,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             resources.Add(http);
             var cameraLeases = new FileSystemCameraLeaseStore(cameraLeasePath);
             resources.Add(cameraLeases);
-            var cameraConnections = CreateCameraConnections(http);
+            var cameraConnections = CreateCameraConnections(http, events);
 
             var spoutSource = new PInvokeSpoutVideoSource(nativeLibraryPath);
             resources.Add(spoutSource);
@@ -323,15 +323,17 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         });
 
     private static VrChatCameraConnectionUseCase CreateCameraConnections(
-        HttpMessageInvoker http)
+        HttpMessageInvoker http,
+        IOscOperationEventSink? events = null)
     {
         var discovery = new OscQueryVrChatInstanceDiscovery(
             new WindowsDnsSdOscQueryServiceBrowser(),
             http,
-            OscQueryDiscoveryTimeout);
+            OscQueryDiscoveryTimeout,
+            events);
         return new VrChatCameraConnectionUseCase(
             new VrChatTargetResolver(discovery),
-            new ConfirmedUdpVrChatCameraGatewayFactory(http));
+            new ConfirmedUdpVrChatCameraGatewayFactory(http, events));
     }
 
     private static void EnsureRecoverySucceeded(

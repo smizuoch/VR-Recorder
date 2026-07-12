@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Threading.Channels;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Diagnostics;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
@@ -18,6 +19,7 @@ public sealed class StructuredRecordingEventSink
       IAudioSessionEventSink,
       IRecordingMediaEventSink,
       IRecordingFinalizationEventSink,
+      IOscOperationEventSink,
       IDisposable
 {
     public const int DefaultAudioQueueCapacity = 64;
@@ -263,6 +265,22 @@ public sealed class StructuredRecordingEventSink
             }));
     }
 
+    public void Publish(OscOperationEvent operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            operation.Outcome == OscOperationOutcome.Succeeded
+                ? DiagnosticLogLevel.Information
+                : DiagnosticLogLevel.Warning,
+            "osc.operation",
+            new Dictionary<string, string>
+            {
+                ["operation"] = OscOperationName(operation.Operation),
+                ["outcome"] = OscOutcomeName(operation.Outcome),
+            }));
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
@@ -388,6 +406,28 @@ public sealed class StructuredRecordingEventSink
                 nameof(reason),
                 reason,
                 "The recording recovery reason is not supported."),
+        };
+
+    private static string OscOperationName(OscOperation operation) =>
+        operation switch
+        {
+            OscOperation.CapabilityProbe => "capability_probe",
+            OscOperation.CameraWrite => "camera_write",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(operation),
+                operation,
+                "The OSC operation is not supported."),
+        };
+
+    private static string OscOutcomeName(OscOperationOutcome outcome) =>
+        outcome switch
+        {
+            OscOperationOutcome.Succeeded => "succeeded",
+            OscOperationOutcome.Failed => "failed",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(outcome),
+                outcome,
+                "The OSC operation outcome is not supported."),
         };
 
     private static string AudioInputName(AudioInput input) => input switch

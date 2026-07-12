@@ -116,6 +116,16 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         "finalization_failed",
         "validation_failed",
     ];
+    private static readonly HashSet<string> OscOperations =
+    [
+        "camera_write",
+        "capability_probe",
+    ];
+    private static readonly HashSet<string> OscOutcomes =
+    [
+        "failed",
+        "succeeded",
+    ];
     private static readonly HashSet<string> Architectures =
     [
         "arm64",
@@ -391,8 +401,33 @@ public sealed class PrivacySafeDiagnosticBundleExporter
                 fields),
             "recording.finalization_recovery" =>
                 SanitizeFinalizationRecovery(fields),
+            "osc.operation" => SanitizeOscOperation(fields),
             _ => null,
         };
+
+    private static SortedDictionary<string, string>? SanitizeOscOperation(
+        IReadOnlyDictionary<string, JsonElement> fields)
+    {
+        if (!TryReadAllowedString(
+                fields,
+                "operation",
+                OscOperations,
+                out var operation) ||
+            !TryReadAllowedString(
+                fields,
+                "outcome",
+                OscOutcomes,
+                out var outcome))
+        {
+            return null;
+        }
+
+        return new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["operation"] = operation,
+            ["outcome"] = outcome,
+        };
+    }
 
     private static SortedDictionary<string, string>?
         SanitizeFinalizationRecovery(

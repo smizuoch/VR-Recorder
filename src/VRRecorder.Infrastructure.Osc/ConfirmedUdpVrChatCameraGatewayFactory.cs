@@ -8,6 +8,7 @@ public sealed class ConfirmedUdpVrChatCameraGatewayFactory
     : IVrChatCameraGatewayFactory
 {
     private readonly HttpMessageInvoker? _snapshotHttp;
+    private readonly IOscOperationEventSink? _events;
 
     public ConfirmedUdpVrChatCameraGatewayFactory()
     {
@@ -15,9 +16,17 @@ public sealed class ConfirmedUdpVrChatCameraGatewayFactory
 
     public ConfirmedUdpVrChatCameraGatewayFactory(
         HttpMessageInvoker snapshotHttp)
+        : this(snapshotHttp, events: null)
+    {
+    }
+
+    public ConfirmedUdpVrChatCameraGatewayFactory(
+        HttpMessageInvoker snapshotHttp,
+        IOscOperationEventSink? events)
     {
         ArgumentNullException.ThrowIfNull(snapshotHttp);
         _snapshotHttp = snapshotHttp;
+        _events = events;
     }
 
     public IVrChatCameraGateway Create(VrChatInstanceCandidate candidate)
@@ -38,7 +47,8 @@ public sealed class ConfirmedUdpVrChatCameraGatewayFactory
                 remoteEndpoint,
                 candidate,
                 _snapshotHttp,
-                snapshotHttpOwner: null);
+                snapshotHttpOwner: null,
+                _events);
         }
 
         var ownedHttp = new HttpMessageInvoker(new SocketsHttpHandler
@@ -53,7 +63,8 @@ public sealed class ConfirmedUdpVrChatCameraGatewayFactory
                 remoteEndpoint,
                 candidate,
                 ownedHttp,
-                ownedHttp);
+                ownedHttp,
+                _events);
         }
         catch
         {
