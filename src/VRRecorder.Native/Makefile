@@ -3,7 +3,7 @@ BUILD_DIR := build
 CPPFLAGS := -DVRRECORDER_NATIVE_EXPORTS -Iinclude -Isrc
 CXXFLAGS := -std=c++20 -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Wpedantic -Werror
 LDFLAGS := -shared -pthread -Wl,--no-undefined -Wl,--version-script=exports.version -Wl,-Map,$(BUILD_DIR)/vrrecorder_native.map
-SOURCES := src/abi.cpp src/audio_capture_input_worker.cpp src/audio_capture_input_runner.cpp src/audio_capture_session.cpp src/audio_capture_normalizer.cpp src/audio_capture_platform_support.cpp src/audio_capture_pump.cpp src/audio_capture_timeline.cpp src/audio_encoding_pump.cpp src/audio_encoding_worker.cpp src/audio_media_event_adapter.cpp src/audio_mix_coordinator.cpp src/audio_mixer.cpp src/audio_pipeline_session.cpp src/audio_timeline_buffer.cpp src/unavailable_encoder_probe_backend.cpp src/unavailable_media_backend.cpp src/unavailable_spout_source_backend.cpp src/unavailable_steamvr_input_backend.cpp src/unavailable_wasapi_audio_capture_source.cpp src/video_cfr_scheduler.cpp
+SOURCES := src/abi.cpp src/audio_capture_input_worker.cpp src/audio_capture_input_runner.cpp src/audio_capture_session.cpp src/audio_capture_normalizer.cpp src/audio_capture_platform_support.cpp src/audio_capture_pump.cpp src/audio_capture_timeline.cpp src/audio_encoding_pump.cpp src/audio_encoding_worker.cpp src/audio_media_event_adapter.cpp src/audio_mix_coordinator.cpp src/audio_mixer.cpp src/audio_pipeline_session.cpp src/audio_timeline_buffer.cpp src/unavailable_encoder_probe_backend.cpp src/unavailable_media_backend.cpp src/unavailable_spout_source_backend.cpp src/unavailable_steamvr_input_backend.cpp src/unavailable_wasapi_audio_capture_source.cpp src/video_cfr_scheduler.cpp src/video_encoding_pump.cpp
 OBJECTS := $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean
