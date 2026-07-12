@@ -74,10 +74,10 @@ public sealed class FirstRunSetupVerificationControllerTests
         public List<FirstRunSetupStep> RequestedSteps { get; } = [];
 
         public Task<bool> VerifyAsync(
-            FirstRunSetupStep step,
+            FirstRunSetupStep setupStep,
             CancellationToken cancellationToken)
         {
-            RequestedSteps.Add(step);
+            RequestedSteps.Add(setupStep);
             return Task.FromResult(succeeded);
         }
     }
