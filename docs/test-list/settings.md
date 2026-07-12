@@ -14,6 +14,7 @@
 - [x] 保存先変更時は認証済みLegal Bundleのミラー成功後だけ新しいpathを保存する
 - [x] audio routing／gainの明示変更だけを保存し、未変更のendpoint IDと同時更新値を保持する
 - [x] desktop／microphone endpoint IDをlocalized／accessibleなeditable selectorへ投影し、明示変更だけを三者マージして次回録画へ反映する
+- [x] Windows Core Audioからactive render／capture endpointのfriendly nameとopaque IDを列挙し、非activeな保存済み選択も失わずselectorへ統合する
 
 ## English
 
@@ -29,3 +30,4 @@
 - [x] Persist a changed output path only after mirroring the authenticated Legal Bundle successfully
 - [x] Save only explicit audio-routing and gain edits while preserving endpoint IDs and concurrent unedited values
 - [x] Project desktop/microphone endpoint IDs into localized accessible editable selectors and three-way merge only explicit changes into the next recording
+- [x] Enumerate active Windows Core Audio render/capture endpoints by friendly name and opaque ID while retaining inactive persisted selections in the selectors
