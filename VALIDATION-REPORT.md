@@ -80,6 +80,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - first packet確定後にapp version／OS build／process architecture／canonical PCI GPU model／driverをbest-effort構造化eventへ発行するproduction環境sourceとdesktop composition
 - finalization／validation失敗後のquarantine reasonを録画結果へ影響しないbest-effort eventとして発行し、path／例外messageを除外するproduction診断経路
 - OSCQuery capabilityと確認済みcamera writeの成功／失敗をbest-effort固定語eventとして発行し、service ID／endpoint／avatar値を除外するproduction診断経路
+- capture timeline overrunとmixed-window underrunをinput role／正確な48 kHz frame付きで検出し、native media event sinkへ転送するaudio health境界（C ABI／managed診断への伝播は未実装）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -218,6 +219,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A production environment source and desktop composition that emit app version, OS build, process architecture, canonical PCI GPU model, and driver as a best-effort structured event after the first packet is committed
 - A production diagnostics path that emits the post-failure finalization/validation quarantine reason without changing recording results and excludes paths and exception messages
 - A production diagnostics path that emits OSCQuery capability and confirmed camera-write outcomes as best-effort fixed-term events while excluding service IDs, endpoints, and avatar values
+- An audio-health boundary that detects capture-timeline overruns and mixed-window underruns with the input role and exact 48 kHz frame and forwards them to the native media-event sink (C ABI/managed diagnostics propagation remains outstanding)
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
