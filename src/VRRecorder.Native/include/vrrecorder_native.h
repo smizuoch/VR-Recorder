@@ -159,9 +159,10 @@ typedef struct vrrec_session_statistics_v1 {
 } vrrec_session_statistics_v1;
 
 /*
- * For audio-device lost/recovered events, audio_packet_count carries the
- * scheduled 48 kHz audio-frame position. video_packet_count is zero,
- * status is VRREC_STATUS_OK, and message_utf8 is null.
+ * For audio-device lost/recovered and audio-buffer underrun/overrun events,
+ * audio_packet_count carries the scheduled 48 kHz audio-frame position.
+ * video_packet_count is zero, status is VRREC_STATUS_OK, and message_utf8 is
+ * null.
  */
 typedef struct vrrec_event_v1 {
     uint32_t struct_size;

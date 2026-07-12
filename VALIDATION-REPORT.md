@@ -4,7 +4,7 @@
 
 ### 現在の判定
 
-実装進行中であり、release適格ではありません。2026-07-12現在、Linux／WSL2で実行できるmanagedテスト、Windows x64向けWPF cross-build、Linux native ABIを検証しています。Windows上でのWPF実行、Spout2、D3D11、WASAPI、FFmpeg、OpenVR、実VRChat、Windows 10／11、GPU／HMDの検証は未実施です。
+実装進行中であり、release適格ではありません。2026-07-13現在、Linux／WSL2で実行できるmanagedテスト、Windows x64向けWPF cross-build、Linux native ABIを検証しています。Windows上でのWPF実行、Spout2、D3D11、WASAPI、FFmpeg、OpenVR、実VRChat、Windows 10／11、GPU／HMDの検証は未実施です。
 
 desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、VRChat service単位のSpout sender前回選択と曖昧時のdesktop prompt、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、media profile／最終native統計を含むprivacy-safe診断bundleの明示exportも配線済みです。録画中のMic／Muteはnative ABIからdesktop／wrist／SteamVR入力まで復元可能な状態を保って配線済みです。native内部にはPCM／floatとsample rate／channel差を48 kHz stereoへ正規化する処理、event-driven WASAPI loopback／microphone source、packet境界／gap／device loss／recovery／Abortを扱うcapture timelineと再探索runner、WASAPIのStart／Readを同一専用threadへ固定して同期初期化とRAII joinを行うworker、desktop／microphoneの開始rollbackと同一frame window mixを所有するcapture sessionがあります。ただしこれらをencoder／muxerへ接続するproduction native media backendとSteamVR backendは意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
 
@@ -12,7 +12,7 @@ desktop production compositionはP/Invoke Spout source、encoder probe、native 
 
 ### 自動検証
 
-2026-07-12に次を実行し、成功を確認しました。
+2026-07-13に次を実行し、成功を確認しました。
 
 ```text
 dotnet test tests/VRRecorder.Domain.Tests/VRRecorder.Domain.Tests.csproj --no-restore
@@ -29,12 +29,12 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 869件成功、失敗0、skip 0
+- managed: 871件成功、失敗0、skip 0
   - Domain 90
   - Application 227
   - Compliance 186
   - Presentation 85
-  - Integration 281
+  - Integration 283
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
@@ -80,7 +80,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - first packet確定後にapp version／OS build／process architecture／canonical PCI GPU model／driverをbest-effort構造化eventへ発行するproduction環境sourceとdesktop composition
 - finalization／validation失敗後のquarantine reasonを録画結果へ影響しないbest-effort eventとして発行し、path／例外messageを除外するproduction診断経路
 - OSCQuery capabilityと確認済みcamera writeの成功／失敗をbest-effort固定語eventとして発行し、service ID／endpoint／avatar値を除外するproduction診断経路
-- capture timeline overrunとmixed-window underrunをinput role／正確な48 kHz frame付きで検出し、native media event sinkへ転送するaudio health境界（C ABI／managed診断への伝播は未実装）
+- capture timeline overrunとmixed-window underrunをinput role／正確な48 kHz frame付きで検出し、48-byte C ABI event、typed P/Invoke callback、bounded structured log、privacy-safe bundleへ伝播するaudio health経路
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -133,7 +133,6 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
-- 継続A/V閾値、audio underrun／overrunを網羅する構造化診断event
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -143,7 +142,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 ### Current verdict
 
-Implementation is in progress and is not release-eligible. As of 2026-07-12, validation covers managed tests runnable on Linux/WSL2, a Windows x64 WPF cross-build, and the Linux native ABI. Running WPF on Windows and validating Spout2, D3D11, WASAPI, FFmpeg, OpenVR, real VRChat, Windows 10/11, GPUs, and HMDs remain outstanding.
+Implementation is in progress and is not release-eligible. As of 2026-07-13, validation covers managed tests runnable on Linux/WSL2, a Windows x64 WPF cross-build, and the Linux native ABI. Running WPF on Windows and validating Spout2, D3D11, WASAPI, FFmpeg, OpenVR, real VRChat, Windows 10/11, GPUs, and HMDs remain outstanding.
 
 The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, service-scoped previous Spout-sender selection with a desktop ambiguity prompt, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export including the media profile/final native statistics are also wired. Live Mic/Mute control now preserves reversible state from the native ABI through desktop, wrist, and SteamVR input. Native internals include PCM/float sample-rate and channel normalization to 48 kHz stereo, event-driven WASAPI loopback/microphone sources, capture timelines and recovery runners covering packet boundaries, gaps, device loss/recovery, and abort, joined workers that keep WASAPI Start/Read on dedicated same threads, and a rollback-safe stereo capture session that feeds aligned desktop/microphone frame windows into the mixer. The production native media backend that connects these boundaries to an encoder/muxer, and the SteamVR backend, still intentionally return `BACKEND_UNAVAILABLE`; approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is therefore a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
 
@@ -151,7 +150,7 @@ The current third-party registry entries are candidates for test-only NuGet depe
 
 ### Automated validation
 
-The following commands were run successfully on 2026-07-12:
+The following commands were run successfully on 2026-07-13:
 
 ```text
 dotnet test tests/VRRecorder.Domain.Tests/VRRecorder.Domain.Tests.csproj --no-restore
@@ -168,12 +167,12 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 869 passed, 0 failed, 0 skipped
+- managed: 871 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 227
   - Compliance 186
   - Presentation 85
-  - Integration 281
+  - Integration 283
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
@@ -219,7 +218,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A production environment source and desktop composition that emit app version, OS build, process architecture, canonical PCI GPU model, and driver as a best-effort structured event after the first packet is committed
 - A production diagnostics path that emits the post-failure finalization/validation quarantine reason without changing recording results and excludes paths and exception messages
 - A production diagnostics path that emits OSCQuery capability and confirmed camera-write outcomes as best-effort fixed-term events while excluding service IDs, endpoints, and avatar values
-- An audio-health boundary that detects capture-timeline overruns and mixed-window underruns with the input role and exact 48 kHz frame and forwards them to the native media-event sink (C ABI/managed diagnostics propagation remains outstanding)
+- An audio-health path that detects capture-timeline overruns and mixed-window underruns with the input role and exact 48 kHz frame and propagates them through the 48-byte C ABI event, typed P/Invoke callback, bounded structured log, and privacy-safe bundle
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -272,7 +271,6 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
-- Complete structured diagnostics for continuous A/V thresholds and audio underruns/overruns
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
