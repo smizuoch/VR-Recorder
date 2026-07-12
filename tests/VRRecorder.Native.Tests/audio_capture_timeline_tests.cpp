@@ -146,6 +146,46 @@ void AbortWakesAReaderWithoutAdvancingTheTimeline()
     CHECK(timeline.FramePosition() == 0);
 }
 
+void ReportsOnlyGapsInsideTheCurrentReadWindow()
+{
+    vrrecorder::native::StereoCaptureTimeline timeline(1'200);
+    const auto first = ConstantStereo(480, 0.25F);
+    const auto second = ConstantStereo(320, 0.5F);
+    CHECK(timeline.Push({
+              0,
+              {0, 1'000'000, 10'000'000},
+              first,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(timeline.Push({
+              640,
+              {640, 1'100'000, 10'000'000},
+              second,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::Ready);
+
+    std::vector<float> output(480U * 2U, -1.0F);
+    vrrecorder::native::AudioTimelineRead first_read {};
+    CHECK(timeline.WaitRead(480, output, first_read) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(first_read.start_frame_48k == 0);
+    CHECK(!first_read.underrun);
+    for (const auto sample : output) {
+        CHECK(NearlyEqual(sample, 0.25F));
+    }
+
+    vrrecorder::native::AudioTimelineRead second_read {};
+    CHECK(timeline.WaitRead(480, output, second_read) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(second_read.start_frame_48k == 480);
+    CHECK(second_read.underrun);
+    for (std::size_t frame = 0; frame < 480; ++frame) {
+        const auto expected = frame < 160 ? 0.0F : 0.5F;
+        CHECK(NearlyEqual(output[frame * 2U], expected));
+        CHECK(NearlyEqual(output[frame * 2U + 1U], expected));
+    }
+}
+
 }
 
 int main()
@@ -153,5 +193,6 @@ int main()
     JoinsArbitraryPacketBoundariesOnOne48KhzTimeline();
     DeviceLossWakesAReaderAndCompletesWithSilence();
     AbortWakesAReaderWithoutAdvancingTheTimeline();
+    ReportsOnlyGapsInsideTheCurrentReadWindow();
     return 0;
 }
