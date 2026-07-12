@@ -20,6 +20,11 @@ enum class AudioCapturePumpResult {
     Failed,
 };
 
+enum class AudioBufferHealth {
+    Underrun,
+    Overrun,
+};
+
 class AudioCaptureAvailabilitySink {
 public:
     virtual ~AudioCaptureAvailabilitySink() = default;
@@ -28,6 +33,15 @@ public:
         AudioCaptureRole role,
         bool available,
         std::uint64_t frame_position) noexcept = 0;
+    virtual void BufferHealthChanged(
+        AudioCaptureRole role,
+        AudioBufferHealth health,
+        std::uint64_t frame_position) noexcept
+    {
+        (void)role;
+        (void)health;
+        (void)frame_position;
+    }
 };
 
 class AudioCapturePump final {

@@ -163,6 +163,14 @@ AudioCapturePumpResult AudioCapturePump::AcceptPacket(
         samples,
         packet.discontinuity,
     }));
+    if (result == AudioCapturePumpResult::Overrun &&
+        availability_sink_ != nullptr) {
+        availability_sink_->BufferHealthChanged(
+            role_,
+            AudioBufferHealth::Overrun,
+            packet.start_frame_48k);
+    }
+
     if (result != AudioCapturePumpResult::PacketAccepted &&
         recovery_applied) {
         timeline_.Abort();
