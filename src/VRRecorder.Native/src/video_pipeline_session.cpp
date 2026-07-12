@@ -78,6 +78,12 @@ void VideoPipelineSession::Abort() noexcept
     if (encoding_started_.load()) {
         encoding_.Abort();
     }
+    if (capture_started_.load()) {
+        capture_.Join();
+    }
+    if (encoding_started_.load()) {
+        encoding_.Join();
+    }
 }
 
 VideoPipelineResult VideoPipelineSession::Join() noexcept
