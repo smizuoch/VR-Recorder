@@ -231,6 +231,25 @@ public sealed class StructuredRecordingEventSink
             }));
     }
 
+    public void Publish(RecordingEnvironmentSnapshot environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        Enqueue(new DiagnosticLogEntry(
+            TimestampUtc(),
+            DiagnosticLogLevel.Information,
+            "application.environment",
+            new Dictionary<string, string>
+            {
+                ["appVersion"] = environment.AppVersion,
+                ["architecture"] = ArchitectureName(
+                    environment.Architecture),
+                ["driverVersion"] = environment.DriverVersion,
+                ["gpuModel"] = environment.GpuModel,
+                ["gpuVendor"] = GpuVendorName(environment.GpuVendor),
+                ["osBuild"] = environment.OsBuild,
+            }));
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
@@ -333,6 +352,17 @@ public sealed class StructuredRecordingEventSink
                 nameof(reason),
                 reason,
                 "The camera warning reason is not supported."),
+        };
+
+    private static string ArchitectureName(
+        RecordingProcessArchitecture architecture) => architecture switch
+        {
+            RecordingProcessArchitecture.X64 => "x64",
+            RecordingProcessArchitecture.Arm64 => "arm64",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(architecture),
+                architecture,
+                "The recording process architecture is not supported."),
         };
 
     private static string AudioInputName(AudioInput input) => input switch

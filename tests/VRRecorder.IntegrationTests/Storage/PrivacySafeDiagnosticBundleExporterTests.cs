@@ -95,6 +95,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                     {
                         ["appVersion"] = "0.3.0",
                         ["architecture"] = "x64",
+                        ["gpuModel"] = "ven_10de&dev_2684",
                         ["gpuVendor"] = "nvidia",
                         ["osBuild"] = "10.0.26100",
                         ["driverVersion"] = "32.0.15.6094",
@@ -106,6 +107,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                     {
                         ["appVersion"] = "private-version-secret",
                         ["architecture"] = "x64",
+                        ["gpuModel"] = "private-model-secret",
                         ["gpuVendor"] = "nvidia",
                         ["osBuild"] = "10.0.26100",
                         ["driverVersion"] = "32.0.15.6094",
@@ -191,6 +193,9 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         Assert.Contains("\"appVersion\":\"0.3.0\"", diagnostics);
         Assert.Contains("\"osBuild\":\"10.0.26100\"", diagnostics);
         Assert.Contains("\"driverVersion\":\"32.0.15.6094\"", diagnostics);
+        Assert.Contains(
+            "\"gpuModel\":\"ven_10de\\u0026dev_2684\"",
+            diagnostics);
         Assert.Contains("\"encoder\":\"nvenc\"", diagnostics);
         Assert.Contains("\"sourceWidth\":\"1920\"", diagnostics);
         Assert.Contains(

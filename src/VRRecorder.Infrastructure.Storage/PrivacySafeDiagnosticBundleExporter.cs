@@ -402,6 +402,7 @@ public sealed class PrivacySafeDiagnosticBundleExporter
                 "gpuVendor",
                 GpuVendors,
                 out var gpuVendor) ||
+            !TryReadGpuModel(fields, out var gpuModel) ||
             !TryReadNumericVersion(fields, "osBuild", 3, 4, out var osBuild) ||
             !TryReadNumericVersion(
                 fields,
@@ -419,6 +420,7 @@ public sealed class PrivacySafeDiagnosticBundleExporter
             ["architecture"] = architecture,
             ["driverVersion"] = driverVersion,
             ["gpuVendor"] = gpuVendor,
+            ["gpuModel"] = gpuModel,
             ["osBuild"] = osBuild,
         };
     }
@@ -901,6 +903,33 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         value = text;
         return true;
     }
+
+    private static bool TryReadGpuModel(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        out string value)
+    {
+        value = string.Empty;
+        if (!TryReadString(properties, "gpuModel", out var model))
+        {
+            return false;
+        }
+
+        var parts = model.Split('&');
+        if (parts.Length != 2 ||
+            !IsHardwarePart(parts[0], "ven_") ||
+            !IsHardwarePart(parts[1], "dev_"))
+        {
+            return false;
+        }
+
+        value = model;
+        return true;
+    }
+
+    private static bool IsHardwarePart(string value, string prefix) =>
+        value.Length == prefix.Length + 4 &&
+        value.StartsWith(prefix, StringComparison.Ordinal) &&
+        value[prefix.Length..].All(char.IsAsciiHexDigit);
 
     private static bool TryReadString(
         IReadOnlyDictionary<string, JsonElement> properties,

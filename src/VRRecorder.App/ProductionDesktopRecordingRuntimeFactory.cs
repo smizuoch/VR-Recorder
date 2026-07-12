@@ -134,7 +134,8 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 clock,
                 faultStops,
                 audioEvents,
-                events);
+                events,
+                SystemRecordingEnvironmentSource.ForCurrentProcess());
             var savedEvents = new CompositeSavedRecordingSink(
                 events,
                 _recordingNotifications);

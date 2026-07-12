@@ -193,7 +193,7 @@ public sealed class StructuredRecordingEventSinkTests
         Assert.Contains("\"event\":\"application.environment\"", content);
         Assert.Contains("\"appVersion\":\"0.3.0\"", content);
         Assert.Contains("\"architecture\":\"x64\"", content);
-        Assert.Contains("\"gpuModel\":\"ven_10de&dev_2684\"", content);
+        Assert.Contains("\"gpuModel\":\"ven_10de\\u0026dev_2684\"", content);
         Assert.Contains("\"gpuVendor\":\"nvidia\"", content);
         Assert.Contains("\"osBuild\":\"10.0.26100\"", content);
         Assert.Contains("\"driverVersion\":\"32.0.15.6094\"", content);
