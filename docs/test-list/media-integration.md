@@ -18,6 +18,8 @@
 - [x] native音声device eventを入力別の型付きwarning／recoveryへ変換し、pending Stopを完了せずobserver障害でも録画を中断しない
 - [x] native callbackを診断I/O／presentation処理から分離し、停止時はproducer停止後にqueueをdrainする
 - [x] first packet確定後のmedia profileとgraceful stop後のnative最終統計を録画結果を変えず診断へ発行する
+- [x] A/V packetのPTS/DTSを保持してstream別DTSを検証し、1秒以降のkeyframeまたは2秒上限でfragmentを確定する
+- [x] graceful finishだけが最終fragment、trailer、file flushを順に実行し、Abortではtrailerを書かない
 
 ## English
 
@@ -37,3 +39,5 @@
 - [x] Translate native audio-device events into input-specific typed warnings/recoveries without completing a pending Stop or interrupting recording when observers fail
 - [x] Isolate native callbacks from diagnostics I/O/presentation work and drain queues after stopping producers
 - [x] Publish the committed media profile and final native statistics without changing recording start/stop outcomes
+- [x] Preserve A/V packet PTS/DTS, validate DTS per stream, and close fragments at a keyframe after one second or at the hard two-second limit
+- [x] Run final-fragment, trailer, and file flush in order only for graceful finish, never writing a trailer after abort
