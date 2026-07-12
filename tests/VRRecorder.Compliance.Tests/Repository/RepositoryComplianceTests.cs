@@ -74,6 +74,55 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void CandidateVerificationRejectsAnUnregisteredRuntimeLoadCallSite()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vr-recorder-runtime-load-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "third-party"));
+            Directory.CreateDirectory(Path.Combine(root, "src", "Rogue"));
+            File.WriteAllText(
+                Path.Combine(root, "third-party", "registry.yml"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "registryVersion": 1,
+                  "components": []
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(
+                    root,
+                    "third-party",
+                    "runtime-load-manifest.yml"),
+                """
+                {
+                  "schemaVersion": 1,
+                  "entries": []
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(root, "src", "Rogue", "Loader.cs"),
+                "NativeLibrary.Load(fullPath);");
+
+            var issues = RepositoryComplianceVerifier.VerifyCandidateInputs(root);
+
+            Assert.Contains(issues, issue =>
+                issue.Code == "unregistered-runtime-load" &&
+                issue.Subject == "src/Rogue/Loader.cs");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
