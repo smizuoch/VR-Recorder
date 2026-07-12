@@ -40,9 +40,6 @@ internal static class NativeStagingAdmissionValidator
         ArgumentNullException.ThrowIfNull(actualFiles);
         ArgumentNullException.ThrowIfNull(registeredArtifacts);
 
-        var approvedComponentIds = approvedGraph.Graph.Components
-            .Select(component => component.Id)
-            .ToHashSet(StringComparer.Ordinal);
         var candidates = actualFiles
             .Select(file => new NativeCandidate(
                 file,
@@ -89,10 +86,33 @@ internal static class NativeStagingAdmissionValidator
         foreach (var candidate in thirdPartyCandidates)
         {
             var registration = candidate.Registrations[0];
-            if (!approvedComponentIds.Contains(registration.ComponentId))
+            var approvedComponents = approvedGraph.Graph.Components.Where(
+                    component => string.Equals(
+                        component.Id,
+                        registration.ComponentId,
+                        StringComparison.Ordinal))
+                .ToArray();
+            if (approvedComponents.Length == 0)
             {
                 issues.Add(new ComplianceIssue(
                     "unapproved-native-artifact-owner",
+                    $"{registration.ComponentId}:{candidate.File.RelativePath}"));
+                continue;
+            }
+
+            if (approvedComponents.Length != 1)
+            {
+                issues.Add(new ComplianceIssue(
+                    "ambiguous-native-artifact-owner",
+                    $"{registration.ComponentId}:{candidate.File.RelativePath}"));
+                continue;
+            }
+
+            if (approvedComponents[0].Scope is
+                NoticeScope.TestOnly or NoticeScope.BuildOnly)
+            {
+                issues.Add(new ComplianceIssue(
+                    "staged-component-scope-mismatch",
                     $"{registration.ComponentId}:{candidate.File.RelativePath}"));
                 continue;
             }
