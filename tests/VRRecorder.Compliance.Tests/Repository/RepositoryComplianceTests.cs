@@ -74,6 +74,16 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void NativeLinkCallSitesHaveExplicitOwnershipAdmissions()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = RepositoryNativeLinkVerifier.Verify(repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
     public void CandidateVerificationRejectsAnUnregisteredRuntimeLoadCallSite()
     {
         var root = Path.Combine(
