@@ -11,9 +11,17 @@
 
 namespace vrrecorder::native {
 
+enum class AudioEncoderFailureStage {
+    None,
+    Encoding,
+    Muxing,
+};
+
 struct StereoAudioEncoderWrite final {
     vrrec_status_t status;
     std::uint64_t muxed_packet_count;
+    AudioEncoderFailureStage failure_stage =
+        AudioEncoderFailureStage::None;
 };
 
 class StereoAudioEncoderSink {
@@ -34,6 +42,7 @@ enum class StereoAudioEncodingResult {
     InvalidState,
     CaptureFailed,
     EncoderFailed,
+    MuxFailed,
     Failed,
 };
 

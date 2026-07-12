@@ -55,7 +55,9 @@ StereoAudioEncodingResult StereoAudioEncodingPump::PumpNext(
         write.status,
     };
     if (write.status != VRREC_STATUS_OK) {
-        return StereoAudioEncodingResult::EncoderFailed;
+        return write.failure_stage == AudioEncoderFailureStage::Muxing
+            ? StereoAudioEncodingResult::MuxFailed
+            : StereoAudioEncodingResult::EncoderFailed;
     }
 
     const auto submitted = submitted_frame_count_.load();

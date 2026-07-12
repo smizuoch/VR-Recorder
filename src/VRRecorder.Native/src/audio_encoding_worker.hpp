@@ -16,6 +16,7 @@ enum class StereoAudioEncodingWorkerResult {
     Aborted,
     CaptureFailed,
     EncoderFailed,
+    MuxFailed,
     InvalidState,
     Failed,
 };

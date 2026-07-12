@@ -119,7 +119,10 @@ void StereoAudioEncodingWorker::Run() noexcept
                 } else {
                     sink_.Abort();
                     SetResult(
-                        StereoAudioEncodingWorkerResult::EncoderFailed);
+                        finish.failure_stage ==
+                                AudioEncoderFailureStage::Muxing
+                            ? StereoAudioEncodingWorkerResult::MuxFailed
+                            : StereoAudioEncodingWorkerResult::EncoderFailed);
                 }
             } else {
                 sink_.Abort();
@@ -129,6 +132,10 @@ void StereoAudioEncodingWorker::Run() noexcept
             source_.Abort();
             sink_.Abort();
             SetResult(StereoAudioEncodingWorkerResult::EncoderFailed);
+        } else if (result == StereoAudioEncodingResult::MuxFailed) {
+            source_.Abort();
+            sink_.Abort();
+            SetResult(StereoAudioEncodingWorkerResult::MuxFailed);
         } else if (result == StereoAudioEncodingResult::CaptureFailed ||
                    result == StereoAudioEncodingResult::InvalidState) {
             sink_.Abort();
