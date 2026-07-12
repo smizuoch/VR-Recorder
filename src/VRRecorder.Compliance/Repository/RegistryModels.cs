@@ -22,7 +22,8 @@ internal sealed record RegistryComponent(
     RegistryRepository Repository,
     bool Modified,
     RegistryApproval Approval,
-    RegistryPackage[] Packages);
+    RegistryPackage[] Packages,
+    RegistryNativeArtifact[]? NativeArtifacts = null);
 
 internal sealed record RegistryRepository(string Url, string? Commit);
 
@@ -35,6 +36,14 @@ internal sealed record RegistryPackage(
     string ArchiveSha256,
     [property: JsonConverter(typeof(JsonStringEnumConverter<NuGetDependencyKind>))]
     NuGetDependencyKind Kind);
+
+internal sealed record RegistryNativeArtifact(
+    string Platform,
+    string FileName,
+    string BinarySha256,
+    string SourceArchivePath,
+    string SourceArchiveSha256,
+    string BuildRecipePath);
 
 internal sealed record RegistryPackageRegistration(
     RegistryComponent Component,

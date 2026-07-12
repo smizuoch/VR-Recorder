@@ -32,11 +32,11 @@ public static partial class RepositoryNativeRuntimeLoadVerifier
         }
 
         NativeRuntimeLoadManifestEntry[] entries;
-        string[] componentIds;
+        NativeArtifactRegistry registry;
         try
         {
             entries = manifest.Entries;
-            componentIds = ReadRegisteredComponentIds(root);
+            registry = NativeArtifactRegistryReader.Read(root);
             ValidateEntrySourcePaths(root, entries);
         }
         catch (Exception exception) when (exception is
@@ -67,7 +67,7 @@ public static partial class RepositoryNativeRuntimeLoadVerifier
         try
         {
             issues.AddRange(NativeRuntimeLoadAdmissionValidator
-                .Validate(observations, admissions, componentIds)
+                .Validate(observations, admissions, registry.ComponentIds)
                 .Issues);
         }
         catch (Exception exception) when (exception is
@@ -77,6 +77,21 @@ public static partial class RepositoryNativeRuntimeLoadVerifier
                 "invalid-runtime-load-manifest",
                 "third-party/runtime-load-manifest.yml"));
             return issues;
+        }
+
+        foreach (var entry in entries.Where(entry =>
+                     entry.Origin == NativeDependencyOrigin.ThirdParty))
+        {
+            var issue = NativeArtifactRegistryReader.ValidateDependency(
+                root,
+                registry,
+                entry.ComponentId!,
+                entry.FileName,
+                entry.Platform);
+            if (issue is not null)
+            {
+                issues.Add(issue);
+            }
         }
 
         VerifyCallSites(root, entries, issues);
@@ -114,19 +129,6 @@ public static partial class RepositoryNativeRuntimeLoadVerifier
                 "third-party/runtime-load-manifest.yml"));
             return null;
         }
-    }
-
-    private static string[] ReadRegisteredComponentIds(string root)
-    {
-        var path = Path.Combine(root, "third-party", "registry.yml");
-        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
-        return document.RootElement
-            .GetProperty("components")
-            .EnumerateArray()
-            .Select(component => component.GetProperty("id").GetString() ??
-                                 throw new InvalidDataException(
-                                     "A registry component ID is null."))
-            .ToArray();
     }
 
     private static void ValidateEntrySourcePaths(
