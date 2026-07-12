@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "consumer": "VRRecorder.Infrastructure.Media",
+      "fileName": "vrrecorder_native.dll",
+      "mechanism": "NativeLibrary",
+      "platform": "windows-x64",
+      "origin": "FirstParty",
+      "integrity": "ReleaseArtifact",
+      "componentId": null,
+      "sourcePaths": [
+        "src/VRRecorder.Infrastructure.Media/Native/NativeAbiLibrary.cs",
+        "src/VRRecorder.Infrastructure.Media/Native/NativeEncoderProbeLibrary.cs",
+        "src/VRRecorder.Infrastructure.Media/Native/NativeSpoutSourceLibrary.cs"
+      ]
+    },
+    {
+      "consumer": "VRRecorder.Infrastructure.SteamVr",
+      "fileName": "vrrecorder_native.dll",
+      "mechanism": "NativeLibrary",
+      "platform": "windows-x64",
+      "origin": "FirstParty",
+      "integrity": "ReleaseArtifact",
+      "componentId": null,
+      "sourcePaths": [
+        "src/VRRecorder.Infrastructure.SteamVr/Native/NativeSteamVrInputLibrary.cs"
+      ]
+    },
+    {
+      "consumer": "VRRecorder.Infrastructure.Osc",
+      "fileName": "dnsapi.dll",
+      "mechanism": "LibraryImport",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "integrity": "WindowsSystem",
+      "componentId": null,
+      "sourcePaths": [
+        "src/VRRecorder.Infrastructure.Osc/WindowsDnsServiceInterop.cs"
+      ]
+    },
+    {
+      "consumer": "VRRecorder.Infrastructure.Storage",
+      "fileName": "shell32.dll",
+      "mechanism": "LibraryImport",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "integrity": "WindowsSystem",
+      "componentId": null,
+      "sourcePaths": [
+        "src/VRRecorder.Infrastructure.Storage/ShellWindowsKnownFolderPathApi.cs"
+      ]
+    }
+  ]
+}
