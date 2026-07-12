@@ -64,6 +64,17 @@
     <system:String x:Key="VrChat_Selection_Cancel_Label">⟦CÁNCËL · CÁNCËL⟧</system:String>
     <system:String x:Key="VrChat_Selection_Cancel_AccessibleName">⟦Cáncël VRChát ïnstáncë sëlëctïön · Cáncël VRChát ïnstáncë sëlëctïön⟧</system:String>
     <system:String x:Key="VrChat_Selection_Cancel_Tooltip">⟦Rëtürn wïthöüt stártïng á rëcördïng · Rëtürn wïthöüt stártïng á rëcördïng⟧</system:String>
+    <system:String x:Key="Spout_Selection_Title">⟦Chöösë Spöüt sëndër · Chöösë Spöüt sëndër⟧</system:String>
+    <system:String x:Key="Spout_Selection_Body">⟦Mörë thán önë stáblë Spöüt vïdëö sëndër ïs áváïláblë. Chöösë thë ëxáct VRChát cámërá strëám tö rëcörd. · Mörë thán önë stáblë Spöüt vïdëö sëndër ïs áváïláblë. Chöösë thë ëxáct VRChát cámërá strëám tö rëcörd.⟧</system:String>
+    <system:String x:Key="Spout_Selection_Item_Format">⟦{0} — {1}×{2} — {3} · {0} — {1}×{2} — {3}⟧</system:String>
+    <system:String x:Key="Spout_Selection_List_AccessibleName">⟦Stáblë Spöüt vïdëö sëndërs · Stáblë Spöüt vïdëö sëndërs⟧</system:String>
+    <system:String x:Key="Spout_Selection_List_Tooltip">⟦Chöösë thë Spöüt sëndër cöntáïnïng thë VRChát cámërá strëám tö rëcörd · Chöösë thë Spöüt sëndër cöntáïnïng thë VRChát cámërá strëám tö rëcörd⟧</system:String>
+    <system:String x:Key="Spout_Selection_Accept_Label">⟦ÜSË SËLËCTËD · ÜSË SËLËCTËD⟧</system:String>
+    <system:String x:Key="Spout_Selection_Accept_AccessibleName">⟦Üsë thë sëlëctëd Spöüt sëndër · Üsë thë sëlëctëd Spöüt sëndër⟧</system:String>
+    <system:String x:Key="Spout_Selection_Accept_Tooltip">⟦Cöntïnüë rëcördïng sëtüp wïth thë sëlëctëd Spöüt vïdëö sëndër · Cöntïnüë rëcördïng sëtüp wïth thë sëlëctëd Spöüt vïdëö sëndër⟧</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_Label">⟦CÁNCËL · CÁNCËL⟧</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_AccessibleName">⟦Cáncël Spöüt sëndër sëlëctïön · Cáncël Spöüt sëndër sëlëctïön⟧</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_Tooltip">⟦Rëtürn wïthöüt stártïng á rëcördïng · Rëtürn wïthöüt stártïng á rëcördïng⟧</system:String>
     <system:String x:Key="Settings_Open_Label">⟦SËTTÏNGS · SËTTÏNGS⟧</system:String>
     <system:String x:Key="Settings_Open_AccessibleName">⟦Öpën rëcördïng sëttïngs · Öpën rëcördïng sëttïngs⟧</system:String>
     <system:String x:Key="Settings_Open_Tooltip">⟦Cönfïgürë rëcördïng öptïöns üsëd för thë nëxt rëcördïng · Cönfïgürë rëcördïng öptïöns üsëd för thë nëxt rëcördïng⟧</system:String>

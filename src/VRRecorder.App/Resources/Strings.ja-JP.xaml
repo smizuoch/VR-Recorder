@@ -64,6 +64,17 @@
     <system:String x:Key="VrChat_Selection_Cancel_Label">取消</system:String>
     <system:String x:Key="VrChat_Selection_Cancel_AccessibleName">VRChatインスタンスの選択を取り消す</system:String>
     <system:String x:Key="VrChat_Selection_Cancel_Tooltip">録画を開始せずに戻ります</system:String>
+    <system:String x:Key="Spout_Selection_Title">Spout送信元を選択</system:String>
+    <system:String x:Key="Spout_Selection_Body">安定したSpout映像送信元を複数検出しました。録画するVRChatカメラ映像を正確に選択してください。</system:String>
+    <system:String x:Key="Spout_Selection_Item_Format">{0} — {1}×{2} — {3}</system:String>
+    <system:String x:Key="Spout_Selection_List_AccessibleName">安定したSpout映像送信元</system:String>
+    <system:String x:Key="Spout_Selection_List_Tooltip">録画するVRChatカメラ映像を含むSpout送信元を選択します</system:String>
+    <system:String x:Key="Spout_Selection_Accept_Label">選択して続行</system:String>
+    <system:String x:Key="Spout_Selection_Accept_AccessibleName">選択したSpout送信元を使用</system:String>
+    <system:String x:Key="Spout_Selection_Accept_Tooltip">選択したSpout映像送信元で録画準備を続行します</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_Label">取消</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_AccessibleName">Spout送信元の選択を取り消す</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_Tooltip">録画を開始せずに戻ります</system:String>
     <system:String x:Key="Settings_Open_Label">設定</system:String>
     <system:String x:Key="Settings_Open_AccessibleName">録画設定を開く</system:String>
     <system:String x:Key="Settings_Open_Tooltip">次回録画で使う録画設定を変更します</system:String>

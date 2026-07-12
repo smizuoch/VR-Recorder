@@ -7,6 +7,7 @@ using VRRecorder.Application.Encoding;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Application.Video;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.Infrastructure.Media;
 using VRRecorder.Infrastructure.Osc;
@@ -20,6 +21,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
     private const string NativeLibraryFileName = "vrrecorder_native.dll";
     private const string FfprobeFileName = "ffprobe.exe";
     private const string CameraLeaseFileName = "camera-lease.json";
+    private const string VideoSenderSelectionFileName = "spout-senders.json";
     private const long MaximumEstimatedBytesPerSecond = 11_000_000;
     private static readonly TimeSpan OscQueryConnectTimeout =
         TimeSpan.FromSeconds(1);
@@ -86,6 +88,12 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         {
             var settingsPath = new WindowsSettingsPathProvider().GetPath();
             var cameraLeasePath = CameraLeasePath(settingsPath);
+            var senderSelectionStore = new JsonFileVideoSenderSelectionStore(
+                VideoSenderSelectionPath(settingsPath));
+            resources.Add(senderSelectionStore);
+            var senderSelection = new CachedPromptingVideoSenderSelection(
+                senderSelectionStore,
+                new WpfVideoSenderSelectionPrompt());
             var recordingRights =
                 new JsonFileRecordingRightsAcknowledgementStore(
                     RecordingRightsPath(settingsPath),
@@ -152,7 +160,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 events,
                 sessions);
             var startRecording = new StartRecordingUseCase(
-                new SpoutVideoSignalGateway(spoutSource),
+                new SpoutVideoSignalGateway(spoutSource, senderSelection),
                 new MonotonicCountdownTimer(clock),
                 new FileSystemRecordingFileReservation(),
                 wallClock,
@@ -251,6 +259,16 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                                        throw new InvalidOperationException(
                                            "The settings path has no parent directory.");
         return Path.Combine(applicationDataDirectory, CameraLeaseFileName);
+    }
+
+    private static string VideoSenderSelectionPath(string settingsPath)
+    {
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(
+            applicationDataDirectory,
+            VideoSenderSelectionFileName);
     }
 
     private static string ProductVersion() =>

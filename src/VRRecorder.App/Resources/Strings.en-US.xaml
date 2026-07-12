@@ -64,6 +64,17 @@
     <system:String x:Key="VrChat_Selection_Cancel_Label">CANCEL</system:String>
     <system:String x:Key="VrChat_Selection_Cancel_AccessibleName">Cancel VRChat instance selection</system:String>
     <system:String x:Key="VrChat_Selection_Cancel_Tooltip">Return without starting a recording</system:String>
+    <system:String x:Key="Spout_Selection_Title">Choose Spout sender</system:String>
+    <system:String x:Key="Spout_Selection_Body">More than one stable Spout video sender is available. Choose the exact VRChat camera stream to record.</system:String>
+    <system:String x:Key="Spout_Selection_Item_Format">{0} — {1}×{2} — {3}</system:String>
+    <system:String x:Key="Spout_Selection_List_AccessibleName">Stable Spout video senders</system:String>
+    <system:String x:Key="Spout_Selection_List_Tooltip">Choose the Spout sender containing the VRChat camera stream to record</system:String>
+    <system:String x:Key="Spout_Selection_Accept_Label">USE SELECTED</system:String>
+    <system:String x:Key="Spout_Selection_Accept_AccessibleName">Use the selected Spout sender</system:String>
+    <system:String x:Key="Spout_Selection_Accept_Tooltip">Continue recording setup with the selected Spout video sender</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_Label">CANCEL</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_AccessibleName">Cancel Spout sender selection</system:String>
+    <system:String x:Key="Spout_Selection_Cancel_Tooltip">Return without starting a recording</system:String>
     <system:String x:Key="Settings_Open_Label">SETTINGS</system:String>
     <system:String x:Key="Settings_Open_AccessibleName">Open recording settings</system:String>
     <system:String x:Key="Settings_Open_Tooltip">Configure recording options used for the next recording</system:String>
