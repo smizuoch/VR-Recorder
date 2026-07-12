@@ -24,7 +24,7 @@ public:
     void ReleaseJoin() { { const std::lock_guard lock(mutex); allow_join = true; } changed.notify_all(); }
     mutable std::mutex mutex;
     std::condition_variable changed;
-    MediaRecordingPipelineStatistics statistics {{{120, 118, 2, 3}, 91, 1'500, 2'500}, {48'000, 142}};
+    MediaRecordingPipelineStatistics statistics {{{120, 118, 2, 3}, 91, 1'500, 2'500}, {48'000, 142}, -15'000};
     vrrec_status_t start_status = VRREC_STATUS_OK;
     vrrec_status_t routing_status = VRREC_STATUS_OK;
     vrrec_status_t stop_status = VRREC_STATUS_OK;
@@ -76,7 +76,7 @@ void AdaptsControlsAndStatistics()
     CHECK(statistics.duplicated_output_video_frame_count == 3);
     CHECK(statistics.latest_encode_latency_microseconds == 1'500);
     CHECK(statistics.maximum_encode_latency_microseconds == 2'500);
-    CHECK(statistics.audio_video_offset_microseconds == 0);
+    CHECK(statistics.audio_video_offset_microseconds == -15'000);
 }
 
 void StopsAndJoinsAsynchronously()

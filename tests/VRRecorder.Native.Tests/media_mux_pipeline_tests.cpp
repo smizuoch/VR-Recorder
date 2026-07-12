@@ -119,6 +119,7 @@ void ConnectsMuxedPacketsToDriftEventsAndStatistics()
     CHECK(snapshot.latest_absolute_drift_microseconds == 100'000);
     CHECK(snapshot.maximum_absolute_drift_microseconds == 100'000);
     CHECK(snapshot.threshold_event_count == 1);
+    CHECK(pipeline.AudioVideoOffsetMicroseconds() == 100'000);
 }
 
 void FinalizesOnlyAfterBothStreamsFinish()

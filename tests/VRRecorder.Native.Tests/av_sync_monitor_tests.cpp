@@ -61,6 +61,7 @@ void WaitsForBothStreamsAndTreatsExactlyEightyMillisecondsAsHealthy()
     const auto snapshot = monitor.Snapshot();
     CHECK(snapshot.latest_absolute_drift_microseconds == 80'000);
     CHECK(snapshot.maximum_absolute_drift_microseconds == 80'000);
+    CHECK(snapshot.latest_audio_video_offset_microseconds == -80'000);
 }
 
 void EmitsOncePerExcursionAndRearmsAfterRecovery()
@@ -87,6 +88,7 @@ void EmitsOncePerExcursionAndRearmsAfterRecovery()
     CHECK(snapshot.threshold_event_count == 2);
     CHECK(snapshot.latest_absolute_drift_microseconds == 90'001);
     CHECK(snapshot.maximum_absolute_drift_microseconds == 90'001);
+    CHECK(snapshot.latest_audio_video_offset_microseconds == -90'001);
 }
 
 void RejectsInvalidStreamOrNegativePtsWithoutChangingStatistics()

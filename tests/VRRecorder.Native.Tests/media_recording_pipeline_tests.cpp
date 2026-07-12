@@ -43,6 +43,7 @@ public:
 class FakeMuxSession final : public MediaMuxSessionPort {
 public:
     void Abort() noexcept override { ++abort_calls; }
+    std::int64_t AudioVideoOffsetMicroseconds() const noexcept override { return -12'000; }
     std::size_t abort_calls = 0;
 };
 
@@ -90,6 +91,7 @@ void ComposesConfiguredPipelinesIntoOneRecordingLifecycle()
     CHECK(statistics.video.scheduler.dropped_source_frame_count == 1);
     CHECK(statistics.audio.submitted_frame_count == 48'000);
     CHECK(statistics.audio.muxed_packet_count == 202);
+    CHECK(statistics.audio_video_offset_microseconds == -12'000);
     CHECK(events.stopped_calls == 1);
     CHECK(events.video_packets == 101);
     CHECK(events.audio_packets == 202);
