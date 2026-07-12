@@ -177,6 +177,7 @@ void EncoderFailureAbortsWithoutCountingTheWindow()
     CHECK(sink.write_calls == 1);
     CHECK(sink.finish_calls == 0);
     CHECK(sink.abort_calls == 1);
+    CHECK(source.abort_calls == 1);
     CHECK(worker.SubmittedFrameCount() == 0);
     CHECK(worker.MuxedPacketCount() == 0);
 }
