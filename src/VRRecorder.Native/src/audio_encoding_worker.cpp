@@ -126,6 +126,7 @@ void StereoAudioEncodingWorker::Run() noexcept
                 SetResult(StereoAudioEncodingWorkerResult::CaptureFailed);
             }
         } else if (result == StereoAudioEncodingResult::EncoderFailed) {
+            source_.Abort();
             sink_.Abort();
             SetResult(StereoAudioEncodingWorkerResult::EncoderFailed);
         } else if (result == StereoAudioEncodingResult::CaptureFailed ||
