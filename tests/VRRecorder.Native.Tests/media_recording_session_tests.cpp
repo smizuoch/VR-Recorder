@@ -43,13 +43,25 @@ public:
 
 class ConcurrentStreamPipeline final : public MediaStreamPipelinePort {
 public:
-    explicit ConcurrentStreamPipeline(bool block_join) noexcept
-        : block_join_(block_join)
+    explicit ConcurrentStreamPipeline(
+        bool block_join,
+        bool block_stop = false) noexcept
+        : block_join_(block_join), block_stop_(block_stop)
     {
     }
 
     vrrec_status_t Start() noexcept override { return VRREC_STATUS_OK; }
-    vrrec_status_t RequestStop() noexcept override { return VRREC_STATUS_OK; }
+    vrrec_status_t RequestStop() noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        ++stop_calls;
+        stop_entered_ = true;
+        changed_.notify_all();
+        if (block_stop_) {
+            changed_.wait(lock, [this] { return aborted_; });
+        }
+        return VRREC_STATUS_OK;
+    }
 
     void Abort() noexcept override
     {
@@ -81,13 +93,22 @@ public:
         changed_.wait(lock, [this] { return join_entered_; });
     }
 
+    void WaitForStop()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return stop_entered_; });
+    }
+
     std::mutex mutex_;
     std::condition_variable changed_;
     bool block_join_;
+    bool block_stop_;
+    bool stop_entered_ = false;
     bool join_entered_ = false;
     bool aborted_ = false;
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
+    std::size_t stop_calls = 0;
 };
 
 class RecordingEvents final : public MediaEventSink {
@@ -184,6 +205,28 @@ void AbortDuringJoinSuppressesSuccessfulStoppedCompletion()
     CHECK(events.stopped_calls == 0);
 }
 
+void AbortDuringStopRequestSkipsTheRemainingGracefulSequence()
+{
+    std::vector<int> order;
+    ConcurrentStreamPipeline video(false, true);
+    ConcurrentStreamPipeline audio(false);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(video, audio, mux, events);
+    CHECK(session.Start() == VRREC_STATUS_OK);
+
+    auto stop_result = VRREC_STATUS_OK;
+    std::thread stopper([&] { stop_result = session.RequestStop(); });
+    video.WaitForStop();
+    session.Abort();
+    stopper.join();
+
+    CHECK(stop_result == VRREC_STATUS_INVALID_STATE);
+    CHECK(video.stop_calls == 1);
+    CHECK(audio.stop_calls == 0);
+    CHECK(events.stopped_calls == 0);
+}
+
 }
 
 int main()
@@ -192,5 +235,6 @@ int main()
     AudioStartFailureRollsBackVideoAndMux();
     StreamFailureAbortsPeerAndMuxWithoutStoppedEvent();
     AbortDuringJoinSuppressesSuccessfulStoppedCompletion();
+    AbortDuringStopRequestSkipsTheRemainingGracefulSequence();
     return 0;
 }
