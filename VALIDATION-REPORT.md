@@ -28,10 +28,10 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 858件成功、失敗0、skip 0
+- managed: 860件成功、失敗0、skip 0
   - Domain 90
   - Application 226
-  - Compliance 181
+  - Compliance 183
   - Presentation 85
   - Integration 276
 - WPF `win-x64` cross-build: warning 0、error 0
@@ -39,6 +39,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
+- GCC標準gcov JSONをtest executable間でsource line／branch単位にmergeし、first-party nativeのline／branch各90%を独立判定するrelease-gate evaluator（workflow接続と実測90%達成は未完了）
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -157,10 +158,10 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 858 passed, 0 failed, 0 skipped
+- managed: 860 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 226
-  - Compliance 181
+  - Compliance 183
   - Presentation 85
   - Integration 276
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
@@ -168,6 +169,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
+- A release-gate evaluator that merges standard GCC gcov JSON across test executables by source line/branch and independently checks 90% first-party native line and branch thresholds (workflow integration and measured 90% attainment remain outstanding)
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
