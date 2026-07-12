@@ -51,6 +51,7 @@ public sealed class DesktopRecordingSettingsController
     private readonly RecordingOutputPathResolver _outputPaths;
     private readonly ILegalBundleOutputMirror _legalBundleMirror;
     private readonly IAudioEndpointCatalog? _audioEndpoints;
+    private readonly IUiLocaleApplier? _locales;
 
     public DesktopRecordingSettingsController(
         ISettingsStore settings,
@@ -65,6 +66,21 @@ public sealed class DesktopRecordingSettingsController
         RecordingOutputPathResolver outputPaths,
         ILegalBundleOutputMirror legalBundleMirror,
         IAudioEndpointCatalog? audioEndpoints)
+        : this(
+            settings,
+            outputPaths,
+            legalBundleMirror,
+            audioEndpoints,
+            locales: null)
+    {
+    }
+
+    public DesktopRecordingSettingsController(
+        ISettingsStore settings,
+        RecordingOutputPathResolver outputPaths,
+        ILegalBundleOutputMirror legalBundleMirror,
+        IAudioEndpointCatalog? audioEndpoints,
+        IUiLocaleApplier? locales)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(outputPaths);
@@ -73,6 +89,7 @@ public sealed class DesktopRecordingSettingsController
         _outputPaths = outputPaths;
         _legalBundleMirror = legalBundleMirror;
         _audioEndpoints = audioEndpoints;
+        _locales = locales;
     }
 
     public static IReadOnlyList<int> SupportedSelfTimerSeconds =>
@@ -156,6 +173,10 @@ public sealed class DesktopRecordingSettingsController
 
         var updated = current with
         {
+            UiLocale = Merge(
+                original.UiLocale,
+                edited.UiLocale,
+                current.UiLocale),
             Recording = current.Recording with
             {
                 OutputFolder = Merge(
@@ -218,6 +239,10 @@ public sealed class DesktopRecordingSettingsController
         await _settings
             .SaveAsync(updated, cancellationToken)
             .ConfigureAwait(false);
+        if (original.UiLocale != edited.UiLocale)
+        {
+            _locales?.Apply(updated.UiLocale);
+        }
     }
 
     private async Task<VRRecorderSettings> LoadValidatedAsync(
@@ -250,7 +275,8 @@ public sealed class DesktopRecordingSettingsController
             settings.Audio.DesktopGainDb,
             settings.Audio.MicrophoneGainDb,
             settings.Audio.DesktopEndpointId,
-            settings.Audio.MicrophoneEndpointId);
+            settings.Audio.MicrophoneEndpointId,
+            settings.UiLocale);
 
     public OutputPath ResolveOutputPath(string configuredPath) =>
         _outputPaths.Resolve(configuredPath);
@@ -303,6 +329,10 @@ public sealed class DesktopRecordingSettingsController
         ValidateEndpointId(
             draft.MicrophoneEndpointId,
             "microphone endpoint");
+        if (!Enum.IsDefined(draft.UiLocale))
+        {
+            throw InvalidChoice("UI locale");
+        }
 
         ValidateGain(draft.DesktopGainDb, "desktop gain");
         ValidateGain(draft.MicrophoneGainDb, "microphone gain");

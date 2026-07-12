@@ -59,6 +59,7 @@ public static class VRRecorderSettingsContract
 
         EnsurePort(settings.Osc.FallbackSendPort, "fallback send port");
         EnsurePort(settings.Osc.FallbackReceivePort, "fallback receive port");
+        EnsureDefined(settings.UiLocale);
     }
 
     private static void EnsureDefined<TEnum>(TEnum value)

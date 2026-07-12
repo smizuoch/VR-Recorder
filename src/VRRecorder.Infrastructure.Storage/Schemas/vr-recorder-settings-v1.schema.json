@@ -16,6 +16,10 @@
     "schemaVersion": {
       "const": 1
     },
+    "uiLocale": {
+      "type": "string",
+      "enum": ["System", "English", "Japanese"]
+    },
     "recording": {
       "type": "object",
       "additionalProperties": false,

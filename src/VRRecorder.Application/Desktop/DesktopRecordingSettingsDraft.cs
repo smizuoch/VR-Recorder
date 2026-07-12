@@ -16,4 +16,5 @@ public sealed record DesktopRecordingSettingsDraft(
     double DesktopGainDb,
     double MicrophoneGainDb,
     string DesktopEndpointId = "default-render",
-    string MicrophoneEndpointId = "default-capture");
+    string MicrophoneEndpointId = "default-capture",
+    UiLocale UiLocale = UiLocale.System);

@@ -9,7 +9,8 @@ public sealed record VRRecorderSettings(
     VideoSettings Video,
     AudioSettings Audio,
     VrSettings Vr,
-    OscSettings Osc)
+    OscSettings Osc,
+    UiLocale UiLocale = UiLocale.System)
 {
     public static VRRecorderSettings CreateDefault() =>
         new(
@@ -40,7 +41,8 @@ public sealed record VRRecorderSettings(
                 AutoDiscover: true,
                 FallbackHost: "127.0.0.1",
                 FallbackSendPort: 9000,
-                FallbackReceivePort: 9001));
+                FallbackReceivePort: 9001),
+            UiLocale: UiLocale.System);
 }
 
 public sealed record RecordingSettings(
