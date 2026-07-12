@@ -1,5 +1,7 @@
 #include "video_pipeline_session.hpp"
 
+#include <thread>
+
 namespace vrrecorder::native {
 
 VideoPipelineSession::VideoPipelineSession(
@@ -84,9 +86,38 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
         return VideoPipelineResult::InvalidState;
     }
 
-    const auto capture_result = capture_.Join();
-    if (capture_result == SpoutCaptureWorkerResult::SenderLost) {
+    auto capture_result = SpoutCaptureWorkerResult::InvalidState;
+    std::thread capture_join_thread;
+    try {
+        capture_join_thread = std::thread([this, &capture_result]() noexcept {
+            capture_result = capture_.Join();
+            if (capture_result == SpoutCaptureWorkerResult::SenderLost ||
+                capture_result == SpoutCaptureWorkerResult::Failed) {
+                encoding_.Abort();
+            }
+        });
+    } catch (...) {
+        capture_.Abort();
         encoding_.Abort();
+        capture_.Join();
+        encoding_.Join();
+        active_.store(false);
+        finished_.store(true);
+        return VideoPipelineResult::Failed;
+    }
+
+    const auto encoding_result = encoding_.Join();
+    if (encoding_result == VideoEncodingWorkerResult::EncoderFailed ||
+        encoding_result == VideoEncodingWorkerResult::ClockFailed ||
+        encoding_result == VideoEncodingWorkerResult::Failed ||
+        encoding_result == VideoEncodingWorkerResult::InvalidState ||
+        (encoding_result == VideoEncodingWorkerResult::Stopped &&
+         !stop_requested_.load())) {
+        capture_.Abort();
+    }
+    capture_join_thread.join();
+
+    if (capture_result == SpoutCaptureWorkerResult::SenderLost) {
         events_.Faulted(
             VRREC_STATUS_BACKEND_UNAVAILABLE,
             "Spout sender was lost while recording");
@@ -96,7 +127,6 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
     }
 
     if (capture_result == SpoutCaptureWorkerResult::Failed) {
-        encoding_.Abort();
         events_.Faulted(
             VRREC_STATUS_INTERNAL_ERROR,
             "Spout capture failed while recording");
@@ -112,7 +142,6 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
         return VideoPipelineResult::Failed;
     }
 
-    const auto encoding_result = encoding_.Join();
     active_.store(false);
     finished_.store(true);
     if (encoding_result == VideoEncodingWorkerResult::Stopped) {
