@@ -443,6 +443,25 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_fragmented_mp4_mux_coordinator)
 
 add_executable(
+    vrrecorder_native_shared_mux_finalization_session
+    shared_mux_finalization_session_tests.cpp
+    "${native_source_root}/src/shared_mux_finalization_session.cpp"
+    "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp")
+target_compile_features(
+    vrrecorder_native_shared_mux_finalization_session PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_shared_mux_finalization_session
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_shared_mux_finalization_session
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_shared_mux_finalization_session)
+
+add_executable(
     vrrecorder_native_muxing_video_encoder_sink
     muxing_video_encoder_sink_tests.cpp
     "${native_source_root}/src/muxing_video_encoder_sink.cpp"
@@ -635,6 +654,8 @@ add_test(NAME vrrecorder_native_video_encoder_config
     COMMAND vrrecorder_native_video_encoder_config)
 add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator
     COMMAND vrrecorder_native_fragmented_mp4_mux_coordinator)
+add_test(NAME vrrecorder_native_shared_mux_finalization_session
+    COMMAND vrrecorder_native_shared_mux_finalization_session)
 add_test(NAME vrrecorder_native_muxing_video_encoder_sink
     COMMAND vrrecorder_native_muxing_video_encoder_sink)
 add_test(NAME vrrecorder_native_muxing_audio_encoder_sink
