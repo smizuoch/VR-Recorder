@@ -8,6 +8,8 @@
 - [x] 1.5秒fresh frameがなければSignalLostへ遷移する
 - [x] SignalLost後5秒復帰しなければSafeStopを要求する
 - [x] 5秒以内にfresh frameが戻ればAvailableへ復帰する
+- [x] CFR tickでは最新source frameだけを採用し、中間frameをdropとして集計する
+- [x] 新規frameがないtickでは直前frameをduplicateし、最初のframe前は出力しない
 
 ## English
 
@@ -17,3 +19,5 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Enter SignalLost after 1.5 seconds without a fresh frame
 - [x] Request SafeStop after five seconds without recovery from SignalLost
 - [x] Return to Available when a fresh frame arrives within five seconds
+- [x] Select only the latest source frame at each CFR tick and count discarded intermediate frames
+- [x] Duplicate the previous frame when a tick has no new input, while producing nothing before the first frame
