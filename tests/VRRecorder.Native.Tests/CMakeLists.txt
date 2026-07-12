@@ -77,6 +77,24 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_audio_encoder_config)
 
 add_executable(
+    vrrecorder_native_av_sync_monitor
+    av_sync_monitor_tests.cpp
+    "${native_source_root}/src/av_sync_monitor.cpp")
+target_compile_features(
+    vrrecorder_native_av_sync_monitor PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_av_sync_monitor
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_av_sync_monitor
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_av_sync_monitor)
+
+add_executable(
     vrrecorder_native_audio_timeline_buffer
     audio_timeline_buffer_tests.cpp
     "${native_source_root}/src/audio_timeline_buffer.cpp")
@@ -622,6 +640,8 @@ add_test(NAME vrrecorder_native_audio_mixer
     COMMAND vrrecorder_native_audio_mixer)
 add_test(NAME vrrecorder_native_audio_encoder_config
     COMMAND vrrecorder_native_audio_encoder_config)
+add_test(NAME vrrecorder_native_av_sync_monitor
+    COMMAND vrrecorder_native_av_sync_monitor)
 add_test(NAME vrrecorder_native_audio_timeline_buffer
     COMMAND vrrecorder_native_audio_timeline_buffer)
 add_test(NAME vrrecorder_native_audio_capture_timeline
