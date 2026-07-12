@@ -631,6 +631,36 @@ public sealed class LegalReleasePackageIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-025")]
+    public async Task NativeComponentVersionMustMatchCanonicalRegistryIdentity()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var binary = await StageFfprobeAsync(
+            payload,
+            registryVersion: "8.1");
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                FfmpegRequest(
+                    payload,
+                    packagePath,
+                    binary,
+                    graphVersion: "8.0"),
+                CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "native-component-version-mismatch");
+        Assert.Contains(result.Issues, issue => issue.Subject == "ffmpeg");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
     public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
     {
         using var directory = TemporaryDirectory.Create();
@@ -964,7 +994,8 @@ public sealed class LegalReleasePackageIntegrationTests
         string componentId,
         string fileName,
         string binarySha256,
-        string repositoryCommit = "commit")
+        string repositoryCommit = "commit",
+        string version = "8.0")
     {
         const string sourceArchivePath =
             "third-party/source-archives/ffmpeg-source.zip";
@@ -992,7 +1023,7 @@ public sealed class LegalReleasePackageIntegrationTests
                 new
                 {
                     id = componentId,
-                    version = "8.0",
+                    version,
                     repository = new
                     {
                         url = $"https://example.invalid/{componentId}",
@@ -1019,7 +1050,8 @@ public sealed class LegalReleasePackageIntegrationTests
     private static async Task<byte[]> StageFfprobeAsync(
         StagedPayload payload,
         string? registryBinarySha256 = null,
-        string repositoryCommit = "commit")
+        string repositoryCommit = "commit",
+        string registryVersion = "8.0")
     {
         const string relativePath = "tools/ffprobe.exe";
         byte[] binary = [0x4d, 0x5a, 0x46, 0x46, 0x50, 0x52, 0x4f, 0x42, 0x45];
@@ -1033,7 +1065,8 @@ public sealed class LegalReleasePackageIntegrationTests
             "ffmpeg",
             "ffprobe.exe",
             registryBinarySha256 ?? Hash(binary),
-            repositoryCommit);
+            repositoryCommit,
+            registryVersion);
         return binary;
     }
 
