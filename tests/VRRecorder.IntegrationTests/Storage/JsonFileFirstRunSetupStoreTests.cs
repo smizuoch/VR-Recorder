@@ -34,9 +34,10 @@ public sealed class JsonFileFirstRunSetupStoreTests
             }
             """ + "\n",
             await File.ReadAllTextAsync(path));
-        Assert.Equal(
+        Assert.Equivalent(
             progress,
-            await store.LoadAsync(CancellationToken.None));
+            await store.LoadAsync(CancellationToken.None),
+            strict: true);
         Assert.DoesNotContain(
             Directory.GetFiles(directory.Path),
             file => Path.GetFileName(file).Contains(
