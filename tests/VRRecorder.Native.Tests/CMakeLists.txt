@@ -465,6 +465,7 @@ add_executable(
     vrrecorder_native_muxing_video_encoder_sink
     muxing_video_encoder_sink_tests.cpp
     "${native_source_root}/src/muxing_video_encoder_sink.cpp"
+    "${native_source_root}/src/shared_mux_finalization_session.cpp"
     "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp")
 target_compile_features(
     vrrecorder_native_muxing_video_encoder_sink PRIVATE cxx_std_20)
@@ -484,6 +485,7 @@ add_executable(
     vrrecorder_native_muxing_audio_encoder_sink
     muxing_audio_encoder_sink_tests.cpp
     "${native_source_root}/src/muxing_audio_encoder_sink.cpp"
+    "${native_source_root}/src/shared_mux_finalization_session.cpp"
     "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp")
 target_compile_features(
     vrrecorder_native_muxing_audio_encoder_sink PRIVATE cxx_std_20)

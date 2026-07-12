@@ -7,7 +7,7 @@ namespace vrrecorder::native {
 
 MuxingVideoEncoderSink::MuxingVideoEncoderSink(
     PacketVideoEncoder &encoder,
-    FragmentedMp4MuxCoordinator &mux) noexcept
+    SharedMuxFinalizationSession &mux) noexcept
     : encoder_(encoder),
       mux_(mux)
 {
@@ -37,7 +37,22 @@ VideoEncoderWrite MuxingVideoEncoderSink::Finish() noexcept
             VideoEncoderFailureStage::Encoding,
         };
     }
-    return Commit(encoder_.Finish());
+    auto write = Commit(encoder_.Finish());
+    if (write.status != VRREC_STATUS_OK) {
+        mux_.EncoderFailed(MediaStreamKind::Video);
+        return write;
+    }
+    const auto finish_status = mux_.EncoderFinished(MediaStreamKind::Video);
+    if (finish_status != VRREC_STATUS_OK) {
+        Abort();
+        return {
+            finish_status,
+            0,
+            write.encode_latency_microseconds,
+            VideoEncoderFailureStage::Muxing,
+        };
+    }
+    return write;
 }
 
 void MuxingVideoEncoderSink::Abort() noexcept
@@ -46,7 +61,7 @@ void MuxingVideoEncoderSink::Abort() noexcept
         return;
     }
     encoder_.Abort();
-    mux_.Abort();
+    mux_.EncoderFailed(MediaStreamKind::Video);
 }
 
 VideoEncoderWrite MuxingVideoEncoderSink::Commit(

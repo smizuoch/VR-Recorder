@@ -7,7 +7,7 @@ namespace vrrecorder::native {
 
 MuxingAudioEncoderSink::MuxingAudioEncoderSink(
     PacketAudioEncoder &encoder,
-    FragmentedMp4MuxCoordinator &mux) noexcept
+    SharedMuxFinalizationSession &mux) noexcept
     : encoder_(encoder),
       mux_(mux)
 {
@@ -38,7 +38,21 @@ StereoAudioEncoderWrite MuxingAudioEncoderSink::Finish() noexcept
             AudioEncoderFailureStage::Encoding,
         };
     }
-    return Commit(encoder_.Finish());
+    auto write = Commit(encoder_.Finish());
+    if (write.status != VRREC_STATUS_OK) {
+        mux_.EncoderFailed(MediaStreamKind::Audio);
+        return write;
+    }
+    const auto finish_status = mux_.EncoderFinished(MediaStreamKind::Audio);
+    if (finish_status != VRREC_STATUS_OK) {
+        Abort();
+        return {
+            finish_status,
+            0,
+            AudioEncoderFailureStage::Muxing,
+        };
+    }
+    return write;
 }
 
 void MuxingAudioEncoderSink::Abort() noexcept
@@ -47,7 +61,7 @@ void MuxingAudioEncoderSink::Abort() noexcept
         return;
     }
     encoder_.Abort();
-    mux_.Abort();
+    mux_.EncoderFailed(MediaStreamKind::Audio);
 }
 
 StereoAudioEncoderWrite MuxingAudioEncoderSink::Commit(

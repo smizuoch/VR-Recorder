@@ -32,10 +32,10 @@ $(BUILD_DIR)/fragmented_mp4_mux_coordinator_tests: fragmented_mp4_mux_coordinato
 $(BUILD_DIR)/shared_mux_finalization_session_tests: shared_mux_finalization_session_tests.cpp $(NATIVE_ROOT)/src/shared_mux_finalization_session.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/muxing_video_encoder_sink_tests: muxing_video_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/muxing_video_encoder_sink.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/muxing_video_encoder_sink_tests: muxing_video_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/muxing_video_encoder_sink.cpp $(NATIVE_ROOT)/src/shared_mux_finalization_session.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/muxing_audio_encoder_sink_tests: muxing_audio_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/muxing_audio_encoder_sink.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/muxing_audio_encoder_sink_tests: muxing_audio_encoder_sink_tests.cpp $(NATIVE_ROOT)/src/muxing_audio_encoder_sink.cpp $(NATIVE_ROOT)/src/shared_mux_finalization_session.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/audio_timeline_buffer_tests: audio_timeline_buffer_tests.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)

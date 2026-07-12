@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "fragmented_mp4_mux_coordinator.hpp"
+#include "shared_mux_finalization_session.hpp"
 #include "video_encoding_pump.hpp"
 
 namespace vrrecorder::native {
@@ -30,7 +30,7 @@ class MuxingVideoEncoderSink final : public VideoEncoderSink {
 public:
     MuxingVideoEncoderSink(
         PacketVideoEncoder &encoder,
-        FragmentedMp4MuxCoordinator &mux) noexcept;
+        SharedMuxFinalizationSession &mux) noexcept;
 
     VideoEncoderWrite Write(
         const ScheduledVideoFrame &frame) noexcept override;
@@ -42,7 +42,7 @@ private:
         PacketVideoEncoderWrite encoded) noexcept;
 
     PacketVideoEncoder &encoder_;
-    FragmentedMp4MuxCoordinator &mux_;
+    SharedMuxFinalizationSession &mux_;
     std::atomic_bool aborted_ = false;
 };
 

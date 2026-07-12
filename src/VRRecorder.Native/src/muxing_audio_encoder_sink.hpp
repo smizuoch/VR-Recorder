@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "audio_encoding_pump.hpp"
-#include "fragmented_mp4_mux_coordinator.hpp"
+#include "shared_mux_finalization_session.hpp"
 
 namespace vrrecorder::native {
 
@@ -31,7 +31,7 @@ class MuxingAudioEncoderSink final : public StereoAudioEncoderSink {
 public:
     MuxingAudioEncoderSink(
         PacketAudioEncoder &encoder,
-        FragmentedMp4MuxCoordinator &mux) noexcept;
+        SharedMuxFinalizationSession &mux) noexcept;
 
     StereoAudioEncoderWrite WritePcm48k(
         std::uint64_t start_frame_48k,
@@ -44,7 +44,7 @@ private:
         PacketAudioEncoderWrite encoded) noexcept;
 
     PacketAudioEncoder &encoder_;
-    FragmentedMp4MuxCoordinator &mux_;
+    SharedMuxFinalizationSession &mux_;
     std::atomic_bool aborted_ = false;
 };
 

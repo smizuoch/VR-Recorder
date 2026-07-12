@@ -101,7 +101,8 @@ void SubmitsEveryEncodedVideoPacketToTheSharedMuxTimeline()
     };
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingVideoEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
     ScheduledVideoFrame frame {};
     frame.output_tick = 7;
 
@@ -119,7 +120,8 @@ void KeepsEncoderBufferingAsAZeroPacketSuccess()
     ScriptedPacketEncoder encoder;
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingVideoEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
 
     const auto write = sink.Write({});
     CHECK(write.status == VRREC_STATUS_OK);
@@ -134,7 +136,8 @@ void AbortsBothSidesWhenMuxingFails()
     RecordingMuxer backend;
     backend.write_status = VRREC_STATUS_INTERNAL_ERROR;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingVideoEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
 
     const auto write = sink.Write({});
     CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
@@ -150,7 +153,8 @@ void FlushesEncoderPacketsWithoutFinalizingTheSharedMuxer()
     encoder.finish = {VRREC_STATUS_OK, 300, {VideoPacket(0)}};
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingVideoEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
 
     const auto finish = sink.Finish();
     CHECK(finish.status == VRREC_STATUS_OK);

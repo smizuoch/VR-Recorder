@@ -106,7 +106,8 @@ void SubmitsEveryEncodedAacPacketToTheSharedMuxTimeline()
     };
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingAudioEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
     const std::vector<float> samples {0.25F, -0.25F, 0.5F, -0.5F};
 
     const auto write = sink.WritePcm48k(480, samples);
@@ -122,7 +123,8 @@ void KeepsEncoderBufferingAsAZeroPacketSuccess()
     ScriptedPacketEncoder encoder;
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingAudioEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
 
     const auto write = sink.WritePcm48k(0, std::vector<float> {0.0F, 0.0F});
     CHECK(write.status == VRREC_STATUS_OK);
@@ -137,7 +139,8 @@ void AbortsBothSidesWhenMuxingFails()
     RecordingMuxer backend;
     backend.write_status = VRREC_STATUS_INTERNAL_ERROR;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingAudioEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
 
     const auto write = sink.WritePcm48k(0, std::vector<float> {0.0F, 0.0F});
     CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
@@ -153,7 +156,8 @@ void FlushesAacPacketsWithoutFinalizingTheSharedMuxer()
     encoder.finish = {VRREC_STATUS_OK, {AudioPacket(0)}};
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
-    MuxingAudioEncoderSink sink(encoder, mux);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
 
     const auto finish = sink.Finish();
     CHECK(finish.status == VRREC_STATUS_OK);

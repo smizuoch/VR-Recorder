@@ -4,6 +4,7 @@ add_library(vrrecorder_native SHARED
     src/fragmented_mp4_mux_coordinator.cpp
     src/muxing_video_encoder_sink.cpp
     src/muxing_audio_encoder_sink.cpp
+    src/shared_mux_finalization_session.cpp
     src/audio_capture_input_worker.cpp
     src/audio_capture_input_runner.cpp
     src/audio_capture_session.cpp
