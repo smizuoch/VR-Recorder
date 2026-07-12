@@ -35,6 +35,7 @@
 - [x] 映像pipelineを先に停止してから音声pipelineを終了し、両方のjoin成功時だけ最終packet数を通知し、開始途中／停止中の片側failureではpeerと共有muxをAbortする
 - [x] 設定済みpoll timeoutと音声endpoint／QPC／frame windowを既存pipelineへ渡し、video／audio終了結果とmux packet統計を共通recording session portへ変換する
 - [x] configured video／audio adaptersとrecording coordinatorを安全な所有順序で合成し、Start、live audio routing、graceful Stop、両stream統計を一つのpipeline境界へ集約する
+- [x] recording pipelineをC ABI MediaBackendへ接続し、layout／routing、全統計field、冪等な非同期stop／joinとdestructor回収を保証する
 
 ## English
 
@@ -71,3 +72,4 @@
 - [x] Stop the video pipeline before ending audio, publish final packet counts only after both joins succeed, and abort the peer plus shared mux on partial-start or stop-time failure
 - [x] Pass configured poll timeout and audio endpoint/QPC/frame-window values into existing pipelines, mapping video/audio completion results and muxed-packet statistics into the common recording-session port
 - [x] Compose configured video/audio adapters and the recording coordinator in safe ownership order, exposing start, live audio routing, graceful stop, and both stream statistics through one pipeline boundary
+- [x] Adapt the recording pipeline to the C ABI MediaBackend, preserving layout/routing, every statistics field, and idempotent asynchronous stop/join with destructor reclamation

@@ -37,7 +37,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
-- CMake 3.28.3 configure／全target build／CTest: 38/38成功（公開symbol 17/17とCMake build contractを含む）
+- CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
@@ -110,6 +110,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 映像停止→音声終了→両stream joinの順序を固定し、開始rollbackと片側failure時のpeer／共有mux Abort、両側成功時だけの最終packet統計通知を保証するmedia recording session境界
 - 既存のvideo／stereo audio pipelineへpoll timeout、endpoint、session QPC、encoding frame windowを固定して渡し、終了理由を安定C ABI statusへ、packet統計を共通recording sessionへ変換するconfigured stream adapters
 - configured video／audio adaptersとrecording coordinatorをlifetime-safeに所有し、Start／live routing／graceful Stop／video・audio統計を単一APIへ集約するmedia recording pipeline composition（backend実体は未実装）
+- recording pipelineをC ABI MediaBackendへ変換し、video layout／audio routing、ABI統計、冪等な非同期stop workerとAbort／destructorでの確実なjoinを提供するadapter
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -163,7 +164,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
-- CMake 3.28.3 configure/full-target build/CTest: 38/38 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
+- CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
@@ -236,6 +237,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A media recording-session boundary that fixes video-stop, audio-end, and dual-stream-join ordering; rolls back partial starts; aborts the peer and shared mux on either-side failure; and publishes final packet counts only after both streams succeed
 - Configured stream adapters that pass poll timeout, endpoints, session QPC, and encoding frame windows into the existing video/stereo-audio pipelines, mapping their completion reasons to stable C ABI statuses and packet statistics to the common recording session
 - A lifetime-safe media recording-pipeline composition that owns the configured video/audio adapters and recording coordinator and exposes start, live routing, graceful stop, and video/audio statistics through one API (backend implementations remain outstanding)
+- An adapter from the recording pipeline to the C ABI MediaBackend that supplies video layout/audio routing, ABI statistics, an idempotent asynchronous stop worker, and guaranteed joining on abort or destruction
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
