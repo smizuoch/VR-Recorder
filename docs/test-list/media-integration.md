@@ -38,6 +38,7 @@
 - [x] recording pipelineをC ABI MediaBackendへ接続し、layout／routing、全統計field、冪等な非同期stop／joinとdestructor回収を保証する
 - [x] mux成功packetから最新の符号付きA/V offsetを`audio PTS - video PTS`で計算し、mux／recording pipelineを通してC ABI最終統計へ伝播する
 - [x] 非同期stop Joinとforced Abortをatomic terminal遷移で仲裁し、Abortが先行した場合はStopped／Saved相当の成功完了を抑止する
+- [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする
 
 ## English
 
@@ -77,3 +78,4 @@
 - [x] Adapt the recording pipeline to the C ABI MediaBackend, preserving layout/routing, every statistics field, and idempotent asynchronous stop/join with destructor reclamation
 - [x] Compute the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` and propagate it through mux/recording pipelines into final C ABI statistics
 - [x] Arbitrate asynchronous stop/join against forced abort with an atomic terminal transition, suppressing Stopped/Saved-equivalent success when abort wins
+- [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop
