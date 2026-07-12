@@ -13,7 +13,19 @@ struct MediaRecordingPipelineStatistics final {
     StereoAudioPipelineStatistics audio;
 };
 
-class MediaRecordingPipeline final {
+class MediaRecordingPipelinePort {
+public:
+    virtual ~MediaRecordingPipelinePort() = default;
+    virtual vrrec_status_t Start() noexcept = 0;
+    virtual vrrec_status_t UpdateAudioRouting(
+        vrrec_audio_routing_t routing) noexcept = 0;
+    virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void Abort() noexcept = 0;
+    virtual vrrec_status_t Join() noexcept = 0;
+    virtual MediaRecordingPipelineStatistics Statistics() const noexcept = 0;
+};
+
+class MediaRecordingPipeline final : public MediaRecordingPipelinePort {
 public:
     MediaRecordingPipeline(
         VideoPipelineSessionPort &video,
@@ -24,13 +36,13 @@ public:
         MediaMuxSessionPort &mux,
         MediaEventSink &events);
 
-    vrrec_status_t Start() noexcept;
+    vrrec_status_t Start() noexcept override;
     vrrec_status_t UpdateAudioRouting(
-        vrrec_audio_routing_t routing) noexcept;
-    vrrec_status_t RequestStop() noexcept;
-    void Abort() noexcept;
-    vrrec_status_t Join() noexcept;
-    MediaRecordingPipelineStatistics Statistics() const noexcept;
+        vrrec_audio_routing_t routing) noexcept override;
+    vrrec_status_t RequestStop() noexcept override;
+    void Abort() noexcept override;
+    vrrec_status_t Join() noexcept override;
+    MediaRecordingPipelineStatistics Statistics() const noexcept override;
 
 private:
     VideoPipelineSessionPort &video_session_;

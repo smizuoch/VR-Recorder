@@ -7,6 +7,7 @@ SOURCES := src/abi.cpp src/av_sync_monitor.cpp src/av_sync_media_event_adapter.c
 SOURCES += src/media_recording_session.cpp
 SOURCES += src/media_stream_pipeline_adapters.cpp
 SOURCES += src/media_recording_pipeline.cpp
+SOURCES += src/pipeline_media_backend.cpp
 OBJECTS := $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean

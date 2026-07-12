@@ -83,17 +83,18 @@ void StopsAndJoinsAsynchronously()
 {
     FakeRecordingPipeline pipeline;
     FakeLayoutPort layout;
-    PipelineMediaBackend backend(pipeline, layout);
-    CHECK(backend.Start() == VRREC_STATUS_OK);
-    CHECK(backend.RequestStop() == VRREC_STATUS_OK);
-    pipeline.WaitForJoin();
-    CHECK(pipeline.stop_calls == 1);
-    CHECK(pipeline.join_calls == 0);
-    pipeline.ReleaseJoin();
-    backend.WaitForStopForTesting();
+    {
+        PipelineMediaBackend backend(pipeline, layout);
+        CHECK(backend.Start() == VRREC_STATUS_OK);
+        CHECK(backend.RequestStop() == VRREC_STATUS_OK);
+        pipeline.WaitForJoin();
+        CHECK(pipeline.stop_calls == 1);
+        CHECK(pipeline.join_calls == 0);
+        CHECK(backend.RequestStop() == VRREC_STATUS_OK);
+        CHECK(pipeline.stop_calls == 1);
+        pipeline.ReleaseJoin();
+    }
     CHECK(pipeline.join_calls == 1);
-    CHECK(backend.RequestStop() == VRREC_STATUS_OK);
-    CHECK(pipeline.stop_calls == 1);
 }
 
 }
