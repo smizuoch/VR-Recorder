@@ -6,6 +6,7 @@ using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
+using VRRecorder.Application.Setup;
 using VRRecorder.Compliance.Runtime;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
@@ -35,6 +36,8 @@ public partial class App
     private readonly JsonFileRecordingRightsAcknowledgementStore
         _recordingRightsStore;
     private readonly RecordingRightsGate _recordingRightsGate;
+    private readonly JsonFileFirstRunSetupStore _firstRunSetupStore;
+    private readonly FirstRunSetupController _firstRunSetup;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
     private IDisposable? _trayNotificationSubscription;
@@ -80,6 +83,9 @@ public partial class App
         _recordingRightsGate = new RecordingRightsGate(
             _recordingRightsStore,
             SystemWallClock.Instance);
+        _firstRunSetupStore = new JsonFileFirstRunSetupStore(
+            FirstRunSetupPath(settingsPath));
+        _firstRunSetup = new FirstRunSetupController(_firstRunSetupStore);
         _legalController = new DesktopLegalController(
             new AuthenticatedLegalCatalogReader(
                 AppContext.BaseDirectory,
@@ -120,6 +126,9 @@ public partial class App
 
     internal static DesktopDiagnosticsController DiagnosticsController =>
         ((App)Current)._diagnosticsController;
+
+    internal static FirstRunSetupController FirstRunSetup =>
+        ((App)Current)._firstRunSetup;
 
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
@@ -253,7 +262,14 @@ public partial class App
                 }
                 finally
                 {
-                    _recordingRightsStore.Dispose();
+                    try
+                    {
+                        _recordingRightsStore.Dispose();
+                    }
+                    finally
+                    {
+                        _firstRunSetupStore.Dispose();
+                    }
                 }
             }
         }
@@ -529,6 +545,17 @@ public partial class App
         return Path.Combine(
             applicationDataDirectory,
             "recording-rights.json");
+    }
+
+    private static string FirstRunSetupPath(string settingsPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
+        var applicationDataDirectory = Path.GetDirectoryName(settingsPath) ??
+                                       throw new InvalidOperationException(
+                                           "The settings path has no parent directory.");
+        return Path.Combine(
+            applicationDataDirectory,
+            "first-run-setup.json");
     }
 
     private static string LogDirectory(string settingsPath)
