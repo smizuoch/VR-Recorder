@@ -96,6 +96,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - shared GPU surfaceをbounded timeoutでAcquireし、encoder writeの成功／失敗後に必ずReleaseし、一時timeoutを次tickへ継続、同期failureをMediaEvent faultへ変換するencoding境界
 - texture実寸の奇数辺を最大1px正規化し、cropなしのSingleFileFit配置、RGBA channel swap、NV12出力をD3D11 processor向け不変planへ変換するportable計算境界（GPU変換実体は未実装）
 - processorへsource surface／処理planを渡し、出力Adapter LUID／寸法／NV12／native handleをfail-closed検証してencoderへ転送し、processing／encoding failureとAbort順序を分離するadapter（D3D11 processor実体は未実装）
+- C ABI live video layoutを固定canvas／bounds／even寸法で検証してmutex保護し、次frameの明示destinationへ適用、source寸法不一致をprocessor前に拒否するlayout controller（GPU processor実体は未実装）
 - 偶数NV12入力、HighからMainへのcapability降格、品質優先VBR、2秒GOP、`width*height*fps*0.14`の8–80 Mbps clampと1.5倍maxrateを整数安全に導出するH.264設定境界
 - AAC-LC、48 kHz、stereo、192 kbpsと既存mixerのFloat32 interleaved source形式を明示し、backend固有sample変換をencoder adapterへ隔離する音声設定境界
 - A/V packetのPTS／DTS／duration／keyframeを直列化し、stream別DTS単調性、1秒以降keyframe優先／2秒上限fragment、graceful fragment→trailer→file flush、Abort時trailer禁止を保証するfMP4 mux coordinator
@@ -224,6 +225,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An encoding boundary that acquires shared GPU surfaces with a bounded timeout, releases them after both successful and failed writes, continues after transient timeouts, and maps synchronization failures to media faults
 - A portable planning boundary that normalizes odd texture edges by at most one pixel and produces immutable no-crop SingleFileFit placement, RGBA channel-swap, and NV12-output instructions for a D3D11 processor (the GPU transformation implementation remains outstanding)
 - An adapter that passes source surfaces/plans to a processor, fail-closed validates output adapter LUID, dimensions, NV12 format, and native handle before encoding, and separates processing/encoding failures and abort order (the D3D11 processor implementation remains outstanding)
+- A layout controller that validates C ABI live-video layouts against fixed canvas/bounds/even dimensions, stores them under a mutex, applies explicit destinations from the next frame, and rejects source-dimension mismatch before processing (the GPU processor implementation remains outstanding)
 - An H.264 configuration boundary that safely derives even NV12 input, High-to-Main capability fallback, quality VBR, a two-second GOP, the clamped 8–80 Mbps `width*height*fps*0.14` target, and a 1.5x maximum rate
 - An audio configuration boundary that fixes AAC-LC, 48 kHz, stereo, 192 kbps, and the mixer's interleaved Float32 source format while isolating backend-specific sample conversion in encoder adapters
 - An fMP4 mux coordinator that serializes A/V packet PTS/DTS/duration/keyframes, enforces per-stream DTS monotonicity, prefers keyframe cuts after one second with a hard two-second fragment limit, orders graceful fragment/trailer/file flush, and forbids trailers after abort
