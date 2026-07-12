@@ -23,11 +23,12 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         return CaptureNormalizationResult::InvalidFormat;
     }
 
+    const auto reset_epoch = !initialized_ || packet.discontinuity;
     if (packet.frame_count == 0 || session_start_qpc_100ns_ < 0 ||
         (!packet.timestamp_error &&
          (packet.qpc_100ns < 0 ||
           packet.qpc_100ns < session_start_qpc_100ns_)) ||
-        (!initialized_ && packet.timestamp_error) ||
+        (reset_epoch && packet.timestamp_error) ||
         packet.frame_count >
             std::numeric_limits<std::uint64_t>::max()) {
         return CaptureNormalizationResult::InvalidPacket;
@@ -46,19 +47,19 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         return CaptureNormalizationResult::InvalidPacket;
     }
 
-    if (initialized_ &&
+    if (initialized_ && !packet.discontinuity &&
         (!SameFormat(format_, format) ||
          packet.device_position != expected_device_position_)) {
-        return packet.discontinuity
-            ? CaptureNormalizationResult::Discontinuity
-            : CaptureNormalizationResult::InvalidPacket;
+        return CaptureNormalizationResult::InvalidPacket;
     }
 
+    const auto base_input_frames = reset_epoch ? 0U : input_frames_;
+    const auto base_output_frames = reset_epoch ? 0U : output_frames_;
     const auto frame_count = static_cast<std::uint64_t>(
         packet.frame_count);
     std::uint64_t new_input_frames = 0;
     std::uint64_t new_expected_device_position = 0;
-    if (!TryAdd(input_frames_, frame_count, new_input_frames) ||
+    if (!TryAdd(base_input_frames, frame_count, new_input_frames) ||
         !TryAdd(
             packet.device_position,
             frame_count,
@@ -72,12 +73,12 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
             OutputSampleRate,
             format.sample_rate_hz,
             new_output_frames) ||
-        new_output_frames < output_frames_) {
+        new_output_frames < base_output_frames) {
         return CaptureNormalizationResult::InvalidPacket;
     }
 
     const auto output_frame_count_u64 =
-        new_output_frames - output_frames_;
+        new_output_frames - base_output_frames;
     if (output_frame_count_u64 == 0 ||
         output_frame_count_u64 >
             std::numeric_limits<std::size_t>::max() ||
@@ -88,10 +89,10 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
     }
 
     std::uint64_t start_frame_48k = 0;
-    if (initialized_) {
+    if (!reset_epoch) {
         if (!TryAdd(
                 epoch_start_frame_48k_,
-                output_frames_,
+                base_output_frames,
                 start_frame_48k)) {
             return CaptureNormalizationResult::InvalidPacket;
         }
@@ -104,6 +105,20 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                 10'000'000,
                 start_frame_48k)) {
             return CaptureNormalizationResult::InvalidPacket;
+        }
+
+        if (initialized_) {
+            std::uint64_t previous_end_frame_48k = 0;
+            if (!TryAdd(
+                    epoch_start_frame_48k_,
+                    output_frames_,
+                    previous_end_frame_48k)) {
+                return CaptureNormalizationResult::InvalidPacket;
+            }
+
+            start_frame_48k = std::max(
+                start_frame_48k,
+                previous_end_frame_48k);
         }
     }
 
@@ -187,7 +202,7 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                  output_frame < output_frame_count;
                  ++output_frame) {
                 const auto global_output_frame =
-                    output_frames_ + output_frame;
+                    base_output_frames + output_frame;
                 const auto global_source_position =
                     static_cast<long double>(global_output_frame) *
                     static_cast<long double>(format.sample_rate_hz) /
@@ -196,7 +211,7 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                     std::max<long double>(
                         0.0L,
                         global_source_position -
-                            static_cast<long double>(input_frames_));
+                            static_cast<long double>(base_input_frames));
                 const auto first_source_frame =
                     std::min<std::size_t>(
                         static_cast<std::size_t>(local_source_position),
@@ -225,7 +240,7 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         return CaptureNormalizationResult::OutOfMemory;
     }
 
-    if (!initialized_) {
+    if (reset_epoch) {
         format_ = format;
         epoch_start_frame_48k_ = start_frame_48k;
         initialized_ = true;
