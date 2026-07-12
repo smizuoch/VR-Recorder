@@ -171,6 +171,16 @@ private:
     bool aborted_ = false;
 };
 
+class RecordingInputStartSink final : public AudioCaptureInputStartSink {
+public:
+    void Started(vrrec_status_t status) noexcept override
+    {
+        statuses.push_back(status);
+    }
+
+    std::vector<vrrec_status_t> statuses;
+};
+
 AudioCaptureSourceConfig Config()
 {
     return {
@@ -572,6 +582,46 @@ void AbortReleasesARecoveryWaitImmediately()
     CHECK(timeline.WaitRead(4, output, read) == AudioTimelineResult::Aborted);
 }
 
+void ReportsInitialCaptureStartExactlyOnce()
+{
+    auto source = std::make_unique<FakeAudioCaptureSource>();
+    source->reads.push_back({
+        AudioCaptureReadResult::Failed,
+        0,
+        0,
+        0,
+        0,
+        {},
+        false,
+        false,
+        0,
+    });
+    FailingRecoverySourceProvider provider(std::move(source));
+    RecordingRecoveryWaiter waiter;
+    RecordingInputStartSink starts;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+
+    CHECK(runner.Run(Config(), starts) == AudioCaptureInputResult::Failed);
+    CHECK(starts.statuses.size() == 1);
+    CHECK(starts.statuses[0] == VRREC_STATUS_OK);
+}
+
+void ReportsInitialCaptureStartFailureExactlyOnce()
+{
+    auto source = std::make_unique<FakeAudioCaptureSource>();
+    source->start_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    FailingRecoverySourceProvider provider(std::move(source));
+    RecordingRecoveryWaiter waiter;
+    RecordingInputStartSink starts;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+
+    CHECK(runner.Run(Config(), starts) == AudioCaptureInputResult::Failed);
+    CHECK(starts.statuses.size() == 1);
+    CHECK(starts.statuses[0] == VRREC_STATUS_BACKEND_UNAVAILABLE);
+}
+
 }
 
 int main()
@@ -584,5 +634,7 @@ int main()
     FailedReplacementStartDoesNotPoisonLaterRecovery();
     StopsDefaultEndpointRediscoveryAfterFiveSeconds();
     AbortReleasesARecoveryWaitImmediately();
+    ReportsInitialCaptureStartExactlyOnce();
+    ReportsInitialCaptureStartFailureExactlyOnce();
     return 0;
 }
