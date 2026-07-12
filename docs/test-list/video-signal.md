@@ -17,9 +17,10 @@
 - [x] selected Spout sender以外のframeをCFR schedulerへ入れない
 - [x] Spout poll timeout、sender loss、Abortを別結果として扱う
 - [x] Spout timeout後も専用capture threadを継続し、sender loss／invalid frameでterminal終了する
-- [x] captureをencoderより先に開始し、encoder開始失敗時はcaptureをrollbackする
+- [x] captureをencoderより先に開始し、encoder開始失敗時はcaptureをAbort／Joinしてrollbackする
 - [x] graceful stopではcaptureを先に中断してからencoderをflushし、sender loss時はencoderをAbortしてfaultを通知する
 - [x] encoder／CFR clockが先に失敗した場合は待機中のcaptureをAbortして双方をjoinする
+- [x] forced Abortはcapture／encoding双方へ停止signalを送り、両workerをjoinしてから戻る
 - [x] Spout textureの共有所有権とdescriptorをcaptureからCFR出力へ保持し、metadata不一致を拒否する
 - [x] shared surfaceをbounded timeoutでAcquireし、encoder成功／失敗の双方でReleaseし、timeoutと同期failureを分離する
 - [x] 奇数textureを右／下へ最大1pxパディングし、整数演算のSingleFileFitで偶数contain配置とNV12処理計画を生成する
@@ -44,9 +45,10 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Never admit a frame from an unselected Spout sender into the CFR scheduler
 - [x] Keep Spout poll timeout, sender loss, and abort as distinct outcomes
 - [x] Continue the dedicated capture thread after Spout timeouts and terminate on sender loss or invalid frames
-- [x] Start capture before encoding and roll capture back when encoding cannot start
+- [x] Start capture before encoding and abort/join capture when encoding cannot start
 - [x] On graceful stop, halt capture before flushing the encoder; on sender loss, abort encoding and report a fault
 - [x] If the encoder or CFR clock fails first, abort the waiting capture worker and join both sides
+- [x] On forced abort, signal both capture and encoding to stop and join both workers before returning
 - [x] Retain shared Spout-texture ownership and its descriptor from capture through CFR output, rejecting metadata mismatches
 - [x] Acquire shared surfaces with a bounded timeout, release them after both encoder success and failure, and distinguish timeout from synchronization failure
 - [x] Pad odd textures by at most one pixel on the right/bottom and use integer SingleFileFit math to produce an even contain placement and NV12 processing plan

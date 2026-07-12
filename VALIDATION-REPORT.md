@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.42%（2776/3250）／branch 69.63%（1580/2269）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.50%（2783/3255）／branch 69.82%（1587/2273）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -94,6 +94,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - selected Spout senderのframe metadataだけを検証してCFR schedulerへ渡し、timeout、sender loss、Abortを分離するcapture pump
 - bounded poll timeoutでSpout pumpを専用thread実行し、timeout継続、sender loss、terminal failure、Abort/joinを管理するworker
 - capture先行開始、encoder開始失敗時rollback、capture先行停止、capture／encoder相互runtime failure時のpeer Abort、sender loss MediaEvent fault、最終video統計を統合するpipeline session
+- encoder開始rollbackでcaptureをAbort／Joinし、forced Abortでもcapture／encoding両workerをjoinしてcontrol call復帰時のthread quiescenceを保証するvideo pipeline lifetime境界
 - Adapter LUID／実寸／pixel format／native handleを持つGPU surfaceの共有所有権をSpout captureからCFR outputへ伝播し、texture descriptorとframe metadataの不一致を拒否する境界
 - shared GPU surfaceをbounded timeoutでAcquireし、encoder writeの成功／失敗後に必ずReleaseし、一時timeoutを次tickへ継続、同期failureをMediaEvent faultへ変換するencoding境界
 - texture実寸の奇数辺を最大1px正規化し、cropなしのSingleFileFit配置、RGBA channel swap、NV12出力をD3D11 processor向け不変planへ変換するportable計算境界（GPU変換実体は未実装）
@@ -171,7 +172,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.42% lines (2776/3250) and 69.63% branches (1580/2269), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.50% lines (2783/3255) and 69.82% branches (1587/2273), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -225,6 +226,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A capture pump that validates metadata from only the selected Spout sender, feeds the CFR scheduler, and distinguishes timeout, sender loss, and abort
 - A joined Spout capture worker that polls with a bounded timeout and manages timeout continuation, sender loss, terminal failure, and abort
 - A video pipeline session that integrates capture-first startup, rollback on encoder startup failure, capture-first shutdown, peer abort for capture/encoder runtime failures, sender-loss media faults, and final video statistics
+- A video-pipeline lifetime boundary that aborts and joins capture during encoder-start rollback and joins both capture/encoding workers on forced abort, guaranteeing thread quiescence before the control call returns
 - A GPU-surface boundary that carries shared ownership, adapter LUID, actual dimensions, pixel format, and a native handle from Spout capture through CFR output while rejecting texture/frame metadata mismatches
 - An encoding boundary that acquires shared GPU surfaces with a bounded timeout, releases them after both successful and failed writes, continues after transient timeouts, and maps synchronization failures to media faults
 - A portable planning boundary that normalizes odd texture edges by at most one pixel and produces immutable no-crop SingleFileFit placement, RGBA channel-swap, and NV12-output instructions for a D3D11 processor (the GPU transformation implementation remains outstanding)
