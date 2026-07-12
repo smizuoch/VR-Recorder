@@ -29,11 +29,11 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 888件成功、失敗0、skip 0
+- managed: 890件成功、失敗0、skip 0
   - Domain 90
   - Application 239
   - Compliance 186
-  - Presentation 86
+  - Presentation 88
   - Integration 287
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
@@ -86,7 +86,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - System／English／Japaneseのoptional schema v1 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
 - VR hand／Wrist Dock・World PinとOSC auto discovery／loopback fallback host・portをlocalized／accessible settings controlへ投影し、overlay transformやportの同時更新を保持して個別保存する経路（OpenVR／fallback snapshot backendへのruntime適用は未実装）
 - 設計上の12初回setup項目をversion付き固定順序として扱い、厳格JSONをatomic保存して完了済みprefixから再開し、破損／順序外完了／旧versionの完了誤認をfail-safeで拒否するApp構成済み経路（画面／実機probeは未実装）
-- 初回setupの現在項目を12個の個別localized resource key、1-origin step番号、全体件数、進捗率へ投影し、完了時にplaceholder項目を表示しないwindow用Application model（WPF画面／probe接続は未実装）
+- 初回setupの現在項目を12個の個別localized resource、1-origin step番号、全体件数、進捗率へ投影する英日／200% pseudo／high-contrast／accessible WPF画面。録画権利認可より先に未完了を表示し、閉じても録画を無効のまま保ち、画面自身には完了APIを持たせない（probe接続は未実装）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -138,7 +138,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
-- 初回setupの画面／実機probe、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
+- 初回setupの実機probeと検証操作、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -173,11 +173,11 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 888 passed, 0 failed, 0 skipped
+- managed: 890 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 239
   - Compliance 186
-  - Presentation 86
+  - Presentation 88
   - Integration 287
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
@@ -229,8 +229,8 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An admission for the `ole32.dll` COM cleanup call site as WindowsSystem integrity in the runtime-load manifest, without misclassifying it as a redistributed third-party component
 - A settings path that three-way merges System/English/Japanese as an optional schema-v1 locale, applies it to WPF string/layout resources at startup with CLI-override precedence, and reapplies it immediately after a successful save
 - A settings path that projects VR hand/Wrist Dock/World Pin and OSC auto-discovery/loopback fallback host/ports into localized accessible controls and persists explicit edits while retaining concurrent overlay-transform or port updates (runtime application to OpenVR and a fallback snapshot backend remains outstanding)
-- An App-composed path that models the 12 specified first-run setup items as a versioned fixed order, atomically persists strict JSON, resumes from a completed prefix, and fails safe on corruption, out-of-order completion, or completion from an older version (UI and hardware probes remain outstanding)
-- A window-facing Application model that projects the current first-run item to 12 distinct localized resource keys, a one-based step number, total count, and overall progress, without exposing a placeholder item after completion (WPF UI and probe wiring remain outstanding)
+- An App-composed path that models the 12 specified first-run setup items as a versioned fixed order, atomically persists strict JSON, resumes from a completed prefix, and fails safe on corruption, out-of-order completion, or completion from an older version (hardware probes remain outstanding)
+- An English/Japanese, deterministic 200%-pseudo, high-contrast, accessible WPF window that projects the current first-run item, one-based step number, total count, and overall progress; it appears before rights authorization, keeps recording disabled after close while incomplete, and exposes no self-approval API (probe wiring remains outstanding)
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -282,7 +282,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
-- Production UI/hardware probes for first-run setup, runtime VR-placement/OSC settings, and end-to-end recording in the real application
+- Production hardware probes and verified actions for first-run setup, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
