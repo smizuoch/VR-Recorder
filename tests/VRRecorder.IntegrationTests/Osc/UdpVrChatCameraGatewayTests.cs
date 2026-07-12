@@ -11,6 +11,33 @@ namespace VRRecorder.IntegrationTests.Osc;
 public sealed class UdpVrChatCameraGatewayTests
 {
     [Fact]
+    public async Task ConfirmedWritePublishesPrivacySafeOutcome()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var fakeVrChat = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        var events = new CapturingOscOperationEventSink();
+        var endpoint = (IPEndPoint)fakeVrChat.Client.LocalEndPoint!;
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(
+            endpoint,
+            events);
+
+        var write = gateway.SetStreamingAsync(true, timeout.Token);
+        var request = await fakeVrChat.ReceiveAsync(timeout.Token);
+        await fakeVrChat.SendAsync(
+            request.Buffer,
+            request.RemoteEndPoint,
+            timeout.Token);
+        await write;
+
+        Assert.Equal(
+            [new OscOperationEvent(
+                OscOperation.CameraWrite,
+                OscOperationOutcome.Succeeded)],
+            events.Events);
+    }
+
+    [Fact]
     [Trait("Scenario", "IT-001")]
     public async Task QueuedEchoFromPreviousWriteDoesNotConfirmNextWrite()
     {
@@ -196,6 +223,15 @@ public sealed class UdpVrChatCameraGatewayTests
             CameraLease lease,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class CapturingOscOperationEventSink
+        : IOscOperationEventSink
+    {
+        public List<OscOperationEvent> Events { get; } = [];
+
+        public void Publish(OscOperationEvent operation) =>
+            Events.Add(operation);
     }
 
     private static readonly byte[] ModeStreamPacket = Convert.FromHexString(
