@@ -389,6 +389,24 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_video_processing_plan)
 
 add_executable(
+    vrrecorder_native_video_encoder_config
+    video_encoder_config_tests.cpp
+    "${native_source_root}/src/video_encoder_config.cpp")
+target_compile_features(
+    vrrecorder_native_video_encoder_config PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_video_encoder_config
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_video_encoder_config
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_video_encoder_config)
+
+add_executable(
     vrrecorder_native_video_processing_encoder_sink
     video_processing_encoder_sink_tests.cpp
     "${native_source_root}/src/video_processing_encoder_sink.cpp"
@@ -537,6 +555,8 @@ add_test(NAME vrrecorder_native_video_cfr_scheduler
     COMMAND vrrecorder_native_video_cfr_scheduler)
 add_test(NAME vrrecorder_native_video_processing_plan
     COMMAND vrrecorder_native_video_processing_plan)
+add_test(NAME vrrecorder_native_video_encoder_config
+    COMMAND vrrecorder_native_video_encoder_config)
 add_test(NAME vrrecorder_native_video_processing_encoder_sink
     COMMAND vrrecorder_native_video_processing_encoder_sink)
 add_test(NAME vrrecorder_native_video_encoding_pump
