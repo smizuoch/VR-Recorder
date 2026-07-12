@@ -113,6 +113,28 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_av_sync_media_event_adapter)
 
 add_executable(
+    vrrecorder_native_media_mux_pipeline
+    media_mux_pipeline_tests.cpp
+    "${native_source_root}/src/media_mux_pipeline.cpp"
+    "${native_source_root}/src/av_sync_monitor.cpp"
+    "${native_source_root}/src/av_sync_media_event_adapter.cpp"
+    "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp"
+    "${native_source_root}/src/shared_mux_finalization_session.cpp")
+target_compile_features(
+    vrrecorder_native_media_mux_pipeline PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_media_mux_pipeline
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_media_mux_pipeline
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_media_mux_pipeline)
+
+add_executable(
     vrrecorder_native_audio_timeline_buffer
     audio_timeline_buffer_tests.cpp
     "${native_source_root}/src/audio_timeline_buffer.cpp")
@@ -662,6 +684,8 @@ add_test(NAME vrrecorder_native_av_sync_monitor
     COMMAND vrrecorder_native_av_sync_monitor)
 add_test(NAME vrrecorder_native_av_sync_media_event_adapter
     COMMAND vrrecorder_native_av_sync_media_event_adapter)
+add_test(NAME vrrecorder_native_media_mux_pipeline
+    COMMAND vrrecorder_native_media_mux_pipeline)
 add_test(NAME vrrecorder_native_audio_timeline_buffer
     COMMAND vrrecorder_native_audio_timeline_buffer)
 add_test(NAME vrrecorder_native_audio_capture_timeline
