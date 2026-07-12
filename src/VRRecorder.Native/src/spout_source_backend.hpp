@@ -38,6 +38,9 @@ public:
     virtual vrrec_status_t Poll(
         std::chrono::milliseconds timeout,
         SpoutFrame &frame) = 0;
+    virtual void Abort() noexcept
+    {
+    }
 };
 
 std::unique_ptr<SpoutSourceBackend> CreateSpoutSourceBackend(
