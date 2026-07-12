@@ -7,10 +7,12 @@ namespace vrrecorder::native {
 StereoAudioMixCoordinator::StereoAudioMixCoordinator(
     StereoCaptureTimeline &desktop,
     StereoCaptureTimeline &microphone,
-    StereoAudioMixer &mixer) noexcept
+    StereoAudioMixer &mixer,
+    AudioCaptureAvailabilitySink *health_sink) noexcept
     : desktop_(desktop),
       microphone_(microphone),
-      mixer_(mixer)
+      mixer_(mixer),
+      health_sink_(health_sink)
 {
 }
 
@@ -78,6 +80,22 @@ StereoAudioMixResult StereoAudioMixCoordinator::MixNext(
             frame_count_48k,
             output_interleaved) != VRREC_STATUS_OK) {
         return StereoAudioMixResult::Failed;
+    }
+
+    if (health_sink_ != nullptr) {
+        if (desktop_read.underrun) {
+            health_sink_->BufferHealthChanged(
+                AudioCaptureRole::DesktopLoopback,
+                AudioBufferHealth::Underrun,
+                expected_start_frame);
+        }
+
+        if (microphone_read.underrun) {
+            health_sink_->BufferHealthChanged(
+                AudioCaptureRole::Microphone,
+                AudioBufferHealth::Underrun,
+                expected_start_frame);
+        }
     }
 
     read = StereoAudioMixRead {

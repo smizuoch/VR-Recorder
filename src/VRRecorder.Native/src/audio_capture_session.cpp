@@ -30,7 +30,8 @@ StereoAudioCaptureSession::StereoAudioCaptureSession(
       mix_coordinator_(
           desktop_timeline_,
           microphone_timeline_,
-          mixer_),
+          mixer_,
+          availability_sink),
       initial_routing_(initial_routing)
 {
 }

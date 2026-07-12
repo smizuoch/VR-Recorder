@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "audio_capture_timeline.hpp"
+#include "audio_capture_pump.hpp"
 #include "audio_mixer.hpp"
 
 namespace vrrecorder::native {
@@ -45,7 +46,8 @@ public:
     StereoAudioMixCoordinator(
         StereoCaptureTimeline &desktop,
         StereoCaptureTimeline &microphone,
-        StereoAudioMixer &mixer) noexcept;
+        StereoAudioMixer &mixer,
+        AudioCaptureAvailabilitySink *health_sink = nullptr) noexcept;
 
     StereoAudioMixResult MixNext(
         std::size_t frame_count_48k,
@@ -60,6 +62,7 @@ private:
     StereoCaptureTimeline &desktop_;
     StereoCaptureTimeline &microphone_;
     StereoAudioMixer &mixer_;
+    AudioCaptureAvailabilitySink *health_sink_;
     std::vector<float> desktop_samples_;
     std::vector<float> microphone_samples_;
     std::atomic_bool aborted_ = false;
