@@ -181,6 +181,27 @@ public:
     std::vector<vrrec_status_t> statuses;
 };
 
+struct AvailabilityEvent final {
+    AudioCaptureRole role;
+    bool available;
+    std::uint64_t frame_position;
+};
+
+class RecordingAvailabilitySink final : public AudioCaptureAvailabilitySink {
+public:
+    void AvailabilityChanged(
+        AudioCaptureRole role,
+        bool available,
+        std::uint64_t frame_position) noexcept override
+    {
+        CHECK(count < 4);
+        events[count++] = {role, available, frame_position};
+    }
+
+    AvailabilityEvent events[4] {};
+    std::size_t count = 0;
+};
+
 AudioCaptureSourceConfig Config()
 {
     return {
@@ -488,6 +509,68 @@ void FailedReplacementStartDoesNotPoisonLaterRecovery()
     }
 }
 
+void ReportsLossAndRecoveryAtTheirExactFrames()
+{
+    FakeAudioCaptureSource lost_source;
+    lost_source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0,
+        500,
+        2'000'000,
+        2,
+        {0.25F, 0.25F, 0.25F, 0.25F},
+        false,
+        false,
+        0,
+    });
+    lost_source.reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0,
+        0,
+        0,
+        0,
+        {},
+        false,
+        false,
+        2,
+    });
+    StereoCaptureTimeline timeline(12);
+    RecordingAvailabilitySink availability;
+    AudioCapturePump initial(lost_source, timeline, &availability);
+    CHECK(initial.Start(Config()) == VRREC_STATUS_OK);
+    CHECK(initial.PumpOne() == AudioCapturePumpResult::PacketAccepted);
+    CHECK(initial.PumpOne() == AudioCapturePumpResult::DeviceLost);
+    CHECK(availability.count == 1);
+    CHECK(availability.events[0].role ==
+          AudioCaptureRole::DesktopLoopback);
+    CHECK(!availability.events[0].available);
+    CHECK(availability.events[0].frame_position == 2);
+
+    FakeAudioCaptureSource recovered_source;
+    recovered_source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        4,
+        0,
+        2'010'000,
+        2,
+        {0.75F, 0.75F, 0.75F, 0.75F},
+        false,
+        false,
+        0,
+    });
+    AudioCapturePump recovered(
+        recovered_source,
+        timeline,
+        &availability);
+    CHECK(recovered.StartRecovery(Config()) == VRREC_STATUS_OK);
+    CHECK(recovered.PumpOne() == AudioCapturePumpResult::PacketAccepted);
+    CHECK(availability.count == 2);
+    CHECK(availability.events[1].role ==
+          AudioCaptureRole::DesktopLoopback);
+    CHECK(availability.events[1].available);
+    CHECK(availability.events[1].frame_position == 4);
+}
+
 void StopsDefaultEndpointRediscoveryAfterFiveSeconds()
 {
     auto initial = std::make_unique<FakeAudioCaptureSource>();
@@ -632,6 +715,7 @@ int main()
     RetainsAFlaggedPacketAfterItsExplicitGap();
     RecoversAReplacementSourceAtItsExactFirstFrame();
     FailedReplacementStartDoesNotPoisonLaterRecovery();
+    ReportsLossAndRecoveryAtTheirExactFrames();
     StopsDefaultEndpointRediscoveryAfterFiveSeconds();
     AbortReleasesARecoveryWaitImmediately();
     ReportsInitialCaptureStartExactlyOnce();
