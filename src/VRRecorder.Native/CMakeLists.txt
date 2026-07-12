@@ -1,5 +1,6 @@
 add_library(vrrecorder_native SHARED
     src/abi.cpp
+    src/audio_capture_input_runner.cpp
     src/audio_capture_normalizer.cpp
     src/audio_capture_pump.cpp
     src/audio_capture_timeline.cpp
