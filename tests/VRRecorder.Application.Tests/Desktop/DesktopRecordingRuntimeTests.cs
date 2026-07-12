@@ -4,6 +4,7 @@ using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Video;
 using VRRecorder.Domain.Camera;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
@@ -240,6 +241,26 @@ public sealed class DesktopRecordingRuntimeTests
             ["service-stale", candidate.ServiceId],
             lifecycle.StartRequests.Select(request => request.ServiceId));
         Assert.Equal(RecorderState.Recording, lifecycle.State);
+        Assert.Empty(stops.Requests);
+    }
+
+    [Fact]
+    public async Task CancelingSpoutSenderSelectionIsANormalReturnToReady()
+    {
+        var requests = new ControllableStartRequestSource();
+        requests.EnqueueCompleted(Request("service-spout-choice"));
+        var lifecycle = new ControllableRecordingLifecycle();
+        lifecycle.EnqueueFailure(new VideoSenderSelectionCanceledException());
+        var stops = new ControllableStopRequestSink(lifecycle);
+        await using var runtime = new DesktopRecordingRuntime(
+            requests,
+            lifecycle,
+            stops);
+
+        await runtime.ToggleAsync(CancellationToken.None);
+
+        Assert.Equal(RecorderState.Ready, runtime.Current.State);
+        Assert.Single(lifecycle.StartRequests);
         Assert.Empty(stops.Requests);
     }
 
@@ -925,6 +946,9 @@ public sealed class DesktopRecordingRuntimeTests
 
         public void EnqueueCompleted(RecordingLifecycleStartResult result) =>
             EnqueuePending().SetResult(result);
+
+        public void EnqueueFailure(Exception failure) =>
+            EnqueuePending().SetException(failure);
 
         public async Task<RecordingLifecycleStartResult> StartAsync(
             string? selectedServiceId,
