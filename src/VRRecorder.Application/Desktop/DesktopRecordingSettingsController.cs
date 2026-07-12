@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Settings;
@@ -49,11 +50,21 @@ public sealed class DesktopRecordingSettingsController
     private readonly ISettingsStore _settings;
     private readonly RecordingOutputPathResolver _outputPaths;
     private readonly ILegalBundleOutputMirror _legalBundleMirror;
+    private readonly IAudioEndpointCatalog? _audioEndpoints;
 
     public DesktopRecordingSettingsController(
         ISettingsStore settings,
         RecordingOutputPathResolver outputPaths,
         ILegalBundleOutputMirror legalBundleMirror)
+        : this(settings, outputPaths, legalBundleMirror, audioEndpoints: null)
+    {
+    }
+
+    public DesktopRecordingSettingsController(
+        ISettingsStore settings,
+        RecordingOutputPathResolver outputPaths,
+        ILegalBundleOutputMirror legalBundleMirror,
+        IAudioEndpointCatalog? audioEndpoints)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(outputPaths);
@@ -61,6 +72,7 @@ public sealed class DesktopRecordingSettingsController
         _settings = settings;
         _outputPaths = outputPaths;
         _legalBundleMirror = legalBundleMirror;
+        _audioEndpoints = audioEndpoints;
     }
 
     public static IReadOnlyList<int> SupportedSelfTimerSeconds =>
@@ -89,6 +101,36 @@ public sealed class DesktopRecordingSettingsController
         var settings = await LoadValidatedAsync(cancellationToken)
             .ConfigureAwait(false);
         return Project(settings);
+    }
+
+    public async Task<DesktopAudioEndpointOptions> LoadAudioEndpointOptionsAsync(
+        DesktopRecordingSettingsDraft draft,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        _ = ValidateDraft(draft);
+        if (_audioEndpoints is null)
+        {
+            return new DesktopAudioEndpointOptions(
+                [new AudioEndpointOption(
+                    draft.DesktopEndpointId,
+                    draft.DesktopEndpointId)],
+                [new AudioEndpointOption(
+                    draft.MicrophoneEndpointId,
+                    draft.MicrophoneEndpointId)]);
+        }
+
+        var desktop = await _audioEndpoints
+            .GetActiveAsync(AudioInput.Desktop, cancellationToken)
+            .ConfigureAwait(false);
+        var microphone = await _audioEndpoints
+            .GetActiveAsync(AudioInput.Microphone, cancellationToken)
+            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(desktop);
+        ArgumentNullException.ThrowIfNull(microphone);
+        return new DesktopAudioEndpointOptions(
+            MergeEndpointOptions(draft.DesktopEndpointId, desktop),
+            MergeEndpointOptions(draft.MicrophoneEndpointId, microphone));
     }
 
     public async Task SaveAsync(
@@ -292,5 +334,23 @@ public sealed class DesktopRecordingSettingsController
         {
             throw InvalidChoice(setting);
         }
+    }
+
+    private static IReadOnlyList<AudioEndpointOption> MergeEndpointOptions(
+        string selectedId,
+        IReadOnlyList<AudioEndpointOption> active)
+    {
+        var unique = new Dictionary<string, AudioEndpointOption>(
+            StringComparer.Ordinal);
+        foreach (var option in active)
+        {
+            ArgumentNullException.ThrowIfNull(option);
+            unique.TryAdd(option.Id, option);
+        }
+
+        var selected = unique.Remove(selectedId, out var current)
+            ? current
+            : new AudioEndpointOption(selectedId, selectedId);
+        return [selected, .. unique.Values];
     }
 }

@@ -1,3 +1,4 @@
+using VRRecorder.Application.Audio;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
