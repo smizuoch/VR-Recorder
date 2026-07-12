@@ -93,6 +93,7 @@ make -C tests/VRRecorder.Native.Tests test
 - texture実寸の奇数辺を最大1px正規化し、cropなしのSingleFileFit配置、RGBA channel swap、NV12出力をD3D11 processor向け不変planへ変換するportable計算境界（GPU変換実体は未実装）
 - processorへsource surface／処理planを渡し、出力Adapter LUID／寸法／NV12／native handleをfail-closed検証してencoderへ転送し、processing／encoding failureとAbort順序を分離するadapter（D3D11 processor実体は未実装）
 - 偶数NV12入力、HighからMainへのcapability降格、品質優先VBR、2秒GOP、`width*height*fps*0.14`の8–80 Mbps clampと1.5倍maxrateを整数安全に導出するH.264設定境界
+- AAC-LC、48 kHz、stereo、192 kbpsと既存mixerのFloat32 interleaved source形式を明示し、backend固有sample変換をencoder adapterへ隔離する音声設定境界
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -202,6 +203,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A portable planning boundary that normalizes odd texture edges by at most one pixel and produces immutable no-crop SingleFileFit placement, RGBA channel-swap, and NV12-output instructions for a D3D11 processor (the GPU transformation implementation remains outstanding)
 - An adapter that passes source surfaces/plans to a processor, fail-closed validates output adapter LUID, dimensions, NV12 format, and native handle before encoding, and separates processing/encoding failures and abort order (the D3D11 processor implementation remains outstanding)
 - An H.264 configuration boundary that safely derives even NV12 input, High-to-Main capability fallback, quality VBR, a two-second GOP, the clamped 8–80 Mbps `width*height*fps*0.14` target, and a 1.5x maximum rate
+- An audio configuration boundary that fixes AAC-LC, 48 kHz, stereo, 192 kbps, and the mixer's interleaved Float32 source format while isolating backend-specific sample conversion in encoder adapters
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
