@@ -1,6 +1,7 @@
 #ifndef VRRECORDER_NATIVE_MEDIA_RECORDING_SESSION_HPP
 #define VRRECORDER_NATIVE_MEDIA_RECORDING_SESSION_HPP
 
+#include <atomic>
 #include <cstdint>
 
 #include "media_backend.hpp"
@@ -47,11 +48,11 @@ private:
     MediaStreamPipelinePort &audio_;
     MediaMuxSessionPort &mux_;
     MediaEventSink &events_;
-    bool video_started_ = false;
-    bool audio_started_ = false;
-    bool start_attempted_ = false;
-    bool stop_requested_ = false;
-    bool terminal_ = false;
+    std::atomic_bool video_started_ = false;
+    std::atomic_bool audio_started_ = false;
+    std::atomic_bool start_attempted_ = false;
+    std::atomic_bool stop_requested_ = false;
+    std::atomic_bool terminal_ = false;
 };
 
 }

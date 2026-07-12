@@ -18,36 +18,36 @@ MediaRecordingSession::~MediaRecordingSession()
 
 vrrec_status_t MediaRecordingSession::Start() noexcept
 {
-    if (start_attempted_ || terminal_) {
+    if (start_attempted_.exchange(true) || terminal_.load()) {
         return VRREC_STATUS_INVALID_STATE;
     }
-    start_attempted_ = true;
     const auto video_status = video_.Start();
     if (video_status != VRREC_STATUS_OK) {
         mux_.Abort();
-        terminal_ = true;
+        terminal_.store(true);
         return video_status;
     }
-    video_started_ = true;
+    video_started_.store(true);
     const auto audio_status = audio_.Start();
     if (audio_status != VRREC_STATUS_OK) {
         video_.Abort();
         video_.Join();
         mux_.Abort();
-        video_started_ = false;
-        terminal_ = true;
+        video_started_.store(false);
+        terminal_.store(true);
         return audio_status;
     }
-    audio_started_ = true;
+    audio_started_.store(true);
     return VRREC_STATUS_OK;
 }
 
 vrrec_status_t MediaRecordingSession::RequestStop() noexcept
 {
-    if (!video_started_ || !audio_started_ || terminal_) {
+    if (!video_started_.load() || !audio_started_.load() ||
+        terminal_.load()) {
         return VRREC_STATUS_INVALID_STATE;
     }
-    if (stop_requested_) {
+    if (stop_requested_.load()) {
         return VRREC_STATUS_OK;
     }
     const auto video_status = video_.RequestStop();
@@ -60,20 +60,19 @@ vrrec_status_t MediaRecordingSession::RequestStop() noexcept
         Abort();
         return audio_status;
     }
-    stop_requested_ = true;
+    stop_requested_.store(true);
     return VRREC_STATUS_OK;
 }
 
 void MediaRecordingSession::Abort() noexcept
 {
-    if (terminal_) {
+    if (terminal_.exchange(true)) {
         return;
     }
-    terminal_ = true;
-    if (video_started_) {
+    if (video_started_.load()) {
         video_.Abort();
     }
-    if (audio_started_) {
+    if (audio_started_.load()) {
         audio_.Abort();
     }
     mux_.Abort();
@@ -81,26 +80,42 @@ void MediaRecordingSession::Abort() noexcept
 
 vrrec_status_t MediaRecordingSession::Join() noexcept
 {
-    if (!video_started_ || !audio_started_ || terminal_ || !stop_requested_) {
+    if (!video_started_.load() || !audio_started_.load() ||
+        terminal_.load() || !stop_requested_.load()) {
         return VRREC_STATUS_INVALID_STATE;
     }
     const auto video_status = video_.Join();
+    if (terminal_.load()) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (video_status != VRREC_STATUS_OK) {
         audio_.Abort();
         audio_.Join();
         mux_.Abort();
-        terminal_ = true;
-        events_.Faulted(video_status, "Video pipeline failed while stopping");
+        if (!terminal_.exchange(true)) {
+            events_.Faulted(
+                video_status,
+                "Video pipeline failed while stopping");
+        }
         return video_status;
     }
     const auto audio_status = audio_.Join();
+    if (terminal_.load()) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (audio_status != VRREC_STATUS_OK) {
         mux_.Abort();
-        terminal_ = true;
-        events_.Faulted(audio_status, "Audio pipeline failed while stopping");
+        if (!terminal_.exchange(true)) {
+            events_.Faulted(
+                audio_status,
+                "Audio pipeline failed while stopping");
+        }
         return audio_status;
     }
-    terminal_ = true;
+    auto expected_terminal = false;
+    if (!terminal_.compare_exchange_strong(expected_terminal, true)) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     events_.Stopped(video_.MuxedPacketCount(), audio_.MuxedPacketCount());
     return VRREC_STATUS_OK;
 }
