@@ -68,11 +68,41 @@ public sealed class StartRecordingUseCase
             .ConfigureAwait(false);
     }
 
+    internal Task<StartRecordingResult> ExecuteAsync(
+        string vrChatServiceId,
+        StartRecordingCommand command,
+        IRecordingSessionCompletionSink? completionSink,
+        IRecordingStartPhaseSink? phaseSink,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vrChatServiceId);
+        return ExecuteCoreAsync(
+            vrChatServiceId,
+            command,
+            completionSink,
+            phaseSink,
+            cancellationToken);
+    }
+
     internal Task CaptureVideoSignalBaselineAsync(
         CancellationToken cancellationToken) =>
         _videoSignalGateway.CaptureBaselineAsync(cancellationToken);
 
     internal async Task<StartRecordingResult> ExecuteAsync(
+        StartRecordingCommand command,
+        IRecordingSessionCompletionSink? completionSink,
+        IRecordingStartPhaseSink? phaseSink,
+        CancellationToken cancellationToken) =>
+        await ExecuteCoreAsync(
+                vrChatServiceId: null,
+                command,
+                completionSink,
+                phaseSink,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    private async Task<StartRecordingResult> ExecuteCoreAsync(
+        string? vrChatServiceId,
         StartRecordingCommand command,
         IRecordingSessionCompletionSink? completionSink,
         IRecordingStartPhaseSink? phaseSink,
@@ -83,8 +113,9 @@ public sealed class StartRecordingUseCase
         StableVideoSignal signal;
         try
         {
-            signal = await _videoSignalGateway
-                .WaitForStableSignalAsync(SignalTimeout, cancellationToken)
+            signal = await WaitForStableSignalAsync(
+                    vrChatServiceId,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (TimeoutException)
@@ -182,4 +213,16 @@ public sealed class StartRecordingUseCase
             autoStopCompletion,
             storageMonitoringCompletion);
     }
+
+    private Task<StableVideoSignal> WaitForStableSignalAsync(
+        string? vrChatServiceId,
+        CancellationToken cancellationToken) =>
+        vrChatServiceId is null
+            ? _videoSignalGateway.WaitForStableSignalAsync(
+                SignalTimeout,
+                cancellationToken)
+            : _videoSignalGateway.WaitForStableSignalAsync(
+                vrChatServiceId,
+                SignalTimeout,
+                cancellationToken);
 }

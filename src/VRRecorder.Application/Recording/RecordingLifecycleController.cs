@@ -216,6 +216,7 @@ public sealed class RecordingLifecycleController : IRecordingLifecycleController
             {
                 var recording = await _startRecording
                     .ExecuteAsync(
+                        connected.Candidate.ServiceId,
                         command,
                         completionSink,
                         phaseSink,
