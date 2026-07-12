@@ -32,9 +32,22 @@ public:
         return writes[next++];
     }
 
+    VideoEncoderWrite Finish() noexcept override
+    {
+        ++finish_calls;
+        return {VRREC_STATUS_OK, 0, 0};
+    }
+
+    void Abort() noexcept override
+    {
+        ++abort_calls;
+    }
+
     std::vector<VideoEncoderWrite> writes;
     std::vector<ScheduledVideoFrame> frames;
     std::size_t next = 0;
+    std::size_t finish_calls = 0;
+    std::size_t abort_calls = 0;
 };
 
 void DoesNotCallTheEncoderBeforeTheFirstSourceFrame()

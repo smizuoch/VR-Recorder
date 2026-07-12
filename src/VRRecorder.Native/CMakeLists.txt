@@ -21,6 +21,7 @@ add_library(vrrecorder_native SHARED
     src/video_cfr_scheduler.cpp)
 
 target_sources(vrrecorder_native PRIVATE src/video_encoding_pump.cpp)
+target_sources(vrrecorder_native PRIVATE src/video_encoding_worker.cpp)
 
 if(WIN32)
     target_sources(

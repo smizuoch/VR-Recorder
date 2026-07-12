@@ -20,6 +20,8 @@ public:
 
     virtual VideoEncoderWrite Write(
         const ScheduledVideoFrame &frame) noexcept = 0;
+    virtual VideoEncoderWrite Finish() noexcept = 0;
+    virtual void Abort() noexcept = 0;
 };
 
 enum class VideoEncodingResult {
