@@ -529,6 +529,81 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void FirstRunSetupWindowIsLocalizedAccessibleAndCannotSelfApprove()
+    {
+        var appDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App");
+        var window = LoadRequiredXaml(appDirectory, "FirstRunSetupWindow.xaml");
+        Assert.Equal(
+            "{DynamicResource Setup_Window_AccessibleName}",
+            window.Root?.Attribute(Presentation + "Name")?.Value);
+        Assert.Equal(
+            "{DynamicResource {x:Static SystemColors.WindowBrushKey}}",
+            window.Root?.Attribute("Background")?.Value);
+        Assert.NotNull(window.Descendants(Presentation + "ProgressBar").Single());
+        Assert.NotNull(window.Descendants(Presentation + "TextBlock")
+            .Single(element => element.Attribute("Name")?.Value == "SetupTitleText"));
+        Assert.NotNull(window.Descendants(Presentation + "TextBlock")
+            .Single(element => element.Attribute("Name")?.Value == "SetupBodyText"));
+
+        var code = File.ReadAllText(Path.Combine(
+            appDirectory,
+            "FirstRunSetupWindow.xaml.cs"));
+        Assert.Contains("FirstRunSetupUiController", code);
+        Assert.Contains("TitleResourceKey", code);
+        Assert.Contains("BodyResourceKey", code);
+        Assert.DoesNotContain("CompleteAsync", code);
+
+        string[] stepStems =
+        [
+            "SteamVrDetection",
+            "VrChatOscDetection",
+            "CameraOscEndpoint",
+            "MicrophonePrivacyAndDevice",
+            "EncoderSelfTest",
+            "SteamVrActionBinding",
+            "WristOverlayPlacement",
+            "TestRecordingPlayback",
+            "LegalBundleVerification",
+            "OfflineLegalAccess",
+            "LocalizationAccessibility",
+            "DesignAssetConformance",
+        ];
+        foreach (var resourcePath in new[]
+                 {
+                     "Resources/Strings.en-US.xaml",
+                     "Resources/Strings.ja-JP.xaml",
+                     "Resources/Strings.qps-ploc.xaml",
+                     "Resources/Strings.qps-plocm.xaml",
+                 })
+        {
+            var resources = ReadStringResources(appDirectory, resourcePath);
+            foreach (var key in new[]
+                     {
+                         "Setup_Window_Title",
+                         "Setup_Window_AccessibleName",
+                         "Setup_Progress_AccessibleName",
+                         "Setup_Progress_Format",
+                         "Setup_VerificationPending",
+                         "Setup_Close_Label",
+                         "Setup_Close_AccessibleName",
+                         "Setup_Close_Tooltip",
+                     })
+            {
+                Assert.Contains(key, resources.Keys);
+            }
+
+            foreach (var stem in stepStems)
+            {
+                Assert.Contains($"Setup_Step_{stem}_Title", resources.Keys);
+                Assert.Contains($"Setup_Step_{stem}_Body", resources.Keys);
+            }
+        }
+    }
+
+    [Fact]
     public void DesktopProductionFactoryRecoversStaleCameraLeaseBeforeMediaPreflight()
     {
         var appDirectory = Path.Combine(
