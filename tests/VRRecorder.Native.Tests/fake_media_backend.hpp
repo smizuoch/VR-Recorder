@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "vrrecorder_native.h"
+#include "media_backend.hpp"
 
 namespace vrrecorder::native::testing {
 
@@ -55,6 +56,10 @@ void Fail(std::int32_t status, std::string_view message);
 void EmitAvDrift(
     std::uint64_t video_pts_microseconds,
     std::uint64_t audio_pts_microseconds);
+void EmitAudioBufferHealth(
+    AudioEndpointRole role,
+    AudioBufferHealth health,
+    std::uint64_t frame_position);
 void SetDesktopAudioEndpointAvailable(
     bool available,
     std::uint64_t frame_position);

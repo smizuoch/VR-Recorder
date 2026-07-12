@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "fake_media_backend.hpp"
+#include "media_backend.hpp"
 #include "vrrecorder_native.h"
 
 static_assert(VRREC_ABI_V1 == 1);
@@ -17,6 +18,10 @@ static_assert(VRREC_EVENT_DESKTOP_AUDIO_DEVICE_LOST == 4);
 static_assert(VRREC_EVENT_DESKTOP_AUDIO_DEVICE_RECOVERED == 5);
 static_assert(VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_LOST == 6);
 static_assert(VRREC_EVENT_MICROPHONE_AUDIO_DEVICE_RECOVERED == 7);
+static_assert(VRREC_EVENT_DESKTOP_AUDIO_BUFFER_UNDERRUN == 9);
+static_assert(VRREC_EVENT_DESKTOP_AUDIO_BUFFER_OVERRUN == 10);
+static_assert(VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_UNDERRUN == 11);
+static_assert(VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN == 12);
 static_assert(sizeof(vrrec_session_config_v1) == 176);
 static_assert(offsetof(vrrec_session_config_v1, source_pixel_format) == 160);
 static_assert(offsetof(vrrec_session_config_v1, reserved_v2) == 164);
@@ -643,6 +648,66 @@ bool EmitsPrivacySafeNonterminalAudioDeviceEvents()
     CHECK(vrrec_session_abort_v1(session) == VRREC_STATUS_OK);
     SetDesktopAudioEndpointAvailable(false, 1);
     CHECK(abort_log.events.empty());
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool EmitsPrivacySafeNonterminalAudioBufferHealthEvents()
+{
+    using vrrecorder::native::testing::EmitAudioBufferHealth;
+    using vrrecorder::native::AudioBufferHealth;
+    using vrrecorder::native::AudioEndpointRole;
+
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+
+    EmitAudioBufferHealth(
+        AudioEndpointRole::Desktop,
+        AudioBufferHealth::Underrun,
+        24'000);
+    EmitAudioBufferHealth(
+        AudioEndpointRole::Desktop,
+        AudioBufferHealth::Overrun,
+        24'480);
+    EmitAudioBufferHealth(
+        AudioEndpointRole::Microphone,
+        AudioBufferHealth::Underrun,
+        24'960);
+    EmitAudioBufferHealth(
+        AudioEndpointRole::Microphone,
+        AudioBufferHealth::Overrun,
+        25'440);
+
+    const vrrec_event_kind_t expected_kinds[] = {
+        VRREC_EVENT_DESKTOP_AUDIO_BUFFER_UNDERRUN,
+        VRREC_EVENT_DESKTOP_AUDIO_BUFFER_OVERRUN,
+        VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_UNDERRUN,
+        VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN,
+    };
+    CHECK(log.events.size() == 5);
+    for (std::size_t index = 0; index < 4; ++index) {
+        const auto &event = log.events[index + 1];
+        CHECK(event.kind == expected_kinds[index]);
+        CHECK(event.status == VRREC_STATUS_OK);
+        CHECK(event.sequence == index + 2);
+        CHECK(event.video_packet_count == 0);
+        CHECK(event.audio_packet_count == 24'000 + index * 480);
+        CHECK(event.message.empty());
+    }
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    EmitAudioBufferHealth(
+        AudioEndpointRole::Desktop,
+        AudioBufferHealth::Underrun,
+        30'000);
+    CHECK(log.events.size() == 5);
+    vrrecorder::native::testing::CompleteTrailerFlushClose(90, 142);
     vrrec_session_destroy_v1(session);
     return true;
 }
@@ -1803,6 +1868,7 @@ int main()
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
+        !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||
