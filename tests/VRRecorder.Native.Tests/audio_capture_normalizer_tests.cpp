@@ -315,6 +315,47 @@ void ConvertsPackedPcm24WithSignExtension()
     CHECK(NearlyEqual(normalized.interleaved_samples[5], positive));
 }
 
+void ConvertsPcm24StoredInA32BitContainer()
+{
+    const std::vector<std::int32_t> mono {
+        std::numeric_limits<std::int32_t>::min(),
+        0,
+        static_cast<std::int32_t>(0x7fffff00),
+    };
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::PcmSignedInteger,
+        32,
+        24,
+        4,
+        0x0000'0004,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(7'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  0,
+                  7'000'000,
+                  mono.size(),
+                  std::as_bytes(std::span<const std::int32_t>(mono)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(NearlyEqual(normalized.interleaved_samples[0], -1.0F));
+    CHECK(NearlyEqual(normalized.interleaved_samples[1], -1.0F));
+    CHECK(NearlyEqual(normalized.interleaved_samples[2], 0.0F));
+    CHECK(NearlyEqual(normalized.interleaved_samples[3], 0.0F));
+    const auto positive = 8388607.0F / 8388608.0F;
+    CHECK(NearlyEqual(normalized.interleaved_samples[4], positive));
+    CHECK(NearlyEqual(normalized.interleaved_samples[5], positive));
+}
+
 }
 
 int main()
@@ -325,5 +366,6 @@ int main()
     RetainsRationalPhaseWhenTheSecondPacketTimestampIsInvalid();
     Downmixes51FloatBySpeakerMaskOrder();
     ConvertsPackedPcm24WithSignExtension();
+    ConvertsPcm24StoredInA32BitContainer();
     return 0;
 }
