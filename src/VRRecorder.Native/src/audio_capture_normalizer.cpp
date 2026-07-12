@@ -265,7 +265,9 @@ bool StereoCaptureNormalizer48k::IsFormatSupported(
          format.container_bits == 32 && format.valid_bits == 32) ||
         (format.encoding == CaptureSampleEncoding::PcmSignedInteger &&
          ((format.container_bits == 16 && format.valid_bits == 16) ||
-          (format.container_bits == 24 && format.valid_bits == 24)));
+          (format.container_bits == 24 && format.valid_bits == 24) ||
+          (format.container_bits == 32 &&
+           (format.valid_bits == 24 || format.valid_bits == 32))));
     return encoding_supported && format.container_bits % 8U == 0 &&
            format.block_align == bytes_per_sample * format.channel_count;
 }
@@ -372,6 +374,21 @@ bool StereoCaptureNormalizer48k::TryDecodeSample(
         }
 
         sample = static_cast<float>(pcm) / 8388608.0F;
+        return true;
+    }
+
+    if (format.container_bits == 32 &&
+        (format.valid_bits == 24 || format.valid_bits == 32)) {
+        std::int32_t pcm = 0;
+        std::memcpy(&pcm, bytes, sizeof(pcm));
+        const auto padding_bits =
+            static_cast<int>(format.container_bits - format.valid_bits);
+        const auto padding_scale = std::int32_t {1} << padding_bits;
+        const auto valid_sample = pcm / padding_scale;
+        const auto full_scale = std::ldexp(
+            1.0F,
+            static_cast<int>(format.valid_bits) - 1);
+        sample = static_cast<float>(valid_sample) / full_scale;
         return true;
     }
 
