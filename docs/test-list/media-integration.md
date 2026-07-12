@@ -24,6 +24,8 @@
 - [x] mux failure時はpacket統計をcommitせずvideo encoderとmuxerをともにAbortする
 - [x] AAC encoderの0 packet bufferingと実packet batchを分離し、audio packetだけを共有mux timelineへ投入する
 - [x] audio mux failureをencoder failureと分離し、未commit統計を除外してcapture／encoder／muxerを停止する
+- [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux fragment／trailer／file flushを実行する
+- [x] flush済みstreamの追加packet／重複完了を拒否し、片側failure時はtrailerなしで共有muxをAbortする
 
 ## English
 
@@ -49,3 +51,5 @@
 - [x] On mux failure, commit no packet statistics and abort both the video encoder and muxer
 - [x] Distinguish zero-packet AAC buffering from real packet batches and submit only audio packets to the shared mux timeline
 - [x] Separate audio mux failures from encoder failures, exclude uncommitted statistics, and stop capture, encoder, and muxer
+- [x] Wait at a barrier for successful video/audio encoder flushes and run mux fragment/trailer/file flush only after the second completion
+- [x] Reject packets or duplicate completion from a flushed stream and abort the shared mux without a trailer when either encoder fails
