@@ -33,6 +33,7 @@
 - [x] A/V monitorのvideo／audio PTSとabsolute driftをnative MediaEventへ改変せず転送する
 - [x] muxer、A/V monitor、MediaEvent adapter、dual-stream finalizationを安全な所有順序で合成し、packet投入からdrift診断と両encoder完了後のfinalizeまでを一つのpipeline境界で接続する
 - [x] 映像pipelineを先に停止してから音声pipelineを終了し、両方のjoin成功時だけ最終packet数を通知し、開始途中／停止中の片側failureではpeerと共有muxをAbortする
+- [x] 設定済みpoll timeoutと音声endpoint／QPC／frame windowを既存pipelineへ渡し、video／audio終了結果とmux packet統計を共通recording session portへ変換する
 
 ## English
 
@@ -67,3 +68,4 @@
 - [x] Forward A/V monitor video/audio PTS and absolute drift unchanged into native media events
 - [x] Compose the muxer, A/V monitor, MediaEvent adapter, and dual-stream finalization in safe ownership order, connecting packet submission through drift diagnostics and post-encoder finalization at one pipeline boundary
 - [x] Stop the video pipeline before ending audio, publish final packet counts only after both joins succeed, and abort the peer plus shared mux on partial-start or stop-time failure
+- [x] Pass configured poll timeout and audio endpoint/QPC/frame-window values into existing pipelines, mapping video/audio completion results and muxed-packet statistics into the common recording-session port
