@@ -50,6 +50,18 @@
       "sourcePaths": [
         "src/VRRecorder.Infrastructure.Storage/ShellWindowsKnownFolderPathApi.cs"
       ]
+    },
+    {
+      "consumer": "VRRecorder.Infrastructure.Media",
+      "fileName": "ole32.dll",
+      "mechanism": "LibraryImport",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "integrity": "WindowsSystem",
+      "componentId": null,
+      "sourcePaths": [
+        "src/VRRecorder.Infrastructure.Media/ShellWindowsAudioEndpointApi.cs"
+      ]
     }
   ]
 }
