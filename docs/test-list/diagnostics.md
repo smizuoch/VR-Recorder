@@ -5,6 +5,7 @@
 - [x] 診断bundleはユーザーの明示export操作後だけ生成する
 - [x] JSONLは既知eventと許可fieldだけを再投影し、未知event／fieldを除外する
 - [x] bundleへ映像、音声、認証情報、file path、ユーザー名、world名、OSC avatar値を含めない
+- [x] app／OS／GPU vendor／driver metadataは列挙値と数値versionだけをbundleへ許可し、未知fieldと自由文字列を除外する
 - [x] 入力logのsymlink／reparse pointを拒否し、失敗時にpartial ZIPを残さない
 - [x] ZIP entry名、順序、時刻、UTF-8 JSON Linesを決定論的に生成する
 - [x] desktop UIからlocalizedかつaccessibleな明示操作で保存先を選択する
@@ -23,6 +24,7 @@
 - [x] Generate a diagnostic bundle only after an explicit user export action
 - [x] Reproject only known JSONL events and approved fields, excluding unknown events and fields
 - [x] Exclude video, audio, credentials, file paths, user names, world names, and OSC avatar values
+- [x] Admit app/OS/GPU-vendor/driver metadata to bundles only as enumerated values and numeric versions, excluding unknown fields and free-form strings
 - [x] Reject linked/reparse-point log inputs and leave no partial ZIP after failure
 - [x] Generate deterministic ZIP entry names, order, timestamps, and UTF-8 JSON Lines
 - [x] Choose the destination through an explicit localized and accessible desktop action
