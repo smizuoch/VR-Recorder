@@ -14,6 +14,7 @@ public sealed class NativeRecordingEngine
     private readonly IMonotonicClock _clock;
     private readonly IAudioSessionEventSink _audioEvents;
     private readonly IRecordingMediaEventSink _mediaEvents;
+    private readonly IRecordingEnvironmentSource? _environmentSource;
     private readonly INativeRecordingRuntimeFaultSink _runtimeFaults;
     private readonly ConcurrentDictionary<string, ActiveSession> _sessions =
         new(StringComparer.Ordinal);
@@ -51,6 +52,23 @@ public sealed class NativeRecordingEngine
         INativeRecordingRuntimeFaultSink runtimeFaults,
         IAudioSessionEventSink audioEvents,
         IRecordingMediaEventSink mediaEvents)
+        : this(
+            backend,
+            clock,
+            runtimeFaults,
+            audioEvents,
+            mediaEvents,
+            environmentSource: null)
+    {
+    }
+
+    public NativeRecordingEngine(
+        INativeRecordingBackend backend,
+        IMonotonicClock clock,
+        INativeRecordingRuntimeFaultSink runtimeFaults,
+        IAudioSessionEventSink audioEvents,
+        IRecordingMediaEventSink mediaEvents,
+        IRecordingEnvironmentSource? environmentSource)
     {
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(clock);
@@ -62,6 +80,7 @@ public sealed class NativeRecordingEngine
         _runtimeFaults = runtimeFaults;
         _audioEvents = audioEvents;
         _mediaEvents = mediaEvents;
+        _environmentSource = environmentSource;
     }
 
     public async Task<RecordingHandle> StartAsync(
@@ -262,6 +281,11 @@ public sealed class NativeRecordingEngine
                 plan.FrameRate.Value,
                 plan.Encoder,
                 plan.Signal.GpuVendor));
+            if (_environmentSource is not null)
+            {
+                _mediaEvents.Publish(
+                    _environmentSource.Capture(plan.Signal));
+            }
         }
         catch (Exception)
         {

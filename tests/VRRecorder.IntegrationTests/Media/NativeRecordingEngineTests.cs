@@ -3,6 +3,7 @@ using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
 using VRRecorder.Domain.Audio;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;

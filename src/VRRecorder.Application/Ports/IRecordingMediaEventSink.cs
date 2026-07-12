@@ -11,4 +11,8 @@ public interface IRecordingMediaEventSink
     void Publish(RecordingAvDriftEvent drift)
     {
     }
+
+    void Publish(RecordingEnvironmentSnapshot environment)
+    {
+    }
 }
