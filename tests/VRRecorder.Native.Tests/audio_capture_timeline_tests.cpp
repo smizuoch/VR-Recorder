@@ -114,11 +114,44 @@ void DeviceLossWakesAReaderAndCompletesWithSilence()
     }
 }
 
+void AbortWakesAReaderWithoutAdvancingTheTimeline()
+{
+    using namespace std::chrono_literals;
+
+    vrrecorder::native::StereoCaptureTimeline timeline(960);
+    std::vector<float> output(480U * 2U, -1.0F);
+    vrrecorder::native::AudioTimelineRead read {};
+    std::promise<void> reader_started;
+    auto reader_started_future = reader_started.get_future();
+    auto waiting = std::async(std::launch::async, [&] {
+        reader_started.set_value();
+        return timeline.WaitRead(480, output, read);
+    });
+    reader_started_future.wait();
+
+    CHECK(waiting.wait_for(20ms) == std::future_status::timeout);
+    timeline.Abort();
+    timeline.Abort();
+    CHECK(waiting.wait_for(1s) == std::future_status::ready);
+    CHECK(waiting.get() ==
+          vrrecorder::native::AudioTimelineResult::Aborted);
+    CHECK(timeline.FramePosition() == 0);
+    CHECK(timeline.BufferedFrames() == 0);
+    for (const auto sample : output) {
+        CHECK(NearlyEqual(sample, -1.0F));
+    }
+
+    CHECK(timeline.WaitRead(480, output, read) ==
+          vrrecorder::native::AudioTimelineResult::Aborted);
+    CHECK(timeline.FramePosition() == 0);
+}
+
 }
 
 int main()
 {
     JoinsArbitraryPacketBoundariesOnOne48KhzTimeline();
     DeviceLossWakesAReaderAndCompletesWithSilence();
+    AbortWakesAReaderWithoutAdvancingTheTimeline();
     return 0;
 }
