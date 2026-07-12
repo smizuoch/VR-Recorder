@@ -203,6 +203,64 @@ void AppliesLossAtTheExactFrameAndAbortsIdempotently()
     CHECK(timeline.FramePosition() == 4);
 }
 
+void RetainsAFlaggedPacketAfterItsExplicitGap()
+{
+    FakeAudioCaptureSource source;
+    source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0,
+        100,
+        1'000'000,
+        2,
+        {0.25F, 0.25F, 0.25F, 0.25F},
+        false,
+        false,
+        0,
+    });
+    source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        4,
+        0,
+        1'010'000,
+        2,
+        {0.75F, 0.75F, 0.75F, 0.75F},
+        false,
+        true,
+        0,
+    });
+    source.reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0,
+        0,
+        0,
+        0,
+        {},
+        false,
+        false,
+        6,
+    });
+    StereoCaptureTimeline timeline(12);
+    AudioCapturePump pump(source, timeline);
+
+    CHECK(pump.Start(Config()) == VRREC_STATUS_OK);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::PacketAccepted);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::PacketAccepted);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::DeviceLost);
+
+    std::vector<float> output(12, -1.0F);
+    AudioTimelineRead read {};
+    CHECK(timeline.WaitRead(6, output, read) == AudioTimelineResult::Ready);
+    CHECK(read.underrun);
+    CHECK(read.input_available);
+    for (std::size_t frame = 0; frame < 6; ++frame) {
+        const auto expected = frame < 2
+            ? 0.25F
+            : (frame < 4 ? 0.0F : 0.75F);
+        CHECK(output[frame * 2U] == expected);
+        CHECK(output[frame * 2U + 1U] == expected);
+    }
+}
+
 }
 
 int main()
@@ -210,5 +268,6 @@ int main()
     StartsAndForwardsAClockedStereoPacket();
     ExpandsSilentPacketsUsingTheirExplicitFrameCount();
     AppliesLossAtTheExactFrameAndAbortsIdempotently();
+    RetainsAFlaggedPacketAfterItsExplicitGap();
     return 0;
 }
