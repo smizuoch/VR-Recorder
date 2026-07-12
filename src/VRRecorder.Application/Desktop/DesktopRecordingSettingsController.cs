@@ -154,6 +154,14 @@ public sealed class DesktopRecordingSettingsController
                     original.AudioRouting,
                     edited.AudioRouting,
                     current.Audio.Routing),
+                DesktopEndpointId = Merge(
+                    original.DesktopEndpointId,
+                    edited.DesktopEndpointId,
+                    current.Audio.DesktopEndpointId),
+                MicrophoneEndpointId = Merge(
+                    original.MicrophoneEndpointId,
+                    edited.MicrophoneEndpointId,
+                    current.Audio.MicrophoneEndpointId),
                 DesktopGainDb = Merge(
                     original.DesktopGainDb,
                     edited.DesktopGainDb,
@@ -198,7 +206,9 @@ public sealed class DesktopRecordingSettingsController
             settings.Video.QualityPreset,
             settings.Audio.Routing,
             settings.Audio.DesktopGainDb,
-            settings.Audio.MicrophoneGainDb);
+            settings.Audio.MicrophoneGainDb,
+            settings.Audio.DesktopEndpointId,
+            settings.Audio.MicrophoneEndpointId);
 
     public OutputPath ResolveOutputPath(string configuredPath) =>
         _outputPaths.Resolve(configuredPath);
@@ -247,6 +257,11 @@ public sealed class DesktopRecordingSettingsController
             throw InvalidChoice("audio routing");
         }
 
+        ValidateEndpointId(draft.DesktopEndpointId, "desktop endpoint");
+        ValidateEndpointId(
+            draft.MicrophoneEndpointId,
+            "microphone endpoint");
+
         ValidateGain(draft.DesktopGainDb, "desktop gain");
         ValidateGain(draft.MicrophoneGainDb, "microphone gain");
 
@@ -266,6 +281,14 @@ public sealed class DesktopRecordingSettingsController
         if (!double.IsFinite(value) ||
             value is < RecordingMediaConfiguration.MinimumInputGainDb or
                 > RecordingMediaConfiguration.MaximumInputGainDb)
+        {
+            throw InvalidChoice(setting);
+        }
+    }
+
+    private static void ValidateEndpointId(string value, string setting)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl))
         {
             throw InvalidChoice(setting);
         }
