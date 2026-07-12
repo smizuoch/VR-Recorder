@@ -9,7 +9,7 @@ LDFLAGS := --coverage -pthread
 
 .PHONY: all clean test export-check cmake-contract-sync managed-fixture
 
-all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/c_header_smoke.o
+all: $(BUILD_DIR)/abi_contract_tests $(BUILD_DIR)/audio_mixer_tests $(BUILD_DIR)/audio_timeline_buffer_tests $(BUILD_DIR)/audio_capture_timeline_tests $(BUILD_DIR)/audio_capture_pump_tests $(BUILD_DIR)/audio_capture_normalizer_tests $(BUILD_DIR)/c_header_smoke.o
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -30,6 +30,9 @@ $(BUILD_DIR)/audio_capture_timeline_tests: audio_capture_timeline_tests.cpp $(NA
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/audio_capture_pump_tests: audio_capture_pump_tests.cpp $(NATIVE_ROOT)/src/audio_capture_pump.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/audio_capture_normalizer_tests: audio_capture_normalizer_tests.cpp $(NATIVE_ROOT)/src/audio_capture_normalizer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/libvrrecorder_native_test.so: fake_media_backend.cpp fake_control_exports.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
@@ -55,6 +58,7 @@ test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/audio_timeline_buffer_tests
 	$(BUILD_DIR)/audio_capture_timeline_tests
 	$(BUILD_DIR)/audio_capture_pump_tests
+	$(BUILD_DIR)/audio_capture_normalizer_tests
 
 clean:
 	rm -rf $(BUILD_DIR)

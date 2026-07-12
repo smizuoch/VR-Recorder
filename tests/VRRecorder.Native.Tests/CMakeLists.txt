@@ -112,6 +112,23 @@ set_target_properties(
         CXX_EXTENSIONS OFF)
 vrrecorder_enable_strict_warnings(vrrecorder_native_audio_capture_pump)
 
+add_executable(
+    vrrecorder_native_audio_capture_normalizer
+    audio_capture_normalizer_tests.cpp
+    "${native_source_root}/src/audio_capture_normalizer.cpp")
+target_compile_features(
+    vrrecorder_native_audio_capture_normalizer PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_capture_normalizer
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_audio_capture_normalizer
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(vrrecorder_native_audio_capture_normalizer)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -124,6 +141,8 @@ add_test(NAME vrrecorder_native_audio_capture_timeline
     COMMAND vrrecorder_native_audio_capture_timeline)
 add_test(NAME vrrecorder_native_audio_capture_pump
     COMMAND vrrecorder_native_audio_capture_pump)
+add_test(NAME vrrecorder_native_audio_capture_normalizer
+    COMMAND vrrecorder_native_audio_capture_normalizer)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
