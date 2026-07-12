@@ -198,6 +198,22 @@ void SenderLossAbortsEncodingAndRaisesMediaFault()
     CHECK(events.fault_message != nullptr);
 }
 
+void EncoderFailureAbortsCapture()
+{
+    std::vector<int> order;
+    FakeCaptureWorker capture(order);
+    FakeEncodingWorker encoding(order);
+    encoding.join_result = VideoEncodingWorkerResult::EncoderFailed;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    CHECK(session.Start(std::chrono::milliseconds(100)) == VRREC_STATUS_OK);
+    CHECK(session.Join() == VideoPipelineResult::EncoderFailed);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
+    CHECK(encoding.join_calls == 1);
+}
+
 }
 
 int main()
@@ -205,5 +221,6 @@ int main()
     StartsCaptureBeforeEncodingAndStopsInSafeOrder();
     RollsBackCaptureWhenEncodingCannotStart();
     SenderLossAbortsEncodingAndRaisesMediaFault();
+    EncoderFailureAbortsCapture();
     return 0;
 }
