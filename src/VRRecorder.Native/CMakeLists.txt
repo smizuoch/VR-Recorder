@@ -14,6 +14,7 @@ add_library(vrrecorder_native SHARED
     src/audio_mixer.cpp
     src/audio_pipeline_session.cpp
     src/spout_capture_pump.cpp
+    src/spout_capture_worker.cpp
     src/audio_timeline_buffer.cpp
     src/unavailable_encoder_probe_backend.cpp
     src/unavailable_media_backend.cpp

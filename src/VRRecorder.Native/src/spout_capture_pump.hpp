@@ -19,7 +19,16 @@ enum class SpoutCaptureResult {
     Failed,
 };
 
-class SpoutCapturePump final {
+class SpoutCaptureSource {
+public:
+    virtual ~SpoutCaptureSource() = default;
+
+    virtual SpoutCaptureResult PollOne(
+        std::chrono::milliseconds timeout) noexcept = 0;
+    virtual void Abort() noexcept = 0;
+};
+
+class SpoutCapturePump final : public SpoutCaptureSource {
 public:
     SpoutCapturePump(
         SpoutSourceBackend &backend,
@@ -27,8 +36,8 @@ public:
         std::string selected_sender_id);
 
     SpoutCaptureResult PollOne(
-        std::chrono::milliseconds timeout) noexcept;
-    void Abort() noexcept;
+        std::chrono::milliseconds timeout) noexcept override;
+    void Abort() noexcept override;
 
 private:
     static bool IsFrameValid(const SpoutFrame &frame) noexcept;
