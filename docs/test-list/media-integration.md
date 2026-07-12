@@ -31,6 +31,7 @@
 - [x] 80 ms超過eventをABIサイズ不変でnative→P/Invoke→typed callback→structured診断へ伝播し、pending Stopを完了しない
 - [x] encoder probeのDispose開始を同期確定し、in-flight native結果を抑止してlibrary解放まで非同期に待つ
 - [x] A/V monitorのvideo／audio PTSとabsolute driftをnative MediaEventへ改変せず転送する
+- [x] muxer、A/V monitor、MediaEvent adapter、dual-stream finalizationを安全な所有順序で合成し、packet投入からdrift診断と両encoder完了後のfinalizeまでを一つのpipeline境界で接続する
 
 ## English
 
@@ -63,3 +64,4 @@
 - [x] Propagate >80 ms events through native→P/Invoke→typed callback→structured diagnostics without ABI-size changes or completing a pending Stop
 - [x] Mark encoder-probe disposal synchronously, suppress in-flight native results, and asynchronously await library release
 - [x] Forward A/V monitor video/audio PTS and absolute drift unchanged into native media events
+- [x] Compose the muxer, A/V monitor, MediaEvent adapter, and dual-stream finalization in safe ownership order, connecting packet submission through drift diagnostics and post-encoder finalization at one pipeline boundary
