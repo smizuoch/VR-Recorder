@@ -144,7 +144,7 @@ public partial class MainWindow : Window
                         CancellationToken.None);
                     if (setup.RequiresSetup)
                     {
-                        ApplyStartupResult(startup, activation);
+                        ApplySetupRequiredState(startup, activation);
                         return;
                     }
                 }
@@ -199,6 +199,14 @@ public partial class MainWindow : Window
         }
 
         ApplyStartupResult(startup, activation);
+    }
+
+    private void ApplySetupRequiredState(
+        RecorderStartupResult startup,
+        DesktopRecordingHostActivation activation)
+    {
+        ApplyStartupResult(startup, activation);
+        RecordingToggleButton.IsEnabled = false;
     }
 
     private void ApplyRightsPersistenceError()
