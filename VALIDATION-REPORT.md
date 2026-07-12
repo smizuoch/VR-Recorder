@@ -23,6 +23,9 @@ dotnet test tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj
 dotnet build src/VRRecorder.App/VRRecorder.App.csproj --no-restore
 dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minimal
 make -C tests/VRRecorder.Native.Tests test
+cmake -S . -B build/cmake-validation
+cmake --build build/cmake-validation --parallel
+ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
 - managed: 858件成功、失敗0、skip 0
@@ -34,9 +37,10 @@ make -C tests/VRRecorder.Native.Tests test
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
+- CMake 3.28.3 configure／全target build／CTest: 38/38成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
 
-現在の環境には`cmake`がないため、2026-07-12の変更に対してCMake/CTestは再実行していません。2026-07-10のCMake/CTest 4/4は新しいaudio timeline／capture／mix target追加前の結果であり、現在のCMake構成の成功証拠としては扱いません。Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
+CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
 ### 直前checkpointの結合テスト単独coverage
 
@@ -145,6 +149,9 @@ dotnet test tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj
 dotnet build src/VRRecorder.App/VRRecorder.App.csproj --no-restore
 dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minimal
 make -C tests/VRRecorder.Native.Tests test
+cmake -S . -B build/cmake-validation
+cmake --build build/cmake-validation --parallel
+ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
 - managed: 858 passed, 0 failed, 0 skipped
@@ -156,9 +163,10 @@ make -C tests/VRRecorder.Native.Tests test
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
+- CMake 3.28.3 configure/full-target build/CTest: 38/38 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
 
-`cmake` is unavailable in the current environment, so CMake/CTest was not rerun for the 2026-07-12 changes. The 2026-07-10 CMake/CTest 4/4 result predates the new audio timeline/capture/mix targets and is not treated as evidence for the current CMake graph. A Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
+CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
 ### Integration-test-only coverage from the preceding checkpoint
 
