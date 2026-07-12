@@ -1,6 +1,7 @@
 add_library(vrrecorder_native SHARED
     src/abi.cpp
     src/audio_mixer.cpp
+    src/audio_timeline_buffer.cpp
     src/unavailable_encoder_probe_backend.cpp
     src/unavailable_media_backend.cpp
     src/unavailable_spout_source_backend.cpp
