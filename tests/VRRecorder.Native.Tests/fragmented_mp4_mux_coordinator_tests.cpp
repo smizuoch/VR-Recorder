@@ -116,6 +116,17 @@ void EndsAFragmentBeforeTheNextKeyFrameAtTwoSeconds()
     CHECK(muxer.fragment_calls == 1);
 }
 
+void ForcesAFragmentBoundaryAtTheTwoSecondLimit()
+{
+    RecordingMuxer muxer;
+    FragmentedMp4MuxCoordinator coordinator(muxer);
+
+    CHECK(coordinator.Submit(Video(0, true)) == Mp4MuxResult::Written);
+    CHECK(coordinator.Submit(Audio(2'000'000)) == Mp4MuxResult::Written);
+    CHECK(muxer.order == std::vector<int>({1, 3, 2}));
+    CHECK(muxer.fragment_calls == 1);
+}
+
 void RejectsNonMonotonicDtsPerStream()
 {
     RecordingMuxer muxer;
@@ -153,6 +164,7 @@ int main()
 {
     SerializesAudioAndVideoPacketsWithoutChangingTimestamps();
     EndsAFragmentBeforeTheNextKeyFrameAtTwoSeconds();
+    ForcesAFragmentBoundaryAtTheTwoSecondLimit();
     RejectsNonMonotonicDtsPerStream();
     FinalizesFragmentTrailerAndFileInOrder();
     AbortNeverWritesATrailerAndIsIdempotent();
