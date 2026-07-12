@@ -263,6 +263,55 @@ public sealed class DesktopRecordingSettingsControllerTests
         Assert.Equal([UiLocale.Japanese], locales.Applied);
     }
 
+    [Fact]
+    public async Task ExplicitVrAndOscChangesPreserveConcurrentNestedValues()
+    {
+        var events = new List<string>();
+        var initial = VRRecorderSettings.CreateDefault();
+        var store = new TrackingSettingsStore(initial, events);
+        var controller = new DesktopRecordingSettingsController(
+            store,
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(AbsolutePath("downloads"))),
+            new TrackingLegalBundleOutputMirror(events));
+        var original = await controller.LoadAsync(CancellationToken.None);
+        Assert.Equal(VrHand.Left, original.VrHand);
+        Assert.True(original.OscAutoDiscover);
+        var concurrentTransform = new OverlayTransform(
+            Position: [7, 8, 9],
+            RotationEuler: [10, 11, 12]);
+        store.Replace(initial with
+        {
+            Vr = initial.Vr with { Transform = concurrentTransform },
+            Osc = initial.Osc with
+            {
+                FallbackSendPort = 9200,
+                FallbackReceivePort = 9201,
+            },
+        });
+
+        await controller.SaveAsync(
+            original,
+            original with
+            {
+                VrHand = VrHand.Right,
+                OverlayPlacement = OverlayPlacementMode.WorldPin,
+                OscAutoDiscover = false,
+                OscFallbackHost = "::1",
+            },
+            CancellationToken.None);
+
+        Assert.Equal(VrHand.Right, store.Current.Vr.Hand);
+        Assert.Equal(
+            OverlayPlacementMode.WorldPin,
+            store.Current.Vr.PlacementMode);
+        Assert.Same(concurrentTransform, store.Current.Vr.Transform);
+        Assert.False(store.Current.Osc.AutoDiscover);
+        Assert.Equal("::1", store.Current.Osc.FallbackHost);
+        Assert.Equal(9200, store.Current.Osc.FallbackSendPort);
+        Assert.Equal(9201, store.Current.Osc.FallbackReceivePort);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-settings-controller-tests",

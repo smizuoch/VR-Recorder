@@ -17,4 +17,10 @@ public sealed record DesktopRecordingSettingsDraft(
     double MicrophoneGainDb,
     string DesktopEndpointId = "default-render",
     string MicrophoneEndpointId = "default-capture",
-    UiLocale UiLocale = UiLocale.System);
+    UiLocale UiLocale = UiLocale.System,
+    VrHand VrHand = VrHand.Left,
+    OverlayPlacementMode OverlayPlacement = OverlayPlacementMode.WristDock,
+    bool OscAutoDiscover = true,
+    string OscFallbackHost = "127.0.0.1",
+    int OscFallbackSendPort = 9000,
+    int OscFallbackReceivePort = 9001);
