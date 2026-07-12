@@ -1,9 +1,11 @@
 #include "video_encoding_pump.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -18,6 +20,43 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+
+class ScriptedVideoSurface final : public VideoSurface {
+public:
+    VideoSurfaceDescriptor Descriptor() const noexcept override
+    {
+        return {
+            42,
+            1'920,
+            1'080,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        };
+    }
+
+    void *NativeHandle() const noexcept override
+    {
+        return reinterpret_cast<void *>(1);
+    }
+
+    VideoSurfaceAcquireResult AcquireForRead(
+        std::chrono::milliseconds timeout) noexcept override
+    {
+        ++acquire_calls;
+        last_timeout = timeout;
+        return acquire_result;
+    }
+
+    void ReleaseFromRead() noexcept override
+    {
+        ++release_calls;
+    }
+
+    VideoSurfaceAcquireResult acquire_result =
+        VideoSurfaceAcquireResult::Acquired;
+    std::chrono::milliseconds last_timeout {0};
+    std::size_t acquire_calls = 0;
+    std::size_t release_calls = 0;
+};
 
 class ScriptedVideoEncoderSink final : public VideoEncoderSink {
 public:
@@ -131,6 +170,61 @@ void EncoderFailureDoesNotCommitPacketOrLatencyStatistics()
     CHECK(statistics.maximum_encode_latency_microseconds == 0);
 }
 
+void AcquiresAndReleasesTheSharedSurfaceAroundEncoderWrite()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedVideoEncoderSink sink;
+    sink.writes.push_back({VRREC_STATUS_OK, 1, 100});
+    VideoEncodingPump pump(
+        scheduler,
+        sink,
+        std::chrono::milliseconds(7));
+    const auto surface = std::make_shared<ScriptedVideoSurface>();
+    CHECK(scheduler.Push({40, 4'000'000, surface}) == VRREC_STATUS_OK);
+
+    VideoEncodingRead read {};
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::Submitted);
+    CHECK(surface->acquire_calls == 1);
+    CHECK(surface->last_timeout == std::chrono::milliseconds(7));
+    CHECK(surface->release_calls == 1);
+    CHECK(sink.frames.size() == 1);
+    CHECK(sink.frames.front().surface == surface);
+}
+
+void KeepsSurfaceTimeoutSeparateAndDoesNotCallTheEncoder()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedVideoEncoderSink sink;
+    VideoEncodingPump pump(
+        scheduler,
+        sink,
+        std::chrono::milliseconds(3));
+    const auto surface = std::make_shared<ScriptedVideoSurface>();
+    surface->acquire_result = VideoSurfaceAcquireResult::Timeout;
+    CHECK(scheduler.Push({50, 5'000'000, surface}) == VRREC_STATUS_OK);
+
+    VideoEncodingRead read {};
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::SurfaceTimeout);
+    CHECK(surface->acquire_calls == 1);
+    CHECK(surface->release_calls == 0);
+    CHECK(sink.frames.empty());
+}
+
+void ReleasesTheSurfaceWhenTheEncoderFails()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedVideoEncoderSink sink;
+    sink.writes.push_back({VRREC_STATUS_INTERNAL_ERROR, 0, 0});
+    VideoEncodingPump pump(scheduler, sink);
+    const auto surface = std::make_shared<ScriptedVideoSurface>();
+    CHECK(scheduler.Push({60, 6'000'000, surface}) == VRREC_STATUS_OK);
+
+    VideoEncodingRead read {};
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::EncoderFailed);
+    CHECK(surface->acquire_calls == 1);
+    CHECK(surface->release_calls == 1);
+}
+
 }
 
 int main()
@@ -139,5 +233,8 @@ int main()
     DetectsTheFirstMuxedPacketAfterEncoderBuffering();
     CountsLaterPacketsWithoutRepeatingTheFirstPacketEvent();
     EncoderFailureDoesNotCommitPacketOrLatencyStatistics();
+    AcquiresAndReleasesTheSharedSurfaceAroundEncoderWrite();
+    KeepsSurfaceTimeoutSeparateAndDoesNotCallTheEncoder();
+    ReleasesTheSurfaceWhenTheEncoderFails();
     return 0;
 }
