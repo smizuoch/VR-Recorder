@@ -25,7 +25,7 @@
 - [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
-- [ ] native branch／line coverageのrelease thresholdを適用する
+- [x] native branch／line coverageのrelease thresholdを適用する（現在値は未達のためrelease gateはfail）
 
 ## English
 
@@ -52,4 +52,4 @@
 - [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends
-- [ ] Enforce the native branch and line coverage release thresholds
+- [x] Enforce the native branch and line coverage release thresholds (current measurements remain below threshold, so the release gate fails)

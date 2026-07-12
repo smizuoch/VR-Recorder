@@ -23,15 +23,16 @@ dotnet test tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj
 dotnet build src/VRRecorder.App/VRRecorder.App.csproj --no-restore
 dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minimal
 make -C tests/VRRecorder.Native.Tests test
+make -C tests/VRRecorder.Native.Tests coverage-gate
 cmake -S . -B build/cmake-validation
 cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 860件成功、失敗0、skip 0
+- managed: 862件成功、失敗0、skip 0
   - Domain 90
   - Application 226
-  - Compliance 183
+  - Compliance 185
   - Presentation 85
   - Integration 276
 - WPF `win-x64` cross-build: warning 0、error 0
@@ -39,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONをtest executable間でsource line／branch単位にmergeし、first-party nativeのline／branch各90%を独立判定するrelease-gate evaluator（workflow接続と実測90%達成は未完了）
+- GCC標準gcov JSONを112 artifactから収集・mergeしてfirst-party nativeのline／branch各90%を独立判定する`coverage-gate` target: gateは接続済み、実測line 85.42%（2776/3250）／branch 68.07%（1580/2321）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -153,15 +154,16 @@ dotnet test tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj
 dotnet build src/VRRecorder.App/VRRecorder.App.csproj --no-restore
 dotnet format VR-Recorder.sln --no-restore --verify-no-changes --verbosity minimal
 make -C tests/VRRecorder.Native.Tests test
+make -C tests/VRRecorder.Native.Tests coverage-gate
 cmake -S . -B build/cmake-validation
 cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 860 passed, 0 failed, 0 skipped
+- managed: 862 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 226
-  - Compliance 183
+  - Compliance 185
   - Presentation 85
   - Integration 276
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
@@ -169,7 +171,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A release-gate evaluator that merges standard GCC gcov JSON across test executables by source line/branch and independently checks 90% first-party native line and branch thresholds (workflow integration and measured 90% attainment remain outstanding)
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts and independently enforces 90% first-party native line/branch thresholds; current measurements are 85.42% lines (2776/3250) and 68.07% branches (1580/2321), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
