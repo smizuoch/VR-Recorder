@@ -1,5 +1,6 @@
 #include "audio_capture_normalizer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -113,11 +114,51 @@ void ConvertsPcm16EndpointsToFiniteStereoFloat()
     CHECK(NearlyEqual(normalized.interleaved_samples[5], positive));
 }
 
+void PreservesNative48KhzStereoFloatChannels()
+{
+    const std::vector<float> stereo {
+        0.25F,
+        -0.25F,
+        0.5F,
+        -0.5F,
+    };
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        2,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        8,
+        0x0000'0003,
+    };
+    const vrrecorder::native::RawCapturePacket packet {
+        20,
+        3'000'000,
+        2,
+        std::as_bytes(std::span<const float>(stereo)),
+        false,
+        false,
+        false,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(3'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(format, packet, normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(normalized.frame_count_48k == 2);
+    CHECK(normalized.interleaved_samples.size() == stereo.size());
+    CHECK(std::equal(
+        stereo.begin(),
+        stereo.end(),
+        normalized.interleaved_samples.begin()));
+}
+
 }
 
 int main()
 {
     ConvertsOne44100HzMonoPacketToAnExact480FrameStereoWindow();
     ConvertsPcm16EndpointsToFiniteStereoFloat();
+    PreservesNative48KhzStereoFloatChannels();
     return 0;
 }
