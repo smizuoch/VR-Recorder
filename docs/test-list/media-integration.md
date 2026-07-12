@@ -32,6 +32,7 @@
 - [x] encoder probeのDispose開始を同期確定し、in-flight native結果を抑止してlibrary解放まで非同期に待つ
 - [x] A/V monitorのvideo／audio PTSとabsolute driftをnative MediaEventへ改変せず転送する
 - [x] muxer、A/V monitor、MediaEvent adapter、dual-stream finalizationを安全な所有順序で合成し、packet投入からdrift診断と両encoder完了後のfinalizeまでを一つのpipeline境界で接続する
+- [x] 映像pipelineを先に停止してから音声pipelineを終了し、両方のjoin成功時だけ最終packet数を通知し、開始途中／停止中の片側failureではpeerと共有muxをAbortする
 
 ## English
 
@@ -65,3 +66,4 @@
 - [x] Mark encoder-probe disposal synchronously, suppress in-flight native results, and asynchronously await library release
 - [x] Forward A/V monitor video/audio PTS and absolute drift unchanged into native media events
 - [x] Compose the muxer, A/V monitor, MediaEvent adapter, and dual-stream finalization in safe ownership order, connecting packet submission through drift diagnostics and post-encoder finalization at one pipeline boundary
+- [x] Stop the video pipeline before ending audio, publish final packet counts only after both joins succeed, and abort the peer plus shared mux on partial-start or stop-time failure

@@ -103,6 +103,7 @@ make -C tests/VRRecorder.Native.Tests test
 - encoder probeのDispose開始flagを呼出しthreadで同期確定し、in-flight native結果を`ObjectDisposedException`へ収束させてlibrary解放完了を`IAsyncDisposable`で待つlifetime境界
 - A/V sync monitorの非負video／audio PTSとabsolute driftをprivacy-safe native MediaEventへ正確に転送し、C ABI drift event経路へ接続するadapter
 - muxer、A/V sync monitor、MediaEvent adapter、共有dual-stream finalizationを安全なlifetime順序で所有し、成功packetのdrift観測と両encoder完了後のfinalizeを自動接続するnative composition boundary
+- 映像停止→音声終了→両stream joinの順序を固定し、開始rollbackと片側failure時のpeer／共有mux Abort、両側成功時だけの最終packet統計通知を保証するmedia recording session境界
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -222,6 +223,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An encoder-probe lifetime boundary that synchronously marks disposal on the caller thread, converges in-flight native results to `ObjectDisposedException`, and exposes library-release completion through `IAsyncDisposable`
 - An adapter that forwards nonnegative A/V-monitor video/audio PTS and absolute drift exactly into privacy-safe native media events, connecting the monitor to the C ABI drift-event path
 - A native composition boundary that owns the muxer-facing coordinator, A/V sync monitor, MediaEvent adapter, and shared dual-stream finalization in safe lifetime order, automatically connecting successful packets to drift observation and both encoder completions to finalization
+- A media recording-session boundary that fixes video-stop, audio-end, and dual-stream-join ordering; rolls back partial starts; aborts the peer and shared mux on either-side failure; and publishes final packet counts only after both streams succeed
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
