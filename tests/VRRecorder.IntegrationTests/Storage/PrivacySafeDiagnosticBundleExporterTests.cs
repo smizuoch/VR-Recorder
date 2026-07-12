@@ -90,6 +90,27 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                         ["outputPath"] = privatePath,
                     }),
                 LogLine(
+                    "application.environment",
+                    new Dictionary<string, string>
+                    {
+                        ["appVersion"] = "0.3.0",
+                        ["architecture"] = "x64",
+                        ["gpuVendor"] = "nvidia",
+                        ["osBuild"] = "10.0.26100",
+                        ["driverVersion"] = "32.0.15.6094",
+                        ["computerName"] = "private-machine-secret",
+                    }),
+                LogLine(
+                    "application.environment",
+                    new Dictionary<string, string>
+                    {
+                        ["appVersion"] = "private-version-secret",
+                        ["architecture"] = "x64",
+                        ["gpuVendor"] = "nvidia",
+                        ["osBuild"] = "10.0.26100",
+                        ["driverVersion"] = "32.0.15.6094",
+                    }),
+                LogLine(
                     "recording.media_profile",
                     new Dictionary<string, string>
                     {
@@ -149,7 +170,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
             CancellationToken.None);
 
         Assert.Equal(destination, result.BundlePath);
-        Assert.Equal(7, result.EventCount);
+        Assert.Equal(8, result.EventCount);
         using var archive = ZipFile.OpenRead(destination);
         Assert.Equal(
             ["README.txt", "diagnostics.jsonl"],
@@ -166,6 +187,10 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         Assert.Contains("audio.input_status", diagnostics);
         Assert.Contains("recording.media_profile", diagnostics);
         Assert.Contains("recording.media_statistics", diagnostics);
+        Assert.Contains("application.environment", diagnostics);
+        Assert.Contains("\"appVersion\":\"0.3.0\"", diagnostics);
+        Assert.Contains("\"osBuild\":\"10.0.26100\"", diagnostics);
+        Assert.Contains("\"driverVersion\":\"32.0.15.6094\"", diagnostics);
         Assert.Contains("\"encoder\":\"nvenc\"", diagnostics);
         Assert.Contains("\"sourceWidth\":\"1920\"", diagnostics);
         Assert.Contains(
@@ -183,6 +208,8 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                      "audio-user-secret",
                      "private-gpu-identity",
                      "private-unknown-encoder",
+                     "private-machine-secret",
+                     "private-version-secret",
                      "bearer-token-secret",
                      "credential-secret",
                      "world-secret",
@@ -197,7 +224,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         var lines = diagnostics.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(7, lines.Length);
+        Assert.Equal(8, lines.Length);
         Assert.All(lines, line => JsonDocument.Parse(line).Dispose());
     }
 
