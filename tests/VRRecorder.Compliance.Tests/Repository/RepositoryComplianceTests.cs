@@ -84,6 +84,29 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void WindowsSystemNativeLinksRetainWindowsPlatformProvenance()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var manifestPath = Path.Combine(
+            repositoryRoot,
+            "third-party",
+            "native-link-manifest.yml");
+        using var manifest = JsonDocument.Parse(
+            File.ReadAllBytes(manifestPath));
+
+        var windowsSystemEntries = manifest.RootElement
+            .GetProperty("entries")
+            .EnumerateArray()
+            .Where(entry =>
+                entry.GetProperty("origin").GetString() == "WindowsSystem")
+            .ToArray();
+        Assert.Equal(2, windowsSystemEntries.Length);
+        Assert.All(windowsSystemEntries, entry => Assert.Equal(
+            "windows-x64",
+            entry.GetProperty("platform").GetString()));
+    }
+
+    [Fact]
     public void CandidateVerificationRejectsAnUnregisteredRuntimeLoadCallSite()
     {
         var root = Path.Combine(
