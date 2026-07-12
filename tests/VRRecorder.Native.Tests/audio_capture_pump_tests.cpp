@@ -1,11 +1,15 @@
+#include "audio_capture_input_runner.hpp"
 #include "audio_capture_pump.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -80,6 +84,47 @@ public:
     AudioCaptureRole started_role = AudioCaptureRole::Microphone;
     std::string endpoint;
     std::int64_t session_start_qpc_100ns = 0;
+};
+
+class FailingRecoverySourceProvider final
+    : public AudioCaptureSourceProvider {
+public:
+    explicit FailingRecoverySourceProvider(
+        std::unique_ptr<AudioCaptureSource> initial)
+        : initial_(std::move(initial))
+    {
+    }
+
+    vrrec_status_t Create(
+        std::unique_ptr<AudioCaptureSource> &source) noexcept override
+    {
+        ++create_calls;
+        if (initial_ != nullptr) {
+            source = std::move(initial_);
+            return VRREC_STATUS_OK;
+        }
+
+        source.reset();
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+
+    std::size_t create_calls = 0;
+
+private:
+    std::unique_ptr<AudioCaptureSource> initial_;
+};
+
+class RecordingRecoveryWaiter final : public AudioCaptureRecoveryWaiter {
+public:
+    bool Wait(std::chrono::milliseconds duration) noexcept override
+    {
+        ++wait_calls;
+        total_wait += duration;
+        return true;
+    }
+
+    std::size_t wait_calls = 0;
+    std::chrono::milliseconds total_wait {0};
 };
 
 AudioCaptureSourceConfig Config()
@@ -322,6 +367,54 @@ void RecoversAReplacementSourceAtItsExactFirstFrame()
     }
 }
 
+void StopsDefaultEndpointRediscoveryAfterFiveSeconds()
+{
+    auto initial = std::make_unique<FakeAudioCaptureSource>();
+    initial->reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0,
+        100,
+        3'000'000,
+        2,
+        {0.25F, 0.25F, 0.25F, 0.25F},
+        false,
+        false,
+        0,
+    });
+    initial->reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0,
+        0,
+        0,
+        0,
+        {},
+        false,
+        false,
+        2,
+    });
+    FailingRecoverySourceProvider provider(std::move(initial));
+    RecordingRecoveryWaiter waiter;
+    StereoCaptureTimeline timeline(12);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+
+    CHECK(runner.Run(Config()) ==
+          AudioCaptureInputResult::RecoveryTimedOut);
+    CHECK(provider.create_calls == 51);
+    CHECK(waiter.wait_calls == 50);
+    CHECK(waiter.total_wait == std::chrono::seconds(5));
+
+    std::vector<float> output(8, -1.0F);
+    AudioTimelineRead read {};
+    CHECK(timeline.WaitRead(4, output, read) == AudioTimelineResult::Ready);
+    CHECK(!read.input_available);
+    CHECK(read.underrun);
+    for (std::size_t frame = 0; frame < 4; ++frame) {
+        const auto expected = frame < 2 ? 0.25F : 0.0F;
+        CHECK(output[frame * 2U] == expected);
+        CHECK(output[frame * 2U + 1U] == expected);
+    }
+}
+
 }
 
 int main()
@@ -331,5 +424,6 @@ int main()
     AppliesLossAtTheExactFrameAndAbortsIdempotently();
     RetainsAFlaggedPacketAfterItsExplicitGap();
     RecoversAReplacementSourceAtItsExactFirstFrame();
+    StopsDefaultEndpointRediscoveryAfterFiveSeconds();
     return 0;
 }

@@ -96,6 +96,7 @@ vrrecorder_enable_strict_warnings(vrrecorder_native_audio_capture_timeline)
 add_executable(
     vrrecorder_native_audio_capture_pump
     audio_capture_pump_tests.cpp
+    "${native_source_root}/src/audio_capture_input_runner.cpp"
     "${native_source_root}/src/audio_capture_pump.cpp"
     "${native_source_root}/src/audio_capture_timeline.cpp"
     "${native_source_root}/src/audio_timeline_buffer.cpp")

@@ -29,7 +29,7 @@ $(BUILD_DIR)/audio_timeline_buffer_tests: audio_timeline_buffer_tests.cpp $(NATI
 $(BUILD_DIR)/audio_capture_timeline_tests: audio_capture_timeline_tests.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/audio_capture_pump_tests: audio_capture_pump_tests.cpp $(NATIVE_ROOT)/src/audio_capture_pump.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/audio_capture_pump_tests: audio_capture_pump_tests.cpp $(NATIVE_ROOT)/src/audio_capture_input_runner.cpp $(NATIVE_ROOT)/src/audio_capture_pump.cpp $(NATIVE_ROOT)/src/audio_capture_timeline.cpp $(NATIVE_ROOT)/src/audio_timeline_buffer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/audio_capture_normalizer_tests: audio_capture_normalizer_tests.cpp $(NATIVE_ROOT)/src/audio_capture_normalizer.cpp | $(BUILD_DIR)
