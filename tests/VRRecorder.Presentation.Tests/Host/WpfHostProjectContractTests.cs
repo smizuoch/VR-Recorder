@@ -538,15 +538,15 @@ public sealed class WpfHostProjectContractTests
         var window = LoadRequiredXaml(appDirectory, "FirstRunSetupWindow.xaml");
         Assert.Equal(
             "{DynamicResource Setup_Window_AccessibleName}",
-            window.Root?.Attribute(Presentation + "Name")?.Value);
+            window.Root?.Attribute("AutomationProperties.Name")?.Value);
         Assert.Equal(
             "{DynamicResource {x:Static SystemColors.WindowBrushKey}}",
             window.Root?.Attribute("Background")?.Value);
         Assert.NotNull(window.Descendants(Presentation + "ProgressBar").Single());
         Assert.NotNull(window.Descendants(Presentation + "TextBlock")
-            .Single(element => element.Attribute("Name")?.Value == "SetupTitleText"));
+            .Single(element => element.Attribute(Xaml + "Name")?.Value == "SetupTitleText"));
         Assert.NotNull(window.Descendants(Presentation + "TextBlock")
-            .Single(element => element.Attribute("Name")?.Value == "SetupBodyText"));
+            .Single(element => element.Attribute(Xaml + "Name")?.Value == "SetupBodyText"));
 
         var code = File.ReadAllText(Path.Combine(
             appDirectory,

@@ -38,6 +38,7 @@ public partial class App
     private readonly RecordingRightsGate _recordingRightsGate;
     private readonly JsonFileFirstRunSetupStore _firstRunSetupStore;
     private readonly FirstRunSetupController _firstRunSetup;
+    private readonly FirstRunSetupUiController _firstRunSetupUi;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
     private IDisposable? _trayNotificationSubscription;
@@ -86,6 +87,7 @@ public partial class App
         _firstRunSetupStore = new JsonFileFirstRunSetupStore(
             FirstRunSetupPath(settingsPath));
         _firstRunSetup = new FirstRunSetupController(_firstRunSetupStore);
+        _firstRunSetupUi = new FirstRunSetupUiController(_firstRunSetup);
         _legalController = new DesktopLegalController(
             new AuthenticatedLegalCatalogReader(
                 AppContext.BaseDirectory,
@@ -129,6 +131,9 @@ public partial class App
 
     internal static FirstRunSetupController FirstRunSetup =>
         ((App)Current)._firstRunSetup;
+
+    internal static FirstRunSetupUiController FirstRunSetupUi =>
+        ((App)Current)._firstRunSetupUi;
 
     internal static IRecorderStatusSource RecordingStatuses =>
         ((App)Current)._recordingHost;
