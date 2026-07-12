@@ -186,6 +186,54 @@ void ReportsOnlyGapsInsideTheCurrentReadWindow()
     }
 }
 
+void RecoveryKeepsSilenceUntilItsExactEffectiveFrame()
+{
+    vrrecorder::native::StereoCaptureTimeline timeline(960);
+    const auto initial = ConstantStereo(160, 0.25F);
+    CHECK(timeline.Push({
+              0,
+              {0, 1'000'000, 10'000'000},
+              initial,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(timeline.SetAvailable(false, 160) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    std::vector<float> output(480U * 2U, -1.0F);
+    vrrecorder::native::AudioTimelineRead loss_read {};
+    CHECK(timeline.WaitRead(480, output, loss_read) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+
+    CHECK(timeline.SetAvailable(true, 640) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    const auto too_early = ConstantStereo(160, 0.9F);
+    CHECK(timeline.Push({
+              480,
+              {0, 1'050'000, 10'000'000},
+              too_early,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::InvalidPacket);
+    const auto recovered = ConstantStereo(320, 0.75F);
+    CHECK(timeline.Push({
+              640,
+              {0, 1'100'000, 10'000'000},
+              recovered,
+              false,
+          }) == vrrecorder::native::AudioTimelineResult::Ready);
+
+    vrrecorder::native::AudioTimelineRead recovery_read {};
+    CHECK(timeline.WaitRead(480, output, recovery_read) ==
+          vrrecorder::native::AudioTimelineResult::Ready);
+    CHECK(recovery_read.start_frame_48k == 480);
+    CHECK(recovery_read.input_available);
+    CHECK(recovery_read.underrun);
+    CHECK(timeline.FramePosition() == 960);
+    for (std::size_t frame = 0; frame < 480; ++frame) {
+        const auto expected = frame < 160 ? 0.0F : 0.75F;
+        CHECK(NearlyEqual(output[frame * 2U], expected));
+        CHECK(NearlyEqual(output[frame * 2U + 1U], expected));
+    }
+}
+
 }
 
 int main()
@@ -194,5 +242,6 @@ int main()
     DeviceLossWakesAReaderAndCompletesWithSilence();
     AbortWakesAReaderWithoutAdvancingTheTimeline();
     ReportsOnlyGapsInsideTheCurrentReadWindow();
+    RecoveryKeepsSilenceUntilItsExactEffectiveFrame();
     return 0;
 }
