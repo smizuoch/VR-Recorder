@@ -53,7 +53,6 @@ AudioTimelineResult StereoCaptureTimeline::Push(
         return AudioTimelineResult::InvalidPacket;
     }
 
-    has_gap_ = has_gap_ || packet.start_frame_48k > write_end_position_;
     write_end_position_ = end_position;
     last_clock_ = packet.clock;
     has_packet_ = true;
@@ -92,10 +91,12 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
     }
 
     const auto start_position = read_position_;
+    bool had_missing_frames = false;
     if (buffer_.Read(
             start_position,
             frame_count,
-            output_interleaved) != VRREC_STATUS_OK) {
+            output_interleaved,
+            had_missing_frames) != VRREC_STATUS_OK) {
         return AudioTimelineResult::InvalidPacket;
     }
 
@@ -118,12 +119,9 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
     read = AudioTimelineRead {
         start_position,
         !includes_unavailable_frames,
-        has_gap_ || includes_unavailable_frames,
+        had_missing_frames || includes_unavailable_frames,
     };
     read_position_ = end_position;
-    if (read_position_ >= write_end_position_) {
-        has_gap_ = false;
-    }
 
     return AudioTimelineResult::Ready;
 }

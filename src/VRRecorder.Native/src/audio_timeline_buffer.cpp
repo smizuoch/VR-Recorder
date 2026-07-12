@@ -49,6 +49,20 @@ vrrec_status_t StereoAudioTimelineBuffer::Read(
     std::size_t frame_count,
     std::span<float> output_interleaved) const noexcept
 {
+    bool ignored_missing_frames = false;
+    return Read(
+        first_frame_position,
+        frame_count,
+        output_interleaved,
+        ignored_missing_frames);
+}
+
+vrrec_status_t StereoAudioTimelineBuffer::Read(
+    std::uint64_t first_frame_position,
+    std::size_t frame_count,
+    std::span<float> output_interleaved,
+    bool &had_missing_frames) const noexcept
+{
     if (capacity_frames_ == 0 || frame_count == 0 ||
         frame_count > std::numeric_limits<std::size_t>::max() / ChannelCount ||
         output_interleaved.size() != frame_count * ChannelCount ||
@@ -57,6 +71,7 @@ vrrec_status_t StereoAudioTimelineBuffer::Read(
     }
 
     const std::lock_guard lock(mutex_);
+    had_missing_frames = false;
     std::fill(output_interleaved.begin(), output_interleaved.end(), 0.0F);
     for (std::size_t frame = 0; frame < frame_count; ++frame) {
         const auto frame_position =
@@ -64,6 +79,7 @@ vrrec_status_t StereoAudioTimelineBuffer::Read(
         const auto slot = static_cast<std::size_t>(
             frame_position % capacity_frames_);
         if (frame_positions_[slot] != frame_position) {
+            had_missing_frames = true;
             continue;
         }
 

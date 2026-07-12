@@ -26,6 +26,12 @@ public:
         std::size_t frame_count,
         std::span<float> output_interleaved) const noexcept;
 
+    vrrec_status_t Read(
+        std::uint64_t first_frame_position,
+        std::size_t frame_count,
+        std::span<float> output_interleaved,
+        bool &had_missing_frames) const noexcept;
+
 private:
     static constexpr std::uint64_t EmptyFramePosition =
         UINT64_MAX;

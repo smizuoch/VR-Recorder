@@ -76,7 +76,6 @@ private:
     std::uint64_t write_end_position_ = 0;
     CaptureClockAnchor last_clock_ {};
     bool has_packet_ = false;
-    bool has_gap_ = false;
     bool input_available_ = true;
     std::uint64_t unavailable_from_ = 0;
     bool aborted_ = false;
