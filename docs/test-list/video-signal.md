@@ -10,6 +10,8 @@
 - [x] 5秒以内にfresh frameが戻ればAvailableへ復帰する
 - [x] CFR tickでは最新source frameだけを採用し、中間frameをdropとして集計する
 - [x] 新規frameがないtickでは直前frameをduplicateし、最初のframe前は出力しない
+- [x] encoder buffering後の最初のmux packetだけを録画開始確定eventとして識別する
+- [x] runtime encoder failureのpacket／latencyを成功統計へ加算しない
 
 ## English
 
@@ -21,3 +23,5 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Return to Available when a fresh frame arrives within five seconds
 - [x] Select only the latest source frame at each CFR tick and count discarded intermediate frames
 - [x] Duplicate the previous frame when a tick has no new input, while producing nothing before the first frame
+- [x] Identify only the first muxed packet after encoder buffering as the recording-start commit event
+- [x] Do not commit packet or latency statistics from a runtime encoder failure
