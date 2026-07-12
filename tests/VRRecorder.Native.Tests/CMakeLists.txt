@@ -295,6 +295,24 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_audio_encoding_pump)
 
+add_executable(
+    vrrecorder_native_audio_media_event_adapter
+    audio_media_event_adapter_tests.cpp
+    "${native_source_root}/src/audio_media_event_adapter.cpp")
+target_compile_features(
+    vrrecorder_native_audio_media_event_adapter PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_audio_media_event_adapter
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_audio_media_event_adapter
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_audio_media_event_adapter)
+
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
 add_test(NAME vrrecorder_native_c_header_smoke
@@ -321,6 +339,8 @@ add_test(NAME vrrecorder_native_audio_mix_coordinator
     COMMAND vrrecorder_native_audio_mix_coordinator)
 add_test(NAME vrrecorder_native_audio_encoding_pump
     COMMAND vrrecorder_native_audio_encoding_pump)
+add_test(NAME vrrecorder_native_audio_media_event_adapter
+    COMMAND vrrecorder_native_audio_media_event_adapter)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"
