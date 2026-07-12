@@ -29,9 +29,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 876件成功、失敗0、skip 0
+- managed: 881件成功、失敗0、skip 0
   - Domain 90
-  - Application 231
+  - Application 236
   - Compliance 186
   - Presentation 85
   - Integration 284
@@ -85,6 +85,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - `ole32.dll` COM解放call siteをWindowsSystem integrityとしてruntime-load manifestへ明示登録し、第三者配布物へ誤分類しないadmission
 - System／English／Japaneseのoptional schema v1 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
 - VR hand／Wrist Dock・World PinとOSC auto discovery／loopback fallback host・portをlocalized／accessible settings controlへ投影し、overlay transformやportの同時更新を保持して個別保存する経路（OpenVR／fallback snapshot backendへのruntime適用は未実装）
+- 設計上の12初回setup項目をversion付き固定順序として扱い、完了済みprefixから再開し、順序外完了と旧versionの完了誤認を拒否するApplication境界（永続store／画面／実機probeのproduction配線は未実装）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -136,7 +137,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
-- 初回setup、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
+- 初回setupの永続store／画面／実機probe、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -171,9 +172,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 876 passed, 0 failed, 0 skipped
+- managed: 881 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 231
+  - Application 236
   - Compliance 186
   - Presentation 85
   - Integration 284
@@ -227,6 +228,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An admission for the `ole32.dll` COM cleanup call site as WindowsSystem integrity in the runtime-load manifest, without misclassifying it as a redistributed third-party component
 - A settings path that three-way merges System/English/Japanese as an optional schema-v1 locale, applies it to WPF string/layout resources at startup with CLI-override precedence, and reapplies it immediately after a successful save
 - A settings path that projects VR hand/Wrist Dock/World Pin and OSC auto-discovery/loopback fallback host/ports into localized accessible controls and persists explicit edits while retaining concurrent overlay-transform or port updates (runtime application to OpenVR and a fallback snapshot backend remains outstanding)
+- An Application boundary that models the 12 specified first-run setup items as a versioned fixed order, resumes from a completed prefix, and rejects out-of-order completion or false completion from an older version (production persistence, UI, and hardware probes remain outstanding)
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -278,7 +280,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
-- First-run setup, runtime VR-placement/OSC settings, and end-to-end recording in the real application
+- Production persistence/UI/hardware probes for first-run setup, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
