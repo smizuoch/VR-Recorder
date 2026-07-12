@@ -109,14 +109,7 @@ public sealed class PInvokeEncoderProbeTests
         var probing = probe.ProbeAsync(Request(), CancellationToken.None);
         await controls.WaitUntilProbeEnteredAsync()
             .WaitAsync(TimeSpan.FromSeconds(1));
-        var disposeAttempted = new TaskCompletionSource(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        var disposal = Task.Run(() =>
-        {
-            disposeAttempted.TrySetResult();
-            probe.Dispose();
-        });
-        await disposeAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var disposal = probe.DisposeAsync().AsTask();
 
         Assert.False(disposal.IsCompleted);
         controls.ReleaseProbe();
