@@ -76,7 +76,8 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - concrete desktop production composition、Release media入力gate、Ready後SteamVR input、録画を維持する4状態tray操作
 - 保存pathとカメラ復元警告の分離通知、persisted録画／audio／出力設定、保存先Legal mirror
 - 明示操作だけで生成し、未知field・media・認証情報・private値・symlinkを除外するatomic診断bundle
-- app／OS build／GPU vendor／driver metadataを列挙値と数値versionへ制限し、未知fieldと自由文字列を除外する診断bundle sanitizer（production event生成は未実装）
+- app／OS build／GPU vendor／driver metadataを列挙値と数値versionへ制限し、未知fieldと自由文字列を除外する診断bundle sanitizer
+- first packet確定後にapp version／OS build／process architecture／canonical PCI GPU model／driverをbest-effort構造化eventへ発行するproduction環境sourceとdesktop composition
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -129,7 +130,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup、audio device選択、設定からの言語切替、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
-- app／OS／GPU model／driver、継続A/V閾値、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
+- 継続A/V閾値、audio underrun／overrun、OSC、finalization失敗を網羅する構造化診断event
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -211,7 +212,8 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Concrete desktop production composition, Release media-input gates, Ready-gated SteamVR input, and four-state tray controls that preserve recording
 - Separate saved-path/camera-restore notifications, persisted recording/audio/output settings, and output-folder Legal mirroring
 - Atomic diagnostic bundles generated only by explicit action while excluding unknown fields, media, credentials, private values, and symlinks
-- A diagnostic-bundle sanitizer that restricts app/OS-build/GPU-vendor/driver metadata to enumerated values and numeric versions and excludes unknown fields and free-form strings (production event emission remains outstanding)
+- A diagnostic-bundle sanitizer that restricts app/OS-build/GPU-vendor/driver metadata to enumerated values and numeric versions and excludes unknown fields and free-form strings
+- A production environment source and desktop composition that emit app version, OS build, process architecture, canonical PCI GPU model, and driver as a best-effort structured event after the first packet is committed
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -264,7 +266,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - First-run setup, audio-device selection, settings-driven language switching, runtime VR-placement/OSC settings, and end-to-end recording in the real application
-- Complete structured diagnostics for app/OS/GPU model/driver, continuous A/V thresholds, audio underruns/overruns, OSC, and finalization failures
+- Complete structured diagnostics for continuous A/V thresholds, audio underruns/overruns, OSC, and finalization failures
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
