@@ -17,7 +17,17 @@ enum class SpoutCaptureWorkerResult {
     Failed,
 };
 
-class SpoutCaptureWorker final {
+class SpoutCaptureWorkerPort {
+public:
+    virtual ~SpoutCaptureWorkerPort() = default;
+
+    virtual vrrec_status_t Start(
+        std::chrono::milliseconds poll_timeout) noexcept = 0;
+    virtual void Abort() noexcept = 0;
+    virtual SpoutCaptureWorkerResult Join() noexcept = 0;
+};
+
+class SpoutCaptureWorker final : public SpoutCaptureWorkerPort {
 public:
     explicit SpoutCaptureWorker(SpoutCaptureSource &source) noexcept;
     ~SpoutCaptureWorker();
@@ -25,9 +35,10 @@ public:
     SpoutCaptureWorker(const SpoutCaptureWorker &) = delete;
     SpoutCaptureWorker &operator=(const SpoutCaptureWorker &) = delete;
 
-    vrrec_status_t Start(std::chrono::milliseconds poll_timeout) noexcept;
-    void Abort() noexcept;
-    SpoutCaptureWorkerResult Join() noexcept;
+    vrrec_status_t Start(
+        std::chrono::milliseconds poll_timeout) noexcept override;
+    void Abort() noexcept override;
+    SpoutCaptureWorkerResult Join() noexcept override;
 
 private:
     void Run() noexcept;

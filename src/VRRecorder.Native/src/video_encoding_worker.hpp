@@ -35,7 +35,18 @@ enum class VideoEncodingWorkerResult {
     Failed,
 };
 
-class VideoEncodingWorker final {
+class VideoEncodingWorkerPort {
+public:
+    virtual ~VideoEncodingWorkerPort() = default;
+
+    virtual vrrec_status_t Start() noexcept = 0;
+    virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void Abort() noexcept = 0;
+    virtual VideoEncodingWorkerResult Join() noexcept = 0;
+    virtual VideoEncodingStatistics Statistics() const noexcept = 0;
+};
+
+class VideoEncodingWorker final : public VideoEncodingWorkerPort {
 public:
     VideoEncodingWorker(
         VideoCfrScheduler &scheduler,
@@ -47,11 +58,11 @@ public:
     VideoEncodingWorker(const VideoEncodingWorker &) = delete;
     VideoEncodingWorker &operator=(const VideoEncodingWorker &) = delete;
 
-    vrrec_status_t Start() noexcept;
-    vrrec_status_t RequestStop() noexcept;
-    void Abort() noexcept;
-    VideoEncodingWorkerResult Join() noexcept;
-    VideoEncodingStatistics Statistics() const noexcept;
+    vrrec_status_t Start() noexcept override;
+    vrrec_status_t RequestStop() noexcept override;
+    void Abort() noexcept override;
+    VideoEncodingWorkerResult Join() noexcept override;
+    VideoEncodingStatistics Statistics() const noexcept override;
 
 private:
     void Run() noexcept;
