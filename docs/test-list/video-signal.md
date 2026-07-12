@@ -22,6 +22,7 @@
 - [x] encoder／CFR clockが先に失敗した場合は待機中のcaptureをAbortして双方をjoinする
 - [x] Spout textureの共有所有権とdescriptorをcaptureからCFR出力へ保持し、metadata不一致を拒否する
 - [x] shared surfaceをbounded timeoutでAcquireし、encoder成功／失敗の双方でReleaseし、timeoutと同期failureを分離する
+- [x] 奇数textureを右／下へ最大1pxパディングし、整数演算のSingleFileFitで偶数contain配置とNV12処理計画を生成する
 
 ## English
 
@@ -45,3 +46,4 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] If the encoder or CFR clock fails first, abort the waiting capture worker and join both sides
 - [x] Retain shared Spout-texture ownership and its descriptor from capture through CFR output, rejecting metadata mismatches
 - [x] Acquire shared surfaces with a bounded timeout, release them after both encoder success and failure, and distinguish timeout from synchronization failure
+- [x] Pad odd textures by at most one pixel on the right/bottom and use integer SingleFileFit math to produce an even contain placement and NV12 processing plan
