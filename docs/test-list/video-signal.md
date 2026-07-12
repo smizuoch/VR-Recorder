@@ -17,6 +17,8 @@
 - [x] selected Spout sender以外のframeをCFR schedulerへ入れない
 - [x] Spout poll timeout、sender loss、Abortを別結果として扱う
 - [x] Spout timeout後も専用capture threadを継続し、sender loss／invalid frameでterminal終了する
+- [x] captureをencoderより先に開始し、encoder開始失敗時はcaptureをrollbackする
+- [x] graceful stopではcaptureを先に中断してからencoderをflushし、sender loss時はencoderをAbortしてfaultを通知する
 
 ## English
 
@@ -35,3 +37,5 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Never admit a frame from an unselected Spout sender into the CFR scheduler
 - [x] Keep Spout poll timeout, sender loss, and abort as distinct outcomes
 - [x] Continue the dedicated capture thread after Spout timeouts and terminate on sender loss or invalid frames
+- [x] Start capture before encoding and roll capture back when encoding cannot start
+- [x] On graceful stop, halt capture before flushing the encoder; on sender loss, abort encoding and report a fault
