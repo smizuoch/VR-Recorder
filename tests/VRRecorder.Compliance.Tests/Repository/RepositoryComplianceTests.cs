@@ -64,6 +64,16 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void NativeRuntimeLoadCallSitesHaveExplicitIntegrityAdmissions()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = RepositoryNativeRuntimeLoadVerifier.Verify(repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
     public void ComponentCatalogV3TemplateIsStrictCycleFreeAndDocumented()
     {
         var repositoryRoot = FindRepositoryRoot();
