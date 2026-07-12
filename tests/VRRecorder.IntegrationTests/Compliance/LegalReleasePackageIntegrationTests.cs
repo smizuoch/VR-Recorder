@@ -639,6 +639,47 @@ public sealed class LegalReleasePackageIntegrationTests
     }
 
     [Fact]
+    [Trait("Scenario", "IT-025")]
+    public async Task UnknownNativeBinaryCannotClaimFirstPartyOwnership()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        const string relativePath = "native/rogue.dll";
+        byte[] binary = [0x4d, 0x5a, 0x52, 0x4f, 0x47, 0x55, 0x45];
+        var binaryPath = Path.Combine(
+            payload.StagingPath,
+            relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
+        await File.WriteAllBytesAsync(binaryPath, binary);
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                Request(
+                    payload.StagingPath,
+                    packagePath,
+                    [
+                        .. payload.Registrations,
+                        new RegisteredStagedArtifact(
+                            "vr-recorder",
+                            relativePath,
+                            Hash(binary),
+                            StagedArtifactKind.NativeLibrary),
+                    ]),
+                CancellationToken.None);
+
+        AssertRejected(
+            result,
+            packagePath,
+            "unregistered-first-party-native-artifact");
+        Assert.Contains(result.Issues, issue =>
+            issue.Subject == "vr-recorder:native/rogue.dll");
+        Assert.False(Directory.Exists(Path.Combine(
+            payload.StagingPath,
+            "VR-Recorder-Legal")));
+    }
+
+    [Fact]
     public async Task MissingMaterialSymbolsManifestProducesNoReleaseArtifacts()
     {
         using var directory = TemporaryDirectory.Create();
