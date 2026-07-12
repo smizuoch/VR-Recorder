@@ -16,6 +16,7 @@
 - [x] first mux packet callbackをwriteまたはflushの最初の一度だけ発行する
 - [x] selected Spout sender以外のframeをCFR schedulerへ入れない
 - [x] Spout poll timeout、sender loss、Abortを別結果として扱う
+- [x] Spout timeout後も専用capture threadを継続し、sender loss／invalid frameでterminal終了する
 
 ## English
 
@@ -33,3 +34,4 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Emit the first-muxed-packet callback only once, whether produced by a write or final flush
 - [x] Never admit a frame from an unselected Spout sender into the CFR scheduler
 - [x] Keep Spout poll timeout, sender loss, and abort as distinct outcomes
+- [x] Continue the dedicated capture thread after Spout timeouts and terminate on sender loss or invalid frames

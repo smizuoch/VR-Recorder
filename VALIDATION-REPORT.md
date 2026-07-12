@@ -32,7 +32,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: warning 0、error 0
-- native Make ABI／audio pipeline／availability-event／Spout capture／video CFR／encoding-worker contract: 成功
+- native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
 - format/analyzer: 差分なし
 
@@ -86,6 +86,7 @@ make -C tests/VRRecorder.Native.Tests test
 - scheduled frameをvideo encoder Portへ渡し、buffering、first mux packet、runtime failure、最新／最大latencyを集計するpump
 - dedicated CFR clock threadでvideo pumpを実行し、first packet callback、graceful flush、Abort、runtime faultをMediaEventへ統合するworker
 - selected Spout senderのframe metadataだけを検証してCFR schedulerへ渡し、timeout、sender loss、Abortを分離するcapture pump
+- bounded poll timeoutでSpout pumpを専用thread実行し、timeout継続、sender loss、terminal failure、Abort/joinを管理するworker
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -134,7 +135,7 @@ make -C tests/VRRecorder.Native.Tests test
   - Presentation 85
   - Integration 275
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
-- native Make ABI/audio-pipeline/availability-event/Spout-capture/video-CFR/encoding-worker contracts: passed
+- native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
 - format/analyzers: no changes required
 
@@ -188,6 +189,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A video encoding pump that submits scheduled frames through an encoder port and tracks buffering, first muxed packet, runtime failure, and latest/maximum latency
 - A dedicated CFR-clock worker that integrates video pumping, first-packet callbacks, graceful flush, abort, and runtime faults into media events
 - A capture pump that validates metadata from only the selected Spout sender, feeds the CFR scheduler, and distinguishes timeout, sender loss, and abort
+- A joined Spout capture worker that polls with a bounded timeout and manages timeout continuation, sender loss, terminal failure, and abort
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
