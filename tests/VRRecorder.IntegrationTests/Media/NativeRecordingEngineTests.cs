@@ -326,13 +326,21 @@ public sealed class NativeRecordingEngineTests
             AudioVideoOffset: TimeSpan.FromMicroseconds(-15_000));
         backend.Session.Statistics = expectedStatistics;
         var mediaEvents = new CapturingRecordingMediaEventSink();
+        var environment = new RecordingEnvironmentSnapshot(
+            "0.3.0",
+            "10.0.26100",
+            RecordingProcessArchitecture.X64,
+            "ven_10de&dev_2684",
+            GpuVendor.Nvidia,
+            "32.0.15.6094");
         var engine = new NativeRecordingEngine(
             backend,
             new ControllableClock(
                 MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
             new CapturingRuntimeFaultSink(),
             new ThrowingAudioSessionEventSink(),
-            mediaEvents);
+            mediaEvents,
+            new StubRecordingEnvironmentSource(environment));
         var plan = CreatePlan();
 
         var starting = engine.StartAsync(plan, CancellationToken.None);
@@ -357,6 +365,7 @@ public sealed class NativeRecordingEngineTests
         Assert.Equal(plan.FrameRate.Value, profile.OutputFramesPerSecond);
         Assert.Equal(plan.Encoder, profile.Encoder);
         Assert.Equal(plan.Signal.GpuVendor, profile.GpuVendor);
+        Assert.Equal([environment], mediaEvents.Environments);
         Assert.Equal([expectedStatistics], mediaEvents.Statistics);
         Assert.Equal(expectedStatistics, stopped.Statistics);
     }
@@ -582,11 +591,24 @@ public sealed class NativeRecordingEngineTests
 
         public List<RecordingSessionStatistics> Statistics { get; } = [];
 
+        public List<RecordingEnvironmentSnapshot> Environments { get; } = [];
+
         public void Publish(RecordingMediaProfile profile) =>
             Profiles.Add(profile);
 
         public void Publish(RecordingSessionStatistics statistics) =>
             Statistics.Add(statistics);
+
+        public void Publish(RecordingEnvironmentSnapshot environment) =>
+            Environments.Add(environment);
+    }
+
+    private sealed class StubRecordingEnvironmentSource(
+        RecordingEnvironmentSnapshot environment)
+        : IRecordingEnvironmentSource
+    {
+        public RecordingEnvironmentSnapshot Capture(StableVideoSignal signal) =>
+            environment;
     }
 
     private sealed class ThrowingRecordingMediaEventSink
