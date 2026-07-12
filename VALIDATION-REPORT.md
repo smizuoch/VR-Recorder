@@ -91,6 +91,7 @@ make -C tests/VRRecorder.Native.Tests test
 - Adapter LUID／実寸／pixel format／native handleを持つGPU surfaceの共有所有権をSpout captureからCFR outputへ伝播し、texture descriptorとframe metadataの不一致を拒否する境界
 - shared GPU surfaceをbounded timeoutでAcquireし、encoder writeの成功／失敗後に必ずReleaseし、一時timeoutを次tickへ継続、同期failureをMediaEvent faultへ変換するencoding境界
 - texture実寸の奇数辺を最大1px正規化し、cropなしのSingleFileFit配置、RGBA channel swap、NV12出力をD3D11 processor向け不変planへ変換するportable計算境界（GPU変換実体は未実装）
+- processorへsource surface／処理planを渡し、出力Adapter LUID／寸法／NV12／native handleをfail-closed検証してencoderへ転送し、processing／encoding failureとAbort順序を分離するadapter（D3D11 processor実体は未実装）
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
 - CMake link入力とNativeLibrary／LibraryImport call siteをfirst-party／Windows system／toolchain／third-party provenanceおよびintegrity policyへ照合するcandidate gate
@@ -198,6 +199,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A GPU-surface boundary that carries shared ownership, adapter LUID, actual dimensions, pixel format, and a native handle from Spout capture through CFR output while rejecting texture/frame metadata mismatches
 - An encoding boundary that acquires shared GPU surfaces with a bounded timeout, releases them after both successful and failed writes, continues after transient timeouts, and maps synchronization failures to media faults
 - A portable planning boundary that normalizes odd texture edges by at most one pixel and produces immutable no-crop SingleFileFit placement, RGBA channel-swap, and NV12-output instructions for a D3D11 processor (the GPU transformation implementation remains outstanding)
+- An adapter that passes source surfaces/plans to a processor, fail-closed validates output adapter LUID, dimensions, NV12 format, and native handle before encoding, and separates processing/encoding failures and abort order (the D3D11 processor implementation remains outstanding)
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
 - Candidate gates that reconcile CMake link inputs and NativeLibrary/LibraryImport call sites with first-party, Windows-system, toolchain, or third-party provenance and integrity policies
