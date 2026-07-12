@@ -24,6 +24,17 @@ internal sealed class ControllableVideoSignalGateway : IVideoSignalGateway
         return _signal.Task.WaitAsync(cancellationToken);
     }
 
+    public Task<StableVideoSignal> WaitForStableSignalAsync(
+        string vrChatServiceId,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        RequestedServiceId = vrChatServiceId;
+        return WaitForStableSignalAsync(timeout, cancellationToken);
+    }
+
+    public string? RequestedServiceId { get; private set; }
+
     public Task WaitUntilRequestedAsync() => _requested.Task;
 
     public void CompleteWithTimeout() =>

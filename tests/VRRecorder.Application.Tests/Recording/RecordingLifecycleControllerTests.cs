@@ -202,6 +202,7 @@ public sealed class RecordingLifecycleControllerTests
         engine.CommitFirstPacket(handle);
         var started = Assert.IsType<StartRecordingResult.Started>(
             (await starting).Recording);
+        Assert.Equal(candidate.ServiceId, signal.RequestedServiceId);
         Assert.Same(leaseIdentity, leaseStore.SavedLease?.Identity);
 
         var userStop = sessions.RequestStopAsync(
