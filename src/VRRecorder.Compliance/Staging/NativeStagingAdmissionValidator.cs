@@ -178,6 +178,16 @@ internal static class NativeStagingAdmissionValidator
             }
 
             if (!string.Equals(
+                    approvedComponent.Version,
+                    registeredComponent.Version,
+                    StringComparison.Ordinal))
+            {
+                issues.Add(new ComplianceIssue(
+                    "native-component-version-mismatch",
+                    componentId));
+            }
+
+            if (!string.Equals(
                     approvedComponent.SourceInformation,
                     $"{registeredComponent.RepositoryUrl}@" +
                     registeredComponent.RepositoryCommit,
