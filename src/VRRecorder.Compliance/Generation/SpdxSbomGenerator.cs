@@ -98,7 +98,9 @@ public static class SpdxSbomGenerator
     {
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var spdxIds = new HashSet<string>(StringComparer.Ordinal);
-        var resolved = new List<ResolvedPackage>(dependencies.Length);
+        var representedComponentIds = new HashSet<string>(StringComparer.Ordinal);
+        var resolved = new List<ResolvedPackage>(
+            dependencies.Length + components.Length);
 
         foreach (var dependency in dependencies
                      .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
@@ -142,6 +144,31 @@ public static class SpdxSbomGenerator
             }
 
             resolved.Add(new ResolvedPackage(dependency, component, spdxId));
+            representedComponentIds.Add(component.Id);
+        }
+
+        foreach (var component in components
+                     .Where(component =>
+                         component.Scope is not (
+                             NoticeScope.TestOnly or NoticeScope.BuildOnly) &&
+                         !representedComponentIds.Contains(component.Id))
+                     .OrderBy(component => component.Id, StringComparer.Ordinal))
+        {
+            if (component.Approval.Status != LegalApprovalStatus.Approved)
+            {
+                throw new InvalidOperationException(
+                    $"Component {component.Id} is not approved for release SBOM generation.");
+            }
+
+            ValidatePackageMetadata(component);
+            var spdxId = CreateComponentSpdxId(component);
+            if (!spdxIds.Add(spdxId))
+            {
+                throw new InvalidOperationException(
+                    $"Component {component.Id} has a duplicate SPDX identifier.");
+            }
+
+            resolved.Add(new ResolvedPackage(null, component, spdxId));
         }
 
         return [.. resolved];
@@ -150,6 +177,8 @@ public static class SpdxSbomGenerator
     private static void ValidatePackageMetadata(NormalizedComponent component)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(component.Id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(component.DisplayName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(component.Version);
         ArgumentNullException.ThrowIfNull(component.License);
         ArgumentNullException.ThrowIfNull(component.Approval);
         ArgumentException.ThrowIfNullOrWhiteSpace(
@@ -198,6 +227,24 @@ public static class SpdxSbomGenerator
 
         var identityHash = SHA256.HashData(
             Encoding.UTF8.GetBytes(dependency.Identity));
+        builder.Append('-').Append(Convert.ToHexString(identityHash));
+        return builder.ToString();
+    }
+
+    private static string CreateComponentSpdxId(
+        NormalizedComponent component)
+    {
+        var builder = new StringBuilder("SPDXRef-Component-");
+        foreach (var character in component.Id)
+        {
+            builder.Append(
+                char.IsAsciiLetterOrDigit(character) || character is '.' or '-'
+                    ? character
+                    : '-');
+        }
+
+        var identityHash = SHA256.HashData(
+            Encoding.UTF8.GetBytes($"{component.Id}@{component.Version}"));
         builder.Append('-').Append(Convert.ToHexString(identityHash));
         return builder.ToString();
     }
@@ -264,9 +311,13 @@ public static class SpdxSbomGenerator
         ResolvedPackage package)
     {
         writer.WriteStartObject();
-        writer.WriteString("name", package.Dependency.Id);
+        writer.WriteString(
+            "name",
+            package.Dependency?.Id ?? package.Component.DisplayName);
         writer.WriteString("SPDXID", package.SpdxId);
-        writer.WriteString("versionInfo", package.Dependency.Version);
+        writer.WriteString(
+            "versionInfo",
+            package.Dependency?.Version ?? package.Component.Version);
         writer.WriteString(
             "downloadLocation",
             package.Component.SourceInformation);
@@ -280,21 +331,25 @@ public static class SpdxSbomGenerator
         writer.WriteString(
             "copyrightText",
             package.Component.CopyrightNotice);
-        writer.WritePropertyName("externalRefs");
-        writer.WriteStartArray();
-        writer.WriteStartObject();
-        writer.WriteString("referenceCategory", "PACKAGE-MANAGER");
-        writer.WriteString("referenceType", "purl");
-        writer.WriteString(
-            "referenceLocator",
-            $"pkg:nuget/{Uri.EscapeDataString(package.Dependency.Id)}@{Uri.EscapeDataString(package.Dependency.Version)}");
-        writer.WriteEndObject();
-        writer.WriteEndArray();
+        if (package.Dependency is not null)
+        {
+            writer.WritePropertyName("externalRefs");
+            writer.WriteStartArray();
+            writer.WriteStartObject();
+            writer.WriteString("referenceCategory", "PACKAGE-MANAGER");
+            writer.WriteString("referenceType", "purl");
+            writer.WriteString(
+                "referenceLocator",
+                $"pkg:nuget/{Uri.EscapeDataString(package.Dependency.Id)}@{Uri.EscapeDataString(package.Dependency.Version)}");
+            writer.WriteEndObject();
+            writer.WriteEndArray();
+        }
+
         writer.WriteEndObject();
     }
 
     private sealed record ResolvedPackage(
-        NuGetPackage Dependency,
+        NuGetPackage? Dependency,
         NormalizedComponent Component,
         string SpdxId);
 }

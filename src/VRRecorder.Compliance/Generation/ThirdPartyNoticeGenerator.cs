@@ -138,24 +138,37 @@ public static class ThirdPartyNoticeGenerator
                 continue;
             }
 
-            if (!component.IsApproved)
-            {
-                throw new InvalidOperationException(
-                    $"Component {component.Id} is not approved for release notices.");
-            }
+            ValidateDistributedComponent(component);
+            selected.TryAdd(component.Id, component);
+        }
 
-            if (string.IsNullOrWhiteSpace(component.CopyrightNotice))
-            {
-                throw new InvalidOperationException(
-                    $"Component {component.Id} is missing its copyright notice.");
-            }
-
+        foreach (var component in components.Where(component =>
+                     component.Scope is not (
+                         NoticeScope.TestOnly or NoticeScope.BuildOnly)))
+        {
+            ValidateDistributedComponent(component);
             selected.TryAdd(component.Id, component);
         }
 
         return selected.Values
             .OrderBy(component => component.Id, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static void ValidateDistributedComponent(
+        RenderedComponent component)
+    {
+        if (!component.IsApproved)
+        {
+            throw new InvalidOperationException(
+                $"Component {component.Id} is not approved for release notices.");
+        }
+
+        if (string.IsNullOrWhiteSpace(component.CopyrightNotice))
+        {
+            throw new InvalidOperationException(
+                $"Component {component.Id} is missing its copyright notice.");
+        }
     }
 
     private static NuGetPackage[] DependenciesFor(
