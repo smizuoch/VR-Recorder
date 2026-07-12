@@ -22,13 +22,36 @@ vrrec_status_t MediaRecordingSession::Start() noexcept
         return VRREC_STATUS_INVALID_STATE;
     }
     const auto video_status = video_.Start();
+    if (terminal_.load()) {
+        if (video_status == VRREC_STATUS_OK) {
+            video_.Abort();
+            video_.Join();
+        }
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (video_status != VRREC_STATUS_OK) {
         mux_.Abort();
         terminal_.store(true);
         return video_status;
     }
     video_started_.store(true);
+    if (terminal_.load()) {
+        video_.Abort();
+        video_.Join();
+        video_started_.store(false);
+        return VRREC_STATUS_INVALID_STATE;
+    }
     const auto audio_status = audio_.Start();
+    if (terminal_.load()) {
+        if (audio_status == VRREC_STATUS_OK) {
+            audio_.Abort();
+            audio_.Join();
+        }
+        video_.Abort();
+        video_.Join();
+        video_started_.store(false);
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (audio_status != VRREC_STATUS_OK) {
         video_.Abort();
         video_.Join();
