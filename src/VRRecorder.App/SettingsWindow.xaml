@@ -9,7 +9,7 @@
         Loaded="OnLoaded"
         Closed="OnClosed"
         Width="720"
-        Height="680"
+        Height="760"
         MinWidth="560"
         MinHeight="480"
         WindowStartupLocation="CenterOwner">
@@ -173,6 +173,27 @@
             <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
                       Header="{DynamicResource Settings_Audio_Heading}">
                 <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                    <TextBlock Text="{DynamicResource Settings_DesktopEndpoint_Label}" />
+                    <ComboBox x:Name="DesktopEndpointComboBox"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              IsEditable="True"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_DesktopEndpoint_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_DesktopEndpoint_Tooltip}"
+                              ToolTip="{DynamicResource Settings_DesktopEndpoint_Tooltip}" />
+
+                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                               Text="{DynamicResource Settings_MicrophoneEndpoint_Label}" />
+                    <ComboBox x:Name="MicrophoneEndpointComboBox"
+                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              MinHeight="{StaticResource Interaction.MinimumTarget}"
+                              IsEditable="True"
+                              SelectionChanged="OnSelectionChanged"
+                              AutomationProperties.Name="{DynamicResource Settings_MicrophoneEndpoint_Label}"
+                              AutomationProperties.HelpText="{DynamicResource Settings_MicrophoneEndpoint_Tooltip}"
+                              ToolTip="{DynamicResource Settings_MicrophoneEndpoint_Tooltip}" />
+
                     <TextBlock Text="{DynamicResource Settings_AudioRouting_Label}" />
                     <ComboBox x:Name="AudioRoutingComboBox"
                               Margin="0,{StaticResource Spacing.LayoutGrid},0,0"

@@ -97,6 +97,10 @@
     <system:String x:Key="Settings_Audio_Heading">音声</system:String>
     <system:String x:Key="Settings_AudioRouting_Label">音声ミックス</system:String>
     <system:String x:Key="Settings_AudioRouting_Tooltip">含めるデスクトップ音声とマイク音声を選択します</system:String>
+    <system:String x:Key="Settings_DesktopEndpoint_Label">デスクトップ音声デバイス</system:String>
+    <system:String x:Key="Settings_DesktopEndpoint_Tooltip">デスクトップ音声の収録に使うWindows再生エンドポイントを選択します</system:String>
+    <system:String x:Key="Settings_MicrophoneEndpoint_Label">マイクデバイス</system:String>
+    <system:String x:Key="Settings_MicrophoneEndpoint_Tooltip">マイク音声に使うWindows録音エンドポイントを選択します</system:String>
     <system:String x:Key="Settings_DesktopGain_Label">デスクトップゲイン</system:String>
     <system:String x:Key="Settings_DesktopGain_Tooltip">デスクトップ音声のゲインを-96～+24 dBで調整します</system:String>
     <system:String x:Key="Settings_MicrophoneGain_Label">マイクゲイン</system:String>

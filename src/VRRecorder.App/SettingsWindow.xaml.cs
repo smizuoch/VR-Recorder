@@ -57,6 +57,12 @@ public partial class SettingsWindow : Window, IDisposable
             SelectValue(EncoderComboBox, _draft.Encoder);
             SelectValue(QualityPresetComboBox, _draft.QualityPreset);
             SelectValue(AudioRoutingComboBox, _draft.AudioRouting);
+            SelectEndpoint(
+                DesktopEndpointComboBox,
+                _draft.DesktopEndpointId);
+            SelectEndpoint(
+                MicrophoneEndpointComboBox,
+                _draft.MicrophoneEndpointId);
             DesktopGainSlider.Value = _draft.DesktopGainDb;
             MicrophoneGainSlider.Value = _draft.MicrophoneGainDb;
             UpdateGainLabels();
@@ -98,6 +104,10 @@ public partial class SettingsWindow : Window, IDisposable
                     QualityPresetComboBox),
                 AudioRouting = SelectedValue<AudioRouting>(
                     AudioRoutingComboBox),
+                DesktopEndpointId = SelectedEndpoint(
+                    DesktopEndpointComboBox),
+                MicrophoneEndpointId = SelectedEndpoint(
+                    MicrophoneEndpointComboBox),
                 DesktopGainDb = DesktopGainSlider.Value,
                 MicrophoneGainDb = MicrophoneGainSlider.Value,
             };
@@ -275,6 +285,35 @@ public partial class SettingsWindow : Window, IDisposable
                             "Unsupported audio routing choice."),
                     })))
                 .ToList();
+        DesktopEndpointComboBox.ItemsSource = new List<string>
+        {
+            "default-render",
+        };
+        MicrophoneEndpointComboBox.ItemsSource = new List<string>
+        {
+            "default-capture",
+        };
+    }
+
+    private static void SelectEndpoint(WpfComboBox comboBox, string endpointId)
+    {
+        var endpoints = (List<string>)comboBox.ItemsSource;
+        if (!endpoints.Contains(endpointId, StringComparer.Ordinal))
+        {
+            endpoints.Add(endpointId);
+            comboBox.Items.Refresh();
+        }
+
+        comboBox.Text = endpointId;
+    }
+
+    private static string SelectedEndpoint(WpfComboBox comboBox)
+    {
+        var endpointId = comboBox.Text;
+        return string.IsNullOrWhiteSpace(endpointId)
+            ? throw new InvalidDataException(
+                "An audio endpoint must be selected.")
+            : endpointId;
     }
 
     private void SelectFrameRate(int value)
@@ -339,7 +378,9 @@ public partial class SettingsWindow : Window, IDisposable
         ResolutionPolicyComboBox.SelectedItem is SettingOption &&
         EncoderComboBox.SelectedItem is SettingOption &&
         QualityPresetComboBox.SelectedItem is SettingOption &&
-        AudioRoutingComboBox.SelectedItem is SettingOption;
+        AudioRoutingComboBox.SelectedItem is SettingOption &&
+        !string.IsNullOrWhiteSpace(DesktopEndpointComboBox.Text) &&
+        !string.IsNullOrWhiteSpace(MicrophoneEndpointComboBox.Text);
 
     private void UpdateSaveAvailability() =>
         SaveSettingsButton.IsEnabled =

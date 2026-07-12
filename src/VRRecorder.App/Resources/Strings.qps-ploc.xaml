@@ -97,6 +97,10 @@
     <system:String x:Key="Settings_Audio_Heading">⟦Áüdïö · Áüdïö⟧</system:String>
     <system:String x:Key="Settings_AudioRouting_Label">⟦Áüdïö mïx · Áüdïö mïx⟧</system:String>
     <system:String x:Key="Settings_AudioRouting_Tooltip">⟦Chöösë whïch dësktöp ánd mïcröphönë sámplës árë ïnclüdëd · Chöösë whïch dësktöp ánd mïcröphönë sámplës árë ïnclüdëd⟧</system:String>
+    <system:String x:Key="Settings_DesktopEndpoint_Label">⟦Dësktöp áüdïö dëvïcë · Dësktöp áüdïö dëvïcë⟧</system:String>
+    <system:String x:Key="Settings_DesktopEndpoint_Tooltip">⟦Sëlëct thë Wïndöws rëndër ëndpöïnt üsëd för dësktöp áüdïö cáptürë · Sëlëct thë Wïndöws rëndër ëndpöïnt üsëd för dësktöp áüdïö cáptürë⟧</system:String>
+    <system:String x:Key="Settings_MicrophoneEndpoint_Label">⟦Mïcröphönë dëvïcë · Mïcröphönë dëvïcë⟧</system:String>
+    <system:String x:Key="Settings_MicrophoneEndpoint_Tooltip">⟦Sëlëct thë Wïndöws cáptürë ëndpöïnt üsëd för mïcröphönë áüdïö · Sëlëct thë Wïndöws cáptürë ëndpöïnt üsëd för mïcröphönë áüdïö⟧</system:String>
     <system:String x:Key="Settings_DesktopGain_Label">⟦Dësktöp gáïn · Dësktöp gáïn⟧</system:String>
     <system:String x:Key="Settings_DesktopGain_Tooltip">⟦Ádjüst dësktöp cáptürë gáïn fröm -96 tö +24 dB · Ádjüst dësktöp cáptürë gáïn fröm -96 tö +24 dB⟧</system:String>
     <system:String x:Key="Settings_MicrophoneGain_Label">⟦Mïcröphönë gáïn · Mïcröphönë gáïn⟧</system:String>
