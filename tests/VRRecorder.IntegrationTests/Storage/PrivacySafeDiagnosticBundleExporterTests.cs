@@ -109,6 +109,15 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                         ["quarantinePath"] = privatePath,
                     }),
                 LogLine(
+                    "osc.operation",
+                    new Dictionary<string, string>
+                    {
+                        ["operation"] = "capability_probe",
+                        ["outcome"] = "succeeded",
+                        ["endpoint"] = "private-osc-endpoint-secret",
+                        ["avatarValue"] = "private-avatar-value-secret",
+                    }),
+                LogLine(
                     "application.environment",
                     new Dictionary<string, string>
                     {
@@ -179,7 +188,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
             CancellationToken.None);
 
         Assert.Equal(destination, result.BundlePath);
-        Assert.Equal(9, result.EventCount);
+        Assert.Equal(10, result.EventCount);
         using var archive = ZipFile.OpenRead(destination);
         Assert.Equal(
             ["README.txt", "diagnostics.jsonl"],
@@ -199,6 +208,9 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         Assert.Contains("application.environment", diagnostics);
         Assert.Contains("recording.finalization_recovery", diagnostics);
         Assert.Contains("\"reason\":\"validation_failed\"", diagnostics);
+        Assert.Contains("osc.operation", diagnostics);
+        Assert.Contains("\"operation\":\"capability_probe\"", diagnostics);
+        Assert.Contains("\"outcome\":\"succeeded\"", diagnostics);
         Assert.Contains("\"appVersion\":\"0.3.0\"", diagnostics);
         Assert.Contains("\"osBuild\":\"10.0.26100\"", diagnostics);
         Assert.Contains("\"driverVersion\":\"32.0.15.6094\"", diagnostics);
@@ -224,6 +236,8 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                      "private-unknown-encoder",
                      "private-machine-secret",
                      "private-version-secret",
+                     "private-osc-endpoint-secret",
+                     "private-avatar-value-secret",
                      "bearer-token-secret",
                      "credential-secret",
                      "world-secret",
@@ -238,7 +252,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         var lines = diagnostics.Split(
             '\n',
             StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(9, lines.Length);
+        Assert.Equal(10, lines.Length);
         Assert.All(lines, line => JsonDocument.Parse(line).Dispose());
     }
 

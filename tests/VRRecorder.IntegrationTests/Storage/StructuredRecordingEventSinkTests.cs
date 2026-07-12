@@ -1,5 +1,6 @@
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Camera;
+using VRRecorder.Application.Diagnostics;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
@@ -220,6 +221,30 @@ public sealed class StructuredRecordingEventSinkTests
             content);
         Assert.Contains("\"reason\":\"validation_failed\"", content);
         Assert.DoesNotContain("path", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RecordsOscOutcomeWithoutEndpointOrAvatarValue()
+    {
+        using var directory = TemporaryDirectory.Create();
+        using var log = new RotatingJsonLinesDiagnosticLog(directory.Path);
+        using var sink = new StructuredRecordingEventSink(
+            log,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        ((IOscOperationEventSink)sink).Publish(new OscOperationEvent(
+            OscOperation.CameraWrite,
+            OscOperationOutcome.Failed));
+        sink.Dispose();
+
+        var content = await File.ReadAllTextAsync(Path.Combine(
+            directory.Path,
+            "vr-recorder.jsonl"));
+        Assert.Contains("\"event\":\"osc.operation\"", content);
+        Assert.Contains("\"operation\":\"camera_write\"", content);
+        Assert.Contains("\"outcome\":\"failed\"", content);
+        Assert.DoesNotContain("endpoint", content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("avatar", content, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
