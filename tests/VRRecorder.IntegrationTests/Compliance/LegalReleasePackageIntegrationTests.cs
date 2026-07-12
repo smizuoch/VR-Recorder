@@ -13,7 +13,11 @@ namespace VRRecorder.IntegrationTests.Compliance;
 public sealed class LegalReleasePackageIntegrationTests
 {
     private static readonly string[] ExpectedPackageNames =
-        ["Package.Direct", "Package.Transitive"];
+    [
+        "Package.Direct",
+        "Package.Transitive",
+        "Material Symbols (Material Design icons by Google)",
+    ];
     private const string BundleId =
         "https://example.invalid/spdx/vr-recorder-release-0.1.0";
 
@@ -657,6 +661,48 @@ public sealed class LegalReleasePackageIntegrationTests
         Assert.False(Directory.Exists(Path.Combine(
             payload.StagingPath,
             "VR-Recorder-Legal")));
+    }
+
+    [Fact]
+    [Trait("Scenario", "IT-025")]
+    public async Task NativeComponentAppearsInTextNoticeAndSpdxSbom()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var payload = await StagePayloadAsync(directory.Path, "staging");
+        var binary = await StageFfprobeAsync(payload);
+        var packagePath = Path.Combine(directory.Path, "release.zip");
+
+        var result = await new LegalReleasePackageOrchestrator()
+            .GenerateAsync(
+                FfmpegRequest(payload, packagePath, binary),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Issues);
+        var extracted = Path.Combine(directory.Path, "extracted-native");
+        ZipFile.ExtractToDirectory(packagePath, extracted);
+        var legalBundle = Path.Combine(
+            extracted,
+            result.LegalBundleRelativePath!
+                .Replace('/', Path.DirectorySeparatorChar));
+        var notice = await File.ReadAllTextAsync(Path.Combine(
+            legalBundle,
+            "THIRD-PARTY-NOTICES.txt"));
+        Assert.Contains(
+            "Component: Component ffmpeg",
+            notice,
+            StringComparison.Ordinal);
+
+        using var sbom = JsonDocument.Parse(await File.ReadAllBytesAsync(
+            Path.Combine(legalBundle, "SBOM", "manifest.spdx.json")));
+        Assert.Contains(
+            sbom.RootElement.GetProperty("packages").EnumerateArray(),
+            package =>
+                package.GetProperty("name").GetString() ==
+                    "Component ffmpeg" &&
+                package.GetProperty("versionInfo").GetString() == "8.0" &&
+                package.GetProperty("downloadLocation").GetString() ==
+                    "https://example.invalid/ffmpeg@commit");
     }
 
     [Fact]
