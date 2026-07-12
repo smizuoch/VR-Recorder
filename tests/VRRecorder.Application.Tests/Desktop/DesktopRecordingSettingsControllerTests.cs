@@ -151,6 +151,47 @@ public sealed class DesktopRecordingSettingsControllerTests
             store.Current.Audio.MicrophoneEndpointId);
     }
 
+    [Fact]
+    public async Task ExplicitDesktopEndpointChangePreservesConcurrentMicrophone()
+    {
+        var events = new List<string>();
+        var defaults = VRRecorderSettings.CreateDefault();
+        var initial = defaults with
+        {
+            Audio = defaults.Audio with
+            {
+                DesktopEndpointId = "initial-render",
+                MicrophoneEndpointId = "initial-capture",
+            },
+        };
+        var store = new TrackingSettingsStore(initial, events);
+        var controller = new DesktopRecordingSettingsController(
+            store,
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(AbsolutePath("downloads"))),
+            new TrackingLegalBundleOutputMirror(events));
+        var original = await controller.LoadAsync(CancellationToken.None);
+        Assert.Equal("initial-render", original.DesktopEndpointId);
+        Assert.Equal("initial-capture", original.MicrophoneEndpointId);
+        store.Replace(initial with
+        {
+            Audio = initial.Audio with
+            {
+                MicrophoneEndpointId = "concurrent-capture",
+            },
+        });
+
+        await controller.SaveAsync(
+            original,
+            original with { DesktopEndpointId = "selected-render" },
+            CancellationToken.None);
+
+        Assert.Equal("selected-render", store.Current.Audio.DesktopEndpointId);
+        Assert.Equal(
+            "concurrent-capture",
+            store.Current.Audio.MicrophoneEndpointId);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-settings-controller-tests",

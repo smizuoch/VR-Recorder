@@ -14,4 +14,6 @@ public sealed record DesktopRecordingSettingsDraft(
     VideoQualityPreset QualityPreset,
     AudioRouting AudioRouting,
     double DesktopGainDb,
-    double MicrophoneGainDb);
+    double MicrophoneGainDb,
+    string DesktopEndpointId = "default-render",
+    string MicrophoneEndpointId = "default-capture");
