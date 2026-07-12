@@ -17,7 +17,8 @@ add_library(vrrecorder_native SHARED
     src/unavailable_encoder_probe_backend.cpp
     src/unavailable_media_backend.cpp
     src/unavailable_spout_source_backend.cpp
-    src/unavailable_steamvr_input_backend.cpp)
+    src/unavailable_steamvr_input_backend.cpp
+    src/video_cfr_scheduler.cpp)
 
 if(WIN32)
     target_sources(
