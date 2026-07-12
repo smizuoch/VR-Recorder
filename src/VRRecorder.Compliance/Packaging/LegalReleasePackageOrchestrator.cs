@@ -41,6 +41,7 @@ public sealed class LegalReleasePackageOrchestrator
 
         var preflightIssues = await ValidatePayloadStagingAsync(
                 request,
+                eligibility.ApprovedGraph!,
                 cancellationToken)
             .ConfigureAwait(false);
         if (preflightIssues.Count != 0)
@@ -96,6 +97,7 @@ public sealed class LegalReleasePackageOrchestrator
     private async Task<IReadOnlyList<ComplianceIssue>>
         ValidatePayloadStagingAsync(
             ReleaseLegalPackageRequest request,
+            ApprovedReleaseGraph approvedGraph,
             CancellationToken cancellationToken)
     {
         var materialIssues = await MaterialSymbolsAssetProvenanceValidator
@@ -110,6 +112,11 @@ public sealed class LegalReleasePackageOrchestrator
             .ConfigureAwait(false);
         return materialIssues
             .Concat(inventory.ScanIssues)
+            .Concat(NativeStagingAdmissionValidator.Validate(
+                request.MaterialSymbolsEvidence?.RepositoryRoot,
+                approvedGraph,
+                inventory.Files,
+                request.ApprovedPayloadArtifacts))
             .Concat(StagingInventoryValidator.Validate(
                 inventory.Files,
                 request.ApprovedPayloadArtifacts))
