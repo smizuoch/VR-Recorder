@@ -133,6 +133,62 @@ internal static class NativeStagingAdmissionValidator
             return Order(issues);
         }
 
+        foreach (var componentId in admittedCandidates
+                     .Select(candidate => candidate.Registration.ComponentId)
+                     .Distinct(StringComparer.Ordinal))
+        {
+            var approvedComponents = approvedGraph.Graph.Components.Where(
+                    component => string.Equals(
+                    component.Id,
+                    componentId,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (approvedComponents.Length != 1)
+            {
+                issues.Add(new ComplianceIssue(
+                    "ambiguous-native-artifact-owner",
+                    componentId));
+                continue;
+            }
+
+            var registeredComponents = registry.Components.Where(
+                    component => string.Equals(
+                    component.Id,
+                    componentId,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (registeredComponents.Length != 1)
+            {
+                issues.Add(new ComplianceIssue(
+                    "missing-native-component-identity",
+                    componentId));
+                continue;
+            }
+
+            var approvedComponent = approvedComponents[0];
+            var registeredComponent = registeredComponents[0];
+            if (string.IsNullOrWhiteSpace(registeredComponent.Version) ||
+                string.IsNullOrWhiteSpace(registeredComponent.RepositoryUrl) ||
+                string.IsNullOrWhiteSpace(registeredComponent.RepositoryCommit))
+            {
+                issues.Add(new ComplianceIssue(
+                    "missing-native-component-identity",
+                    componentId));
+                continue;
+            }
+
+            if (!string.Equals(
+                    approvedComponent.SourceInformation,
+                    $"{registeredComponent.RepositoryUrl}@" +
+                    registeredComponent.RepositoryCommit,
+                    StringComparison.Ordinal))
+            {
+                issues.Add(new ComplianceIssue(
+                    "native-component-source-mismatch",
+                    componentId));
+            }
+        }
+
         foreach (var (file, registration) in admittedCandidates)
         {
             var fileName = Path.GetFileName(file.RelativePath);

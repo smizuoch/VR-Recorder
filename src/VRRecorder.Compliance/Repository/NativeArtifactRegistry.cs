@@ -6,7 +6,14 @@ namespace VRRecorder.Compliance.Repository;
 
 internal sealed record NativeArtifactRegistry(
     IReadOnlySet<string> ComponentIds,
+    IReadOnlyList<RegisteredNativeComponent> Components,
     IReadOnlyList<RegisteredNativeArtifact> Artifacts);
+
+internal sealed record RegisteredNativeComponent(
+    string Id,
+    string? Version,
+    string? RepositoryUrl,
+    string? RepositoryCommit);
 
 internal sealed record RegisteredNativeArtifact(
     string ComponentId,
@@ -24,6 +31,7 @@ internal static class NativeArtifactRegistryReader
         var path = Path.Combine(root, "third-party", "registry.yml");
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
         var componentIds = new HashSet<string>(StringComparer.Ordinal);
+        var components = new List<RegisteredNativeComponent>();
         var artifacts = new List<RegisteredNativeArtifact>();
         foreach (var component in document.RootElement
                      .GetProperty("components")
@@ -37,6 +45,21 @@ internal static class NativeArtifactRegistryReader
                 throw new InvalidDataException(
                     "A registry component ID is duplicated.");
             }
+
+            string? repositoryUrl = null;
+            string? repositoryCommit = null;
+            if (component.TryGetProperty("repository", out var repository) &&
+                repository.ValueKind == JsonValueKind.Object)
+            {
+                repositoryUrl = OptionalString(repository, "url");
+                repositoryCommit = OptionalString(repository, "commit");
+            }
+
+            components.Add(new RegisteredNativeComponent(
+                componentId,
+                OptionalString(component, "version"),
+                repositoryUrl,
+                repositoryCommit));
 
             if (!component.TryGetProperty("nativeArtifacts", out var nativeArtifacts))
             {
@@ -56,7 +79,7 @@ internal static class NativeArtifactRegistryReader
             }
         }
 
-        return new NativeArtifactRegistry(componentIds, artifacts);
+        return new NativeArtifactRegistry(componentIds, components, artifacts);
     }
 
     public static ComplianceIssue? ValidateDependency(
@@ -137,6 +160,20 @@ internal static class NativeArtifactRegistryReader
             ? value
             : throw new InvalidDataException(
                 $"Native artifact property {propertyName} is missing.");
+    }
+
+    private static string? OptionalString(
+        JsonElement element,
+        string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var value = property.GetString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static bool TryResolveRepositoryPath(
