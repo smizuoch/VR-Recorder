@@ -43,6 +43,7 @@ VideoScheduleResult VideoCfrScheduler::Schedule(
     std::uint64_t output_tick,
     ScheduledVideoFrame &output) noexcept
 {
+    output = ScheduledVideoFrame {};
     const std::lock_guard lock(mutex_);
     if (has_output_tick_ && output_tick <= last_output_tick_) {
         return VideoScheduleResult::InvalidTick;
