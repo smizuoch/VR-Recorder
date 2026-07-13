@@ -183,6 +183,42 @@ void ObserverFailureAbortsTheIncompleteFile()
     CHECK(coordinator.Submit(Audio(0)) == Mp4MuxResult::InvalidState);
 }
 
+void FinalizationFailureStopsAtTheExactFailedStageAndAbortsOnce()
+{
+    {
+        RecordingMuxer muxer;
+        muxer.fragment_status = VRREC_STATUS_INTERNAL_ERROR;
+        FragmentedMp4MuxCoordinator coordinator(muxer);
+        CHECK(coordinator.Submit(Video(0, true)) == Mp4MuxResult::Written);
+        CHECK(coordinator.Finish() == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(muxer.order == std::vector<int>({1, 3, 6}));
+        CHECK(muxer.abort_calls == 1);
+        CHECK(coordinator.Finish() == VRREC_STATUS_INVALID_STATE);
+    }
+
+    {
+        RecordingMuxer muxer;
+        muxer.trailer_status = VRREC_STATUS_INTERNAL_ERROR;
+        FragmentedMp4MuxCoordinator coordinator(muxer);
+        CHECK(coordinator.Submit(Video(0, true)) == Mp4MuxResult::Written);
+        CHECK(coordinator.Finish() == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(muxer.order == std::vector<int>({1, 3, 4, 6}));
+        CHECK(muxer.abort_calls == 1);
+        CHECK(coordinator.Submit(Audio(0)) == Mp4MuxResult::InvalidState);
+    }
+
+    {
+        RecordingMuxer muxer;
+        muxer.flush_status = VRREC_STATUS_INTERNAL_ERROR;
+        FragmentedMp4MuxCoordinator coordinator(muxer);
+        CHECK(coordinator.Submit(Video(0, true)) == Mp4MuxResult::Written);
+        CHECK(coordinator.Finish() == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(muxer.order == std::vector<int>({1, 3, 4, 5, 6}));
+        CHECK(muxer.abort_calls == 1);
+        CHECK(coordinator.Submit(Audio(0)) == Mp4MuxResult::InvalidState);
+    }
+}
+
 }
 
 int main()
@@ -194,5 +230,6 @@ int main()
     FinalizesFragmentTrailerAndFileInOrder();
     AbortNeverWritesATrailerAndIsIdempotent();
     ObserverFailureAbortsTheIncompleteFile();
+    FinalizationFailureStopsAtTheExactFailedStageAndAbortsOnce();
     return 0;
 }
