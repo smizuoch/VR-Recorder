@@ -555,6 +555,11 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("TitleResourceKey", code);
         Assert.Contains("BodyResourceKey", code);
         Assert.DoesNotContain("CompleteAsync", code);
+        Assert.Contains("new SettingsWindow", code);
+        Assert.Contains("OnOpenSettings", code);
+        Assert.Single(
+            window.Descendants(Presentation + "Button"),
+            element => element.Attribute("Click")?.Value == "OnOpenSettings");
 
         string[] stepStems =
         [
@@ -590,6 +595,9 @@ public sealed class WpfHostProjectContractTests
                          "Setup_Close_Label",
                          "Setup_Close_AccessibleName",
                          "Setup_Close_Tooltip",
+                         "Setup_Settings_Label",
+                         "Setup_Settings_AccessibleName",
+                         "Setup_Settings_Tooltip",
                      })
             {
                 Assert.Contains(key, resources.Keys);
