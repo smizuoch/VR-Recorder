@@ -126,6 +126,13 @@ public partial class App
                         new TransientEncoderProbe(Path.Combine(
                             AppContext.BaseDirectory,
                             NativeLibraryFileName))),
+                [FirstRunSetupStep.SteamVrActionBinding] =
+                    new SteamVrActionBindingFirstRunSetupProbe(() =>
+                        new NativeSteamVrInputRuntime(
+                            Path.Combine(
+                                AppContext.BaseDirectory,
+                                NativeLibraryFileName),
+                            AppContext.BaseDirectory)),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
