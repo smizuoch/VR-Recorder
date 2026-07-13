@@ -115,6 +115,7 @@ void VideoEncodingWorker::Run() noexcept
             } else if (stop_requested_.load()) {
                 Finish();
             } else {
+                sink_.Abort();
                 Fail(
                     VideoEncodingWorkerResult::ClockFailed,
                     VRREC_STATUS_INTERNAL_ERROR,
