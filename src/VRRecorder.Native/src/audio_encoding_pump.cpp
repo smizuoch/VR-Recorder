@@ -16,6 +16,8 @@ StereoAudioEncodingResult StereoAudioEncodingPump::PumpNext(
     std::size_t frame_count_48k,
     StereoAudioEncodingRead &read) noexcept
 {
+    read = {};
+
     constexpr auto channel_count = StereoAudioMixer::ChannelCount;
     if (frame_count_48k == 0 ||
         frame_count_48k >
