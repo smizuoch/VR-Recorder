@@ -86,7 +86,17 @@ public:
 
     vrrec_status_t Start() noexcept override
     {
-        return VRREC_STATUS_OK;
+        std::unique_lock lock(control_mutex_);
+        if (block_next_start_) {
+            start_entered_ = true;
+            control_condition_.notify_all();
+            control_condition_.wait(lock, [this] {
+                return release_start_;
+            });
+            block_next_start_ = false;
+            release_start_ = false;
+        }
+        return start_status_;
     }
 
     vrrec_status_t RequestStop() noexcept override
@@ -179,6 +189,31 @@ public:
     void CommitMuxedVideoPacket() noexcept
     {
         events_.FirstVideoPacketMuxed();
+    }
+
+    void BlockNextStart(vrrec_status_t status) noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        start_status_ = status;
+        block_next_start_ = true;
+        start_entered_ = false;
+        release_start_ = false;
+    }
+
+    bool WaitUntilStartEntered(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(control_mutex_);
+        return control_condition_.wait_for(lock, timeout, [this] {
+            return start_entered_;
+        });
+    }
+
+    void ReleaseStart() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        release_start_ = true;
+        control_condition_.notify_all();
     }
 
     void CompleteTrailerFlushClose(
@@ -358,6 +393,10 @@ private:
     bool audio_routing_update_entered_ = false;
     bool release_audio_routing_update_ = false;
     std::uint32_t request_stop_call_count_ = 0;
+    vrrec_status_t start_status_ = VRREC_STATUS_OK;
+    bool block_next_start_ = false;
+    bool start_entered_ = false;
+    bool release_start_ = false;
     std::uint32_t audio_routing_update_count_ = 0;
     vrrec_status_t statistics_status_ = VRREC_STATUS_OK;
     bool aborted_ = false;
@@ -626,6 +665,21 @@ namespace testing {
 void CommitMuxedVideoPacket()
 {
     FakeMediaBackend::Active()->CommitMuxedVideoPacket();
+}
+
+void BlockNextMediaStart(std::int32_t status)
+{
+    FakeMediaBackend::Active()->BlockNextStart(status);
+}
+
+bool WaitUntilMediaStartEntered(std::chrono::milliseconds timeout)
+{
+    return FakeMediaBackend::Active()->WaitUntilStartEntered(timeout);
+}
+
+void ReleaseMediaStart()
+{
+    FakeMediaBackend::Active()->ReleaseStart();
 }
 
 void CompleteTrailerFlushClose(

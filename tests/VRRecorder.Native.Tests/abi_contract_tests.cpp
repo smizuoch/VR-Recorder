@@ -631,6 +631,31 @@ bool CallbackCanAbortItsOwnSessionWithoutDeadlocking()
     return true;
 }
 
+bool FailedStartDoesNotPublishAPrematureFirstPacketMilestone()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(
+        VRREC_STATUS_BACKEND_UNAVAILABLE);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    vrrecorder::native::testing::ReleaseMediaStart();
+
+    CHECK(starting.get() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(log.events.empty());
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool EmitsPrivacySafeNonterminalAudioDeviceEvents()
 {
     using vrrecorder::native::testing::SetDesktopAudioEndpointAvailable;
@@ -1937,6 +1962,7 @@ int main()
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !CallbackCanAbortItsOwnSessionWithoutDeadlocking() ||
+        !FailedStartDoesNotPublishAPrematureFirstPacketMilestone() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||

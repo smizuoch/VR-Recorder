@@ -49,6 +49,9 @@ struct ObservedEncoderProbeConfig {
 };
 
 void CommitMuxedVideoPacket();
+void BlockNextMediaStart(std::int32_t status);
+bool WaitUntilMediaStartEntered(std::chrono::milliseconds timeout);
+void ReleaseMediaStart();
 void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count);
