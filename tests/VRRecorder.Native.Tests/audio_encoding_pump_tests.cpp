@@ -180,11 +180,19 @@ void DoesNotCallTheEncoderAfterCaptureAbort()
     RecordingEncoderSink sink;
     StereoAudioEncodingPump pump(source, sink);
 
-    StereoAudioEncodingRead read {};
+    StereoAudioEncodingRead read {
+        Read(9'999, 1),
+        7,
+        VRREC_STATUS_INTERNAL_ERROR,
+    };
     CHECK(pump.PumpNext(1'024, read) ==
           StereoAudioEncodingResult::Aborted);
     CHECK(sink.calls.empty());
     CHECK(pump.SubmittedFrameCount() == 0);
+    CHECK(read.mix.start_frame_48k == 0);
+    CHECK(read.mix.frame_count_48k == 0);
+    CHECK(read.muxed_packet_count == 0);
+    CHECK(read.encoder_status == VRREC_STATUS_OK);
 }
 
 void ReportsEncoderFailureWithoutCountingTheWindow()
