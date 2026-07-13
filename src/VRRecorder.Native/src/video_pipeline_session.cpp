@@ -62,7 +62,18 @@ vrrec_status_t VideoPipelineSession::RequestStop() noexcept
     }
 
     capture_.Abort();
-    return encoding_.RequestStop();
+    const auto encoding_status = encoding_.RequestStop();
+    if (encoding_status != VRREC_STATUS_OK) {
+        active_.store(false);
+        if (!aborted_.exchange(true)) {
+            encoding_.Abort();
+            capture_.Join();
+            encoding_.Join();
+        }
+        finished_.store(true);
+    }
+
+    return encoding_status;
 }
 
 void VideoPipelineSession::Abort() noexcept
