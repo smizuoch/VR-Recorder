@@ -83,6 +83,9 @@ void RejectsNonMonotonicInputAndOutputWithoutChangingStatistics()
     CHECK(scheduler.Schedule(4, output) == VideoScheduleResult::Ready);
     CHECK(scheduler.Schedule(4, output) ==
           VideoScheduleResult::InvalidTick);
+    CHECK(output.output_tick == 0);
+    CHECK(output.source_sequence == 0);
+    CHECK(!output.surface);
     CHECK(scheduler.Schedule(3, output) ==
           VideoScheduleResult::InvalidTick);
 
