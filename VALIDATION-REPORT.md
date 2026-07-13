@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.76%（2922/3368）／branch 72.37%（1729/2389）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.77%（2926/3372）／branch 72.45%（1741/2403）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -80,6 +80,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 32-bit container内24-bit PCMの下位8 padding bitを検証し、非0paddingを切り捨てて正常sample／無音として受理しないpacket境界
 - explicit video processing plan自身がdestinationの非0・偶数・canvas内、black background、rotation noneを検証し、内部更新からcanvas外GPU領域を通さない境界
 - explicit video processing planがgeometry読取前にshort structを`INVALID_ARGUMENT`、未知versionを`UNSUPPORTED_ABI`で拒否し、将来拡張のlarger structは許容するABI境界
+- processing video encoder sinkがabort後のlayout更新と、finish後のlayout更新／frame writeをterminal拒否し、stale layoutを残さない状態境界
 - CameraLease所有権、部分取得rollback、stale leaseのowned Streaming復旧
 - OSCQuery target解決、UDP write確認、SteamVR Input Action ABI
 - SingleFileFit contain計算とruntime layout更新、native最終statistics取得
@@ -210,7 +211,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.76% lines (2922/3368) and 72.37% branches (1729/2389), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.77% lines (2926/3372) and 72.45% branches (1741/2403), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -250,6 +251,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - The audio normalizer validates the low eight padding bits of 24-bit PCM in a 32-bit container and rejects nonzero padding instead of truncating corruption into a valid or silent sample
 - The explicit video-processing-plan boundary independently requires a nonzero even destination inside the canvas, black background, and no rotation, preventing internal updates from passing out-of-canvas GPU regions
 - Before reading geometry, the explicit video-processing-plan boundary rejects a short struct with `INVALID_ARGUMENT` and an unknown version with `UNSUPPORTED_ABI`, while allowing a larger future-compatible struct
+- The processing video encoder sink terminally rejects layout updates after abort and rejects layout updates and frame writes after finish, preventing stale layout state from leaking forward
 - CameraLease ownership, partial-acquisition rollback, and owned Streaming recovery from stale leases
 - OSCQuery target resolution, confirmed UDP writes, and the SteamVR Input Action ABI
 - SingleFileFit contain calculation, runtime layout updates, and final native statistics retrieval
