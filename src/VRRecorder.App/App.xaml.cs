@@ -147,6 +147,9 @@ public partial class App
                 [FirstRunSetupStep.OfflineLegalAccess] =
                     new OfflineLegalAccessFirstRunSetupProbe(
                         legalCatalogReader),
+                [FirstRunSetupStep.LocalizationAccessibility] =
+                    new LocalizationAccessibilityFirstRunSetupProbe(
+                        legalCatalogReader),
                 [FirstRunSetupStep.DesignAssetConformance] =
                     new DesignAssetConformanceFirstRunSetupProbe(
                         legalCatalogReader),
