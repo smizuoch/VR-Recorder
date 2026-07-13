@@ -206,6 +206,7 @@ void UnexpectedSourceAbortReleasesBothPipelineEnds()
 
     CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
     CHECK(worker.Join() == StereoAudioEncodingWorkerResult::CaptureFailed);
+    CHECK(worker.RequestStop() == VRREC_STATUS_INVALID_STATE);
     CHECK(source.abort_calls == 1);
     CHECK(sink.abort_calls == 1);
     CHECK(sink.finish_calls == 0);
