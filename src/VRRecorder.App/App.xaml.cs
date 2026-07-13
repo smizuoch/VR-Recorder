@@ -120,6 +120,12 @@ public partial class App
                         settingsStore,
                         new WindowsAudioEndpointCatalog(),
                         new WindowsMicrophonePrivacyAccess()),
+                [FirstRunSetupStep.EncoderSelfTest] =
+                    new EncoderSelfTestFirstRunSetupProbe(
+                        settingsStore,
+                        new TransientEncoderProbe(Path.Combine(
+                            AppContext.BaseDirectory,
+                            NativeLibraryFileName))),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
