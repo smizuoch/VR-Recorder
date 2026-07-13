@@ -101,9 +101,16 @@ public:
 
     vrrec_status_t RequestStop() noexcept override
     {
-        const std::lock_guard lock(control_mutex_);
+        std::unique_lock lock(control_mutex_);
         ++request_stop_call_count_;
-        return VRREC_STATUS_OK;
+        if (block_next_stop_) {
+            stop_entered_ = true;
+            control_condition_.notify_all();
+            control_condition_.wait(lock, [this] {
+                return release_stop_;
+            });
+        }
+        return stop_status_;
     }
 
     vrrec_status_t UpdateVideoLayout(
@@ -141,6 +148,8 @@ public:
     vrrec_status_t GetStatistics(
         vrrec_session_statistics_v1 &statistics) noexcept override
     {
+        const std::lock_guard lock(control_mutex_);
+        ++statistics_call_count_;
         if (statistics_status_ != VRREC_STATUS_OK) {
             return statistics_status_;
         }
@@ -183,7 +192,10 @@ public:
 
     void RequestAbort() noexcept override
     {
+        const std::lock_guard lock(control_mutex_);
         aborted_ = true;
+        ++request_abort_call_count_;
+        control_condition_.notify_all();
     }
 
     void JoinAfterAbort() noexcept override
@@ -217,6 +229,32 @@ public:
     {
         const std::lock_guard lock(control_mutex_);
         release_start_ = true;
+        control_condition_.notify_all();
+    }
+
+    void BlockNextStop(vrrec_status_t status) noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        stop_status_ = status;
+        block_next_stop_ = true;
+        stop_entered_ = false;
+        release_stop_ = false;
+    }
+
+    bool WaitUntilStopEntered(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(control_mutex_);
+        return control_condition_.wait_for(lock, timeout, [this] {
+            return stop_entered_;
+        });
+    }
+
+    void ReleaseStop() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        block_next_stop_ = false;
+        release_stop_ = true;
         control_condition_.notify_all();
     }
 
@@ -334,11 +372,13 @@ public:
     void SetStatistics(
         const vrrec_session_statistics_v1 &statistics) noexcept
     {
+        const std::lock_guard lock(control_mutex_);
         statistics_ = statistics;
     }
 
     void SetStatisticsStatus(vrrec_status_t status) noexcept
     {
+        const std::lock_guard lock(control_mutex_);
         statistics_status_ = status;
     }
 
@@ -378,6 +418,27 @@ public:
         return request_stop_call_count_;
     }
 
+    std::uint32_t StatisticsCallCount() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        return statistics_call_count_;
+    }
+
+    bool WaitUntilAbortRequested(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(control_mutex_);
+        return control_condition_.wait_for(lock, timeout, [this] {
+            return request_abort_call_count_ != 0;
+        });
+    }
+
+    std::uint32_t RequestAbortCallCount() noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        return request_abort_call_count_;
+    }
+
 private:
     MediaEventSink &events_;
     std::uint32_t encoder_kind_;
@@ -397,6 +458,12 @@ private:
     bool audio_routing_update_entered_ = false;
     bool release_audio_routing_update_ = false;
     std::uint32_t request_stop_call_count_ = 0;
+    std::uint32_t statistics_call_count_ = 0;
+    std::uint32_t request_abort_call_count_ = 0;
+    vrrec_status_t stop_status_ = VRREC_STATUS_OK;
+    bool block_next_stop_ = false;
+    bool stop_entered_ = false;
+    bool release_stop_ = false;
     vrrec_status_t start_status_ = VRREC_STATUS_OK;
     bool block_next_start_ = false;
     bool start_entered_ = false;
@@ -686,6 +753,26 @@ void ReleaseMediaStart()
     FakeMediaBackend::Active()->ReleaseStart();
 }
 
+void BlockNextMediaStop(std::int32_t status)
+{
+    FakeMediaBackend::Active()->BlockNextStop(status);
+}
+
+bool WaitUntilMediaStopEntered(std::chrono::milliseconds timeout)
+{
+    return FakeMediaBackend::Active()->WaitUntilStopEntered(timeout);
+}
+
+void ReleaseMediaStop()
+{
+    FakeMediaBackend::Active()->ReleaseStop();
+}
+
+bool WaitUntilMediaAbortRequested(std::chrono::milliseconds timeout)
+{
+    return FakeMediaBackend::Active()->WaitUntilAbortRequested(timeout);
+}
+
 void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count)
@@ -825,6 +912,16 @@ void ReleaseVideoLayoutUpdate()
 std::uint32_t RequestStopCallCount()
 {
     return FakeMediaBackend::Active()->RequestStopCallCount();
+}
+
+std::uint32_t StatisticsCallCount()
+{
+    return FakeMediaBackend::Active()->StatisticsCallCount();
+}
+
+std::uint32_t RequestAbortCallCount()
+{
+    return FakeMediaBackend::Active()->RequestAbortCallCount();
 }
 
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed)

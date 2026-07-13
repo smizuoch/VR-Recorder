@@ -1,9 +1,11 @@
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <future>
 #include <limits>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -56,7 +58,17 @@ struct EventLog {
 struct AbortFromCallbackContext {
     vrrec_session_t *session = nullptr;
     vrrec_status_t abort_status = VRREC_STATUS_INTERNAL_ERROR;
+    std::uint32_t callback_count = 0;
+    vrrec_event_kind_t last_kind = VRREC_EVENT_STOPPED;
     std::promise<void> completed;
+};
+
+struct BlockingCallbackContext {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool entered = false;
+    bool release = false;
+    vrrec_event_kind_t kind = VRREC_EVENT_STOPPED;
 };
 
 void VRREC_CALL CaptureEvent(
@@ -76,11 +88,25 @@ void VRREC_CALL CaptureEvent(
 
 void VRREC_CALL AbortFromCallback(
     void *user_data,
-    const vrrec_event_v1 *)
+    const vrrec_event_v1 *event)
 {
     auto &context = *static_cast<AbortFromCallbackContext *>(user_data);
+    ++context.callback_count;
+    context.last_kind = event->kind;
     context.abort_status = vrrec_session_abort_v1(context.session);
     context.completed.set_value();
+}
+
+void VRREC_CALL BlockCallback(
+    void *user_data,
+    const vrrec_event_v1 *event)
+{
+    auto &context = *static_cast<BlockingCallbackContext *>(user_data);
+    std::unique_lock lock(context.mutex);
+    context.kind = event->kind;
+    context.entered = true;
+    context.changed.notify_all();
+    context.changed.wait(lock, [&] { return context.release; });
 }
 
 vrrec_session_config_v1 ValidConfig()
@@ -274,6 +300,92 @@ vrrecorder::native::testing::TestSpoutFrame ValidTestSpoutFrame()
             return false;                                                       \
         }                                                                       \
     } while (false)
+
+class MediaStartReleaseGuard {
+public:
+    ~MediaStartReleaseGuard()
+    {
+        Release();
+    }
+
+    void Release()
+    {
+        if (released_) {
+            return;
+        }
+        released_ = true;
+        vrrecorder::native::testing::ReleaseMediaStart();
+    }
+
+private:
+    bool released_ = false;
+};
+
+class MediaStopReleaseGuard {
+public:
+    ~MediaStopReleaseGuard()
+    {
+        Release();
+    }
+
+    void Release()
+    {
+        if (released_) {
+            return;
+        }
+        released_ = true;
+        vrrecorder::native::testing::ReleaseMediaStop();
+    }
+
+private:
+    bool released_ = false;
+};
+
+class VideoLayoutReleaseGuard {
+public:
+    ~VideoLayoutReleaseGuard()
+    {
+        Release();
+    }
+
+    void Release()
+    {
+        if (released_) {
+            return;
+        }
+        released_ = true;
+        vrrecorder::native::testing::ReleaseVideoLayoutUpdate();
+    }
+
+private:
+    bool released_ = false;
+};
+
+class AbiStartCommitReleaseGuard {
+public:
+    explicit AbiStartCommitReleaseGuard(vrrec_session_t *session)
+        : session_(session)
+    {
+    }
+
+    ~AbiStartCommitReleaseGuard()
+    {
+        Release();
+    }
+
+    void Release()
+    {
+        if (released_) {
+            return;
+        }
+        released_ = true;
+        vrrecorder::native::testing::ReleaseAbiStartCommit(session_);
+    }
+
+private:
+    vrrec_session_t *session_;
+    bool released_ = false;
+};
 
 bool RejectsInvalidAbiInputs()
 {
@@ -686,15 +798,641 @@ bool FailedStartDoesNotPublishAPrematureFirstPacketMilestone()
     auto starting = std::async(std::launch::async, [&] {
         return vrrec_session_start_v1(session);
     });
+    MediaStartReleaseGuard start_release;
     CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
         std::chrono::milliseconds(250)));
 
     vrrecorder::native::testing::CommitMuxedVideoPacket();
-    vrrecorder::native::testing::ReleaseMediaStart();
+    start_release.Release();
 
     CHECK(starting.get() == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(log.events.empty());
     vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool AbortDuringStartWinsTheReturnedStatus()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    const auto abort_status = vrrec_session_abort_v1(session);
+    start_release.Release();
+    const auto start_status = starting.get();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(abort_status == VRREC_STATUS_OK);
+    CHECK(start_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(log.events.empty());
+    return true;
+}
+
+bool FailedStartRollbackRejectsReentryAndAllowsRetry()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextAbiStartCommit(session);
+    vrrecorder::native::testing::BlockNextMediaStart(
+        VRREC_STATUS_BACKEND_UNAVAILABLE);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard start_release;
+    AbiStartCommitReleaseGuard commit_release(session);
+    const auto backend_entered =
+        vrrecorder::native::testing::WaitUntilMediaStartEntered(
+            std::chrono::milliseconds(250));
+    start_release.Release();
+    const auto commit_entered =
+        vrrecorder::native::testing::WaitUntilAbiStartCommit(
+            session,
+            std::chrono::milliseconds(250));
+    const auto overlapping_status = vrrec_session_start_v1(session);
+    commit_release.Release();
+    const auto first_status = starting.get();
+
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto retrying = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard retry_release;
+    const auto retry_entered =
+        vrrecorder::native::testing::WaitUntilMediaStartEntered(
+            std::chrono::milliseconds(250));
+    retry_release.Release();
+    const auto retry_status = retrying.get();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(backend_entered);
+    CHECK(commit_entered);
+    CHECK(overlapping_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(first_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(retry_entered);
+    CHECK(retry_status == VRREC_STATUS_OK);
+    CHECK(log.events.empty());
+    return true;
+}
+
+bool FaultDuringStartWinsAndDropsThePendingFirstPacket()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    vrrecorder::native::testing::Fail(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "start failed");
+    auto statistics = ValidStatisticsOutput();
+    const auto statistics_status =
+        vrrec_session_get_statistics_v1(session, &statistics);
+    const auto early_stop_status = vrrec_session_request_stop_v1(session);
+    const auto statistics_calls =
+        vrrecorder::native::testing::StatisticsCallCount();
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    start_release.Release();
+    const auto start_status = starting.get();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(start_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_FAULTED);
+    CHECK(log.events[0].status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events[0].message == "start failed");
+    CHECK(statistics_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(early_stop_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(statistics_calls == 0);
+    CHECK(stop_calls == 0);
+    return true;
+}
+
+bool CallbackAbortDuringStartWinsOverTheFaultStatus()
+{
+    AbortFromCallbackContext context;
+    const auto config = ValidConfig();
+    const auto callbacks = vrrec_callbacks_v1 {
+        sizeof(vrrec_callbacks_v1),
+        VRREC_ABI_V1,
+        AbortFromCallback,
+        &context,
+    };
+    CHECK(vrrec_session_create_v1(
+              &config,
+              &callbacks,
+              &context.session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(context.session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+    auto callback_completed = context.completed.get_future();
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    vrrecorder::native::testing::Fail(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "start failed then aborted");
+    const auto callback_ready =
+        callback_completed.wait_for(std::chrono::milliseconds(250)) ==
+        std::future_status::ready;
+    start_release.Release();
+    const auto start_status = starting.get();
+    vrrec_session_destroy_v1(context.session);
+
+    CHECK(callback_ready);
+    CHECK(context.abort_status == VRREC_STATUS_OK);
+    CHECK(context.callback_count == 1);
+    CHECK(context.last_kind == VRREC_EVENT_FAULTED);
+    CHECK(start_status == VRREC_STATUS_INVALID_STATE);
+    return true;
+}
+
+bool DeferredFirstPacketCallbackAbortChangesTheStartResult()
+{
+    AbortFromCallbackContext context;
+    const auto config = ValidConfig();
+    const auto callbacks = vrrec_callbacks_v1 {
+        sizeof(vrrec_callbacks_v1),
+        VRREC_ABI_V1,
+        AbortFromCallback,
+        &context,
+    };
+    CHECK(vrrec_session_create_v1(
+              &config,
+              &callbacks,
+              &context.session) == VRREC_STATUS_OK);
+    auto callback_completed = context.completed.get_future();
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(context.session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    start_release.Release();
+    const auto callback_ready =
+        callback_completed.wait_for(std::chrono::milliseconds(250)) ==
+        std::future_status::ready;
+    const auto start_status = starting.get();
+    vrrec_session_destroy_v1(context.session);
+
+    CHECK(callback_ready);
+    CHECK(context.abort_status == VRREC_STATUS_OK);
+    CHECK(context.callback_count == 1);
+    CHECK(context.last_kind == VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED);
+    CHECK(start_status == VRREC_STATUS_INVALID_STATE);
+    return true;
+}
+
+bool RuntimeOperationsAndNonterminalEventsAreRejectedDuringStart()
+{
+    using vrrecorder::native::AudioBufferHealth;
+    using vrrecorder::native::AudioEndpointRole;
+
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(
+        VRREC_STATUS_BACKEND_UNAVAILABLE);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    auto layout = ValidRuntimeLayout();
+    auto audio = ValidAudioRoutingUpdate();
+    auto statistics = ValidStatisticsOutput();
+    const auto layout_status =
+        vrrec_session_update_video_layout_v1(session, &layout);
+    const auto audio_status =
+        vrrec_session_update_audio_routing_v1(session, &audio);
+    const auto statistics_status =
+        vrrec_session_get_statistics_v1(session, &statistics);
+    vrrecorder::native::testing::SetDesktopAudioEndpointAvailable(
+        false,
+        4'800);
+    vrrecorder::native::testing::EmitAvDrift(100'000, 190'000);
+    vrrecorder::native::testing::EmitAudioBufferHealth(
+        AudioEndpointRole::Microphone,
+        AudioBufferHealth::Underrun,
+        9'600);
+
+    start_release.Release();
+    const auto start_status = starting.get();
+    const auto layout_calls =
+        vrrecorder::native::testing::VideoLayoutUpdateCount();
+    const auto audio_calls =
+        vrrecorder::native::testing::AudioRoutingUpdateCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(start_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(layout_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(audio_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(statistics_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(layout_calls == 0);
+    CHECK(audio_calls == 0);
+    CHECK(log.events.empty());
+    return true;
+}
+
+bool RuntimeGateStaysClosedThroughTheDeferredFirstPacketCallback()
+{
+    BlockingCallbackContext context;
+    const auto config = ValidConfig();
+    const auto callbacks = vrrec_callbacks_v1 {
+        sizeof(vrrec_callbacks_v1),
+        VRREC_ABI_V1,
+        BlockCallback,
+        &context,
+    };
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    start_release.Release();
+    bool callback_entered;
+    {
+        std::unique_lock lock(context.mutex);
+        callback_entered = context.changed.wait_for(
+            lock,
+            std::chrono::milliseconds(250),
+            [&] { return context.entered; });
+    }
+
+    auto layout = ValidRuntimeLayout();
+    auto audio = ValidAudioRoutingUpdate();
+    auto statistics = ValidStatisticsOutput();
+    const auto layout_status =
+        vrrec_session_update_video_layout_v1(session, &layout);
+    const auto audio_status =
+        vrrec_session_update_audio_routing_v1(session, &audio);
+    const auto statistics_status =
+        vrrec_session_get_statistics_v1(session, &statistics);
+    {
+        const std::lock_guard lock(context.mutex);
+        context.release = true;
+    }
+    context.changed.notify_all();
+    const auto start_status = starting.get();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(callback_entered);
+    CHECK(context.kind == VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED);
+    CHECK(layout_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(audio_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(statistics_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(start_status == VRREC_STATUS_OK);
+    return true;
+}
+
+bool StopDuringStartIsRejectedBeforeTheBackend()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStart(VRREC_STATUS_OK);
+    auto starting = std::async(std::launch::async, [&] {
+        return vrrec_session_start_v1(session);
+    });
+    MediaStartReleaseGuard start_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStartEntered(
+        std::chrono::milliseconds(250)));
+
+    const auto early_stop_status = vrrec_session_request_stop_v1(session);
+    start_release.Release();
+    const auto start_status = starting.get();
+    const auto final_stop_status = early_stop_status ==
+            VRREC_STATUS_INVALID_STATE
+        ? vrrec_session_request_stop_v1(session)
+        : early_stop_status;
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(early_stop_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(start_status == VRREC_STATUS_OK);
+    CHECK(final_stop_status == VRREC_STATUS_OK);
+    CHECK(stop_calls == 1);
+    return true;
+}
+
+bool ConcurrentStopCallersShareFailureAndKeepTheGateClosed()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStop(
+        VRREC_STATUS_BACKEND_UNAVAILABLE);
+    auto first = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+    MediaStopReleaseGuard stop_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStopEntered(
+        std::chrono::milliseconds(250)));
+
+    std::promise<void> second_entered;
+    auto entered = second_entered.get_future();
+    auto second = std::async(std::launch::async, [&] {
+        second_entered.set_value();
+        return vrrec_session_request_stop_v1(session);
+    });
+    entered.wait();
+    const auto waiter_entered =
+        vrrecorder::native::testing::WaitUntilAbiStopWaiter(
+            session,
+            std::chrono::milliseconds(250));
+    const auto second_returned_before_completion =
+        second.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
+    stop_release.Release();
+    const auto first_status = first.get();
+    const auto second_status = second.get();
+    const auto repeated_status = vrrec_session_request_stop_v1(session);
+
+    auto layout = ValidRuntimeLayout();
+    auto audio = ValidAudioRoutingUpdate();
+    auto statistics = ValidStatisticsOutput();
+    const auto layout_status =
+        vrrec_session_update_video_layout_v1(session, &layout);
+    const auto audio_status =
+        vrrec_session_update_audio_routing_v1(session, &audio);
+    const auto statistics_status =
+        vrrec_session_get_statistics_v1(session, &statistics);
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    const auto event_count = log.events.size();
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(waiter_entered);
+    CHECK(!second_returned_before_completion);
+    CHECK(first_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(second_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(repeated_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(layout_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(audio_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(statistics_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(event_count == 0);
+    CHECK(stop_calls == 1);
+    return true;
+}
+
+bool AbortWinsWhileStopWaitsForARuntimeOperation()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextVideoLayoutUpdate();
+    auto layout = ValidRuntimeLayout();
+    auto updating = std::async(std::launch::async, [&] {
+        return vrrec_session_update_video_layout_v1(session, &layout);
+    });
+    VideoLayoutReleaseGuard layout_release;
+    CHECK(vrrecorder::native::testing::WaitUntilVideoLayoutUpdateEntered(
+        std::chrono::milliseconds(250)));
+
+    auto stopping = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+    const auto stop_in_progress =
+        vrrecorder::native::testing::WaitUntilAbiStopInProgress(
+            session,
+            std::chrono::milliseconds(250));
+    auto aborting = std::async(std::launch::async, [&] {
+        return vrrec_session_abort_v1(session);
+    });
+    const auto abort_requested =
+        vrrecorder::native::testing::WaitUntilMediaAbortRequested(
+            std::chrono::milliseconds(250));
+
+    layout_release.Release();
+    const auto update_status = updating.get();
+    const auto stop_status = stopping.get();
+    const auto abort_status = aborting.get();
+    const auto repeated_status = vrrec_session_request_stop_v1(session);
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    const auto abort_calls =
+        vrrecorder::native::testing::RequestAbortCallCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(stop_in_progress);
+    CHECK(abort_requested);
+    CHECK(update_status == VRREC_STATUS_OK);
+    CHECK(stop_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(abort_status == VRREC_STATUS_OK);
+    CHECK(repeated_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(stop_calls == 0);
+    CHECK(abort_calls == 1);
+    CHECK(log.events.empty());
+    return true;
+}
+
+bool FaultWinsWhileStopWaitsForARuntimeOperation()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextVideoLayoutUpdate();
+    auto layout = ValidRuntimeLayout();
+    auto updating = std::async(std::launch::async, [&] {
+        return vrrec_session_update_video_layout_v1(session, &layout);
+    });
+    VideoLayoutReleaseGuard layout_release;
+    CHECK(vrrecorder::native::testing::WaitUntilVideoLayoutUpdateEntered(
+        std::chrono::milliseconds(250)));
+
+    auto stopping = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+    const auto stop_in_progress =
+        vrrecorder::native::testing::WaitUntilAbiStopInProgress(
+            session,
+            std::chrono::milliseconds(250));
+    vrrecorder::native::testing::Fail(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "fault while stop waited");
+
+    layout_release.Release();
+    const auto update_status = updating.get();
+    const auto stop_status = stopping.get();
+    const auto repeated_status = vrrec_session_request_stop_v1(session);
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(stop_in_progress);
+    CHECK(update_status == VRREC_STATUS_OK);
+    CHECK(stop_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(repeated_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(stop_calls == 0);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_FAULTED);
+    CHECK(log.events[0].status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events[0].message == "fault while stop waited");
+    return true;
+}
+
+bool AbortDuringStopWinsAndIsSharedByAllCallers()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStop(VRREC_STATUS_OK);
+    auto first = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+    MediaStopReleaseGuard stop_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStopEntered(
+        std::chrono::milliseconds(250)));
+    std::promise<void> second_entered;
+    auto entered = second_entered.get_future();
+    auto second = std::async(std::launch::async, [&] {
+        second_entered.set_value();
+        return vrrec_session_request_stop_v1(session);
+    });
+    entered.wait();
+    const auto waiter_entered =
+        vrrecorder::native::testing::WaitUntilAbiStopWaiter(
+            session,
+            std::chrono::milliseconds(250));
+
+    const auto abort_status = vrrec_session_abort_v1(session);
+    stop_release.Release();
+    const auto first_status = first.get();
+    const auto second_status = second.get();
+    const auto repeated_status = vrrec_session_request_stop_v1(session);
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(abort_status == VRREC_STATUS_OK);
+    CHECK(waiter_entered);
+    CHECK(first_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(second_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(repeated_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(stop_calls == 1);
+    CHECK(log.events.empty());
+    return true;
+}
+
+bool FaultDuringStopWinsAndIsSharedByAllCallers()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::BlockNextMediaStop(VRREC_STATUS_OK);
+    auto first = std::async(std::launch::async, [&] {
+        return vrrec_session_request_stop_v1(session);
+    });
+    MediaStopReleaseGuard stop_release;
+    CHECK(vrrecorder::native::testing::WaitUntilMediaStopEntered(
+        std::chrono::milliseconds(250)));
+    std::promise<void> second_entered;
+    auto entered = second_entered.get_future();
+    auto second = std::async(std::launch::async, [&] {
+        second_entered.set_value();
+        return vrrec_session_request_stop_v1(session);
+    });
+    entered.wait();
+    const auto waiter_entered =
+        vrrecorder::native::testing::WaitUntilAbiStopWaiter(
+            session,
+            std::chrono::milliseconds(250));
+
+    vrrecorder::native::testing::Fail(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "stop failed");
+    auto statistics = ValidStatisticsOutput();
+    const auto statistics_status =
+        vrrec_session_get_statistics_v1(session, &statistics);
+    const auto statistics_calls =
+        vrrecorder::native::testing::StatisticsCallCount();
+    stop_release.Release();
+    const auto first_status = first.get();
+    const auto second_status = second.get();
+    const auto repeated_status = vrrec_session_request_stop_v1(session);
+    const auto stop_calls =
+        vrrecorder::native::testing::RequestStopCallCount();
+    vrrec_session_destroy_v1(session);
+
+    CHECK(waiter_entered);
+    CHECK(first_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(second_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(repeated_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(stop_calls == 1);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_FAULTED);
+    CHECK(log.events[0].status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events[0].message == "stop failed");
+    CHECK(statistics_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(statistics_calls == 0);
     return true;
 }
 
@@ -1985,8 +2723,65 @@ bool RejectsInvalidEncoderProbeAbiInputs()
 
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc == 2) {
+        const auto requested = std::string(argv[1]);
+        if (requested == "--start-abort") {
+            return AbortDuringStartWinsTheReturnedStatus() ? 0 : 1;
+        }
+        if (requested == "--start-fault") {
+            return FaultDuringStartWinsAndDropsThePendingFirstPacket()
+                ? 0
+                : 1;
+        }
+        if (requested == "--start-rollback-reentry") {
+            return FailedStartRollbackRejectsReentryAndAllowsRetry()
+                ? 0
+                : 1;
+        }
+        if (requested == "--start-callback-abort") {
+            return CallbackAbortDuringStartWinsOverTheFaultStatus()
+                ? 0
+                : 1;
+        }
+        if (requested == "--first-callback-abort") {
+            return DeferredFirstPacketCallbackAbortChangesTheStartResult()
+                ? 0
+                : 1;
+        }
+        if (requested == "--runtime-during-start") {
+            return RuntimeOperationsAndNonterminalEventsAreRejectedDuringStart()
+                ? 0
+                : 1;
+        }
+        if (requested == "--runtime-during-first-callback") {
+            return RuntimeGateStaysClosedThroughTheDeferredFirstPacketCallback()
+                ? 0
+                : 1;
+        }
+        if (requested == "--stop-during-start") {
+            return StopDuringStartIsRejectedBeforeTheBackend() ? 0 : 1;
+        }
+        if (requested == "--concurrent-stop-failure") {
+            return ConcurrentStopCallersShareFailureAndKeepTheGateClosed()
+                ? 0
+                : 1;
+        }
+        if (requested == "--stop-abort") {
+            return AbortDuringStopWinsAndIsSharedByAllCallers() ? 0 : 1;
+        }
+        if (requested == "--stop-wait-abort") {
+            return AbortWinsWhileStopWaitsForARuntimeOperation() ? 0 : 1;
+        }
+        if (requested == "--stop-wait-fault") {
+            return FaultWinsWhileStopWaitsForARuntimeOperation() ? 0 : 1;
+        }
+        if (requested == "--stop-fault") {
+            return FaultDuringStopWinsAndIsSharedByAllCallers() ? 0 : 1;
+        }
+    }
+
     if (vrrec_abi_version() != VRREC_ABI_V1 ||
         !RejectsInvalidAbiInputs() ||
         !LegacySessionConfigDefaultsToSoftwareEncoder() ||
@@ -2006,6 +2801,19 @@ int main()
         !CallbackCanAbortItsOwnSessionWithoutDeadlocking() ||
         !CallbackAbortDoesNotWaitForTheRuntimeOperationThatEmittedIt() ||
         !FailedStartDoesNotPublishAPrematureFirstPacketMilestone() ||
+        !AbortDuringStartWinsTheReturnedStatus() ||
+        !FailedStartRollbackRejectsReentryAndAllowsRetry() ||
+        !FaultDuringStartWinsAndDropsThePendingFirstPacket() ||
+        !CallbackAbortDuringStartWinsOverTheFaultStatus() ||
+        !DeferredFirstPacketCallbackAbortChangesTheStartResult() ||
+        !RuntimeOperationsAndNonterminalEventsAreRejectedDuringStart() ||
+        !RuntimeGateStaysClosedThroughTheDeferredFirstPacketCallback() ||
+        !StopDuringStartIsRejectedBeforeTheBackend() ||
+        !ConcurrentStopCallersShareFailureAndKeepTheGateClosed() ||
+        !AbortWinsWhileStopWaitsForARuntimeOperation() ||
+        !FaultWinsWhileStopWaitsForARuntimeOperation() ||
+        !AbortDuringStopWinsAndIsSharedByAllCallers() ||
+        !FaultDuringStopWinsAndIsSharedByAllCallers() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||

@@ -56,6 +56,7 @@
 - [x] configured video／audio adaptersとrecording coordinatorを安全な所有順序で合成し、Start、live audio routing、graceful Stop、両stream統計を一つのpipeline境界へ集約する
 - [x] recording pipelineをC ABI MediaBackendへ接続し、layout／routing、全統計field、冪等な非同期stop／joinとdestructor回収を保証する
 - [x] backendのcleanup／stop thread生成失敗を注入可能にし、OOM／internal failureとjoinable thread欠落をfail-closed処理する。Start／RequestStop復帰後にAbort winnerを再検査し、失敗したstop結果を再呼出しへ共有してcleanupをexactly onceにする
+- [x] C ABI sessionのStart／Stop transactionをatomicにし、Start確定前のruntime操作／非terminal callback、Start中Stop、失敗Stop後のruntime再開、late FIRSTを拒否する。Abort／Fault／backend結果と同時Stop callerを単一結果へ収束させる
 - [x] mux成功packetから最新の符号付きA/V offsetを`audio PTS - video PTS`で計算し、mux／recording pipelineを通してC ABI最終統計へ伝播する
 - [x] 非同期stop Joinとforced Abortをatomic terminal遷移で仲裁し、Abortが先行した場合はStopped／Saved相当の成功完了を抑止する
 - [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする。外部JoinAfterAbortはStart内rollback完了まで待ち、cleanup ownershipを取ったstreamへRequestAbortを再送する
@@ -118,6 +119,7 @@
 - [x] Compose configured video/audio adapters and the recording coordinator in safe ownership order, exposing start, live audio routing, graceful stop, and both stream statistics through one pipeline boundary
 - [x] Adapt the recording pipeline to the C ABI MediaBackend, preserving layout/routing, every statistics field, and idempotent asynchronous stop/join with destructor reclamation
 - [x] Make backend cleanup/stop thread-launch failures injectable; fail closed on OOM/internal failures or a missing joinable thread; recheck an Abort winner after Start/RequestStop returns; and share a failed stop result across retries while cleaning up exactly once
+- [x] Make C ABI session Start/Stop transactions atomic; reject runtime operations/nonterminal callbacks before Start commits, Stop during Start, runtime reopening after failed Stop, and late FIRST; converge Abort/Fault/backend results and concurrent Stop callers on one result
 - [x] Compute the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` and propagate it through mux/recording pipelines into final C ABI statistics
 - [x] Arbitrate asynchronous stop/join against forced abort with an atomic terminal transition, suppressing Stopped/Saved-equivalent success when abort wins
 - [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop. Make external JoinAfterAbort wait for in-Start rollback and reissue RequestAbort for every stream claimed by cleanup

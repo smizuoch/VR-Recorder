@@ -9,7 +9,8 @@ target_compile_features(vrrecorder_native_abi_contract PRIVATE cxx_std_20)
 target_compile_definitions(
     vrrecorder_native_abi_contract
     PRIVATE
-        VRRECORDER_NATIVE_EXPORTS)
+        VRRECORDER_NATIVE_EXPORTS
+        VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
 target_include_directories(
     vrrecorder_native_abi_contract
     PRIVATE
@@ -1022,6 +1023,9 @@ vrrecorder_enable_strict_warnings(
 
 add_test(NAME vrrecorder_native_abi_contract
     COMMAND vrrecorder_native_abi_contract)
+set_tests_properties(
+    vrrecorder_native_abi_contract
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_c_header_smoke
     COMMAND vrrecorder_native_c_header_smoke)
 add_test(NAME vrrecorder_native_audio_mixer

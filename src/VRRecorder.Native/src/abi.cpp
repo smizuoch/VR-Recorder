@@ -1,5 +1,8 @@
 #include "vrrecorder_native.h"
 
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+#include <chrono>
+#endif
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
@@ -69,7 +72,7 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     {
         {
             const std::lock_guard lock(state_mutex_);
-            if (state_ != SessionState::Created) {
+            if (state_ != SessionState::Created || start_in_progress_) {
                 return VRREC_STATUS_INVALID_STATE;
             }
 
@@ -78,20 +81,23 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
             first_packet_pending_ = false;
         }
 
-        const auto status = backend_->Start();
+        auto status = backend_->Start();
         const std::lock_guard callback_lock(callback_mutex_);
         auto emit_first_packet = false;
+        auto rollback_start = false;
         std::uint64_t sequence = 0;
         {
             const std::lock_guard state_lock(state_mutex_);
-            start_in_progress_ = false;
-            if (status != VRREC_STATUS_OK) {
+            if (state_ == SessionState::Aborted) {
                 first_packet_pending_ = false;
-                if (state_ == SessionState::Started) {
-                    state_ = SessionState::Created;
-                }
-            } else if (state_ == SessionState::Started &&
-                       first_packet_pending_ &&
+                status = VRREC_STATUS_INVALID_STATE;
+            } else if (state_ == SessionState::Terminal) {
+                first_packet_pending_ = false;
+                status = terminal_status_;
+            } else if (status != VRREC_STATUS_OK) {
+                first_packet_pending_ = false;
+                rollback_start = true;
+            } else if (first_packet_pending_ &&
                        !first_packet_emitted_) {
                 first_packet_pending_ = false;
                 first_packet_emitted_ = true;
@@ -99,6 +105,10 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
                 emit_first_packet = true;
             }
         }
+
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+        WaitAtStartCommitHook();
+#endif
 
         if (emit_first_packet) {
             Emit(vrrec_event_v1 {
@@ -113,6 +123,19 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
             });
         }
 
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            start_in_progress_ = false;
+            if (state_ == SessionState::Aborted) {
+                status = VRREC_STATUS_INVALID_STATE;
+            } else if (state_ == SessionState::Terminal) {
+                status = terminal_status_;
+            } else if (rollback_start) {
+                state_ = SessionState::Created;
+            }
+        }
+
+        state_condition_.notify_all();
         return status;
     }
 
@@ -120,6 +143,28 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     {
         {
             std::unique_lock lock(state_mutex_);
+            if (stop_in_progress_) {
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+                ++stop_waiter_count_;
+                state_condition_.notify_all();
+#endif
+                state_condition_.wait(lock, [this] {
+                    return !stop_in_progress_;
+                });
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+                --stop_waiter_count_;
+#endif
+                return stop_status_;
+            }
+
+            if (stop_completed_) {
+                return stop_status_;
+            }
+
+            if (start_in_progress_) {
+                return VRREC_STATUS_INVALID_STATE;
+            }
+
             if (state_ == SessionState::Terminal) {
                 return VRREC_STATUS_OK;
             }
@@ -130,37 +175,97 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
                     : VRREC_STATUS_INVALID_STATE;
             }
 
-            if (stop_requested_) {
-                return VRREC_STATUS_OK;
-            }
-
+            stop_in_progress_ = true;
             stop_requested_ = true;
+            state_condition_.notify_all();
             state_condition_.wait(lock, [this] {
                 return active_runtime_operations_ == 0;
             });
-            if (state_ == SessionState::Terminal ||
-                state_ == SessionState::Aborted) {
-                return VRREC_STATUS_OK;
+            if (state_ == SessionState::Aborted) {
+                stop_status_ = VRREC_STATUS_INVALID_STATE;
+                stop_completed_ = true;
+                stop_in_progress_ = false;
+                state_condition_.notify_all();
+                return stop_status_;
+            }
+            if (state_ == SessionState::Terminal) {
+                stop_status_ = terminal_status_;
+                stop_completed_ = true;
+                stop_in_progress_ = false;
+                state_condition_.notify_all();
+                return stop_status_;
             }
         }
 
-        const auto status = backend_->RequestStop();
-        if (status != VRREC_STATUS_OK) {
+        auto status = backend_->RequestStop();
+        {
             const std::lock_guard lock(state_mutex_);
-            if (state_ == SessionState::Started) {
-                stop_requested_ = false;
+            if (state_ == SessionState::Aborted) {
+                status = VRREC_STATUS_INVALID_STATE;
+            } else if (state_ == SessionState::Terminal &&
+                       terminal_status_ != VRREC_STATUS_OK) {
+                status = terminal_status_;
             }
+            stop_status_ = status;
+            stop_completed_ = true;
+            stop_in_progress_ = false;
         }
+        state_condition_.notify_all();
 
         return status;
     }
+
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+    bool WaitUntilStopWaiter(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(state_mutex_);
+        return state_condition_.wait_for(lock, timeout, [this] {
+            return stop_waiter_count_ != 0;
+        });
+    }
+
+    bool WaitUntilStopInProgress(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(state_mutex_);
+        return state_condition_.wait_for(lock, timeout, [this] {
+            return stop_in_progress_;
+        });
+    }
+
+    void BlockNextStartCommit() noexcept
+    {
+        const std::lock_guard lock(state_mutex_);
+        block_next_start_commit_ = true;
+        start_commit_entered_ = false;
+        release_start_commit_ = false;
+    }
+
+    bool WaitUntilStartCommit(
+        std::chrono::milliseconds timeout) noexcept
+    {
+        std::unique_lock lock(state_mutex_);
+        return state_condition_.wait_for(lock, timeout, [this] {
+            return start_commit_entered_;
+        });
+    }
+
+    void ReleaseStartCommit() noexcept
+    {
+        const std::lock_guard lock(state_mutex_);
+        release_start_commit_ = true;
+        state_condition_.notify_all();
+    }
+#endif
 
     vrrec_status_t UpdateVideoLayout(
         const vrrec_video_layout_v1 &layout) noexcept
     {
         {
             const std::lock_guard lock(state_mutex_);
-            if (state_ != SessionState::Started || stop_requested_) {
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_) {
                 return VRREC_STATUS_INVALID_STATE;
             }
 
@@ -182,7 +287,8 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     {
         {
             const std::lock_guard lock(state_mutex_);
-            if (state_ != SessionState::Started || stop_requested_) {
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_) {
                 return VRREC_STATUS_INVALID_STATE;
             }
 
@@ -199,9 +305,11 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     {
         {
             const std::lock_guard lock(state_mutex_);
-            if ((state_ != SessionState::Started &&
+            if (start_in_progress_ || stop_in_progress_ ||
+                (state_ != SessionState::Started &&
                  state_ != SessionState::Terminal) ||
-                (state_ == SessionState::Started && stop_requested_)) {
+                (state_ == SessionState::Started &&
+                 (start_in_progress_ || stop_requested_))) {
                 return VRREC_STATUS_INVALID_STATE;
             }
 
@@ -245,7 +353,8 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         std::uint64_t sequence;
         {
             const std::lock_guard state_lock(state_mutex_);
-            if (state_ != SessionState::Started || first_packet_emitted_) {
+            if (state_ != SessionState::Started || stop_requested_ ||
+                first_packet_emitted_) {
                 return;
             }
             if (start_in_progress_) {
@@ -282,6 +391,7 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
             }
 
             state_ = SessionState::Terminal;
+            terminal_status_ = VRREC_STATUS_OK;
             sequence = ++sequence_;
         }
 
@@ -311,6 +421,7 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
             }
 
             state_ = SessionState::Terminal;
+            terminal_status_ = status;
             sequence = ++sequence_;
         }
 
@@ -336,7 +447,8 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         std::uint64_t sequence;
         {
             const std::lock_guard state_lock(state_mutex_);
-            if (state_ != SessionState::Started || stop_requested_) {
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_) {
                 return;
             }
 
@@ -387,7 +499,8 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         std::uint64_t sequence;
         {
             const std::lock_guard state_lock(state_mutex_);
-            if (state_ != SessionState::Started || stop_requested_) {
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_) {
                 return;
             }
             sequence = ++sequence_;
@@ -415,7 +528,8 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         std::uint64_t sequence;
         {
             const std::lock_guard state_lock(state_mutex_);
-            if (state_ != SessionState::Started || stop_requested_) {
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_) {
                 return;
             }
 
@@ -448,6 +562,22 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     }
 
 private:
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+    void WaitAtStartCommitHook() noexcept
+    {
+        std::unique_lock lock(state_mutex_);
+        if (!block_next_start_commit_) {
+            return;
+        }
+        start_commit_entered_ = true;
+        state_condition_.notify_all();
+        state_condition_.wait(lock, [this] {
+            return release_start_commit_;
+        });
+        block_next_start_commit_ = false;
+    }
+#endif
+
     void EndRuntimeOperation() noexcept
     {
         const std::lock_guard lock(state_mutex_);
@@ -483,14 +613,66 @@ private:
     std::recursive_mutex callback_mutex_;
     SessionState state_ = SessionState::Created;
     bool stop_requested_ = false;
+    bool stop_in_progress_ = false;
+    bool stop_completed_ = false;
+    vrrec_status_t stop_status_ = VRREC_STATUS_INVALID_STATE;
     bool start_in_progress_ = false;
     bool first_packet_pending_ = false;
     bool first_packet_emitted_ = false;
     bool desktop_audio_available_ = true;
     bool microphone_audio_available_ = true;
+    vrrec_status_t terminal_status_ = VRREC_STATUS_INTERNAL_ERROR;
     std::uint64_t sequence_ = 0;
     std::size_t active_runtime_operations_ = 0;
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+    std::size_t stop_waiter_count_ = 0;
+    bool block_next_start_commit_ = false;
+    bool start_commit_entered_ = false;
+    bool release_start_commit_ = false;
+#endif
 };
+
+#if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
+namespace vrrecorder::native::testing {
+
+bool WaitUntilAbiStopWaiter(
+    vrrec_session_t *session,
+    std::chrono::milliseconds timeout) noexcept
+{
+    return session != nullptr && session->WaitUntilStopWaiter(timeout);
+}
+
+bool WaitUntilAbiStopInProgress(
+    vrrec_session_t *session,
+    std::chrono::milliseconds timeout) noexcept
+{
+    return session != nullptr &&
+        session->WaitUntilStopInProgress(timeout);
+}
+
+void BlockNextAbiStartCommit(vrrec_session_t *session) noexcept
+{
+    if (session != nullptr) {
+        session->BlockNextStartCommit();
+    }
+}
+
+bool WaitUntilAbiStartCommit(
+    vrrec_session_t *session,
+    std::chrono::milliseconds timeout) noexcept
+{
+    return session != nullptr && session->WaitUntilStartCommit(timeout);
+}
+
+void ReleaseAbiStartCommit(vrrec_session_t *session) noexcept
+{
+    if (session != nullptr) {
+        session->ReleaseStartCommit();
+    }
+}
+
+}
+#endif
 
 struct vrrec_steamvr_input final {
     explicit vrrec_steamvr_input(

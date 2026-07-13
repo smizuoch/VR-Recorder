@@ -52,6 +52,21 @@ void CommitMuxedVideoPacket();
 void BlockNextMediaStart(std::int32_t status);
 bool WaitUntilMediaStartEntered(std::chrono::milliseconds timeout);
 void ReleaseMediaStart();
+void BlockNextMediaStop(std::int32_t status);
+bool WaitUntilMediaStopEntered(std::chrono::milliseconds timeout);
+void ReleaseMediaStop();
+bool WaitUntilAbiStopWaiter(
+    vrrec_session_t *session,
+    std::chrono::milliseconds timeout) noexcept;
+bool WaitUntilAbiStopInProgress(
+    vrrec_session_t *session,
+    std::chrono::milliseconds timeout) noexcept;
+void BlockNextAbiStartCommit(vrrec_session_t *session) noexcept;
+bool WaitUntilAbiStartCommit(
+    vrrec_session_t *session,
+    std::chrono::milliseconds timeout) noexcept;
+void ReleaseAbiStartCommit(vrrec_session_t *session) noexcept;
+bool WaitUntilMediaAbortRequested(std::chrono::milliseconds timeout);
 void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count);
@@ -86,6 +101,8 @@ void BlockNextVideoLayoutUpdate();
 bool WaitUntilVideoLayoutUpdateEntered(std::chrono::milliseconds timeout);
 void ReleaseVideoLayoutUpdate();
 std::uint32_t RequestStopCallCount();
+std::uint32_t StatisticsCallCount();
+std::uint32_t RequestAbortCallCount();
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed);
 std::string_view SteamVrManifestPath();
 std::string_view SteamVrActionSetPath();
