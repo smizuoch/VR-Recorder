@@ -41,9 +41,11 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
         const auto acquire = scheduled.surface->AcquireForRead(
             surface_acquire_timeout_);
         if (acquire == VideoSurfaceAcquireResult::Timeout) {
+            read = {};
             return VideoEncodingResult::SurfaceTimeout;
         }
         if (acquire != VideoSurfaceAcquireResult::Acquired) {
+            read = {};
             return VideoEncodingResult::SurfaceFailed;
         }
     }
