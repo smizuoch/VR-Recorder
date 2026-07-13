@@ -686,6 +686,9 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("OfflineLegalAccessFirstRunSetupProbe", appCode);
         Assert.Contains("AuthenticatedLegalCatalogReader", appCode);
         Assert.Contains("DesignAssetConformanceFirstRunSetupProbe", appCode);
+        Assert.Contains(
+            "LocalizationAccessibilityFirstRunSetupProbe",
+            appCode);
         Assert.Contains("OscQueryVrChatInstanceDiscovery", appCode);
         Assert.Contains("WindowsDnsSdOscQueryServiceBrowser", appCode);
         Assert.Contains("_setupOscHttp.Dispose()", appCode);
