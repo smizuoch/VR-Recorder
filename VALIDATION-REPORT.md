@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.76%（2928/3375）／branch 72.45%（1741/2403）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.76%（2929/3376）／branch 72.45%（1741/2403）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -125,7 +125,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - clock付き48 kHz stereo packet、WASAPI silent相当の明示frame数、正確なdevice-loss frame、失敗したreplacement後の再試行、最大5秒のdefault endpoint再探索、待機中Abortを扱うcapture pump／runner
 - WASAPI Start／Readを同一専用threadで実行し、初期結果を同期返却して失敗／Abort／destructorで必ずjoinするcapture worker
 - desktop／microphone workerをrollback可能に開始し、timelineを同一48 kHz frame windowで読み、片側切断時だけを無音化し、skewを拒否してmixerへ固定sample数を渡すstereo capture session
-- mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離するaudio encoding pump
+- mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離し、引数不正／確保失敗／capture中断・失敗を含む早期終了前にread出力を初期化して古いmix／mux／status診断値を返さないaudio encoding pump
 - dedicated threadでaudio encoding pumpを連続実行し、graceful stopだけをflushし、Abort／encoder failureではcaptureとencoderを中断するworker
 - capture初期化後だけencodingを開始し、live routing、冪等stop、rollback、最終frame／packet統計を統合するaudio pipeline session
 - 各CFR tickで最新source frameを採用し、中間frame dropと直前frame duplicateを個別集計するnative video scheduler
@@ -213,7 +213,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.76% lines (2928/3375) and 72.45% branches (1741/2403), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.76% lines (2929/3376) and 72.45% branches (1741/2403), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -298,7 +298,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Capture pumps/runners covering clocked 48 kHz packets, explicit WASAPI-style silent-frame counts, exact device-loss frames, recovery after a failed replacement, bounded five-second default-endpoint rediscovery, and abortable waits
 - Joined capture workers that run WASAPI Start/Read on one dedicated thread, synchronously report initialization, and join on failure, abort, or destruction
 - A rollback-safe stereo capture session that starts desktop/microphone workers, reads their timelines over the same 48 kHz frame window, silences only a disconnected side, rejects skew, and passes a fixed sample count into the mixer
-- An audio encoding pump that submits positioned mixed PCM windows through an encoder port and distinguishes buffered zero-packet writes from actual muxed-packet counts
+- An audio encoding pump that submits positioned mixed PCM windows through an encoder port, distinguishes buffered zero-packet writes from actual muxed-packet counts, and initializes its read output before every early exit—including invalid input, allocation failure, and capture abort/failure—so stale mix, mux, or status diagnostics cannot escape
 - A dedicated encoding worker that flushes only on graceful stop and aborts both capture and encoding on forced abort or encoder failure
 - An audio pipeline session that starts encoding only after capture initialization and integrates live routing, idempotent stop, rollback, and final frame/packet statistics
 - A native video scheduler that selects the latest source frame at each CFR tick and separately counts discarded intermediate frames and duplicated previous outputs
