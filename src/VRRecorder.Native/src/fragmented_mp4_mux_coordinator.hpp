@@ -59,6 +59,7 @@ struct AacStreamDescriptor final {
     AudioChannelLayout channel_layout;
     AacPacketFormat packet_format;
     std::vector<std::byte> codec_extradata;
+    std::uint32_t bitrate_bits_per_second;
 };
 
 inline std::int64_t AacPrimingLowerBoundMicroseconds(

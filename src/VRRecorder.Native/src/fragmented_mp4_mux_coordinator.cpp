@@ -215,6 +215,8 @@ bool FragmentedMp4MuxCoordinator::IsConfigurationValid(
         !configuration.video.codec_extradata.empty() &&
         configuration.audio.sample_rate == 48'000 &&
         configuration.audio.channel_count == 2 &&
+        configuration.audio.bitrate_bits_per_second ==
+            AacTargetBitrateBitsPerSecond &&
         configuration.audio.frame_size != 0 &&
         configuration.audio.frame_size <=
             static_cast<std::uint32_t>(

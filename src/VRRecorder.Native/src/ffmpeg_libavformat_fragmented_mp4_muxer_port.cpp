@@ -323,6 +323,8 @@ bool IsConfigurationValid(
         video_extradata_valid &&
         configuration.audio.sample_rate == 48'000 &&
         configuration.audio.channel_count == 2 &&
+        configuration.audio.bitrate_bits_per_second ==
+            AacTargetBitrateBitsPerSecond &&
         configuration.audio.frame_size == 1'024 &&
         configuration.audio.initial_padding_samples <=
             static_cast<std::uint32_t>(
@@ -698,6 +700,8 @@ vrrec_status_t LibavformatFragmentedMp4MuxerPort::WriteHeader(
     audio_stream->codecpar->codec_id = AV_CODEC_ID_AAC;
     audio_stream->codecpar->codec_tag = 0;
     audio_stream->codecpar->profile = AV_PROFILE_AAC_LOW;
+    audio_stream->codecpar->bit_rate = static_cast<std::int64_t>(
+        configuration.audio.bitrate_bits_per_second);
     audio_stream->codecpar->sample_rate =
         static_cast<int>(configuration.audio.sample_rate);
     audio_stream->codecpar->frame_size =
@@ -776,6 +780,9 @@ vrrec_status_t LibavformatFragmentedMp4MuxerPort::WriteHeader(
         audio_stream->codecpar == nullptr ||
         video_stream->codecpar->codec_id != AV_CODEC_ID_H264 ||
         audio_stream->codecpar->codec_id != AV_CODEC_ID_AAC ||
+        audio_stream->codecpar->bit_rate !=
+            static_cast<std::int64_t>(
+                configuration.audio.bitrate_bits_per_second) ||
         video_stream->time_base.num <= 0 ||
         video_stream->time_base.den <= 0 ||
         audio_stream->time_base.num <= 0 ||

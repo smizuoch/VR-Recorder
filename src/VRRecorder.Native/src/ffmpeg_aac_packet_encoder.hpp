@@ -61,6 +61,10 @@ enum class FfmpegAacPacketEncoderOperation {
     Abort,
 };
 
+enum class FfmpegAacPacketEncoderCheckpoint {
+    FinishBeforeCommit,
+};
+
 class FfmpegAacSerializationObserver {
 public:
     virtual ~FfmpegAacSerializationObserver() = default;
@@ -70,6 +74,13 @@ public:
     // and must outlive it.
     virtual void ObserveContention(
         FfmpegAacPacketEncoderOperation operation) noexcept = 0;
+
+    // Test-only checkpoint invoked while the operation mutex is held.
+    // Implementations must not re-enter the encoder and must outlive it.
+    virtual void ObserveCheckpoint(
+        FfmpegAacPacketEncoderCheckpoint) noexcept
+    {
+    }
 };
 
 struct FfmpegAacPacketEncoderCreateResult;

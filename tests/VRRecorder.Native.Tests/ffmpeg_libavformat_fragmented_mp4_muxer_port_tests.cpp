@@ -156,6 +156,7 @@ FragmentedMp4StreamConfiguration Streams()
                 std::byte {0x11}, std::byte {0x90}, std::byte {0x56},
                 std::byte {0xe5}, std::byte {0x00},
             },
+            192'000,
         },
         DefaultFragmentedMp4FragmentPolicy,
     };
@@ -273,6 +274,43 @@ std::uint64_t ReadBigEndian64(
     return
         (static_cast<std::uint64_t>(ReadBigEndian32(bytes, offset)) << 32U) |
         ReadBigEndian32(bytes, offset + 4);
+}
+
+bool HasAacEsdsBitRates(
+    const std::vector<std::byte> &bytes,
+    std::uint32_t expected_bits_per_second)
+{
+    const auto type_offset = FindAscii(bytes, "esds");
+    if (type_offset == std::numeric_limits<std::size_t>::max() ||
+        type_offset > bytes.size() || bytes.size() - type_offset < 34) {
+        return false;
+    }
+
+    return bytes[type_offset + 8] == std::byte {0x03} &&
+        bytes[type_offset + 16] == std::byte {0x04} &&
+        bytes[type_offset + 21] == std::byte {0x40} &&
+        bytes[type_offset + 22] == std::byte {0x15} &&
+        ReadBigEndian32(bytes, type_offset + 26) ==
+            expected_bits_per_second &&
+        ReadBigEndian32(bytes, type_offset + 30) ==
+            expected_bits_per_second;
+}
+
+bool HasAacBtrtBitRates(
+    const std::vector<std::byte> &bytes,
+    std::uint32_t expected_bits_per_second)
+{
+    const auto type_offset = FindAscii(bytes, "btrt");
+    if (type_offset == std::numeric_limits<std::size_t>::max() ||
+        type_offset > bytes.size() || bytes.size() - type_offset < 16) {
+        return false;
+    }
+
+    return ReadBigEndian32(bytes, type_offset + 4) == 0 &&
+        ReadBigEndian32(bytes, type_offset + 8) ==
+            expected_bits_per_second &&
+        ReadBigEndian32(bytes, type_offset + 12) ==
+            expected_bits_per_second;
 }
 
 struct BoxView final {
@@ -563,6 +601,8 @@ void CreatesH264AndAacStreamsAndReadsBackPostHeaderTimeBases()
         std::numeric_limits<std::size_t>::max());
     CHECK(FindAscii(bytes, "esds") !=
         std::numeric_limits<std::size_t>::max());
+    CHECK(HasAacEsdsBitRates(bytes, 192'000));
+    CHECK(HasAacBtrtBitRates(bytes, 192'000));
 }
 
 void UsesLibavutilPacketRescalingIncludingNegativeAacPriming()
@@ -759,6 +799,27 @@ void RejectsInvalidConfigurationAndRealPacketAllocationFailure()
         std::byte {0x12}, std::byte {0x10},
     };
     invalid_configurations.push_back(wrong_aac_rate);
+
+    auto missing_aac_bitrate = Streams();
+    missing_aac_bitrate.audio.bitrate_bits_per_second = 0;
+    invalid_configurations.push_back(missing_aac_bitrate);
+
+    auto wrong_aac_bitrate = Streams();
+    wrong_aac_bitrate.audio.bitrate_bits_per_second = 128'000;
+    invalid_configurations.push_back(wrong_aac_bitrate);
+
+    auto low_aac_bitrate = Streams();
+    low_aac_bitrate.audio.bitrate_bits_per_second = 191'999;
+    invalid_configurations.push_back(low_aac_bitrate);
+
+    auto high_aac_bitrate = Streams();
+    high_aac_bitrate.audio.bitrate_bits_per_second = 192'001;
+    invalid_configurations.push_back(high_aac_bitrate);
+
+    auto maximum_aac_bitrate = Streams();
+    maximum_aac_bitrate.audio.bitrate_bits_per_second =
+        std::numeric_limits<std::uint32_t>::max();
+    invalid_configurations.push_back(maximum_aac_bitrate);
 
     auto wrong_aac_object_type = Streams();
     wrong_aac_object_type.audio.codec_extradata[0] = std::byte {0x09};

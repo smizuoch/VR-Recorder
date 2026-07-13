@@ -7,6 +7,8 @@
 
 namespace vrrecorder::native {
 
+inline constexpr std::uint32_t AacTargetBitrateBitsPerSecond = 192'000;
+
 enum class AacProfile {
     LowComplexity,
 };

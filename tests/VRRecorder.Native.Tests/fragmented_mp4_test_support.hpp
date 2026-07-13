@@ -26,6 +26,7 @@ inline FragmentedMp4StreamConfiguration TestMp4Streams()
             AudioChannelLayout::Stereo,
             AacPacketFormat::RawAccessUnit,
             {std::byte{0x12}, std::byte{0x10}},
+            192'000,
         },
         DefaultFragmentedMp4FragmentPolicy,
     };

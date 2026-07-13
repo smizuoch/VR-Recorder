@@ -138,6 +138,7 @@ FragmentedMp4StreamConfiguration Streams()
             AudioChannelLayout::Stereo,
             AacPacketFormat::RawAccessUnit,
             {std::byte{0x12}, std::byte{0x10}},
+            192'000,
         },
         DefaultFragmentedMp4FragmentPolicy,
     };
@@ -191,6 +192,8 @@ void RequiresOwnedStreamDescriptorsBeforeWritingPackets()
           std::byte{0x01});
     CHECK(muxer.configurations[0].audio.frame_size == 1'024);
     CHECK(muxer.configurations[0].audio.initial_padding_samples == 1'024);
+    CHECK(
+        muxer.configurations[0].audio.bitrate_bits_per_second == 192'000);
     CHECK(coordinator.Begin(Streams()) == VRREC_STATUS_INVALID_STATE);
     CHECK(coordinator.Submit(Video(0, true)) == Mp4MuxResult::Written);
     CHECK(muxer.order == std::vector<int>({0, 1}));
@@ -263,6 +266,22 @@ void RejectsInvalidStreamDescriptorsBeforeHeaderMutation()
     rejects([](auto &streams) { streams.video.codec_extradata.clear(); });
     rejects([](auto &streams) { streams.audio.sample_rate = 44'100; });
     rejects([](auto &streams) { streams.audio.channel_count = 1; });
+    rejects([](auto &streams) {
+        streams.audio.bitrate_bits_per_second = 0;
+    });
+    rejects([](auto &streams) {
+        streams.audio.bitrate_bits_per_second = 128'000;
+    });
+    rejects([](auto &streams) {
+        streams.audio.bitrate_bits_per_second = 191'999;
+    });
+    rejects([](auto &streams) {
+        streams.audio.bitrate_bits_per_second = 192'001;
+    });
+    rejects([](auto &streams) {
+        streams.audio.bitrate_bits_per_second =
+            std::numeric_limits<std::uint32_t>::max();
+    });
     rejects([](auto &streams) { streams.audio.frame_size = 0; });
     rejects([](auto &streams) {
         streams.audio.frame_size =

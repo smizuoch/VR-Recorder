@@ -10,7 +10,7 @@ vrrec_status_t CreateAacAudioEncoderConfig(
         48'000,
         2,
         AudioChannelLayout::Stereo,
-        192'000,
+        AacTargetBitrateBitsPerSecond,
         AudioSampleFormat::Float32Interleaved,
     };
     return VRREC_STATUS_OK;

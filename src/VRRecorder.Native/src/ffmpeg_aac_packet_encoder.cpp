@@ -1,6 +1,7 @@
 #include "ffmpeg_aac_packet_encoder.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cmath>
 #include <cstddef>
@@ -35,7 +36,8 @@ namespace {
 constexpr char PinnedFfmpegVersion[] = "8.1.2";
 constexpr int AacSampleRate = 48'000;
 constexpr int AacChannelCount = 2;
-constexpr int AacBitRate = 192'000;
+constexpr int AacBitRate =
+    static_cast<int>(AacTargetBitrateBitsPerSecond);
 constexpr int AacFrameSize = 1'024;
 constexpr int AacInitialPadding = 1'024;
 constexpr std::byte ExpectedAudioSpecificConfig[] {
@@ -262,6 +264,26 @@ public:
         return Failure(status);
     }
 
+    PacketAudioEncoderWrite AbortLocked() noexcept
+    {
+        if (state == State::Active) {
+            state_machine.Abort();
+        }
+        if (fifo != nullptr) {
+            av_audio_fifo_reset(fifo);
+        }
+        state = State::Aborted;
+        return Failure(VRREC_STATUS_INVALID_STATE);
+    }
+
+    PacketAudioEncoderWrite FailOrAbortLocked(
+        vrrec_status_t status) noexcept
+    {
+        return abort_requested.load()
+            ? AbortLocked()
+            : FailLocked(status);
+    }
+
     vrrec_status_t QueueConverted(
         std::span<const float> interleaved_samples) noexcept
     {
@@ -361,6 +383,9 @@ public:
             return VRREC_STATUS_INTERNAL_ERROR;
         }
         for (;;) {
+            if (abort_requested.load()) {
+                return VRREC_STATUS_INVALID_STATE;
+            }
             const auto output_capacity =
                 ShouldFail(
                     FfmpegAacPacketEncoderFailurePoint::
@@ -445,6 +470,9 @@ public:
         int sample_count,
         std::vector<EncodedMediaPacket> &packets) noexcept
     {
+        if (abort_requested.load()) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
         if (sample_count <= 0 || sample_count > AacFrameSize ||
             frame == nullptr || fifo == nullptr ||
             av_audio_fifo_size(fifo) < sample_count ||
@@ -488,6 +516,9 @@ public:
                     static_cast<std::size_t>(sample_count),
                 });
         }
+        if (abort_requested.load()) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
         result = ShouldFail(
                      FfmpegAacPacketEncoderFailurePoint::
                          PrepareFrameOutOfMemory)
@@ -497,6 +528,9 @@ public:
             return result;
         }
         auto batch = state_machine.EncodePreparedFrame();
+        if (abort_requested.load()) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
         if (!batch.packets.empty() &&
             ShouldFail(
                 FfmpegAacPacketEncoderFailurePoint::
@@ -506,6 +540,9 @@ public:
         const auto append_status = AppendPackets(packets, std::move(batch));
         if (append_status != VRREC_STATUS_OK) {
             return append_status;
+        }
+        if (abort_requested.load()) {
+            return VRREC_STATUS_INVALID_STATE;
         }
         if (next_frame_pts_48k >
             std::numeric_limits<std::int64_t>::max() - sample_count) {
@@ -519,9 +556,15 @@ public:
         std::vector<EncodedMediaPacket> &packets) noexcept
     {
         while (av_audio_fifo_size(fifo) >= AacFrameSize) {
+            if (abort_requested.load()) {
+                return VRREC_STATUS_INVALID_STATE;
+            }
             const auto status = EncodeOneFrame(AacFrameSize, packets);
             if (status != VRREC_STATUS_OK) {
                 return status;
+            }
+            if (abort_requested.load()) {
+                return VRREC_STATUS_INVALID_STATE;
             }
         }
         return VRREC_STATUS_OK;
@@ -564,6 +607,7 @@ public:
     std::size_t failure_occurrence = 0;
     FfmpegAacSerializationObserver *serialization_observer = nullptr;
     std::mutex mutex;
+    std::atomic_bool abort_requested = false;
     State state = State::Active;
     std::uint64_t next_input_frame_48k = 0;
     std::int64_t next_frame_pts_48k = 0;
@@ -681,7 +725,8 @@ FfmpegAacPacketEncoder::CreateWithRuntimeIdentity(
     if (context == nullptr) {
         return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, std::nullopt};
     }
-    context->bit_rate = AacBitRate;
+    context->bit_rate = static_cast<std::int64_t>(
+        config.bitrate_bits_per_second);
     context->sample_rate = AacSampleRate;
     context->sample_fmt = AV_SAMPLE_FMT_FLTP;
     context->profile = AV_PROFILE_AAC_LOW;
@@ -736,6 +781,7 @@ FfmpegAacPacketEncoder::CreateWithRuntimeIdentity(
                 reinterpret_cast<const std::byte *>(context->extradata) +
                     context->extradata_size,
             },
+            static_cast<std::uint32_t>(context->bit_rate),
         });
     } catch (const std::bad_alloc &) {
         avcodec_free_context(&context);
@@ -881,16 +927,17 @@ PacketAudioEncoderWrite FfmpegAacPacketEncoder::EncodePcm48k(
     if (impl_->state != Impl::State::Active) {
         return Failure(VRREC_STATUS_INVALID_STATE);
     }
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
+    }
     if (interleaved_samples.empty() ||
         interleaved_samples.size() % AacChannelCount != 0) {
-        return impl_->FailLocked(VRREC_STATUS_INVALID_ARGUMENT);
+        return impl_->FailOrAbortLocked(VRREC_STATUS_INVALID_ARGUMENT);
     }
 
     const auto frame_count = interleaved_samples.size() /
         static_cast<std::size_t>(AacChannelCount);
-    if (frame_count >
-            static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
-        start_frame_48k >
+    if (start_frame_48k >
             static_cast<std::uint64_t>(
                 std::numeric_limits<std::int64_t>::max()) ||
         frame_count >
@@ -902,31 +949,73 @@ PacketAudioEncoderWrite FfmpegAacPacketEncoder::EncodePcm48k(
             start_frame_48k + frame_count) ||
         (impl_->has_input &&
             start_frame_48k != impl_->next_input_frame_48k)) {
-        return impl_->FailLocked(VRREC_STATUS_INVALID_ARGUMENT);
+        return impl_->FailOrAbortLocked(VRREC_STATUS_INVALID_ARGUMENT);
     }
-    if (!std::all_of(
-            interleaved_samples.begin(),
-            interleaved_samples.end(),
-            [](float sample) { return std::isfinite(sample); })) {
-        return impl_->FailLocked(VRREC_STATUS_INVALID_ARGUMENT);
+    constexpr auto preflight_sample_count =
+        static_cast<std::size_t>(AacFrameSize * AacChannelCount);
+    std::size_t preflight_offset = 0;
+    while (preflight_offset < interleaved_samples.size()) {
+        if (impl_->abort_requested.load()) {
+            return impl_->AbortLocked();
+        }
+        const auto count = std::min(
+            preflight_sample_count,
+            interleaved_samples.size() - preflight_offset);
+        const auto chunk = interleaved_samples.subspan(
+            preflight_offset,
+            count);
+        if (!std::all_of(
+                chunk.begin(),
+                chunk.end(),
+                [](float sample) { return std::isfinite(sample); })) {
+            return impl_->FailOrAbortLocked(
+                VRREC_STATUS_INVALID_ARGUMENT);
+        }
+        preflight_offset += count;
+    }
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
     }
 
     if (!impl_->has_input) {
         impl_->next_frame_pts_48k =
             static_cast<std::int64_t>(start_frame_48k);
     }
-    const auto queue_status = impl_->QueueConverted(interleaved_samples);
-    if (queue_status != VRREC_STATUS_OK) {
-        return impl_->FailLocked(queue_status);
+    std::vector<EncodedMediaPacket> packets;
+    std::size_t processed_frames = 0;
+    while (processed_frames < frame_count) {
+        if (impl_->abort_requested.load()) {
+            return impl_->AbortLocked();
+        }
+        const auto chunk_frame_count = std::min(
+            static_cast<std::size_t>(AacFrameSize),
+            frame_count - processed_frames);
+        const auto sample_offset = processed_frames *
+            static_cast<std::size_t>(AacChannelCount);
+        const auto chunk_sample_count = chunk_frame_count *
+            static_cast<std::size_t>(AacChannelCount);
+        const auto queue_status = impl_->QueueConverted(
+            interleaved_samples.subspan(
+                sample_offset,
+                chunk_sample_count));
+        if (queue_status != VRREC_STATUS_OK) {
+            return impl_->FailOrAbortLocked(queue_status);
+        }
+        if (impl_->abort_requested.load()) {
+            return impl_->AbortLocked();
+        }
+        const auto encode_status = impl_->EncodeFullFrames(packets);
+        if (encode_status != VRREC_STATUS_OK) {
+            return impl_->FailOrAbortLocked(encode_status);
+        }
+        if (impl_->abort_requested.load()) {
+            return impl_->AbortLocked();
+        }
+        processed_frames += chunk_frame_count;
     }
+
     impl_->has_input = true;
     impl_->next_input_frame_48k = start_frame_48k + frame_count;
-
-    std::vector<EncodedMediaPacket> packets;
-    const auto encode_status = impl_->EncodeFullFrames(packets);
-    if (encode_status != VRREC_STATUS_OK) {
-        return impl_->FailLocked(encode_status);
-    }
     return {VRREC_STATUS_OK, std::move(packets)};
 }
 
@@ -940,9 +1029,15 @@ PacketAudioEncoderWrite FfmpegAacPacketEncoder::Finish() noexcept
     if (impl_->state != Impl::State::Active) {
         return Failure(VRREC_STATUS_INVALID_STATE);
     }
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
+    }
 
     std::vector<EncodedMediaPacket> packets;
     auto status = impl_->FlushResamplerToFifo();
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
+    }
     if (status == VRREC_STATUS_OK) {
         status = impl_->EncodeFullFrames(packets);
     }
@@ -955,25 +1050,38 @@ PacketAudioEncoderWrite FfmpegAacPacketEncoder::Finish() noexcept
         }
     }
     if (status != VRREC_STATUS_OK) {
-        return impl_->FailLocked(status);
+        return impl_->FailOrAbortLocked(status);
     }
 
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
+    }
     if (impl_->ShouldFail(
             FfmpegAacPacketEncoderFailurePoint::DrainCodecFailure)) {
-        return impl_->FailLocked(VRREC_STATUS_INTERNAL_ERROR);
+        return impl_->FailOrAbortLocked(VRREC_STATUS_INTERNAL_ERROR);
     }
     auto final_batch = impl_->state_machine.Finish();
+    if (impl_->serialization_observer != nullptr) {
+        impl_->serialization_observer->ObserveCheckpoint(
+            FfmpegAacPacketEncoderCheckpoint::FinishBeforeCommit);
+    }
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
+    }
     if (!final_batch.packets.empty() &&
         impl_->ShouldFail(
             FfmpegAacPacketEncoderFailurePoint::
                 AppendPacketsOutOfMemory)) {
-        return impl_->FailLocked(VRREC_STATUS_OUT_OF_MEMORY);
+        return impl_->FailOrAbortLocked(VRREC_STATUS_OUT_OF_MEMORY);
     }
     const auto append_status = AppendPackets(
         packets,
         std::move(final_batch));
     if (append_status != VRREC_STATUS_OK) {
-        return impl_->FailLocked(append_status);
+        return impl_->FailOrAbortLocked(append_status);
+    }
+    if (impl_->abort_requested.load()) {
+        return impl_->AbortLocked();
     }
     impl_->state = Impl::State::Finished;
     return {VRREC_STATUS_OK, std::move(packets)};
@@ -984,19 +1092,14 @@ void FfmpegAacPacketEncoder::Abort() noexcept
     if (impl_ == nullptr) {
         return;
     }
+    impl_->abort_requested.store(true);
     auto lock = impl_->AcquireLock(
         FfmpegAacPacketEncoderOperation::Abort);
     if (impl_->state == Impl::State::Finished ||
         impl_->state == Impl::State::Aborted) {
         return;
     }
-    if (impl_->state == Impl::State::Active) {
-        impl_->state_machine.Abort();
-    }
-    if (impl_->fifo != nullptr) {
-        av_audio_fifo_reset(impl_->fifo);
-    }
-    impl_->state = Impl::State::Aborted;
+    static_cast<void>(impl_->AbortLocked());
 }
 
 }

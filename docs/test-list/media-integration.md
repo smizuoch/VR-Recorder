@@ -22,12 +22,13 @@
 - [x] encoded packetが実byte payloadを所有し、encoder元buffer変更後も内容を保ち、empty payloadをmux mutation前に拒否する
 - [x] portable FFmpeg seamでsend／receiveを0／複数packet、EAGAIN操作再試行、drain EOF、部分batch失敗、各ownership確保位置のOOM、Abort競合で状態機械化し、成功packetを必ずunrefする
 - [x] 公式FFmpeg 8.1.2の実libavcodec AAC Portでopen済みcontext所有権、実AVFrameのEAGAIN保持、実AVPacket borrow／unref、負priming／unknown timestampのmicrosecond変換、OOM、drain EOF、terminal Abortを検証する
-- [x] 公式FFmpeg 8.1.2のnative AAC factoryでcontext／ASCを生成し、packed Float32→FLTP、FIFO frame化、small-last／NULL drain、exact packet timing、途中失敗batch atomicity、操作競合を検証する
+- [x] 公式FFmpeg 8.1.2のnative AAC factoryでcontext／ASCを生成し、全入力のfinite／timing事前検証、最大1024 stereo frameの内部変換chunk、packed Float32→FLTP、FIFO frame化、small-last／NULL drain、exact packet timing、途中失敗batch atomicity、Encode／Finishに対するAbort winnerを検証する
 - [x] AACのSkipSamples side dataをaudio-only／exact 10-byteのtyped・owned値としてmuxまで保持し、side-data-only／unknown／wrong-size／duplicate／video side dataをfail-closedにする
 - [x] AACの`frame_size`／`initial_padding_samples`をdescriptorへ保持し、bounded negative priming PTS／DTSをmuxへ維持しながらpresentation 0未満をA/V drift観測だけから除外する
 - [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する
-- [x] 公式FFmpeg 8.1.2の実libavformat PortでAVCC／AAC metadata、実timestamp rescale、fragment option、負AAC priming edit list、packet消費、trailer／flush／close、`/dev/full`、pending非公開を検証し、未変換のAnnex B／SkipSamplesをfail-closed拒否する
-- [x] H.264／AAC descriptorがmicrosecond time base、codec形式、profile／layout、AAC frame size／initial padding、owned extradataを持ち、invalid descriptorをheader前に拒否する
+- [x] 公式FFmpeg 8.1.2の実libavformat PortでAVCC／AAC metadata、exact 192 kbpsの`esds`／`btrt`、実timestamp rescale、fragment option、負AAC priming edit list、packet消費、trailer／flush／close、`/dev/full`、pending非公開を検証し、未変換のAnnex B／SkipSamplesをfail-closed拒否する
+- [x] H.264／AAC descriptorがmicrosecond time base、codec形式、profile／layout、AAC frame size／initial padding／exact 192 kbps、owned extradataを持ち、invalid descriptorをheader前に拒否する
+- [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
 - [x] 初回H.264 configでB-frameを明示的に0へ固定する
@@ -81,12 +82,13 @@
 - [x] Own actual encoded-packet bytes, retain them after mutation of the encoder source buffer, and reject empty payloads before mux mutation
 - [x] Model send/receive in the portable FFmpeg seam as a state machine covering zero/multiple packets, EAGAIN operation retry, drain EOF, partial-batch failure, every packet-ownership OOM position, abort races, and unref of every successful packet
 - [x] Validate opened-context ownership, real-AVFrame retention across EAGAIN, real-AVPacket borrow/unref, microsecond conversion of negative priming and unknown timestamps, OOM, drain EOF, and terminal abort through a real libavcodec AAC port built against official FFmpeg 8.1.2
-- [x] Generate the context/ASC through the official-FFmpeg-8.1.2 native AAC factory and validate packed-Float32-to-FLTP conversion, FIFO framing, small-last/NULL drain, exact packet timing, mid-batch failure atomicity, and operation races
+- [x] Generate the context/ASC through the official-FFmpeg-8.1.2 native AAC factory and validate whole-input finite/timing preflight, at-most-1024-stereo-frame conversion chunks, packed-Float32-to-FLTP conversion, FIFO framing, small-last/NULL drain, exact packet timing, mid-batch failure atomicity, and Abort winning against Encode/Finish
 - [x] Carry AAC SkipSamples as audio-only, exactly 10-byte typed owned data through muxing while failing closed on side-data-only, unknown, wrong-size, duplicate, or video side data
 - [x] Carry AAC `frame_size`/`initial_padding_samples`, preserve the bounded negative priming PTS/DTS for muxing, and exclude pre-presentation-zero packets only from A/V drift observation
 - [x] In the portable mux seam, read back actual video/audio time bases after the header, pass immutable canonical packets into the rescale port, and reject fake-rescale sentinels, end-time overflow, zero duration, or DTS collisions before interleaved write
-- [x] Validate AVCC/AAC metadata, real timestamp rescaling, fragment options, the negative-AAC-priming edit list, packet consumption, trailer/flush/close, `/dev/full`, and pending-file nonpublication through a real libavformat port against official FFmpeg 8.1.2, while fail-closed rejecting unconverted Annex B and SkipSamples
-- [x] Carry a microsecond time base, codec format, profile/layout, AAC frame size/initial padding, and owned extradata in typed H.264/AAC descriptors and reject invalid descriptors before header mutation
+- [x] Validate AVCC/AAC metadata, exact-192-kbps `esds`/`btrt`, real timestamp rescaling, fragment options, the negative-AAC-priming edit list, packet consumption, trailer/flush/close, `/dev/full`, and pending-file nonpublication through a real libavformat port against official FFmpeg 8.1.2, while fail-closed rejecting unconverted Annex B and SkipSamples
+- [x] Carry a microsecond time base, codec format, profile/layout, AAC frame size/initial padding/exact 192 kbps, and owned extradata in typed H.264/AAC descriptors and reject invalid descriptors before header mutation
+- [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video
 - [x] Explicitly configure zero B-frames for the initial H.264 production slice

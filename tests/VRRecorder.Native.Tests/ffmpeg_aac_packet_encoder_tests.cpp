@@ -163,6 +163,7 @@ void CreatesTheExactPinnedDescriptorAndOwnsItsAsc()
     CHECK(descriptor.packet_time_base == MicrosecondPacketTimeBase);
     CHECK(descriptor.sample_rate == SampleRate);
     CHECK(descriptor.channel_count == ChannelCount);
+    CHECK(descriptor.bitrate_bits_per_second == 192'000);
     CHECK(descriptor.frame_size == 1'024);
     CHECK(descriptor.initial_padding_samples == 1'024);
     CHECK(descriptor.profile == AacProfile::LowComplexity);
@@ -310,6 +311,49 @@ void ReusesWritableFramesForTwoFullAacFrames()
     CHECK(observer.frames[1].left.size() == 1'024);
 }
 
+void PreservesEveryFrameAcrossAOneSecondInputWindow()
+{
+    PreparedFrameObserver observer;
+    auto creation = CreateForTest(
+        FfmpegAacPacketEncoderFailurePoint::None,
+        &observer);
+    CHECK(creation.status == VRREC_STATUS_OK);
+    auto samples = StereoFrames(SampleRate);
+
+    CHECK(
+        creation.encoder->EncodePcm48k(0, samples).status ==
+        VRREC_STATUS_OK);
+    CHECK(creation.encoder->Finish().status == VRREC_STATUS_OK);
+
+    CHECK(!observer.failed);
+    CHECK(observer.frames.size() == 47);
+    for (std::size_t index = 0; index < 46; ++index) {
+        CHECK(observer.frames[index].pts_48k ==
+            static_cast<std::int64_t>(index * 1'024));
+        CHECK(observer.frames[index].left.size() == 1'024);
+        CHECK(observer.frames[index].right.size() == 1'024);
+    }
+    CHECK(observer.frames.back().pts_48k == 47'104);
+    CHECK(observer.frames.back().left.size() == 896);
+    CHECK(observer.frames.back().right.size() == 896);
+}
+
+void ChunksLargeInputBeforeCallingIntCountResamplerApis()
+{
+    auto creation = CreateForTest(
+        FfmpegAacPacketEncoderFailurePoint::ConvertSamples,
+        nullptr,
+        2);
+    CHECK(creation.status == VRREC_STATUS_OK);
+    auto samples = StereoFrames(2'048);
+
+    const auto failure = creation.encoder->EncodePcm48k(0, samples);
+
+    CHECK(failure.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(failure.packets.empty());
+    CHECK(creation.encoder->Finish().status == VRREC_STATUS_INVALID_STATE);
+}
+
 void AllowsANonzeroFirstFrameAndPreservesItsPts()
 {
     PreparedFrameObserver observer;
@@ -400,6 +444,24 @@ void RejectsMalformedSamplesAndTimelineDiscontinuitiesTerminally()
         CHECK(encoder.EncodePcm48k(10, samples).status == VRREC_STATUS_OK);
         return encoder.EncodePcm48k(11, samples);
     });
+}
+
+void PreflightsEveryLargeInputChunkBeforeEncoderMutation()
+{
+    PreparedFrameObserver observer;
+    auto creation = CreateForTest(
+        FfmpegAacPacketEncoderFailurePoint::None,
+        &observer);
+    CHECK(creation.status == VRREC_STATUS_OK);
+    auto samples = StereoFrames(4'096);
+    samples.back() = std::numeric_limits<float>::quiet_NaN();
+
+    const auto failure = creation.encoder->EncodePcm48k(0, samples);
+
+    CHECK(failure.status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(failure.packets.empty());
+    CHECK(observer.frames.empty());
+    CHECK(creation.encoder->Finish().status == VRREC_STATUS_INVALID_STATE);
 }
 
 void FinishAndAbortAreTerminalAndIdempotent()
@@ -742,6 +804,7 @@ public:
         std::span<const float>) noexcept override
     {
         std::unique_lock lock(mutex_);
+        ++observe_calls_;
         entered_ = true;
         entered_condition_.notify_one();
         release_condition_.wait(lock, [this] { return released_; });
@@ -763,12 +826,19 @@ public:
         release_condition_.notify_one();
     }
 
+    std::size_t ObserveCalls() const
+    {
+        const std::lock_guard lock(mutex_);
+        return observe_calls_;
+    }
+
 private:
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::condition_variable entered_condition_;
     std::condition_variable release_condition_;
     bool entered_ = false;
     bool released_ = false;
+    std::size_t observe_calls_ = 0;
 };
 
 class ContentionObserver final : public FfmpegAacSerializationObserver {
@@ -798,6 +868,66 @@ private:
     std::array<bool, 3> observed_ {};
 };
 
+class BlockingFinishCheckpointObserver final
+    : public FfmpegAacSerializationObserver {
+public:
+    void ObserveContention(
+        FfmpegAacPacketEncoderOperation operation) noexcept override
+    {
+        if (operation != FfmpegAacPacketEncoderOperation::Abort) {
+            return;
+        }
+        const std::lock_guard lock(mutex_);
+        abort_contended_ = true;
+        condition_.notify_all();
+    }
+
+    void ObserveCheckpoint(
+        FfmpegAacPacketEncoderCheckpoint checkpoint) noexcept override
+    {
+        if (checkpoint !=
+            FfmpegAacPacketEncoderCheckpoint::FinishBeforeCommit) {
+            return;
+        }
+        std::unique_lock lock(mutex_);
+        checkpoint_entered_ = true;
+        condition_.notify_all();
+        condition_.wait(lock, [this] { return checkpoint_released_; });
+    }
+
+    bool WaitUntilCheckpointEntered()
+    {
+        std::unique_lock lock(mutex_);
+        return condition_.wait_for(
+            lock,
+            std::chrono::seconds(5),
+            [this] { return checkpoint_entered_; });
+    }
+
+    bool WaitUntilAbortContended()
+    {
+        std::unique_lock lock(mutex_);
+        return condition_.wait_for(
+            lock,
+            std::chrono::seconds(5),
+            [this] { return abort_contended_; });
+    }
+
+    void ReleaseCheckpoint()
+    {
+        const std::lock_guard lock(mutex_);
+        checkpoint_released_ = true;
+        condition_.notify_all();
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    bool checkpoint_entered_ = false;
+    bool checkpoint_released_ = false;
+    bool abort_contended_ = false;
+};
+
 void SerializesEncodeFinishAndAbortThroughOneMutex()
 {
     {
@@ -809,7 +939,7 @@ void SerializesEncodeFinishAndAbortThroughOneMutex()
             1,
             &contention);
         CHECK(creation.status == VRREC_STATUS_OK);
-        auto samples = StereoFrames(1'024);
+        auto samples = StereoFrames(4'096);
         PacketAudioEncoderWrite encode_result {
             VRREC_STATUS_INTERNAL_ERROR,
             {},
@@ -827,7 +957,9 @@ void SerializesEncodeFinishAndAbortThroughOneMutex()
         observer.Release();
         encode_thread.join();
         abort_thread.join();
-        CHECK(encode_result.status == VRREC_STATUS_OK);
+        CHECK(encode_result.status == VRREC_STATUS_INVALID_STATE);
+        CHECK(encode_result.packets.empty());
+        CHECK(observer.ObserveCalls() == 1);
         CHECK(
             creation.encoder->Finish().status ==
             VRREC_STATUS_INVALID_STATE);
@@ -902,11 +1034,48 @@ void SerializesEncodeFinishAndAbortThroughOneMutex()
         observer.Release();
         finish_thread.join();
         abort_thread.join();
-        CHECK(finish_result.status == VRREC_STATUS_OK);
+        CHECK(finish_result.status == VRREC_STATUS_INVALID_STATE);
+        CHECK(finish_result.packets.empty());
         CHECK(
             creation.encoder->Finish().status ==
             VRREC_STATUS_INVALID_STATE);
     }
+}
+
+void AbortWinsAfterCodecDrainBeforeTheWrapperCommitsFinish()
+{
+    BlockingFinishCheckpointObserver observer;
+    auto creation = CreateForTest(
+        FfmpegAacPacketEncoderFailurePoint::None,
+        nullptr,
+        1,
+        &observer);
+    CHECK(creation.status == VRREC_STATUS_OK);
+    auto samples = StereoFrames(1);
+    CHECK(
+        creation.encoder->EncodePcm48k(0, samples).status ==
+        VRREC_STATUS_OK);
+
+    PacketAudioEncoderWrite finish_result {
+        VRREC_STATUS_INTERNAL_ERROR,
+        {},
+    };
+    std::thread finish_thread([&] {
+        finish_result = creation.encoder->Finish();
+    });
+    CHECK(observer.WaitUntilCheckpointEntered());
+
+    std::thread abort_thread([&] {
+        creation.encoder->Abort();
+    });
+    CHECK(observer.WaitUntilAbortContended());
+    observer.ReleaseCheckpoint();
+    finish_thread.join();
+    abort_thread.join();
+
+    CHECK(finish_result.status == VRREC_STATUS_INVALID_STATE);
+    CHECK(finish_result.packets.empty());
+    CHECK(creation.encoder->Finish().status == VRREC_STATUS_INVALID_STATE);
 }
 
 }
@@ -918,8 +1087,11 @@ int main()
     EncodesEverySmallLastFrameBoundaryExactly();
     PreservesPackedChannelsAcrossArbitraryChunkBoundaries();
     ReusesWritableFramesForTwoFullAacFrames();
+    PreservesEveryFrameAcrossAOneSecondInputWindow();
+    ChunksLargeInputBeforeCallingIntCountResamplerApis();
     AllowsANonzeroFirstFrameAndPreservesItsPts();
     RejectsMalformedSamplesAndTimelineDiscontinuitiesTerminally();
+    PreflightsEveryLargeInputChunkBeforeEncoderMutation();
     FinishAndAbortAreTerminalAndIdempotent();
     RejectsEveryNonExactConfiguration();
     RejectsEveryMismatchedRuntimeIdentity();
@@ -929,5 +1101,6 @@ int main()
     AFailureAfterAnEarlierPacketPublishesNoPartialBatch();
     ResamplerFlushFailureIsObservableAndTerminal();
     SerializesEncodeFinishAndAbortThroughOneMutex();
+    AbortWinsAfterCodecDrainBeforeTheWrapperCommitsFinish();
     return 0;
 }
