@@ -642,6 +642,53 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
     endif()
 endif()
 
+set(ffmpeg_libavformat_test_dependency "")
+if(TARGET FFmpeg::avformat)
+    set(ffmpeg_libavformat_test_dependency FFmpeg::avformat)
+elseif(TARGET FFmpegContractTest::avformat)
+    set(ffmpeg_libavformat_test_dependency FFmpegContractTest::avformat)
+endif()
+
+if(NOT ffmpeg_libavformat_test_dependency STREQUAL "")
+    add_executable(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        ffmpeg_libavformat_fragmented_mp4_muxer_port_tests.cpp
+        "${native_source_root}/src/ffmpeg_libavformat_fragmented_mp4_muxer_port.cpp"
+        "${native_source_root}/src/ffmpeg_fragmented_mp4_muxer.cpp")
+    target_compile_features(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        PRIVATE cxx_std_20)
+    target_compile_definitions(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        PRIVATE VRRECORDER_NATIVE_TESTING=1)
+    target_include_directories(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        PRIVATE
+            "${native_source_root}/include"
+            "${native_source_root}/src")
+    target_link_libraries(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        PRIVATE ${ffmpeg_libavformat_test_dependency})
+    set_target_properties(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        PROPERTIES CXX_EXTENSIONS OFF)
+    vrrecorder_enable_strict_warnings(
+        vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port)
+    if(WIN32)
+        add_custom_command(
+            TARGET
+                vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+            POST_BUILD
+            COMMAND
+                "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:FFmpeg::avformat>"
+                "$<TARGET_FILE:FFmpeg::avcodec>"
+                "$<TARGET_FILE:FFmpeg::avutil>"
+                "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port>"
+            VERBATIM)
+    endif()
+endif()
+
 add_executable(
     vrrecorder_native_ffmpeg_fragmented_mp4_muxer
     ffmpeg_fragmented_mp4_muxer_tests.cpp
@@ -895,6 +942,12 @@ add_test(NAME vrrecorder_native_ffmpeg_encoder_state_machine
 if(TARGET vrrecorder_native_ffmpeg_libavcodec_encoder_port)
     add_test(NAME vrrecorder_native_ffmpeg_libavcodec_encoder_port
         COMMAND vrrecorder_native_ffmpeg_libavcodec_encoder_port)
+endif()
+if(TARGET vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port)
+    add_test(
+        NAME vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port
+        COMMAND
+            vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port)
 endif()
 add_test(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer
     COMMAND vrrecorder_native_ffmpeg_fragmented_mp4_muxer)

@@ -24,7 +24,8 @@
 - [x] 公式FFmpeg 8.1.2の実libavcodec AAC Portでopen済みcontext所有権、実AVFrameのEAGAIN保持、実AVPacket borrow／unref、負priming／unknown timestampのmicrosecond変換、OOM、drain EOF、terminal Abortを検証する
 - [x] AACのSkipSamples side dataをaudio-only／exact 10-byteのtyped・owned値としてmuxまで保持し、side-data-only／unknown／wrong-size／duplicate／video side dataをfail-closedにする
 - [x] AACの`frame_size`／`initial_padding_samples`をdescriptorへ保持し、bounded negative priming PTS／DTSをmuxへ維持しながらpresentation 0未満をA/V drift観測だけから除外する
-- [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する（実`av_packet_rescale_ts`算術はproduction adapter gate）
+- [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する
+- [x] 公式FFmpeg 8.1.2の実libavformat PortでAVCC／AAC metadata、実timestamp rescale、fragment option、負AAC priming edit list、packet消費、trailer／flush／close、`/dev/full`、pending非公開を検証し、未変換のAnnex B／SkipSamplesをfail-closed拒否する
 - [x] H.264／AAC descriptorがmicrosecond time base、codec形式、profile／layout、AAC frame size／initial padding、owned extradataを持ち、invalid descriptorをheader前に拒否する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -75,7 +76,8 @@
 - [x] Validate opened-context ownership, real-AVFrame retention across EAGAIN, real-AVPacket borrow/unref, microsecond conversion of negative priming and unknown timestamps, OOM, drain EOF, and terminal abort through a real libavcodec AAC port built against official FFmpeg 8.1.2
 - [x] Carry AAC SkipSamples as audio-only, exactly 10-byte typed owned data through muxing while failing closed on side-data-only, unknown, wrong-size, duplicate, or video side data
 - [x] Carry AAC `frame_size`/`initial_padding_samples`, preserve the bounded negative priming PTS/DTS for muxing, and exclude pre-presentation-zero packets only from A/V drift observation
-- [x] In the portable mux seam, read back actual video/audio time bases after the header, pass immutable canonical packets into the rescale port, and reject fake-rescale sentinels, end-time overflow, zero duration, or DTS collisions before interleaved write (real `av_packet_rescale_ts` arithmetic remains a production-adapter gate)
+- [x] In the portable mux seam, read back actual video/audio time bases after the header, pass immutable canonical packets into the rescale port, and reject fake-rescale sentinels, end-time overflow, zero duration, or DTS collisions before interleaved write
+- [x] Validate AVCC/AAC metadata, real timestamp rescaling, fragment options, the negative-AAC-priming edit list, packet consumption, trailer/flush/close, `/dev/full`, and pending-file nonpublication through a real libavformat port against official FFmpeg 8.1.2, while fail-closed rejecting unconverted Annex B and SkipSamples
 - [x] Carry a microsecond time base, codec format, profile/layout, AAC frame size/initial padding, and owned extradata in typed H.264/AAC descriptors and reject invalid descriptors before header mutation
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video

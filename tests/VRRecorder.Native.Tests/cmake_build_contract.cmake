@@ -23,10 +23,16 @@ require_file("CMakeLists.txt")
 require_file("CMakePresets.json")
 require_file("cmake/PinnedFFmpeg.cmake")
 require_file("eng/build-ffmpeg-contract-test-sdk.sh")
+require_file(
+    "src/VRRecorder.Native/src/ffmpeg_libavformat_fragmented_mp4_muxer_port.hpp")
+require_file(
+    "src/VRRecorder.Native/src/ffmpeg_libavformat_fragmented_mp4_muxer_port.cpp")
 require_file("src/VRRecorder.Native/CMakeLists.txt")
 require_file("src/VRRecorder.Native/Makefile")
 require_file("src/VRRecorder.Native/vrrecorder_native.def")
 require_file("tests/VRRecorder.Native.Tests/CMakeLists.txt")
+require_file(
+    "tests/VRRecorder.Native.Tests/ffmpeg_libavformat_fragmented_mp4_muxer_port_tests.cpp")
 require_file("tests/VRRecorder.Native.Tests/Makefile")
 require_file("tests/VRRecorder.Native.Tests/verify_exports.cmake")
 require_file("tests/cmake/pinned_ffmpeg_contract.cmake")
@@ -61,6 +67,15 @@ require_text(
 require_text(
     "eng/build-ffmpeg-contract-test-sdk.sh"
     "--enable-encoder=aac")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "--enable-avformat")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "--enable-muxer=mp4")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "libavformat\\.so\\.62\\.12\\.102")
 
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
     set(unsafe_sdk_root "${CMAKE_CURRENT_BINARY_DIR}/unsafe-ffmpeg-sdk-root")
@@ -139,6 +154,12 @@ require_text(
 require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_ffmpeg_libavcodec_encoder_port")
+require_text(
+    "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+    "NAME vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port")
+require_text(
+    "cmake/PinnedFFmpeg.cmake"
+    "FFmpegContractTest::avformat")
 require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer")

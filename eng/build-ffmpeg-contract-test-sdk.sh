@@ -69,6 +69,7 @@ fi
 if [[ "${sdk_owned}" == true ]] &&
    [[ -f "${marker_path}" ]] &&
    [[ "$(<"${marker_path}")" == "${expected_marker}" ]] &&
+   [[ -f "${sdk_root}/lib/libavformat.so.62.12.102" ]] &&
    [[ -f "${sdk_root}/lib/libavcodec.so.62.28.102" ]] &&
    [[ -f "${sdk_root}/lib/libavutil.so.60.26.102" ]]; then
     printf '%s\n' "${sdk_root}"

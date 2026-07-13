@@ -40,7 +40,7 @@ set(
     VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT
     ""
     CACHE PATH
-    "Optional exact FFmpeg 8.1.2 Linux SDK for real libavcodec tests")
+    "Optional exact FFmpeg 8.1.2 Linux SDK for real adapter tests")
 
 if(VRRECORDER_ENABLE_FFMPEG_ADAPTERS)
     if(NOT WIN32)

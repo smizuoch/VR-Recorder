@@ -314,17 +314,22 @@ function(vrrecorder_import_ffmpeg_contract_test_sdk root)
     cmake_path(NORMAL_PATH root OUTPUT_VARIABLE normalized_root)
     _vrrecorder_ffmpeg_validate_exact_headers("${normalized_root}/include")
     set(
+        avformat_library
+        "${normalized_root}/lib/libavformat.so.62.12.102")
+    set(
         avcodec_library
         "${normalized_root}/lib/libavcodec.so.62.28.102")
     set(
         avutil_library
         "${normalized_root}/lib/libavutil.so.60.26.102")
     _vrrecorder_ffmpeg_require_file(
+        "${avformat_library}" "contract-test libavformat")
+    _vrrecorder_ffmpeg_require_file(
         "${avcodec_library}" "contract-test libavcodec")
     _vrrecorder_ffmpeg_require_file(
         "${avutil_library}" "contract-test libavutil")
 
-    foreach(component IN ITEMS avcodec avutil)
+    foreach(component IN ITEMS avformat avcodec avutil)
         if(TARGET "FFmpegContractTest::${component}")
             message(
                 FATAL_ERROR
@@ -345,4 +350,12 @@ function(vrrecorder_import_ffmpeg_contract_test_sdk root)
             IMPORTED_LOCATION "${avcodec_library}"
             INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
             INTERFACE_LINK_LIBRARIES FFmpegContractTest::avutil)
+    add_library(FFmpegContractTest::avformat SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractTest::avformat
+        PROPERTIES
+            IMPORTED_LOCATION "${avformat_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
+            INTERFACE_LINK_LIBRARIES
+                "FFmpegContractTest::avcodec;FFmpegContractTest::avutil")
 endfunction()
