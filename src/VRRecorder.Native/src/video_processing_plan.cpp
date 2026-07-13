@@ -82,9 +82,21 @@ vrrec_status_t CreateExplicitVideoProcessingPlan(
     const vrrec_video_layout_v1 &layout,
     VideoProcessingPlan &plan) noexcept
 {
+    plan = VideoProcessingPlan {};
     if (source.width != layout.source_width ||
-        source.height != layout.source_height) {
-        plan = VideoProcessingPlan {};
+        source.height != layout.source_height ||
+        layout.destination_width == 0 ||
+        layout.destination_height == 0 ||
+        (layout.destination_width & 1U) != 0 ||
+        (layout.destination_height & 1U) != 0 ||
+        layout.destination_x > layout.canvas_width ||
+        layout.destination_y > layout.canvas_height ||
+        layout.destination_width >
+            layout.canvas_width - layout.destination_x ||
+        layout.destination_height >
+            layout.canvas_height - layout.destination_y ||
+        layout.canvas_background != VRREC_CANVAS_BACKGROUND_BLACK ||
+        layout.rotation != VRREC_VIDEO_ROTATION_NONE) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
