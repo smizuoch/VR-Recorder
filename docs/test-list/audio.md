@@ -34,6 +34,9 @@
 - [x] graceful stopではcapture解除後にencoderをflushし、Abort／encoder failureではflushせず両方を停止する
 - [x] capture成功後だけencodingを開始し、pipeline単位でrouting／stop／最終統計を扱う
 - [x] AAC-LC、48 kHz、stereo、192 kbpsと内部Float32 interleaved入力をnative encoder設定として固定する
+- [x] 公式FFmpeg 8.1.2のnative AAC contextを生成し、open後の1024 frame／1024 initial padding／owned AudioSpecificConfigを検証する
+- [x] packed Float32 stereoをFLTPへ変換してFIFOで任意chunkを1024 sample frameへ再構成し、Finish時だけ1–1023 sampleのsmall last frameを送る
+- [x] 0／1／1023／1024／1025 sampleの負priming／末尾duration／side dataなしpacket列と、途中OOM／変換／FIFO／drain失敗時のbatch非公開、Encode／Finish／Abort競合を実APIで固定する
 
 ## English
 
@@ -69,3 +72,6 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Flush the encoder after releasing capture only on graceful stop, and stop both sides without flushing on abort or encoder failure
 - [x] Start encoding only after capture succeeds and manage routing, stop, and final statistics at the pipeline-session level
 - [x] Fix AAC-LC, 48 kHz, stereo, 192 kbps, and internal interleaved Float32 input in the native encoder configuration
+- [x] Create the native AAC context from official FFmpeg 8.1.2 and verify its post-open 1024-frame size, 1024-sample initial padding, and owned AudioSpecificConfig
+- [x] Convert packed stereo Float32 into FLTP, rebuild arbitrary chunks into 1024-sample frames through a FIFO, and send a 1–1023-sample small last frame only during Finish
+- [x] Pin the exact negative-priming/tail-duration/no-side-data packet sequences for 0/1/1023/1024/1025 samples and prove no partial batch escapes after mid-batch OOM, conversion, FIFO, or drain failures and Encode/Finish/Abort races

@@ -602,6 +602,13 @@ elseif(TARGET FFmpegContractTest::avcodec)
     set(ffmpeg_libavcodec_test_dependency FFmpegContractTest::avcodec)
 endif()
 
+set(ffmpeg_swresample_test_dependency "")
+if(TARGET FFmpeg::swresample)
+    set(ffmpeg_swresample_test_dependency FFmpeg::swresample)
+elseif(TARGET FFmpegContractTest::swresample)
+    set(ffmpeg_swresample_test_dependency FFmpegContractTest::swresample)
+endif()
+
 if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
     add_executable(
         vrrecorder_native_ffmpeg_libavcodec_encoder_port
@@ -639,6 +646,49 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
                 "$<TARGET_FILE:FFmpeg::avutil>"
                 "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_libavcodec_encoder_port>"
             VERBATIM)
+    endif()
+
+    if(NOT ffmpeg_swresample_test_dependency STREQUAL "")
+        add_executable(
+            vrrecorder_native_ffmpeg_aac_packet_encoder
+            ffmpeg_aac_packet_encoder_tests.cpp
+            "${native_source_root}/src/audio_encoder_config.cpp"
+            "${native_source_root}/src/ffmpeg_aac_packet_encoder.cpp"
+            "${native_source_root}/src/ffmpeg_libavcodec_encoder_port.cpp"
+            "${native_source_root}/src/ffmpeg_encoder_state_machine.cpp")
+        target_compile_features(
+            vrrecorder_native_ffmpeg_aac_packet_encoder PRIVATE cxx_std_20)
+        target_compile_definitions(
+            vrrecorder_native_ffmpeg_aac_packet_encoder
+            PRIVATE VRRECORDER_NATIVE_TESTING=1)
+        target_include_directories(
+            vrrecorder_native_ffmpeg_aac_packet_encoder
+            PRIVATE
+                "${native_source_root}/include"
+                "${native_source_root}/src")
+        target_link_libraries(
+            vrrecorder_native_ffmpeg_aac_packet_encoder
+            PRIVATE
+                ${ffmpeg_libavcodec_test_dependency}
+                ${ffmpeg_swresample_test_dependency}
+                Threads::Threads)
+        set_target_properties(
+            vrrecorder_native_ffmpeg_aac_packet_encoder
+            PROPERTIES CXX_EXTENSIONS OFF)
+        vrrecorder_enable_strict_warnings(
+            vrrecorder_native_ffmpeg_aac_packet_encoder)
+        if(WIN32)
+            add_custom_command(
+                TARGET vrrecorder_native_ffmpeg_aac_packet_encoder
+                POST_BUILD
+                COMMAND
+                    "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:FFmpeg::avcodec>"
+                    "$<TARGET_FILE:FFmpeg::avutil>"
+                    "$<TARGET_FILE:FFmpeg::swresample>"
+                    "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_aac_packet_encoder>"
+                VERBATIM)
+        endif()
     endif()
 endif()
 
@@ -942,6 +992,10 @@ add_test(NAME vrrecorder_native_ffmpeg_encoder_state_machine
 if(TARGET vrrecorder_native_ffmpeg_libavcodec_encoder_port)
     add_test(NAME vrrecorder_native_ffmpeg_libavcodec_encoder_port
         COMMAND vrrecorder_native_ffmpeg_libavcodec_encoder_port)
+endif()
+if(TARGET vrrecorder_native_ffmpeg_aac_packet_encoder)
+    add_test(NAME vrrecorder_native_ffmpeg_aac_packet_encoder
+        COMMAND vrrecorder_native_ffmpeg_aac_packet_encoder)
 endif()
 if(TARGET vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port)
     add_test(
