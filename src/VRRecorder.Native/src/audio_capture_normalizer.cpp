@@ -406,6 +406,11 @@ bool StereoCaptureNormalizer48k::TryDecodeSample(
         std::memcpy(&pcm, bytes, sizeof(pcm));
         const auto padding_bits =
             static_cast<int>(format.container_bits - format.valid_bits);
+        const auto padding_mask =
+            (std::uint32_t {1} << padding_bits) - 1U;
+        if ((std::bit_cast<std::uint32_t>(pcm) & padding_mask) != 0) {
+            return false;
+        }
         const auto padding_scale = std::int32_t {1} << padding_bits;
         const auto valid_sample = pcm / padding_scale;
         const auto full_scale = std::ldexp(
