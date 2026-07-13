@@ -41,7 +41,7 @@
 - [x] batch全件をwrite前にpreflightし、N回目write failureでは後続を送らずprefixをdrift統計へcommitせず、logical packet countを0にする
 - [x] 同時A/V batchを非interleaveで直列化し、失敗中のpeer batchを0 writeで拒否する
 - [x] Encode中Abortはmuxを先にterminal化し、Write／Finishを直列化してencoder／completion／failure通知をexactly onceにする
-- [x] Finish中Abortをlogical winnerとし、sinkの成功packet数とaudio／video workerのflush packet／latency統計、first-packet／fault eventをcommitしない
+- [x] Finish中Abortとin-flight Write失敗復帰後のAbortをlogical winnerとし、sinkの成功packet数とaudio／video workerのflush packet／latency統計、first-packet／fault eventをcommitしない
 - [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux trailer／file flushを実行する
 - [x] 未開始操作、重複Start／completion、完了済みstreamの追加packet、invalid producer／streamをpending muxのprotocol違反として即Abortし、片側failure後の成功finalizeを拒否する
 - [x] mux成功packetの最新A/V PTS差を監視し、80 ms超のexcursionごとに一度だけprivacy-safe診断eventを発行する
@@ -57,8 +57,8 @@
 - [x] recording pipelineをC ABI MediaBackendへ接続し、layout／routing、全統計field、冪等な非同期stop／joinとdestructor回収を保証する
 - [x] mux成功packetから最新の符号付きA/V offsetを`audio PTS - video PTS`で計算し、mux／recording pipelineを通してC ABI最終統計へ伝播する
 - [x] 非同期stop Joinとforced Abortをatomic terminal遷移で仲裁し、Abortが先行した場合はStopped／Saved相当の成功完了を抑止する
-- [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする
-- [ ] productionの同期drift callbackからfull session Abortする場合、operation gate待ちのpeer workerをcallback stack上でJoinせずcross-stream循環を防ぐ
+- [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする。外部JoinAfterAbortはStart内rollback完了まで待ち、cleanup ownershipを取ったstreamへRequestAbortを再送する
+- [x] productionの同期drift callbackからfull session Abortする場合、callback stackではmuxと両workerへlogical RequestAbortだけを伝播し、prestarted cleanup workerが物理Abort／Joinを回収する。audio→video／video→audioの両方向を実worker graph＋subprocess watchdogで固定する
 
 ## English
 
@@ -101,7 +101,7 @@
 - [x] Preflight every packet before writing a batch, stop after an Nth write failure, commit no prefix to drift statistics, and report zero logical packets
 - [x] Serialize concurrent A/V batches without packet interleaving and reject a peer batch with zero writes after the active batch fails
 - [x] Terminalize muxing before waiting for an in-flight encoder Abort and serialize Write against Finish with exactly-once completion/failure notification
-- [x] Make Abort the logical winner during Finish and commit neither successful sink packet counts nor audio/video-worker flush packet/latency statistics or first-packet/fault events
+- [x] Make Abort the logical winner during Finish and after an in-flight Write returns failure, committing neither successful sink packet counts nor audio/video-worker flush packet/latency statistics or first-packet/fault events
 - [x] Wait at a barrier for successful video/audio encoder flushes and run mux trailer/file flush only after the second completion
 - [x] Treat pre-start operations, duplicate Start/completion, packets from a finished stream, and invalid producers/streams as pending-mux protocol violations that abort immediately and cannot later finalize successfully
 - [x] Monitor latest A/V PTS drift from successfully muxed packets and emit one privacy-safe diagnostic event per excursion beyond 80 ms
@@ -117,5 +117,5 @@
 - [x] Adapt the recording pipeline to the C ABI MediaBackend, preserving layout/routing, every statistics field, and idempotent asynchronous stop/join with destructor reclamation
 - [x] Compute the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` and propagate it through mux/recording pipelines into final C ABI statistics
 - [x] Arbitrate asynchronous stop/join against forced abort with an atomic terminal transition, suppressing Stopped/Saved-equivalent success when abort wins
-- [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop
-- [ ] Prevent a full-session Abort from a synchronous production drift callback from joining a peer worker that is waiting on the same operation gate
+- [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop. Make external JoinAfterAbort wait for in-Start rollback and reissue RequestAbort for every stream claimed by cleanup
+- [x] Propagate only logical RequestAbort to the mux and both workers from a synchronous production drift callback, and let a prestarted cleanup worker reclaim physical Abort/Join outside the callback stack. Cover both audio-to-video and video-to-audio directions with the real worker graph and a subprocess watchdog

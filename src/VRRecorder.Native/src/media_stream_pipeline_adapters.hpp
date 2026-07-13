@@ -18,6 +18,8 @@ public:
         std::chrono::milliseconds poll_timeout) noexcept;
     vrrec_status_t Start() noexcept override;
     vrrec_status_t RequestStop() noexcept override;
+    void RequestAbort() noexcept override;
+    void JoinAfterAbort() noexcept override;
     void Abort() noexcept override;
     vrrec_status_t Join() noexcept override;
     std::uint64_t MuxedPacketCount() const noexcept override;
@@ -36,6 +38,8 @@ public:
         std::size_t encoding_frame_count_48k);
     vrrec_status_t Start() noexcept override;
     vrrec_status_t RequestStop() noexcept override;
+    void RequestAbort() noexcept override;
+    void JoinAfterAbort() noexcept override;
     void Abort() noexcept override;
     vrrec_status_t Join() noexcept override;
     std::uint64_t MuxedPacketCount() const noexcept override;

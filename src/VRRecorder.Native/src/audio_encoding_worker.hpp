@@ -34,6 +34,8 @@ public:
 
     vrrec_status_t Start(std::size_t frame_count_48k) noexcept;
     vrrec_status_t RequestStop() noexcept;
+    void RequestAbort() noexcept;
+    void JoinAfterAbort() noexcept;
     void Abort() noexcept;
     StereoAudioEncodingWorkerResult Join() noexcept;
 
@@ -59,6 +61,7 @@ private:
     std::atomic_bool started_ = false;
     std::atomic_bool stop_requested_ = false;
     std::atomic_bool abort_requested_ = false;
+    std::atomic_bool abort_cleanup_started_ = false;
     std::atomic_bool finished_ = false;
 };
 

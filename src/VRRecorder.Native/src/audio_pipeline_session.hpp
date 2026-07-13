@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 #include "audio_capture_session.hpp"
 #include "audio_encoding_worker.hpp"
@@ -24,6 +25,8 @@ public:
     virtual vrrec_status_t SetRouting(
         vrrec_audio_routing_t routing) noexcept = 0;
     virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void RequestAbort() noexcept = 0;
+    virtual void JoinAfterAbort() noexcept = 0;
     virtual void Abort() noexcept = 0;
     virtual StereoAudioEncodingWorkerResult Join() noexcept = 0;
     virtual StereoAudioPipelineStatistics Statistics() const noexcept = 0;
@@ -47,6 +50,8 @@ public:
     vrrec_status_t SetRouting(
         vrrec_audio_routing_t routing) noexcept override;
     vrrec_status_t RequestStop() noexcept override;
+    void RequestAbort() noexcept override;
+    void JoinAfterAbort() noexcept override;
     void Abort() noexcept override;
     StereoAudioEncodingWorkerResult Join() noexcept override;
     StereoAudioPipelineStatistics Statistics() const noexcept override;
@@ -54,6 +59,7 @@ public:
 private:
     StereoAudioCaptureSessionPort &capture_;
     StereoAudioEncodingWorker encoding_;
+    std::mutex abort_join_mutex_;
     std::atomic_bool start_attempted_ = false;
     std::atomic_bool capture_started_ = false;
     std::atomic_bool encoding_started_ = false;

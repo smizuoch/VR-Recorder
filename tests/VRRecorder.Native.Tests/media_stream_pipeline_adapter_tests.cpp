@@ -16,6 +16,8 @@ class FakeVideoSession final : public VideoPipelineSessionPort {
 public:
     vrrec_status_t Start(std::chrono::milliseconds timeout) noexcept override { start_timeout = timeout; return start_status; }
     vrrec_status_t RequestStop() noexcept override { ++stop_calls; return stop_status; }
+    void RequestAbort() noexcept override { ++request_abort_calls; }
+    void JoinAfterAbort() noexcept override { ++join_after_abort_calls; }
     void Abort() noexcept override { ++abort_calls; }
     VideoPipelineResult Join() noexcept override { ++join_calls; return join_result; }
     VideoEncodingStatistics Statistics() const noexcept override { return statistics; }
@@ -25,6 +27,8 @@ public:
     VideoPipelineResult join_result = VideoPipelineResult::Stopped;
     VideoEncodingStatistics statistics {{0, 0, 0, 0}, 19, 0, 0};
     std::size_t stop_calls = 0;
+    std::size_t request_abort_calls = 0;
+    std::size_t join_after_abort_calls = 0;
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
 };
@@ -34,6 +38,8 @@ public:
     vrrec_status_t Start(const StereoAudioCaptureSessionConfig &config, std::size_t frames) noexcept override { observed_config = config; observed_frames = frames; return start_status; }
     vrrec_status_t SetRouting(vrrec_audio_routing_t) noexcept override { return VRREC_STATUS_OK; }
     vrrec_status_t RequestStop() noexcept override { ++stop_calls; return stop_status; }
+    void RequestAbort() noexcept override { ++request_abort_calls; }
+    void JoinAfterAbort() noexcept override { ++join_after_abort_calls; }
     void Abort() noexcept override { ++abort_calls; }
     StereoAudioEncodingWorkerResult Join() noexcept override { ++join_calls; return join_result; }
     StereoAudioPipelineStatistics Statistics() const noexcept override { return statistics; }
@@ -44,6 +50,8 @@ public:
     StereoAudioEncodingWorkerResult join_result = StereoAudioEncodingWorkerResult::Stopped;
     StereoAudioPipelineStatistics statistics {0, 23};
     std::size_t stop_calls = 0;
+    std::size_t request_abort_calls = 0;
+    std::size_t join_after_abort_calls = 0;
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
 };
@@ -57,6 +65,10 @@ void AdaptsConfiguredVideoSession()
     CHECK(adapter.RequestStop() == VRREC_STATUS_OK);
     CHECK(adapter.Join() == VRREC_STATUS_OK);
     CHECK(adapter.MuxedPacketCount() == 19);
+    adapter.RequestAbort();
+    adapter.JoinAfterAbort();
+    CHECK(session.request_abort_calls == 1);
+    CHECK(session.join_after_abort_calls == 1);
     adapter.Abort();
     CHECK(session.abort_calls == 1);
     session.join_result = VideoPipelineResult::SenderLost;
@@ -78,6 +90,10 @@ void AdaptsConfiguredAudioSession()
     CHECK(adapter.RequestStop() == VRREC_STATUS_OK);
     CHECK(adapter.Join() == VRREC_STATUS_OK);
     CHECK(adapter.MuxedPacketCount() == 23);
+    adapter.RequestAbort();
+    adapter.JoinAfterAbort();
+    CHECK(session.request_abort_calls == 1);
+    CHECK(session.join_after_abort_calls == 1);
     adapter.Abort();
     CHECK(session.abort_calls == 1);
     session.join_result = StereoAudioEncodingWorkerResult::MuxFailed;

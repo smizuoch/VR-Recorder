@@ -89,13 +89,32 @@ vrrec_status_t StereoAudioPipelineSession::RequestStop() noexcept
 
 void StereoAudioPipelineSession::Abort() noexcept
 {
+    RequestAbort();
+    JoinAfterAbort();
+}
+
+void StereoAudioPipelineSession::RequestAbort() noexcept
+{
     if (aborted_.exchange(true)) {
         return;
     }
 
     active_.store(false);
+    if (encoding_started_.load()) {
+        encoding_.RequestAbort();
+    }
+}
+
+void StereoAudioPipelineSession::JoinAfterAbort() noexcept
+{
+    const std::lock_guard cleanup_lock(abort_join_mutex_);
+    if (!aborted_.load()) {
+        return;
+    }
+
     if (encoding_started_.exchange(false)) {
-        encoding_.Abort();
+        encoding_.RequestAbort();
+        encoding_.JoinAfterAbort();
         capture_started_.store(false);
     } else if (capture_started_.exchange(false)) {
         capture_.Abort();

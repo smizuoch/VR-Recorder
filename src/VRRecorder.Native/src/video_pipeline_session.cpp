@@ -100,24 +100,42 @@ vrrec_status_t VideoPipelineSession::RequestStop() noexcept
 
 void VideoPipelineSession::Abort() noexcept
 {
+    RequestAbort();
+    JoinAfterAbort();
+}
+
+void VideoPipelineSession::RequestAbort() noexcept
+{
     if (finished_.load() || aborted_.exchange(true)) {
         return;
     }
 
     active_.store(false);
+    if (encoding_started_.load()) {
+        encoding_.RequestAbort();
+    }
+}
+
+void VideoPipelineSession::JoinAfterAbort() noexcept
+{
+    const std::lock_guard cleanup_lock(abort_join_mutex_);
+    if (!aborted_.load()) {
+        return;
+    }
+
     const auto capture_started = capture_started_.exchange(false);
     const auto encoding_started = encoding_started_.exchange(false);
+    if (encoding_started) {
+        encoding_.RequestAbort();
+    }
     if (capture_started) {
         capture_.Abort();
     }
     if (encoding_started) {
-        encoding_.Abort();
+        encoding_.JoinAfterAbort();
     }
     if (capture_started) {
         capture_.Join();
-    }
-    if (encoding_started) {
-        encoding_.Join();
     }
 }
 

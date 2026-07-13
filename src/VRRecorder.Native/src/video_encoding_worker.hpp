@@ -41,6 +41,8 @@ public:
 
     virtual vrrec_status_t Start() noexcept = 0;
     virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void RequestAbort() noexcept = 0;
+    virtual void JoinAfterAbort() noexcept = 0;
     virtual void Abort() noexcept = 0;
     virtual VideoEncodingWorkerResult Join() noexcept = 0;
     virtual VideoEncodingStatistics Statistics() const noexcept = 0;
@@ -60,6 +62,8 @@ public:
 
     vrrec_status_t Start() noexcept override;
     vrrec_status_t RequestStop() noexcept override;
+    void RequestAbort() noexcept override;
+    void JoinAfterAbort() noexcept override;
     void Abort() noexcept override;
     VideoEncodingWorkerResult Join() noexcept override;
     VideoEncodingStatistics Statistics() const noexcept override;
@@ -88,6 +92,7 @@ private:
     std::atomic_bool started_ = false;
     std::atomic_bool stop_requested_ = false;
     std::atomic_bool abort_requested_ = false;
+    std::atomic_bool abort_cleanup_started_ = false;
     std::atomic_bool finished_ = false;
     std::atomic_bool first_packet_reported_ = false;
 };

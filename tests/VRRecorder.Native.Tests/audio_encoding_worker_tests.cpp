@@ -112,12 +112,12 @@ public:
         std::uint64_t,
         std::span<const float>) noexcept override
     {
-        {
-            const std::lock_guard lock(mutex);
-            ++write_calls;
-        }
-
+        std::unique_lock lock(mutex);
+        ++write_calls;
         changed.notify_all();
+        if (block_write) {
+            changed.wait(lock, [this] { return release_write; });
+        }
         return write_result;
     }
 
@@ -169,6 +169,15 @@ public:
         changed.notify_all();
     }
 
+    void ReleaseWrite()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_write = true;
+        }
+        changed.notify_all();
+    }
+
     std::mutex mutex;
     std::condition_variable changed;
     StereoAudioEncoderWrite write_result {VRREC_STATUS_OK, 1};
@@ -176,6 +185,8 @@ public:
     std::size_t write_calls = 0;
     std::size_t finish_calls = 0;
     std::size_t abort_calls = 0;
+    bool block_write = false;
+    bool release_write = false;
     bool block_finish = false;
     bool finish_entered = false;
     bool release_finish = false;
@@ -299,6 +310,36 @@ void AbortDominatesAConcurrentGracefulFinish()
     CHECK(sink.abort_calls == 1);
 }
 
+void AbortDominatesAnInFlightAudioWriteFailure()
+{
+    BlockingMixSource source(1);
+    RecordingEncoderSink sink;
+    sink.block_write = true;
+    sink.write_result = {
+        VRREC_STATUS_INVALID_STATE,
+        0,
+        AudioEncoderFailureStage::Encoding,
+    };
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    sink.WaitForWrites(1);
+    auto aborting = std::async(std::launch::async, [&] {
+        worker.Abort();
+    });
+    sink.WaitForAbort();
+    sink.ReleaseWrite();
+    aborting.get();
+
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::Aborted);
+    CHECK(worker.SubmittedFrameCount() == 0);
+    CHECK(worker.MuxedPacketCount() == 0);
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.write_calls == 1);
+    CHECK(sink.finish_calls == 0);
+    CHECK(sink.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -310,5 +351,6 @@ int main()
     CaptureFailureReleasesBothPipelineEnds();
     SourceContractFailureReleasesBothPipelineEnds();
     AbortDominatesAConcurrentGracefulFinish();
+    AbortDominatesAnInFlightAudioWriteFailure();
     return 0;
 }

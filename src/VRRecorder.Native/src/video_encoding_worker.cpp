@@ -65,16 +65,26 @@ vrrec_status_t VideoEncodingWorker::RequestStop() noexcept
 
 void VideoEncodingWorker::Abort() noexcept
 {
+    RequestAbort();
+    JoinAfterAbort();
+}
+
+void VideoEncodingWorker::RequestAbort() noexcept
+{
     if (finished_.load()) {
-        JoinThread();
         return;
     }
-
     if (!abort_requested_.exchange(true)) {
         clock_.Abort();
+    }
+}
+
+void VideoEncodingWorker::JoinAfterAbort() noexcept
+{
+    if (abort_requested_.load() &&
+        !abort_cleanup_started_.exchange(true)) {
         sink_.Abort();
     }
-
     JoinThread();
 }
 
@@ -150,6 +160,11 @@ void VideoEncodingWorker::Run() noexcept
 
         VideoEncodingRead read {};
         const auto encoding_result = pump_.PumpTick(tick, read);
+        if (abort_requested_.load()) {
+            SetResult(VideoEncodingWorkerResult::Aborted);
+            finished_.store(true);
+            return;
+        }
         if (encoding_result == VideoEncodingResult::Submitted) {
             if (read.first_packet_muxed &&
                 !first_packet_reported_.exchange(true)) {

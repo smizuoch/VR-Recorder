@@ -113,6 +113,18 @@ public:
         return stop_status;
     }
 
+    void RequestAbort() noexcept override
+    {
+        ++request_abort_calls;
+    }
+
+    void JoinAfterAbort() noexcept override
+    {
+        ++join_after_abort_calls;
+        Abort();
+        static_cast<void>(Join());
+    }
+
     void Abort() noexcept override
     {
         order_.push_back(5);
@@ -156,6 +168,8 @@ public:
         2'500,
     };
     std::size_t stop_calls = 0;
+    std::size_t request_abort_calls = 0;
+    std::size_t join_after_abort_calls = 0;
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
     std::size_t start_calls = 0;

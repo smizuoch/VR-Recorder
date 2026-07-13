@@ -194,6 +194,70 @@ public:
     bool release_finish = false;
 };
 
+class BlockingWriteVideoSink final : public VideoEncoderSink {
+public:
+    VideoEncoderWrite Write(
+        const ScheduledVideoFrame &) noexcept override
+    {
+        std::unique_lock lock(mutex);
+        ++write_calls;
+        write_entered = true;
+        changed.notify_all();
+        changed.wait(lock, [this] { return release_write; });
+        return {
+            VRREC_STATUS_INVALID_STATE,
+            0,
+            900,
+            VideoEncoderFailureStage::Encoding,
+        };
+    }
+
+    VideoEncoderWrite Finish() noexcept override
+    {
+        const std::lock_guard lock(mutex);
+        ++finish_calls;
+        return {VRREC_STATUS_OK, 0, 0};
+    }
+
+    void Abort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex);
+            ++abort_calls;
+        }
+        changed.notify_all();
+    }
+
+    void WaitForWrite()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [this] { return write_entered; });
+    }
+
+    void WaitForAbort()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [this] { return abort_calls > 0; });
+    }
+
+    void ReleaseWrite()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_write = true;
+        }
+        changed.notify_all();
+    }
+
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::size_t write_calls = 0;
+    std::size_t finish_calls = 0;
+    std::size_t abort_calls = 0;
+    bool write_entered = false;
+    bool release_write = false;
+};
+
 class RecordingMediaEvents final : public MediaEventSink {
 public:
     void FirstVideoPacketMuxed() noexcept override
@@ -328,6 +392,39 @@ void AbortDominatesAConcurrentGracefulFinish()
     }
 }
 
+void AbortDominatesAnInFlightVideoWriteFailure()
+{
+    VideoCfrScheduler scheduler;
+    CHECK(scheduler.Push({40, 4'000'000}) == VRREC_STATUS_OK);
+    ScriptedCfrClock clock;
+    clock.ready_tick_count = 1;
+    BlockingWriteVideoSink sink;
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    sink.WaitForWrite();
+    std::thread aborting([&] { worker.Abort(); });
+    sink.WaitForAbort();
+    sink.ReleaseWrite();
+    aborting.join();
+
+    CHECK(worker.Join() == VideoEncodingWorkerResult::Aborted);
+    const auto statistics = worker.Statistics();
+    CHECK(statistics.muxed_packet_count == 0);
+    CHECK(statistics.latest_encode_latency_microseconds == 0);
+    CHECK(statistics.maximum_encode_latency_microseconds == 0);
+    CHECK(events.first_packet_calls == 0);
+    CHECK(events.fault_calls == 0);
+    CHECK(clock.abort_calls == 1);
+    {
+        const std::lock_guard lock(sink.mutex);
+        CHECK(sink.write_calls == 1);
+        CHECK(sink.finish_calls == 0);
+        CHECK(sink.abort_calls == 1);
+    }
+}
+
 void UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault()
 {
     VideoCfrScheduler scheduler;
@@ -378,6 +475,7 @@ int main()
     RuntimeEncoderFailureRaisesFaultAndDoesNotFlush();
     ForcedAbortDoesNotFlushOrRaiseFault();
     AbortDominatesAConcurrentGracefulFinish();
+    AbortDominatesAnInFlightVideoWriteFailure();
     UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
     AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding();
     return 0;

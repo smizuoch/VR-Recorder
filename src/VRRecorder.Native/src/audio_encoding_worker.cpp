@@ -65,16 +65,24 @@ vrrec_status_t StereoAudioEncodingWorker::RequestStop() noexcept
 
 void StereoAudioEncodingWorker::Abort() noexcept
 {
-    if (finished_.load()) {
-        JoinThread();
-        return;
-    }
+    RequestAbort();
+    JoinAfterAbort();
+}
 
-    if (!abort_requested_.exchange(true)) {
+void StereoAudioEncodingWorker::RequestAbort() noexcept
+{
+    if (!finished_.load()) {
+        abort_requested_.store(true);
+    }
+}
+
+void StereoAudioEncodingWorker::JoinAfterAbort() noexcept
+{
+    if (abort_requested_.load() &&
+        !abort_cleanup_started_.exchange(true)) {
         source_.Abort();
         sink_.Abort();
     }
-
     JoinThread();
 }
 
@@ -109,6 +117,11 @@ void StereoAudioEncodingWorker::Run() noexcept
     while (true) {
         StereoAudioEncodingRead read {};
         const auto result = pump_.PumpNext(frame_count_48k_, read);
+        if (abort_requested_.load()) {
+            SetResult(StereoAudioEncodingWorkerResult::Aborted);
+            finished_.store(true);
+            return;
+        }
         if (result == StereoAudioEncodingResult::Submitted) {
             continue;
         }

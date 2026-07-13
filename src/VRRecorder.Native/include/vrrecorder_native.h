@@ -175,6 +175,16 @@ typedef struct vrrec_event_v1 {
     const char *message_utf8;
 } vrrec_event_v1;
 
+/*
+ * An event callback may call vrrec_session_abort_v1() for the same session.
+ * That call publishes the abort request and may return before worker cleanup
+ * has completed. No other session API, including request_stop or destroy, may
+ * be called for that session from its callback.
+ *
+ * The session owner must call destroy only after every callback has returned
+ * and no other ABI call for the session is in progress. Event data and
+ * message_utf8 are borrowed and valid only for the duration of the callback.
+ */
 typedef void (VRREC_CALL *vrrec_event_callback_v1)(
     void *user_data,
     const vrrec_event_v1 *event);

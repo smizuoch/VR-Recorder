@@ -65,6 +65,16 @@ void VideoMediaStreamPipelineAdapter::Abort() noexcept
     session_.Abort();
 }
 
+void VideoMediaStreamPipelineAdapter::RequestAbort() noexcept
+{
+    session_.RequestAbort();
+}
+
+void VideoMediaStreamPipelineAdapter::JoinAfterAbort() noexcept
+{
+    session_.JoinAfterAbort();
+}
+
 vrrec_status_t VideoMediaStreamPipelineAdapter::Join() noexcept
 {
     return MapVideoResult(session_.Join());
@@ -99,6 +109,16 @@ vrrec_status_t AudioMediaStreamPipelineAdapter::RequestStop() noexcept
 void AudioMediaStreamPipelineAdapter::Abort() noexcept
 {
     session_.Abort();
+}
+
+void AudioMediaStreamPipelineAdapter::RequestAbort() noexcept
+{
+    session_.RequestAbort();
+}
+
+void AudioMediaStreamPipelineAdapter::JoinAfterAbort() noexcept
+{
+    session_.JoinAfterAbort();
 }
 
 vrrec_status_t AudioMediaStreamPipelineAdapter::Join() noexcept

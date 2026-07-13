@@ -20,6 +20,8 @@ public:
     explicit FakeVideoSession(std::vector<int> &order) : order_(order) {}
     vrrec_status_t Start(std::chrono::milliseconds timeout) noexcept override { order_.push_back(1); observed_timeout = timeout; return VRREC_STATUS_OK; }
     vrrec_status_t RequestStop() noexcept override { order_.push_back(3); return VRREC_STATUS_OK; }
+    void RequestAbort() noexcept override { order_.push_back(10); }
+    void JoinAfterAbort() noexcept override { order_.push_back(11); }
     void Abort() noexcept override { order_.push_back(5); }
     VideoPipelineResult Join() noexcept override { order_.push_back(7); return VideoPipelineResult::Stopped; }
     VideoEncodingStatistics Statistics() const noexcept override { return {{30, 29, 1, 2}, 101, 1'000, 2'000}; }
@@ -33,6 +35,8 @@ public:
     vrrec_status_t Start(const StereoAudioCaptureSessionConfig &config, std::size_t frames) noexcept override { order_.push_back(2); observed_config = config; observed_frames = frames; return VRREC_STATUS_OK; }
     vrrec_status_t SetRouting(vrrec_audio_routing_t routing) noexcept override { order_.push_back(6); observed_routing = routing; return VRREC_STATUS_OK; }
     vrrec_status_t RequestStop() noexcept override { order_.push_back(4); return VRREC_STATUS_OK; }
+    void RequestAbort() noexcept override { order_.push_back(12); }
+    void JoinAfterAbort() noexcept override { order_.push_back(13); }
     void Abort() noexcept override { order_.push_back(9); }
     StereoAudioEncodingWorkerResult Join() noexcept override { order_.push_back(8); return StereoAudioEncodingWorkerResult::Stopped; }
     StereoAudioPipelineStatistics Statistics() const noexcept override { return {48'000, 202}; }

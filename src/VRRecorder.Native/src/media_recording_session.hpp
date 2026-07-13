@@ -16,6 +16,8 @@ public:
     virtual ~MediaStreamPipelinePort() = default;
     virtual vrrec_status_t Start() noexcept = 0;
     virtual vrrec_status_t RequestStop() noexcept = 0;
+    virtual void RequestAbort() noexcept = 0;
+    virtual void JoinAfterAbort() noexcept = 0;
     virtual void Abort() noexcept = 0;
     virtual vrrec_status_t Join() noexcept = 0;
     virtual std::uint64_t MuxedPacketCount() const noexcept = 0;
@@ -53,6 +55,12 @@ public:
     vrrec_status_t Join() noexcept;
 
 private:
+    enum class StartPhase : std::uint8_t {
+        NotStarted,
+        Starting,
+        Completed,
+    };
+
     enum class AbortPhase : std::uint8_t {
         Idle,
         Requesting,
@@ -68,7 +76,7 @@ private:
     MediaEventSink &events_;
     std::atomic_bool video_started_ = false;
     std::atomic_bool audio_started_ = false;
-    std::atomic_bool start_attempted_ = false;
+    std::atomic<StartPhase> start_phase_ = StartPhase::NotStarted;
     std::atomic_bool stop_requested_ = false;
     std::atomic_bool join_attempted_ = false;
     std::atomic_bool terminal_ = false;

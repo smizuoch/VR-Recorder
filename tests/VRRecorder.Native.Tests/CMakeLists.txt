@@ -213,6 +213,47 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_pipeline_media_backend)
 
 add_executable(
+    vrrecorder_native_full_media_graph_abort
+    full_media_graph_abort_tests.cpp
+    "${native_source_root}/src/pipeline_media_backend.cpp"
+    "${native_source_root}/src/media_recording_pipeline.cpp"
+    "${native_source_root}/src/media_stream_pipeline_adapters.cpp"
+    "${native_source_root}/src/media_recording_session.cpp"
+    "${native_source_root}/src/media_mux_pipeline.cpp"
+    "${native_source_root}/src/av_sync_monitor.cpp"
+    "${native_source_root}/src/av_sync_media_event_adapter.cpp"
+    "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp"
+    "${native_source_root}/src/shared_mux_finalization_session.cpp"
+    "${native_source_root}/src/muxing_video_encoder_sink.cpp"
+    "${native_source_root}/src/muxing_audio_encoder_sink.cpp"
+    "${native_source_root}/src/video_cfr_scheduler.cpp"
+    "${native_source_root}/src/video_encoding_pump.cpp"
+    "${native_source_root}/src/video_encoding_worker.cpp"
+    "${native_source_root}/src/video_pipeline_session.cpp"
+    "${native_source_root}/src/audio_encoding_pump.cpp"
+    "${native_source_root}/src/audio_encoding_worker.cpp"
+    "${native_source_root}/src/audio_pipeline_session.cpp")
+target_compile_features(
+    vrrecorder_native_full_media_graph_abort PRIVATE cxx_std_20)
+target_compile_definitions(
+    vrrecorder_native_full_media_graph_abort
+    PRIVATE VRRECORDER_NATIVE_TESTING=1)
+target_include_directories(
+    vrrecorder_native_full_media_graph_abort
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(
+    vrrecorder_native_full_media_graph_abort
+    PRIVATE Threads::Threads)
+set_target_properties(
+    vrrecorder_native_full_media_graph_abort
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_full_media_graph_abort)
+
+add_executable(
     vrrecorder_native_audio_timeline_buffer
     audio_timeline_buffer_tests.cpp
     "${native_source_root}/src/audio_timeline_buffer.cpp")
@@ -1001,6 +1042,11 @@ add_test(NAME vrrecorder_native_media_recording_pipeline
     COMMAND vrrecorder_native_media_recording_pipeline)
 add_test(NAME vrrecorder_native_pipeline_media_backend
     COMMAND vrrecorder_native_pipeline_media_backend)
+add_test(NAME vrrecorder_native_full_media_graph_abort
+    COMMAND vrrecorder_native_full_media_graph_abort)
+set_tests_properties(
+    vrrecorder_native_full_media_graph_abort
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_audio_timeline_buffer
     COMMAND vrrecorder_native_audio_timeline_buffer)
 add_test(NAME vrrecorder_native_audio_capture_timeline

@@ -25,6 +25,16 @@ public:
     FakeStreamPipeline(std::vector<int> &order, int base) noexcept : order_(order), base_(base) {}
     vrrec_status_t Start() noexcept override { order_.push_back(base_ + 1); return start_status; }
     vrrec_status_t RequestStop() noexcept override { order_.push_back(base_ + 2); return stop_status; }
+    void RequestAbort() noexcept override
+    {
+        order_.push_back(base_ + 5);
+        ++request_abort_calls;
+    }
+    void JoinAfterAbort() noexcept override
+    {
+        ++join_after_abort_calls;
+        Abort();
+    }
     void Abort() noexcept override { order_.push_back(base_ + 3); ++abort_calls; }
     vrrec_status_t Join() noexcept override { order_.push_back(base_ + 4); ++join_calls; return join_status; }
     std::uint64_t MuxedPacketCount() const noexcept override { return muxed_packet_count; }
@@ -35,6 +45,8 @@ public:
     vrrec_status_t join_status = VRREC_STATUS_OK;
     std::uint64_t muxed_packet_count = 0;
     std::size_t abort_calls = 0;
+    std::size_t request_abort_calls = 0;
+    std::size_t join_after_abort_calls = 0;
     std::size_t join_calls = 0;
 };
 
@@ -171,6 +183,18 @@ public:
         }
     }
 
+    void RequestAbort() noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        ++request_abort_calls;
+    }
+
+    void JoinAfterAbort() noexcept override
+    {
+        ++join_after_abort_calls;
+        Abort();
+    }
+
     vrrec_status_t Join() noexcept override
     {
         std::unique_lock lock(mutex_);
@@ -285,6 +309,8 @@ public:
     bool release_stop_ = false;
     bool release_join_ = false;
     std::size_t abort_calls = 0;
+    std::size_t request_abort_calls = 0;
+    std::size_t join_after_abort_calls = 0;
     std::size_t join_calls = 0;
     std::size_t stop_calls = 0;
     std::size_t start_calls = 0;
@@ -476,7 +502,7 @@ void AbortDuringJoinSuppressesSuccessfulStoppedCompletion()
     CHECK(events.stopped_calls == 0);
 }
 
-void LogicalAbortTerminalizesMuxBeforeBlockingStreamCleanup()
+void LogicalAbortTerminalizesMuxAndCleanupReassertsStreamAbortBeforeJoin()
 {
     std::vector<int> order;
     FakeStreamPipeline video(order, 0), audio(order, 10);
@@ -495,6 +521,8 @@ void LogicalAbortTerminalizesMuxBeforeBlockingStreamCleanup()
 
     CHECK(mux.request_abort_calls == 1);
     CHECK(mux.abort_calls == 0);
+    CHECK(video.request_abort_calls == 1);
+    CHECK(audio.request_abort_calls == 1);
     CHECK(video.abort_calls == 0);
     CHECK(audio.abort_calls == 0);
     CHECK(events.stopped_calls == 0);
@@ -505,6 +533,8 @@ void LogicalAbortTerminalizesMuxBeforeBlockingStreamCleanup()
 
     CHECK(video.abort_calls == 1);
     CHECK(audio.abort_calls == 1);
+    CHECK(video.request_abort_calls == 2);
+    CHECK(audio.request_abort_calls == 2);
     CHECK(mux.request_abort_calls == 1);
     CHECK(mux.abort_calls == 1);
     CHECK(events.stopped_calls == 0);
@@ -640,10 +670,57 @@ void AbortDuringVideoStartRollsBackWithoutStartingAudio()
     auto start_result = VRREC_STATUS_OK;
     std::thread starter([&] { start_result = session.Start(); });
     video.WaitForStart();
-    session.Abort();
+    session.RequestAbort();
+    auto cleanup = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
+    const auto cleanup_returned_before_start =
+        cleanup.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
     video.ReleaseStart();
     starter.join();
+    cleanup.get();
 
+    CHECK(!cleanup_returned_before_start);
+    CHECK(start_result == VRREC_STATUS_INVALID_STATE);
+    CHECK(video.abort_calls == 1);
+    CHECK(audio.start_calls == 0);
+    CHECK(mux.abort_calls == 1);
+}
+
+void CleanupWaitsWhenStartOwnsTheStreamAbortJoin()
+{
+    std::vector<int> order;
+    ConcurrentStreamPipeline video(false, false, true, true);
+    ConcurrentStreamPipeline audio(false);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
+
+    auto start_result = VRREC_STATUS_OK;
+    std::thread starter([&] { start_result = session.Start(); });
+    video.WaitForStart();
+    session.RequestAbort();
+    video.ReleaseStart();
+    video.WaitForAbort();
+
+    auto cleanup = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
+    const auto cleanup_returned_before_start_cleanup =
+        cleanup.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
+
+    video.ReleaseAbort();
+    starter.join();
+    cleanup.get();
+
+    CHECK(!cleanup_returned_before_start_cleanup);
     CHECK(start_result == VRREC_STATUS_INVALID_STATE);
     CHECK(video.abort_calls == 1);
     CHECK(audio.start_calls == 0);
@@ -769,11 +846,12 @@ int main()
     AudioStartFailureRollsBackVideoAndMux();
     StreamFailureAbortsPeerAndMuxWithoutStoppedEvent();
     AbortDuringJoinSuppressesSuccessfulStoppedCompletion();
-    LogicalAbortTerminalizesMuxBeforeBlockingStreamCleanup();
+    LogicalAbortTerminalizesMuxAndCleanupReassertsStreamAbortBeforeJoin();
     ConcurrentAbortJoinersWaitForTheSameCleanupCompletion();
     CleanupWaitsForLogicalMuxAbortToCommit();
     AbortDuringStopRequestSkipsTheRemainingGracefulSequence();
     AbortDuringVideoStartRollsBackWithoutStartingAudio();
+    CleanupWaitsWhenStartOwnsTheStreamAbortJoin();
     AbortDuringMuxHeaderStartDoesNotStartEitherStream();
     ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce();
     ConcurrentJoinExecutesEachStreamJoinExactlyOnce();
