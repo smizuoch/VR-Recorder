@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.51%（2885/3335）／branch 72.13%（1690/2343）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.51%（2886/3336）／branch 72.13%（1690/2343）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -73,6 +73,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - video encoder停止要求の失敗を後続の冪等stopで成功に置換せず、capture／encoding両workerをabort・joinしてterminal化する境界
 - audio／video encoding workerの正常停止後は冪等stopを維持しつつ、capture／encoder failure後の新規stop要求を`INVALID_STATE`で拒否する状態境界
 - audio worker failure後のstop失敗をpipeline abortへ集約し、activeを解除して以後のrouting変更を拒否するterminal境界
+- 選択中Spout sender消失時に`SenderLost`結果を保持しながらcapture sourceをabortし、receiver資源を確実に解放する境界
 - CameraLease所有権、部分取得rollback、stale leaseのowned Streaming復旧
 - OSCQuery target解決、UDP write確認、SteamVR Input Action ABI
 - SingleFileFit contain計算とruntime layout更新、native最終statistics取得
@@ -203,7 +204,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.51% lines (2885/3335) and 72.13% branches (1690/2343), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.51% lines (2886/3336) and 72.13% branches (1690/2343), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -236,6 +237,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Video encoder stop-request failure remains visible instead of being replaced by success on a later idempotent stop; both capture and encoding workers are aborted, joined, and terminalized
 - Audio/video encoding workers preserve idempotent stop after a graceful stop while rejecting a new stop with `INVALID_STATE` after capture or encoder failure
 - An audio worker stop failure is routed through pipeline abort, clears the active state, and rejects subsequent routing changes
+- A selected Spout sender loss preserves the `SenderLost` result while aborting the capture source to reliably release receiver resources
 - CameraLease ownership, partial-acquisition rollback, and owned Streaming recovery from stale leases
 - OSCQuery target resolution, confirmed UDP writes, and the SteamVR Input Action ABI
 - SingleFileFit contain calculation, runtime layout updates, and final native statistics retrieval
