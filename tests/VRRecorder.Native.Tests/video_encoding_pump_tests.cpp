@@ -208,6 +208,8 @@ void KeepsSurfaceTimeoutSeparateAndDoesNotCallTheEncoder()
     CHECK(surface->acquire_calls == 1);
     CHECK(surface->release_calls == 0);
     CHECK(sink.frames.empty());
+    CHECK(read.scheduled.source_sequence == 0);
+    CHECK(!read.scheduled.surface);
 }
 
 void ReleasesTheSurfaceWhenTheEncoderFails()
