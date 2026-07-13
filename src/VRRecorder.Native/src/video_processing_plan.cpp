@@ -83,6 +83,12 @@ vrrec_status_t CreateExplicitVideoProcessingPlan(
     VideoProcessingPlan &plan) noexcept
 {
     plan = VideoProcessingPlan {};
+    if (layout.struct_size < sizeof(vrrec_video_layout_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (layout.abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
     if (source.width != layout.source_width ||
         source.height != layout.source_height ||
         layout.destination_width == 0 ||
