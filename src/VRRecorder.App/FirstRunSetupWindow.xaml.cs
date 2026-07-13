@@ -105,6 +105,15 @@ public partial class FirstRunSetupWindow : Window
         SetupVerificationStatusText.Visibility = Visibility.Visible;
     }
 
+    private void OnOpenSettings(object sender, RoutedEventArgs e)
+    {
+        var settings = new SettingsWindow
+        {
+            Owner = this,
+        };
+        settings.ShowDialog();
+    }
+
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     private string Resource(string key) =>

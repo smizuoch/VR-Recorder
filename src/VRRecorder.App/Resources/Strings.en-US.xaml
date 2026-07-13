@@ -306,4 +306,7 @@
     <system:String x:Key="Setup_Verifying">Verifying this setup check.</system:String>
     <system:String x:Key="Setup_Verification_Succeeded">Verification succeeded. Continuing to the next check.</system:String>
     <system:String x:Key="Setup_Verification_Failed">Verification did not succeed. Resolve the requirement and try again.</system:String>
+    <system:String x:Key="Setup_Settings_Label">SETTINGS</system:String>
+    <system:String x:Key="Setup_Settings_AccessibleName">Open recording settings</system:String>
+    <system:String x:Key="Setup_Settings_Tooltip">Choose devices and setup options, then return to verify</system:String>
 </ResourceDictionary>

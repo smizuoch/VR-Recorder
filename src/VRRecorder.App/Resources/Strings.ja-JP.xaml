@@ -306,4 +306,7 @@
     <system:String x:Key="Setup_Verifying">このセットアップ項目を検証しています。</system:String>
     <system:String x:Key="Setup_Verification_Succeeded">検証に成功しました。次の確認へ進みます。</system:String>
     <system:String x:Key="Setup_Verification_Failed">検証に成功しませんでした。要件を解決して再試行してください。</system:String>
+    <system:String x:Key="Setup_Settings_Label">設定</system:String>
+    <system:String x:Key="Setup_Settings_AccessibleName">録画設定を開く</system:String>
+    <system:String x:Key="Setup_Settings_Tooltip">deviceとセットアップ項目を選び、戻って検証します</system:String>
 </ResourceDictionary>

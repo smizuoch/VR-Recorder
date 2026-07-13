@@ -306,4 +306,7 @@
     <system:String x:Key="Setup_Verifying">⟦Vërïfyïng thïs sëtüp chëck. · Vërïfyïng thïs sëtüp chëck.⟧</system:String>
     <system:String x:Key="Setup_Verification_Succeeded">⟦Vërïfïcátïön süccëëdëd. Cöntïnüïng tö thë nëxt chëck. · Vërïfïcátïön süccëëdëd. Cöntïnüïng tö thë nëxt chëck.⟧</system:String>
     <system:String x:Key="Setup_Verification_Failed">⟦Vërïfïcátïön dïd nöt süccëëd. Rësölvë thë rëqüïrëmënt ánd try ágáïn. · Vërïfïcátïön dïd nöt süccëëd. Rësölvë thë rëqüïrëmënt ánd try ágáïn.⟧</system:String>
+    <system:String x:Key="Setup_Settings_Label">⟦SËTTÏNGS · SËTTÏNGS⟧</system:String>
+    <system:String x:Key="Setup_Settings_AccessibleName">⟦Öpën rëcördïng sëttïngs · Öpën rëcördïng sëttïngs⟧</system:String>
+    <system:String x:Key="Setup_Settings_Tooltip">⟦Chöösë dëvïcës ánd sëtüp öptïöns, thën rëtürn tö vërïfy · Chöösë dëvïcës ánd sëtüp öptïöns, thën rëtürn tö vërïfy⟧</system:String>
 </ResourceDictionary>

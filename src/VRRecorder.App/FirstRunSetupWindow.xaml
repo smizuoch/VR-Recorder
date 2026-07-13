@@ -60,6 +60,14 @@
             <StackPanel Margin="0,{StaticResource Spacing.ContentGap},0,0"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal">
+                <Button MinHeight="{StaticResource Interaction.MinimumTarget}"
+                        MinWidth="{StaticResource Interaction.MinimumTarget}"
+                        Content="{DynamicResource Setup_Settings_Label}"
+                        AutomationProperties.Name="{DynamicResource Setup_Settings_AccessibleName}"
+                        AutomationProperties.HelpText="{DynamicResource Setup_Settings_Tooltip}"
+                        ToolTip="{DynamicResource Setup_Settings_Tooltip}"
+                        Click="OnOpenSettings" />
+                <Border Width="{StaticResource Spacing.LayoutGrid}" />
                 <Button x:Name="VerifySetupButton"
                         MinHeight="{StaticResource Interaction.MinimumTarget}"
                         MinWidth="{StaticResource Interaction.MinimumTarget}"
