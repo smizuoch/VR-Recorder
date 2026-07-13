@@ -21,6 +21,8 @@ StereoAudioMixResult StereoAudioMixCoordinator::MixNext(
     std::span<float> output_interleaved,
     StereoAudioMixRead &read) noexcept
 {
+    read = {};
+
     constexpr auto channel_count = StereoAudioMixer::ChannelCount;
     if (aborted_.load()) {
         return StereoAudioMixResult::Aborted;

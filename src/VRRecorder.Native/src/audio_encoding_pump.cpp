@@ -1,5 +1,7 @@
 #include "audio_encoding_pump.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace vrrecorder::native {
@@ -44,7 +46,16 @@ StereoAudioEncodingResult StereoAudioEncodingPump::PumpNext(
         return MapMixResult(mix_result);
     }
 
-    if (mix_read.frame_count_48k != frame_count_48k) {
+    const auto frame_count = static_cast<std::uint64_t>(frame_count_48k);
+    if (mix_read.frame_count_48k != frame_count_48k ||
+        mix_read.start_frame_48k >
+            std::numeric_limits<std::uint64_t>::max() - frame_count ||
+        (has_submitted_window_ &&
+         mix_read.start_frame_48k != next_start_frame_48k_) ||
+        !std::all_of(
+            mixed_samples_.begin(),
+            mixed_samples_.end(),
+            [](float sample) { return std::isfinite(sample); })) {
         return StereoAudioEncodingResult::CaptureFailed;
     }
 
@@ -64,7 +75,6 @@ StereoAudioEncodingResult StereoAudioEncodingPump::PumpNext(
 
     const auto submitted = submitted_frame_count_.load();
     const auto muxed = muxed_packet_count_.load();
-    const auto frame_count = static_cast<std::uint64_t>(frame_count_48k);
     if (submitted >
             std::numeric_limits<std::uint64_t>::max() - frame_count ||
         muxed > std::numeric_limits<std::uint64_t>::max() -
@@ -74,6 +84,8 @@ StereoAudioEncodingResult StereoAudioEncodingPump::PumpNext(
 
     submitted_frame_count_.store(submitted + frame_count);
     muxed_packet_count_.store(muxed + write.muxed_packet_count);
+    next_start_frame_48k_ = mix_read.start_frame_48k + frame_count;
+    has_submitted_window_ = true;
     return StereoAudioEncodingResult::Submitted;
 }
 

@@ -72,6 +72,8 @@ private:
     StereoAudioMixSource &source_;
     StereoAudioEncoderSink &sink_;
     std::vector<float> mixed_samples_;
+    std::uint64_t next_start_frame_48k_ = 0;
+    bool has_submitted_window_ = false;
     std::atomic<std::uint64_t> submitted_frame_count_ {0};
     std::atomic<std::uint64_t> muxed_packet_count_ {0};
 };

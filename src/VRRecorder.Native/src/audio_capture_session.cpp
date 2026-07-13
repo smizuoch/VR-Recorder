@@ -94,6 +94,8 @@ StereoAudioMixResult StereoAudioCaptureSession::MixNext(
     std::span<float> output_interleaved,
     StereoAudioMixRead &read) noexcept
 {
+    read = {};
+
     if (!active_.load() || aborted_.load()) {
         return StereoAudioMixResult::InvalidState;
     }

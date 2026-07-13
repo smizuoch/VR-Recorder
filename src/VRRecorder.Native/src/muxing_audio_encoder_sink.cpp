@@ -1,5 +1,6 @@
 #include "muxing_audio_encoder_sink.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <utility>
 
@@ -17,7 +18,7 @@ StereoAudioEncoderWrite MuxingAudioEncoderSink::WritePcm48k(
     std::uint64_t start_frame_48k,
     std::span<const float> interleaved_samples) noexcept
 {
-    if (aborted_.load()) {
+    if (aborted_.load() || finished_.load()) {
         return {
             VRREC_STATUS_INVALID_STATE,
             0,
@@ -31,7 +32,7 @@ StereoAudioEncoderWrite MuxingAudioEncoderSink::WritePcm48k(
 
 StereoAudioEncoderWrite MuxingAudioEncoderSink::Finish() noexcept
 {
-    if (aborted_.load()) {
+    if (aborted_.load() || finished_.exchange(true)) {
         return {
             VRREC_STATUS_INVALID_STATE,
             0,
@@ -68,6 +69,7 @@ StereoAudioEncoderWrite MuxingAudioEncoderSink::Commit(
     PacketAudioEncoderWrite encoded) noexcept
 {
     if (encoded.status != VRREC_STATUS_OK) {
+        Abort();
         return {
             encoded.status,
             0,
@@ -75,10 +77,23 @@ StereoAudioEncoderWrite MuxingAudioEncoderSink::Commit(
         };
     }
 
+    if (!std::all_of(
+            encoded.packets.begin(),
+            encoded.packets.end(),
+            [](const EncodedMediaPacket &packet) {
+                return packet.stream == MediaStreamKind::Audio;
+            })) {
+        Abort();
+        return {
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            AudioEncoderFailureStage::Muxing,
+        };
+    }
+
     std::uint64_t committed = 0;
     for (const auto &packet : encoded.packets) {
-        if (packet.stream != MediaStreamKind::Audio ||
-            mux_.Submit(packet) != Mp4MuxResult::Written) {
+        if (mux_.Submit(packet) != Mp4MuxResult::Written) {
             Abort();
             return {
                 VRREC_STATUS_INTERNAL_ERROR,

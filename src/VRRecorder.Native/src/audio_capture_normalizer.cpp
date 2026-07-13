@@ -19,6 +19,8 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
     const RawCapturePacket &packet,
     CapturedStereoPacket48k &normalized) noexcept
 {
+    normalized = {};
+
     if (!IsFormatSupported(format)) {
         return CaptureNormalizationResult::InvalidFormat;
     }

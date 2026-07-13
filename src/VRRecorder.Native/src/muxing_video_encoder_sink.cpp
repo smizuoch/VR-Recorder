@@ -1,5 +1,6 @@
 #include "muxing_video_encoder_sink.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <utility>
 
@@ -16,7 +17,7 @@ MuxingVideoEncoderSink::MuxingVideoEncoderSink(
 VideoEncoderWrite MuxingVideoEncoderSink::Write(
     const ScheduledVideoFrame &frame) noexcept
 {
-    if (aborted_.load()) {
+    if (aborted_.load() || finished_.load()) {
         return {
             VRREC_STATUS_INVALID_STATE,
             0,
@@ -29,7 +30,7 @@ VideoEncoderWrite MuxingVideoEncoderSink::Write(
 
 VideoEncoderWrite MuxingVideoEncoderSink::Finish() noexcept
 {
-    if (aborted_.load()) {
+    if (aborted_.load() || finished_.exchange(true)) {
         return {
             VRREC_STATUS_INVALID_STATE,
             0,
@@ -68,6 +69,7 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
     PacketVideoEncoderWrite encoded) noexcept
 {
     if (encoded.status != VRREC_STATUS_OK) {
+        Abort();
         return {
             encoded.status,
             0,
@@ -76,10 +78,24 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
         };
     }
 
+    if (!std::all_of(
+            encoded.packets.begin(),
+            encoded.packets.end(),
+            [](const EncodedMediaPacket &packet) {
+                return packet.stream == MediaStreamKind::Video;
+            })) {
+        Abort();
+        return {
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Muxing,
+        };
+    }
+
     std::uint64_t committed = 0;
     for (const auto &packet : encoded.packets) {
-        if (packet.stream != MediaStreamKind::Video ||
-            mux_.Submit(packet) != Mp4MuxResult::Written) {
+        if (mux_.Submit(packet) != Mp4MuxResult::Written) {
             Abort();
             return {
                 VRREC_STATUS_INTERNAL_ERROR,

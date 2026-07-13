@@ -46,6 +46,7 @@ private:
     PacketAudioEncoder &encoder_;
     SharedMuxFinalizationSession &mux_;
     std::atomic_bool aborted_ = false;
+    std::atomic_bool finished_ = false;
 };
 
 }

@@ -67,6 +67,8 @@ AudioTimelineResult StereoCaptureTimeline::WaitRead(
     std::span<float> output_interleaved,
     AudioTimelineRead &read) noexcept
 {
+    read = {};
+
     std::uint64_t end_position = 0;
     if (frame_count == 0 ||
         frame_count >

@@ -27,6 +27,14 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
             VideoEncoderFailureStage::Processing,
         };
     }
+    if (frame.surface->NativeHandle() == nullptr) {
+        return {
+            VRREC_STATUS_INVALID_ARGUMENT,
+            0,
+            0,
+            VideoEncoderFailureStage::Processing,
+        };
+    }
 
     const auto descriptor = frame.surface->Descriptor();
     VideoProcessingPlan plan {};
@@ -51,6 +59,14 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
         frame.surface,
         plan,
         output);
+    if (aborted_.load() || finished_.load()) {
+        return {
+            VRREC_STATUS_INVALID_STATE,
+            0,
+            0,
+            VideoEncoderFailureStage::Processing,
+        };
+    }
     if (processing_status != VRREC_STATUS_OK) {
         return {
             processing_status,
