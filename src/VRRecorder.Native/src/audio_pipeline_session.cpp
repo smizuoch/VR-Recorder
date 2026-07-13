@@ -62,7 +62,12 @@ vrrec_status_t StereoAudioPipelineSession::RequestStop() noexcept
         return VRREC_STATUS_INVALID_STATE;
     }
 
-    return encoding_.RequestStop();
+    const auto status = encoding_.RequestStop();
+    if (status != VRREC_STATUS_OK) {
+        Abort();
+    }
+
+    return status;
 }
 
 void StereoAudioPipelineSession::Abort() noexcept
