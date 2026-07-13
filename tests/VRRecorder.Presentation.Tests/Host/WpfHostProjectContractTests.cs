@@ -670,6 +670,8 @@ public sealed class WpfHostProjectContractTests
 
         Assert.Contains("FirstRunSetupProbeRouter", appCode);
         Assert.Contains("VrChatOscFirstRunSetupProbe", appCode);
+        Assert.Contains("CameraOscEndpointFirstRunSetupProbe", appCode);
+        Assert.Contains("ConfirmedUdpVrChatCameraGatewayFactory", appCode);
         Assert.Contains("OscQueryVrChatInstanceDiscovery", appCode);
         Assert.Contains("WindowsDnsSdOscQueryServiceBrowser", appCode);
         Assert.Contains("_setupOscHttp.Dispose()", appCode);
