@@ -70,6 +70,10 @@ file(
     WRITE
     "${sdk_root}/lib/libavutil.so.60.26.102"
     "fake contract-test shared library\n")
+file(
+    WRITE
+    "${sdk_root}/lib/libswresample.so.6.3.102"
+    "fake contract-test shared library\n")
 foreach(runtime IN ITEMS
         "avcodec-62.dll"
         "avformat-62.dll"
@@ -219,7 +223,7 @@ file(
     "endif()\n"
     "if(CMAKE_SYSTEM_NAME STREQUAL \"Linux\")\n"
     "  vrrecorder_import_ffmpeg_contract_test_sdk(\"\${SDK_ROOT}\")\n"
-    "  foreach(component IN ITEMS avformat avcodec avutil)\n"
+    "  foreach(component IN ITEMS avformat avcodec avutil swresample)\n"
     "    if(NOT TARGET \"FFmpegContractTest::\${component}\")\n"
     "      message(FATAL_ERROR \"Missing contract-test target: \${component}\")\n"
     "    endif()\n"
@@ -231,6 +235,14 @@ file(
     "  get_target_property(contract_links FFmpegContractTest::avformat INTERFACE_LINK_LIBRARIES)\n"
     "  if(NOT contract_links STREQUAL \"FFmpegContractTest::avcodec;FFmpegContractTest::avutil\")\n"
     "    message(FATAL_ERROR \"Unexpected contract-test links: \${contract_links}\")\n"
+    "  endif()\n"
+    "  get_target_property(swr_location FFmpegContractTest::swresample IMPORTED_LOCATION)\n"
+    "  if(NOT swr_location STREQUAL \"\${SDK_ROOT}/lib/libswresample.so.6.3.102\")\n"
+    "    message(FATAL_ERROR \"Unexpected swresample runtime: \${swr_location}\")\n"
+    "  endif()\n"
+    "  get_target_property(swr_links FFmpegContractTest::swresample INTERFACE_LINK_LIBRARIES)\n"
+    "  if(NOT swr_links STREQUAL \"FFmpegContractTest::avutil\")\n"
+    "    message(FATAL_ERROR \"Unexpected swresample links: \${swr_links}\")\n"
     "  endif()\n"
     "endif()\n")
 execute_process(
@@ -266,6 +278,28 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
         message(
             FATAL_ERROR
             "Contract-test SDK import must reject a missing exact libavformat")
+    endif()
+
+    file(
+        WRITE
+        "${sdk_root}/lib/libavformat.so.62.12.102"
+        "fake contract-test shared library\n")
+    set(missing_swr_build_root
+        "${work_root}/project-build-missing-contract-swresample")
+    file(REMOVE "${sdk_root}/lib/libswresample.so.6.3.102")
+    execute_process(
+        COMMAND
+            "${CMAKE_COMMAND}"
+            -S "${project_root}"
+            -B "${missing_swr_build_root}"
+            "-DSDK_ROOT=${sdk_root}"
+        RESULT_VARIABLE missing_swr_result
+        OUTPUT_QUIET
+        ERROR_QUIET)
+    if(missing_swr_result EQUAL 0)
+        message(
+            FATAL_ERROR
+            "Contract-test SDK import must reject a missing exact libswresample")
     endif()
 endif()
 

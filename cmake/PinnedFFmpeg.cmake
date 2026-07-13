@@ -322,14 +322,19 @@ function(vrrecorder_import_ffmpeg_contract_test_sdk root)
     set(
         avutil_library
         "${normalized_root}/lib/libavutil.so.60.26.102")
+    set(
+        swresample_library
+        "${normalized_root}/lib/libswresample.so.6.3.102")
     _vrrecorder_ffmpeg_require_file(
         "${avformat_library}" "contract-test libavformat")
     _vrrecorder_ffmpeg_require_file(
         "${avcodec_library}" "contract-test libavcodec")
     _vrrecorder_ffmpeg_require_file(
         "${avutil_library}" "contract-test libavutil")
+    _vrrecorder_ffmpeg_require_file(
+        "${swresample_library}" "contract-test libswresample")
 
-    foreach(component IN ITEMS avformat avcodec avutil)
+    foreach(component IN ITEMS avformat avcodec avutil swresample)
         if(TARGET "FFmpegContractTest::${component}")
             message(
                 FATAL_ERROR
@@ -358,4 +363,11 @@ function(vrrecorder_import_ffmpeg_contract_test_sdk root)
             INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
             INTERFACE_LINK_LIBRARIES
                 "FFmpegContractTest::avcodec;FFmpegContractTest::avutil")
+    add_library(FFmpegContractTest::swresample SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractTest::swresample
+        PROPERTIES
+            IMPORTED_LOCATION "${swresample_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
+            INTERFACE_LINK_LIBRARIES FFmpegContractTest::avutil)
 endfunction()
