@@ -89,6 +89,9 @@ void PipelineMediaBackend::JoinStopWorker() noexcept
         if (!stop_worker_.joinable()) {
             return;
         }
+        if (stop_worker_.get_id() == std::this_thread::get_id()) {
+            return;
+        }
         worker = std::move(stop_worker_);
     }
     worker.join();
