@@ -1,13 +1,20 @@
 #include "media_recording_session.hpp"
 
+#include <utility>
+
 namespace vrrecorder::native {
 
 MediaRecordingSession::MediaRecordingSession(
     MediaStreamPipelinePort &video,
     MediaStreamPipelinePort &audio,
     MediaMuxSessionPort &mux,
-    MediaEventSink &events) noexcept
-    : video_(video), audio_(audio), mux_(mux), events_(events)
+    FragmentedMp4StreamConfiguration mux_configuration,
+    MediaEventSink &events)
+    : video_(video),
+      audio_(audio),
+      mux_(mux),
+      mux_configuration_(std::move(mux_configuration)),
+      events_(events)
 {
 }
 
@@ -20,6 +27,15 @@ vrrec_status_t MediaRecordingSession::Start() noexcept
 {
     if (start_attempted_.exchange(true) || terminal_.load()) {
         return VRREC_STATUS_INVALID_STATE;
+    }
+    const auto mux_status = mux_.Start(mux_configuration_);
+    if (terminal_.load()) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+    if (mux_status != VRREC_STATUS_OK) {
+        mux_.Abort();
+        terminal_.store(true);
+        return mux_status;
     }
     const auto video_status = video_.Start();
     if (terminal_.load()) {

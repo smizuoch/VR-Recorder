@@ -18,16 +18,26 @@
 - [x] native音声device eventを入力別の型付きwarning／recoveryへ変換し、pending Stopを完了せずobserver障害でも録画を中断しない
 - [x] native callbackを診断I/O／presentation処理から分離し、停止時はproducer停止後にqueueをdrainする
 - [x] first packet確定後のmedia profileとgraceful stop後のnative最終統計を録画結果を変えず診断へ発行する
-- [x] A/V packetのPTS/DTSを保持してstream別DTSを検証し、1秒以降のkeyframeまたは2秒上限でfragmentを確定する
-- [x] graceful finishだけが最終fragment、trailer、file flushを順に実行し、Abortではtrailerを書かない
+- [x] A/V packetのPTS/DTSをcanonical microsecondsで保持してstream別DTSを検証する
+- [x] encoded packetが実byte payloadを所有し、encoder元buffer変更後も内容を保ち、empty payloadをmux mutation前に拒否する
+- [x] portable FFmpeg seamでsend／receiveを0／複数packet、EAGAIN操作再試行、drain EOF、部分batch失敗、各ownership確保位置のOOM、Abort競合で状態機械化し、成功packetを必ずunrefする（実AVFrame identityはproduction adapter gate）
+- [x] AACのSkipSamples side dataをaudio-only／exact 10-byteのtyped・owned値としてmuxまで保持し、side-data-only／unknown／wrong-size／duplicate／video side dataをfail-closedにする
+- [x] AACの`frame_size`／`initial_padding_samples`をdescriptorへ保持し、bounded negative priming PTS／DTSをmuxへ維持しながらpresentation 0未満をA/V drift観測だけから除外する
+- [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する（実`av_packet_rescale_ts`算術はproduction adapter gate）
+- [x] H.264／AAC descriptorがmicrosecond time base、codec形式、profile／layout、AAC frame size／initial padding、owned extradataを持ち、invalid descriptorをheader前に拒否する
+- [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
+- [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
+- [x] 初回H.264 configでB-frameを明示的に0へ固定する
+- [x] graceful finishだけがtrailer、file flushを順に実行し、Abortではtrailerを書かない
 - [x] video encoderの0 packet bufferingと実packet batchを分離し、実packetだけを共通mux timelineへ投入する
 - [x] mux failure時はpacket統計をcommitせずvideo encoderとmuxerをともにAbortする
 - [x] AAC encoderの0 packet bufferingと実packet batchを分離し、audio packetだけを共有mux timelineへ投入する
 - [x] audio mux failureをencoder failureと分離し、未commit統計を除外してcapture／encoder／muxerを停止する
-- [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux fragment／trailer／file flushを実行する
+- [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux trailer／file flushを実行する
 - [x] flush済みstreamの追加packet／重複完了を拒否し、片側failure時はtrailerなしで共有muxをAbortする
 - [x] mux成功packetの最新A/V PTS差を監視し、80 ms超のexcursionごとに一度だけprivacy-safe診断eventを発行する
 - [x] A/V差が80 ms以内へ復帰したら再armし、最新／最大driftとevent数を集計する
+- [x] mux observer／A/V drift callbackをstate lock外で呼び、callback内の統計readback→Abortが自己deadlockせず、以後のpacketをterminal拒否する
 - [x] 80 ms超過eventをABIサイズ不変でnative→P/Invoke→typed callback→structured診断へ伝播し、pending Stopを完了しない
 - [x] encoder probeのDispose開始を同期確定し、in-flight native結果を抑止してlibrary解放まで非同期に待つ
 - [x] A/V monitorのvideo／audio PTSとabsolute driftをnative MediaEventへ改変せず転送する
@@ -58,16 +68,26 @@
 - [x] Translate native audio-device events into input-specific typed warnings/recoveries without completing a pending Stop or interrupting recording when observers fail
 - [x] Isolate native callbacks from diagnostics I/O/presentation work and drain queues after stopping producers
 - [x] Publish the committed media profile and final native statistics without changing recording start/stop outcomes
-- [x] Preserve A/V packet PTS/DTS, validate DTS per stream, and close fragments at a keyframe after one second or at the hard two-second limit
-- [x] Run final-fragment, trailer, and file flush in order only for graceful finish, never writing a trailer after abort
+- [x] Preserve A/V packet PTS/DTS in canonical microseconds and validate DTS per stream
+- [x] Own actual encoded-packet bytes, retain them after mutation of the encoder source buffer, and reject empty payloads before mux mutation
+- [x] Model send/receive in the portable FFmpeg seam as a state machine covering zero/multiple packets, EAGAIN operation retry, drain EOF, partial-batch failure, every packet-ownership OOM position, abort races, and unref of every successful packet (real AVFrame identity remains a production-adapter gate)
+- [x] Carry AAC SkipSamples as audio-only, exactly 10-byte typed owned data through muxing while failing closed on side-data-only, unknown, wrong-size, duplicate, or video side data
+- [x] Carry AAC `frame_size`/`initial_padding_samples`, preserve the bounded negative priming PTS/DTS for muxing, and exclude pre-presentation-zero packets only from A/V drift observation
+- [x] In the portable mux seam, read back actual video/audio time bases after the header, pass immutable canonical packets into the rescale port, and reject fake-rescale sentinels, end-time overflow, zero duration, or DTS collisions before interleaved write (real `av_packet_rescale_ts` arithmetic remains a production-adapter gate)
+- [x] Carry a microsecond time base, codec format, profile/layout, AAC frame size/initial padding, and owned extradata in typed H.264/AAC descriptors and reject invalid descriptors before header mutation
+- [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
+- [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video
+- [x] Explicitly configure zero B-frames for the initial H.264 production slice
+- [x] Run trailer and file flush in order only for graceful finish, never writing a trailer after abort
 - [x] Distinguish zero-packet video-encoder buffering from real packet batches and submit only real packets to the shared mux timeline
 - [x] On mux failure, commit no packet statistics and abort both the video encoder and muxer
 - [x] Distinguish zero-packet AAC buffering from real packet batches and submit only audio packets to the shared mux timeline
 - [x] Separate audio mux failures from encoder failures, exclude uncommitted statistics, and stop capture, encoder, and muxer
-- [x] Wait at a barrier for successful video/audio encoder flushes and run mux fragment/trailer/file flush only after the second completion
+- [x] Wait at a barrier for successful video/audio encoder flushes and run mux trailer/file flush only after the second completion
 - [x] Reject packets or duplicate completion from a flushed stream and abort the shared mux without a trailer when either encoder fails
 - [x] Monitor latest A/V PTS drift from successfully muxed packets and emit one privacy-safe diagnostic event per excursion beyond 80 ms
 - [x] Rearm after A/V drift recovers to 80 ms or less and track latest/maximum drift and event count
+- [x] Invoke mux observers/A/V drift callbacks outside state locks so callback-time statistics readback followed by Abort cannot self-deadlock and later packets are terminally rejected
 - [x] Propagate >80 ms events through native→P/Invoke→typed callback→structured diagnostics without ABI-size changes or completing a pending Stop
 - [x] Mark encoder-probe disposal synchronously, suppress in-flight native results, and asynchronously await library release
 - [x] Forward A/V monitor video/audio PTS and absolute drift unchanged into native media events

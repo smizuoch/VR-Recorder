@@ -1,9 +1,14 @@
 #include "media_mux_pipeline.hpp"
+#include "fragmented_mp4_test_support.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -18,20 +23,22 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+using namespace vrrecorder::native::test;
 
 class RecordingMuxer final : public FragmentedMp4Muxer {
 public:
+    vrrec_status_t WriteHeader(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        order.push_back(0);
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t WritePacket(
         const EncodedMediaPacket &packet) noexcept override
     {
         packets.push_back(packet);
         order.push_back(1);
-        return VRREC_STATUS_OK;
-    }
-
-    vrrec_status_t EndFragment() noexcept override
-    {
-        order.push_back(2);
         return VRREC_STATUS_OK;
     }
 
@@ -58,7 +65,7 @@ public:
     std::size_t abort_calls = 0;
 };
 
-class RecordingMediaEvents final : public MediaEventSink {
+class RecordingMediaEvents : public MediaEventSink {
 public:
     void FirstVideoPacketMuxed() noexcept override
     {
@@ -96,9 +103,36 @@ public:
     std::uint64_t absolute_drift = 0;
 };
 
+class AbortOnDriftMediaEvents final : public RecordingMediaEvents {
+public:
+    void AvSyncDriftExceeded(
+        std::uint64_t,
+        std::uint64_t,
+        std::uint64_t) noexcept override
+    {
+        ++drift_calls;
+        CHECK(pipeline != nullptr);
+        const auto snapshot = pipeline->AvSyncStatistics();
+        snapshot_read = snapshot.threshold_event_count == 1;
+        pipeline->Abort();
+        abort_returned = true;
+    }
+
+    MediaMuxPipeline *pipeline = nullptr;
+    bool abort_returned = false;
+    bool snapshot_read = false;
+};
+
 EncodedMediaPacket Packet(MediaStreamKind stream, std::int64_t pts)
 {
-    return {stream, pts, pts, 1, stream == MediaStreamKind::Video, 1};
+    return {
+        stream,
+        pts,
+        pts,
+        1,
+        stream == MediaStreamKind::Video,
+        std::vector<std::byte>(1, std::byte{0x01}),
+    };
 }
 
 void ConnectsMuxedPacketsToDriftEventsAndStatistics()
@@ -106,6 +140,7 @@ void ConnectsMuxedPacketsToDriftEventsAndStatistics()
     RecordingMuxer muxer;
     RecordingMediaEvents events;
     MediaMuxPipeline pipeline(muxer, events);
+    CHECK(pipeline.Start(TestMp4Streams()) == VRREC_STATUS_OK);
 
     CHECK(pipeline.Submit(Packet(MediaStreamKind::Video, 0)) ==
           Mp4MuxResult::Written);
@@ -122,20 +157,90 @@ void ConnectsMuxedPacketsToDriftEventsAndStatistics()
     CHECK(pipeline.AudioVideoOffsetMicroseconds() == 100'000);
 }
 
+void MuxesNegativeAacPrimingButStartsDriftObservationAtPresentationZero()
+{
+    RecordingMuxer muxer;
+    RecordingMediaEvents events;
+    MediaMuxPipeline pipeline(muxer, events);
+    CHECK(pipeline.Start(TestMp4Streams()) == VRREC_STATUS_OK);
+
+    CHECK(pipeline.Submit(Packet(MediaStreamKind::Audio, -21'333)) ==
+        Mp4MuxResult::Written);
+    CHECK(pipeline.Submit(Packet(MediaStreamKind::Video, 0)) ==
+        Mp4MuxResult::Written);
+    CHECK(muxer.packets.size() == 2);
+    CHECK(muxer.packets[0].pts_microseconds == -21'333);
+    CHECK(muxer.abort_calls == 0);
+    CHECK(!pipeline.AvSyncStatistics().has_both_streams);
+
+    CHECK(pipeline.Submit(Packet(MediaStreamKind::Audio, 0)) ==
+        Mp4MuxResult::Written);
+    const auto snapshot = pipeline.AvSyncStatistics();
+    CHECK(snapshot.has_both_streams);
+    CHECK(snapshot.latest_absolute_drift_microseconds == 0);
+    CHECK(snapshot.latest_audio_video_offset_microseconds == 0);
+    CHECK(events.drift_calls == 0);
+    CHECK(muxer.abort_calls == 0);
+}
+
+void DriftCallbackCanAbortTheMuxPipelineWithoutDeadlocking()
+{
+    RecordingMuxer muxer;
+    AbortOnDriftMediaEvents events;
+    MediaMuxPipeline pipeline(muxer, events);
+    events.pipeline = &pipeline;
+    CHECK(pipeline.Start(TestMp4Streams()) == VRREC_STATUS_OK);
+    CHECK(pipeline.Submit(Packet(MediaStreamKind::Video, 0)) ==
+        Mp4MuxResult::Written);
+
+    std::mutex watchdog_mutex;
+    std::condition_variable watchdog_changed;
+    bool submit_completed = false;
+    std::thread watchdog([&] {
+        std::unique_lock lock(watchdog_mutex);
+        if (!watchdog_changed.wait_for(
+                lock,
+                std::chrono::seconds(2),
+                [&] { return submit_completed; })) {
+            std::cerr << __func__
+                      << " timed out waiting for reentrant Abort\n";
+            std::abort();
+        }
+    });
+
+    const auto result =
+        pipeline.Submit(Packet(MediaStreamKind::Audio, 100'000));
+    {
+        const std::lock_guard lock(watchdog_mutex);
+        submit_completed = true;
+    }
+    watchdog_changed.notify_all();
+    watchdog.join();
+
+    CHECK(result == Mp4MuxResult::Written);
+    CHECK(events.drift_calls == 1);
+    CHECK(events.abort_returned);
+    CHECK(events.snapshot_read);
+    CHECK(muxer.abort_calls == 1);
+    CHECK(pipeline.Submit(Packet(MediaStreamKind::Video, 1)) ==
+        Mp4MuxResult::InvalidState);
+}
+
 void FinalizesOnlyAfterBothStreamsFinish()
 {
     RecordingMuxer muxer;
     RecordingMediaEvents events;
     MediaMuxPipeline pipeline(muxer, events);
+    CHECK(pipeline.Start(TestMp4Streams()) == VRREC_STATUS_OK);
     CHECK(pipeline.Submit(Packet(MediaStreamKind::Video, 0)) ==
           Mp4MuxResult::Written);
 
     CHECK(pipeline.EncoderFinished(MediaStreamKind::Video) ==
           VRREC_STATUS_OK);
-    CHECK(muxer.order == std::vector<int>({1}));
+    CHECK(muxer.order == std::vector<int>({0, 1}));
     CHECK(pipeline.EncoderFinished(MediaStreamKind::Audio) ==
           VRREC_STATUS_OK);
-    CHECK(muxer.order == std::vector<int>({1, 2, 3, 4}));
+    CHECK(muxer.order == std::vector<int>({0, 1, 3, 4}));
 }
 
 void AbortStopsTheWholeMuxGraphWithoutATrailer()
@@ -154,6 +259,8 @@ void AbortStopsTheWholeMuxGraphWithoutATrailer()
 int main()
 {
     ConnectsMuxedPacketsToDriftEventsAndStatistics();
+    MuxesNegativeAacPrimingButStartsDriftObservationAtPresentationZero();
+    DriftCallbackCanAbortTheMuxPipelineWithoutDeadlocking();
     FinalizesOnlyAfterBothStreamsFinish();
     AbortStopsTheWholeMuxGraphWithoutATrailer();
     return 0;

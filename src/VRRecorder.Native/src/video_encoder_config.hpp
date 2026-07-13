@@ -27,6 +27,7 @@ struct H264VideoEncoderConfig final {
         static_cast<vrrec_source_pixel_format_t>(0);
     H264Profile profile = H264Profile::Main;
     VideoRateControl rate_control = VideoRateControl::QualityVbr;
+    std::uint32_t maximum_b_frame_count = 0;
 };
 
 vrrec_status_t CreateH264VideoEncoderConfig(

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <mutex>
 
+#include "fragmented_mp4_mux_coordinator.hpp"
 #include "media_backend.hpp"
 
 namespace vrrecorder::native {
@@ -23,6 +24,8 @@ public:
 class MediaMuxSessionPort {
 public:
     virtual ~MediaMuxSessionPort() = default;
+    virtual vrrec_status_t Start(
+        const FragmentedMp4StreamConfiguration &configuration) noexcept = 0;
     virtual void Abort() noexcept = 0;
     virtual std::int64_t AudioVideoOffsetMicroseconds() const noexcept
     {
@@ -36,7 +39,8 @@ public:
         MediaStreamPipelinePort &video,
         MediaStreamPipelinePort &audio,
         MediaMuxSessionPort &mux,
-        MediaEventSink &events) noexcept;
+        FragmentedMp4StreamConfiguration mux_configuration,
+        MediaEventSink &events);
     ~MediaRecordingSession();
     MediaRecordingSession(const MediaRecordingSession &) = delete;
     MediaRecordingSession &operator=(const MediaRecordingSession &) = delete;
@@ -49,6 +53,7 @@ private:
     MediaStreamPipelinePort &video_;
     MediaStreamPipelinePort &audio_;
     MediaMuxSessionPort &mux_;
+    FragmentedMp4StreamConfiguration mux_configuration_;
     MediaEventSink &events_;
     std::atomic_bool video_started_ = false;
     std::atomic_bool audio_started_ = false;

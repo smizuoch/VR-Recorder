@@ -808,6 +808,7 @@ offsetY = (outputHeight - destinationHeight) / 2
 - Pixel format: NV12入力、出力互換性は4:2:0
 - Profile: Highを基本、encoder capabilityによりMainへ降格
 - GOP: 2秒
+- 初回production sliceはB-frameを無効化し、`maximum_b_frame_count = 0`をencoderへ明示する。B-frame対応は負DTS／CTTS／fragment epoch／A/V syncを別ADRとTDDで再設計してから有効化する
 - Rate control: 品質優先VBR
 - Target bitrate初期式:
 
@@ -845,6 +846,9 @@ maxrate = target * 1.5
 - Stereo
 - 192 kbps
 - 32-bit floatで内部処理し、encoder入力時に変換する
+- encoder open後の`frame_size`と`initial_padding`をowned stream descriptorへ固定し、muxの`AVCodecParameters`へ欠落なく渡す
+- AAC先頭packetのPTS／DTSは`-initial_padding`になり得る。0へ単純shiftせずMOV edit list用の負epochを保持し、A/V drift診断ではpresentation time 0未満だけを観測対象外にする
+- `AV_PKT_DATA_SKIP_SAMPLES`はaudio-onlyの10 byte layoutとしてowned copyし、wrong-size／duplicate／video packet上の値はfail-closedにする
 
 ### 11.4 ファイル名
 
@@ -866,6 +870,11 @@ VR-Recorder_yyyyMMdd_HHmmss_1080x1920_30fps_part002.mp4
 
 1. 最終名と同一ディレクトリに `.recording.mp4` として作成。
 2. 1～2秒単位のfragmented MP4で書き、異常終了時の回復性を確保。
+   - native mux入力はH.264／AAC descriptor、AAC frame size／initial padding、owned extradata、`1/1,000,000` packet time baseをheader前に確定する。
+   - FFmpegでは`frag_keyframe`、`min_frag_duration=1,000,000`、`frag_duration=2,000,000`をheader optionへ設定し、`av_interleaved_write_frame`へfragment／interleaveを委ねる。C++ coordinatorから`frag_custom`相当の手動cutは行わない。
+	   - `avformat_write_header`成功後にvideo／audioの実`AVStream.time_base`を値でreadbackし、`av_packet_rescale_ts`でpacketを変換する。videoは非負、audioはinitial paddingで定めた範囲の負epochを許し、unknown timestamp、timestamp＋duration overflow、丸め後DTS衝突をwrite前に拒否する。
+	   - portable fakeのGreenは状態遷移／call順／postconditionの証拠に限定する。pinned FFmpegをlinkした実adapterで、AAC負PTS、edit list、SkipSamples、実rescale、packet flag、side-data-only有無、interleaved ownershipを別release gateとして検証する。
+	   - mux observerとA/V drift callbackはcoordinator／finalization／monitorのstate lockを解放してから呼ぶ。callback内のstatistics readbackとAbortを許可し、Abort後のpacketはterminal拒否する。
 3. 停止時にencoderとmuxerをflushし、trailerを書き、ファイルをflushする。
 4. 同一ボリューム内で最終 `.mp4` へatomic renameする。
 5. 最終ファイルを再openし、映像／音声stream、duration、dimensionsを簡易検証する。
@@ -1325,6 +1334,7 @@ Audio
 - UDP/TCP listenerは既定でloopback bind。
 - DLL探索パスをアプリディレクトリへ限定する。
 - 配布バイナリへコード署名する。
+- production実機検証まではunpackaged／self-containedの`win-x64` publish directoryを内部利用し、一般公開しない。実機合格後、同一payload inventoryをWindows Application Packaging ProjectでMicrosoft Store用MSIXへ包み、MSIX固有回帰とWACKを通したものだけを公開候補にする。
 - 依存関係を固定し、SBOMを生成する。
 - VRChatプロセスへhandle injectionやmemory accessをしない。
 - package restoreはlock fileのlocked modeを用い、依存の無断差替えを防ぐ。
@@ -1682,7 +1692,7 @@ assets:
 - OSCQuery discovery
 - ScriptedSpoutSender + D3D11 receiver
 - SyntheticAudioDevice + mixer
-- 実FFmpeg library + in-memory/scratch MP4
+- 実FFmpeg library + in-memory/scratch MP4（AAC負priming PTS／edit list／末尾padding、post-header time base、`av_packet_rescale_ts`、対応encoder別packet side data／flagを含む）
 - OpenVR adapter contract with test runtime seam
 - WPF ViewModel + application host
 - publish staging inventory + notice／SBOM generation
@@ -1959,6 +1969,7 @@ Nightly / lab:
 - Win10/Win11、GPU/HMD matrix
 - long-run、disk full、crash recovery
 - installer、署名、生成済みTHIRD-PARTY-NOTICES／SBOM／source bundle
+- unpackaged実機検証payloadのidentity固定、Microsoft Store MSIX packaging、sideload／WACK／package固有回帰
 - dependency/link/payload/rights fail-closed gate
 - 手首UI・desktop・install・output folderのLegal Bundle同一性検証
 - Material Symbols asset provenance／Apache-2.0／runtime offline検証
@@ -2033,6 +2044,9 @@ Nightly / lab:
 - ADR-023: 公式M3 navigationの全項目をversion付きsource inventoryへ分類し、coverage 100%をrelease gateにする
 - ADR-024: 録画状態はproject recording color groupを使用し、error roleと分離する
 - ADR-025: Overlay移動はdragと非dragの同等commandを併設する
+- ADR-026: Windows配布はunpackaged実機検証payloadからMicrosoft Store MSIXへ段階昇格する
+- ADR-027: native mux入力はcanonical microseconds、typed H.264/AAC descriptor、no-B初期profile、muxer管理fragmentを使う
+- ADR-028: FFmpeg adapterはportable状態機械／postcondition層と実API薄層を分離し、AAC primingの負epochをmuxへ保持する
 
 ---
 

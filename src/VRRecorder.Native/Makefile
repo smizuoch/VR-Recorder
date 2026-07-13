@@ -9,6 +9,8 @@ SOURCES += src/media_stream_pipeline_adapters.cpp
 SOURCES += src/media_recording_pipeline.cpp
 SOURCES += src/pipeline_media_backend.cpp
 SOURCES += src/video_processing_layout_controller.cpp
+SOURCES += src/ffmpeg_encoder_state_machine.cpp
+SOURCES += src/ffmpeg_fragmented_mp4_muxer.cpp
 OBJECTS := $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean

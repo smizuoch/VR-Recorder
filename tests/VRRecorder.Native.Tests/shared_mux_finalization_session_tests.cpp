@@ -1,4 +1,5 @@
 #include "shared_mux_finalization_session.hpp"
+#include "fragmented_mp4_test_support.hpp"
 
 #include <cstddef>
 #include <cstdlib>
@@ -17,20 +18,21 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+using namespace vrrecorder::native::test;
 
 class RecordingMuxer final : public FragmentedMp4Muxer {
 public:
+    vrrec_status_t WriteHeader(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t WritePacket(
         const EncodedMediaPacket &) noexcept override
     {
         order.push_back(1);
         return write_status;
-    }
-
-    vrrec_status_t EndFragment() noexcept override
-    {
-        order.push_back(2);
-        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t WriteTrailer() noexcept override
@@ -58,13 +60,21 @@ public:
 
 EncodedMediaPacket VideoPacket()
 {
-    return {MediaStreamKind::Video, 0, 0, 33'333, true, 100};
+    return {
+        MediaStreamKind::Video,
+        0,
+        0,
+        33'333,
+        true,
+        std::vector<std::byte>(100, std::byte{0x01}),
+    };
 }
 
 void FinalizesOnlyAfterBothEncodersFlushSuccessfully()
 {
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::Written);
 
@@ -73,13 +83,14 @@ void FinalizesOnlyAfterBothEncodersFlushSuccessfully()
     CHECK(backend.order == std::vector<int>({1}));
     CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
           VRREC_STATUS_OK);
-    CHECK(backend.order == std::vector<int>({1, 2, 3, 4}));
+    CHECK(backend.order == std::vector<int>({1, 3, 4}));
 }
 
 void SupportsAudioFinishingBeforeVideo()
 {
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
 
     CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
@@ -94,6 +105,7 @@ void RejectsPacketsAfterTheirEncoderHasFinished()
 {
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
 
     CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
@@ -107,6 +119,7 @@ void EncoderFailureAbortsWithoutWritingATrailer()
 {
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::Written);
 
@@ -123,6 +136,7 @@ void PacketMuxFailureImmediatelyTerminalizesTheSharedSession()
     RecordingMuxer backend;
     backend.write_status = VRREC_STATUS_INTERNAL_ERROR;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
 
     CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::MuxFailed);

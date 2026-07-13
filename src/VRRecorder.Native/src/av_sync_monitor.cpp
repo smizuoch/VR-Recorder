@@ -15,47 +15,68 @@ vrrec_status_t AvSyncMonitor::Observe(
 {
     if ((packet.stream != MediaStreamKind::Video &&
          packet.stream != MediaStreamKind::Audio) ||
-        packet.pts_microseconds < 0) {
+        packet.pts_microseconds == UnknownMediaTimestamp ||
+        (packet.stream == MediaStreamKind::Video &&
+            packet.pts_microseconds < 0)) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
-
-    const std::lock_guard lock(mutex_);
-    if (packet.stream == MediaStreamKind::Video) {
-        video_pts_microseconds_ = packet.pts_microseconds;
-        has_video_ = true;
-    } else {
-        audio_pts_microseconds_ = packet.pts_microseconds;
-        has_audio_ = true;
-    }
-    if (!has_video_ || !has_audio_) {
+    if (packet.stream == MediaStreamKind::Audio &&
+        packet.pts_microseconds < 0) {
+        // AAC priming packets retain the encoder's negative epoch so MOV can
+        // express the edit list. They do not represent audible presentation
+        // time and must not become A/V drift samples.
         return VRREC_STATUS_OK;
     }
 
-    const auto absolute_drift = video_pts_microseconds_ >=
-            audio_pts_microseconds_
-        ? static_cast<std::uint64_t>(
-              video_pts_microseconds_ - audio_pts_microseconds_)
-        : static_cast<std::uint64_t>(
-              audio_pts_microseconds_ - video_pts_microseconds_);
-    latest_audio_video_offset_microseconds_ =
-        audio_pts_microseconds_ - video_pts_microseconds_;
-    latest_absolute_drift_microseconds_ = absolute_drift;
-    maximum_absolute_drift_microseconds_ = std::max(
-        maximum_absolute_drift_microseconds_,
-        absolute_drift);
+    auto emit_threshold_event = false;
+    std::int64_t event_video_pts_microseconds = 0;
+    std::int64_t event_audio_pts_microseconds = 0;
+    std::uint64_t event_absolute_drift_microseconds = 0;
+    {
+        const std::lock_guard lock(mutex_);
+        if (packet.stream == MediaStreamKind::Video) {
+            video_pts_microseconds_ = packet.pts_microseconds;
+            has_video_ = true;
+        } else {
+            audio_pts_microseconds_ = packet.pts_microseconds;
+            has_audio_ = true;
+        }
+        if (!has_video_ || !has_audio_) {
+            return VRREC_STATUS_OK;
+        }
 
-    constexpr std::uint64_t threshold_microseconds = 80'000;
-    if (absolute_drift <= threshold_microseconds) {
-        threshold_active_ = false;
-        return VRREC_STATUS_OK;
-    }
-    if (!threshold_active_) {
-        threshold_active_ = true;
-        ++threshold_event_count_;
-        events_.DriftThresholdExceeded(
-            video_pts_microseconds_,
-            audio_pts_microseconds_,
+        const auto absolute_drift = video_pts_microseconds_ >=
+                audio_pts_microseconds_
+            ? static_cast<std::uint64_t>(
+                  video_pts_microseconds_ - audio_pts_microseconds_)
+            : static_cast<std::uint64_t>(
+                  audio_pts_microseconds_ - video_pts_microseconds_);
+        latest_audio_video_offset_microseconds_ =
+            audio_pts_microseconds_ - video_pts_microseconds_;
+        latest_absolute_drift_microseconds_ = absolute_drift;
+        maximum_absolute_drift_microseconds_ = std::max(
+            maximum_absolute_drift_microseconds_,
             absolute_drift);
+
+        constexpr std::uint64_t threshold_microseconds = 80'000;
+        if (absolute_drift <= threshold_microseconds) {
+            threshold_active_ = false;
+            return VRREC_STATUS_OK;
+        }
+        if (!threshold_active_) {
+            threshold_active_ = true;
+            ++threshold_event_count_;
+            emit_threshold_event = true;
+            event_video_pts_microseconds = video_pts_microseconds_;
+            event_audio_pts_microseconds = audio_pts_microseconds_;
+            event_absolute_drift_microseconds = absolute_drift;
+        }
+    }
+    if (emit_threshold_event) {
+        events_.DriftThresholdExceeded(
+            event_video_pts_microseconds,
+            event_audio_pts_microseconds,
+            event_absolute_drift_microseconds);
     }
     return VRREC_STATUS_OK;
 }

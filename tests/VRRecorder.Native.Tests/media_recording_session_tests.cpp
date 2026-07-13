@@ -1,4 +1,5 @@
 #include "media_recording_session.hpp"
+#include "fragmented_mp4_test_support.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -16,6 +17,7 @@ namespace {
 #define CHECK(condition) do { if (!(condition)) { std::cerr << "check failed at " << __FILE__ << ':' << __LINE__ << ": " #condition << '\n'; std::abort(); } } while (false)
 
 using namespace vrrecorder::native;
+using namespace vrrecorder::native::test;
 
 class FakeStreamPipeline final : public MediaStreamPipelinePort {
 public:
@@ -38,8 +40,17 @@ public:
 class FakeMuxSession final : public MediaMuxSessionPort {
 public:
     explicit FakeMuxSession(std::vector<int> &order) noexcept : order_(order) {}
+    vrrec_status_t Start(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        order_.push_back(21);
+        ++start_calls;
+        return start_status;
+    }
     void Abort() noexcept override { order_.push_back(23); ++abort_calls; }
     std::vector<int> &order_;
+    vrrec_status_t start_status = VRREC_STATUS_OK;
+    std::size_t start_calls = 0;
     std::size_t abort_calls = 0;
 };
 
@@ -192,6 +203,42 @@ public:
     std::size_t join_entries_ = 0;
 };
 
+class ConcurrentMuxSession final : public MediaMuxSessionPort {
+public:
+    vrrec_status_t Start(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        start_entered_ = true;
+        changed_.notify_all();
+        changed_.wait(lock, [this] { return aborted_ || release_start_; });
+        return VRREC_STATUS_OK;
+    }
+
+    void Abort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            aborted_ = true;
+            ++abort_calls;
+        }
+        changed_.notify_all();
+    }
+
+    void WaitForStart()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return start_entered_; });
+    }
+
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    bool start_entered_ = false;
+    bool release_start_ = false;
+    bool aborted_ = false;
+    std::size_t abort_calls = 0;
+};
+
 class RecordingEvents final : public MediaEventSink {
 public:
     void FirstVideoPacketMuxed() noexcept override {}
@@ -213,14 +260,19 @@ void GracefulStopOrdersVideoBeforeAudioAndPublishesFinalCounts()
     RecordingEvents events;
     video.muxed_packet_count = 91;
     audio.muxed_packet_count = 47;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_OK);
-    CHECK(order == std::vector<int>({1, 11}));
+    CHECK(order == std::vector<int>({21, 1, 11}));
     CHECK(session.RequestStop() == VRREC_STATUS_OK);
     CHECK(session.RequestStop() == VRREC_STATUS_OK);
-    CHECK(order == std::vector<int>({1, 11, 2, 12}));
+    CHECK(order == std::vector<int>({21, 1, 11, 2, 12}));
     CHECK(session.Join() == VRREC_STATUS_OK);
-    CHECK(order == std::vector<int>({1, 11, 2, 12, 4, 14}));
+    CHECK(order == std::vector<int>({21, 1, 11, 2, 12, 4, 14}));
     CHECK(events.stopped_calls == 1);
     CHECK(events.video_packets == 91);
     CHECK(events.audio_packets == 47);
@@ -235,11 +287,37 @@ void AudioStartFailureRollsBackVideoAndMux()
     FakeMuxSession mux(order);
     RecordingEvents events;
     audio.start_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_BACKEND_UNAVAILABLE);
-    CHECK(order == std::vector<int>({1, 11, 3, 4, 23}));
+    CHECK(order == std::vector<int>({21, 1, 11, 3, 4, 23}));
     CHECK(video.abort_calls == 1);
     CHECK(video.join_calls == 1);
+    CHECK(events.stopped_calls == 0);
+}
+
+void MuxHeaderFailureDoesNotStartEitherStream()
+{
+    std::vector<int> order;
+    FakeStreamPipeline video(order, 0), audio(order, 10);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    mux.start_status = VRREC_STATUS_INTERNAL_ERROR;
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
+
+    CHECK(session.Start() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(order == std::vector<int>({21, 23}));
+    CHECK(mux.start_calls == 1);
+    CHECK(mux.abort_calls == 1);
     CHECK(events.stopped_calls == 0);
 }
 
@@ -250,7 +328,12 @@ void StreamFailureAbortsPeerAndMuxWithoutStoppedEvent()
     FakeMuxSession mux(order);
     RecordingEvents events;
     video.join_status = VRREC_STATUS_INTERNAL_ERROR;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_OK);
     CHECK(session.RequestStop() == VRREC_STATUS_OK);
     CHECK(session.Join() == VRREC_STATUS_INTERNAL_ERROR);
@@ -269,7 +352,12 @@ void AbortDuringJoinSuppressesSuccessfulStoppedCompletion()
     ConcurrentStreamPipeline audio(false);
     FakeMuxSession mux(order);
     RecordingEvents events;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_OK);
     CHECK(session.RequestStop() == VRREC_STATUS_OK);
 
@@ -293,7 +381,12 @@ void AbortDuringStopRequestSkipsTheRemainingGracefulSequence()
     ConcurrentStreamPipeline audio(false);
     FakeMuxSession mux(order);
     RecordingEvents events;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_OK);
 
     auto stop_result = VRREC_STATUS_OK;
@@ -315,7 +408,12 @@ void AbortDuringVideoStartRollsBackWithoutStartingAudio()
     ConcurrentStreamPipeline audio(false);
     FakeMuxSession mux(order);
     RecordingEvents events;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
 
     auto start_result = VRREC_STATUS_OK;
     std::thread starter([&] { start_result = session.Start(); });
@@ -330,6 +428,31 @@ void AbortDuringVideoStartRollsBackWithoutStartingAudio()
     CHECK(mux.abort_calls == 1);
 }
 
+void AbortDuringMuxHeaderStartDoesNotStartEitherStream()
+{
+    ConcurrentStreamPipeline video(false);
+    ConcurrentStreamPipeline audio(false);
+    ConcurrentMuxSession mux;
+    RecordingEvents events;
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
+
+    auto start_result = VRREC_STATUS_OK;
+    std::thread starter([&] { start_result = session.Start(); });
+    mux.WaitForStart();
+    session.Abort();
+    starter.join();
+
+    CHECK(start_result == VRREC_STATUS_INVALID_STATE);
+    CHECK(mux.abort_calls == 1);
+    CHECK(video.start_calls == 0);
+    CHECK(audio.start_calls == 0);
+}
+
 void ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce()
 {
     std::vector<int> order;
@@ -337,7 +460,12 @@ void ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce()
     ConcurrentStreamPipeline audio(false);
     FakeMuxSession mux(order);
     RecordingEvents events;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_OK);
 
     auto first_result = VRREC_STATUS_INTERNAL_ERROR;
@@ -372,7 +500,12 @@ void ConcurrentJoinExecutesEachStreamJoinExactlyOnce()
     ConcurrentStreamPipeline audio(false);
     FakeMuxSession mux(order);
     RecordingEvents events;
-    MediaRecordingSession session(video, audio, mux, events);
+    MediaRecordingSession session(
+        video,
+        audio,
+        mux,
+        TestMp4Streams(),
+        events);
     CHECK(session.Start() == VRREC_STATUS_OK);
     CHECK(session.RequestStop() == VRREC_STATUS_OK);
 
@@ -410,11 +543,13 @@ void ConcurrentJoinExecutesEachStreamJoinExactlyOnce()
 int main()
 {
     GracefulStopOrdersVideoBeforeAudioAndPublishesFinalCounts();
+    MuxHeaderFailureDoesNotStartEitherStream();
     AudioStartFailureRollsBackVideoAndMux();
     StreamFailureAbortsPeerAndMuxWithoutStoppedEvent();
     AbortDuringJoinSuppressesSuccessfulStoppedCompletion();
     AbortDuringStopRequestSkipsTheRemainingGracefulSequence();
     AbortDuringVideoStartRollsBackWithoutStartingAudio();
+    AbortDuringMuxHeaderStartDoesNotStartEitherStream();
     ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce();
     ConcurrentJoinExecutesEachStreamJoinExactlyOnce();
     return 0;

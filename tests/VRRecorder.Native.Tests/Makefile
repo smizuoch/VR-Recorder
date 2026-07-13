@@ -15,6 +15,8 @@ all: $(BUILD_DIR)/media_recording_session_tests
 all: $(BUILD_DIR)/media_stream_pipeline_adapter_tests
 all: $(BUILD_DIR)/media_recording_pipeline_tests
 all: $(BUILD_DIR)/pipeline_media_backend_tests
+all: $(BUILD_DIR)/ffmpeg_encoder_state_machine_tests
+all: $(BUILD_DIR)/ffmpeg_fragmented_mp4_muxer_tests
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -53,6 +55,12 @@ $(BUILD_DIR)/pipeline_media_backend_tests: pipeline_media_backend_tests.cpp $(NA
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/fragmented_mp4_mux_coordinator_tests: fragmented_mp4_mux_coordinator_tests.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/ffmpeg_encoder_state_machine_tests: ffmpeg_encoder_state_machine_tests.cpp $(NATIVE_ROOT)/src/ffmpeg_encoder_state_machine.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/ffmpeg_fragmented_mp4_muxer_tests: ffmpeg_fragmented_mp4_muxer_tests.cpp $(NATIVE_ROOT)/src/ffmpeg_fragmented_mp4_muxer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/shared_mux_finalization_session_tests: shared_mux_finalization_session_tests.cpp $(NATIVE_ROOT)/src/shared_mux_finalization_session.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp | $(BUILD_DIR)
@@ -167,6 +175,8 @@ test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/audio_pipeline_session_tests
 	$(BUILD_DIR)/audio_media_event_adapter_tests
 	$(BUILD_DIR)/fragmented_mp4_mux_coordinator_tests
+	$(BUILD_DIR)/ffmpeg_encoder_state_machine_tests
+	$(BUILD_DIR)/ffmpeg_fragmented_mp4_muxer_tests
 	$(BUILD_DIR)/media_mux_pipeline_tests
 	$(BUILD_DIR)/media_recording_session_tests
 	$(BUILD_DIR)/media_stream_pipeline_adapter_tests

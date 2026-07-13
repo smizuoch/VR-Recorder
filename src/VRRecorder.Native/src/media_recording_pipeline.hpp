@@ -35,6 +35,7 @@ public:
         StereoAudioCaptureSessionConfig audio_config,
         std::size_t audio_encoding_frame_count_48k,
         MediaMuxSessionPort &mux,
+        FragmentedMp4StreamConfiguration mux_configuration,
         MediaEventSink &events);
 
     vrrec_status_t Start() noexcept override;

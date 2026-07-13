@@ -574,6 +574,47 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_fragmented_mp4_mux_coordinator)
 
 add_executable(
+    vrrecorder_native_ffmpeg_encoder_state_machine
+    ffmpeg_encoder_state_machine_tests.cpp
+    "${native_source_root}/src/ffmpeg_encoder_state_machine.cpp")
+target_compile_features(
+    vrrecorder_native_ffmpeg_encoder_state_machine PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_ffmpeg_encoder_state_machine
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+target_link_libraries(
+    vrrecorder_native_ffmpeg_encoder_state_machine
+    PRIVATE
+        Threads::Threads)
+set_target_properties(
+    vrrecorder_native_ffmpeg_encoder_state_machine
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_ffmpeg_encoder_state_machine)
+
+add_executable(
+    vrrecorder_native_ffmpeg_fragmented_mp4_muxer
+    ffmpeg_fragmented_mp4_muxer_tests.cpp
+    "${native_source_root}/src/ffmpeg_fragmented_mp4_muxer.cpp")
+target_compile_features(
+    vrrecorder_native_ffmpeg_fragmented_mp4_muxer PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_ffmpeg_fragmented_mp4_muxer
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+set_target_properties(
+    vrrecorder_native_ffmpeg_fragmented_mp4_muxer
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_ffmpeg_fragmented_mp4_muxer)
+
+add_executable(
     vrrecorder_native_shared_mux_finalization_session
     shared_mux_finalization_session_tests.cpp
     "${native_source_root}/src/shared_mux_finalization_session.cpp"
@@ -802,6 +843,10 @@ add_test(NAME vrrecorder_native_video_encoder_config
     COMMAND vrrecorder_native_video_encoder_config)
 add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator
     COMMAND vrrecorder_native_fragmented_mp4_mux_coordinator)
+add_test(NAME vrrecorder_native_ffmpeg_encoder_state_machine
+    COMMAND vrrecorder_native_ffmpeg_encoder_state_machine)
+add_test(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer
+    COMMAND vrrecorder_native_ffmpeg_fragmented_mp4_muxer)
 add_test(NAME vrrecorder_native_shared_mux_finalization_session
     COMMAND vrrecorder_native_shared_mux_finalization_session)
 add_test(NAME vrrecorder_native_muxing_video_encoder_sink

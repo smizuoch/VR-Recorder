@@ -1,4 +1,5 @@
 #include "muxing_video_encoder_sink.hpp"
+#include "fragmented_mp4_test_support.hpp"
 
 #include <cstddef>
 #include <cstdlib>
@@ -17,6 +18,7 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+using namespace vrrecorder::native::test;
 
 EncodedMediaPacket VideoPacket(std::int64_t timestamp)
 {
@@ -26,7 +28,7 @@ EncodedMediaPacket VideoPacket(std::int64_t timestamp)
         timestamp,
         33'333,
         timestamp == 0,
-        1'024,
+        std::vector<std::byte>(1'024, std::byte{0x01}),
     };
 }
 
@@ -61,16 +63,17 @@ public:
 
 class RecordingMuxer final : public FragmentedMp4Muxer {
 public:
+    vrrec_status_t WriteHeader(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t WritePacket(
         const EncodedMediaPacket &packet) noexcept override
     {
         packets.push_back(packet);
         return write_status;
-    }
-
-    vrrec_status_t EndFragment() noexcept override
-    {
-        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t WriteTrailer() noexcept override
@@ -103,6 +106,7 @@ void SubmitsEveryEncodedVideoPacketToTheSharedMuxTimeline()
     };
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
     ScheduledVideoFrame frame {};
@@ -122,6 +126,7 @@ void KeepsEncoderBufferingAsAZeroPacketSuccess()
     ScriptedPacketEncoder encoder;
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
 
@@ -138,6 +143,7 @@ void AbortsBothSidesWhenMuxingFails()
     RecordingMuxer backend;
     backend.write_status = VRREC_STATUS_INTERNAL_ERROR;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
 
@@ -155,6 +161,7 @@ void FlushesEncoderPacketsWithoutFinalizingTheSharedMuxer()
     encoder.finish = {VRREC_STATUS_OK, 300, {VideoPacket(0)}};
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
 
@@ -171,6 +178,7 @@ void SuccessfulFinishTerminalizesTheVideoEncoderSink()
     ScriptedPacketEncoder encoder;
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
 
@@ -189,6 +197,7 @@ void EncoderFailureAbortsBothSidesAndRejectsFurtherFrames()
     encoder.encode = {VRREC_STATUS_INTERNAL_ERROR, 50, {}};
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
 
@@ -213,6 +222,7 @@ void RejectsAMixedStreamBatchBeforeMutatingTheMuxer()
     };
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingVideoEncoderSink sink(encoder, session);
 

@@ -1,5 +1,7 @@
 #include "fragmented_mp4_mux_coordinator.hpp"
 
+#include <limits>
+
 namespace vrrecorder::native {
 
 FragmentedMp4MuxCoordinator::FragmentedMp4MuxCoordinator(
@@ -15,71 +17,73 @@ FragmentedMp4MuxCoordinator::~FragmentedMp4MuxCoordinator()
     Abort();
 }
 
+vrrec_status_t FragmentedMp4MuxCoordinator::Begin(
+    const FragmentedMp4StreamConfiguration &configuration) noexcept
+{
+    const std::lock_guard submit_lock(submit_mutex_);
+    const std::lock_guard lock(mutex_);
+    if (terminal_ || started_) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+    if (!IsConfigurationValid(configuration)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    const auto status = muxer_.WriteHeader(configuration);
+    if (status != VRREC_STATUS_OK) {
+        AbortLocked();
+        return status;
+    }
+    minimum_audio_timestamp_microseconds_ =
+        AacPrimingLowerBoundMicroseconds(configuration.audio);
+    started_ = true;
+    return VRREC_STATUS_OK;
+}
+
 Mp4MuxResult FragmentedMp4MuxCoordinator::Submit(
     const EncodedMediaPacket &packet) noexcept
 {
-    const std::lock_guard lock(mutex_);
-    if (terminal_) {
-        return Mp4MuxResult::InvalidState;
-    }
-    if (!IsPacketValid(packet)) {
-        return Mp4MuxResult::InvalidPacket;
-    }
+    const std::lock_guard submit_lock(submit_mutex_);
+    {
+        const std::lock_guard lock(mutex_);
+        if (terminal_ || !started_) {
+            return Mp4MuxResult::InvalidState;
+        }
+        if (!IsPacketValid(packet)) {
+            return Mp4MuxResult::InvalidPacket;
+        }
 
-    constexpr std::int64_t minimum_fragment_microseconds = 1'000'000;
-    constexpr std::int64_t maximum_fragment_microseconds = 2'000'000;
-    const auto fragment_duration = has_fragment_
-        ? packet.dts_microseconds - fragment_start_dts_
-        : 0;
-    const auto preferred_key_frame_boundary =
-        packet.stream == MediaStreamKind::Video && packet.key_frame &&
-        fragment_duration >= minimum_fragment_microseconds;
-    const auto forced_maximum_boundary =
-        fragment_duration >= maximum_fragment_microseconds;
-    if (has_fragment_ &&
-        (preferred_key_frame_boundary || forced_maximum_boundary)) {
-        if (muxer_.EndFragment() != VRREC_STATUS_OK) {
+        if (muxer_.WritePacket(packet) != VRREC_STATUS_OK) {
             AbortLocked();
             return Mp4MuxResult::MuxFailed;
         }
-        fragment_start_dts_ = packet.dts_microseconds;
+
+        if (packet.stream == MediaStreamKind::Video) {
+            has_video_dts_ = true;
+            last_video_dts_ = packet.dts_microseconds;
+        } else {
+            has_audio_dts_ = true;
+            last_audio_dts_ = packet.dts_microseconds;
+        }
     }
 
-    if (muxer_.WritePacket(packet) != VRREC_STATUS_OK) {
-        AbortLocked();
-        return Mp4MuxResult::MuxFailed;
-    }
     if (observer_ != nullptr &&
         observer_->Observe(packet) != VRREC_STATUS_OK) {
+        const std::lock_guard lock(mutex_);
         AbortLocked();
         return Mp4MuxResult::MuxFailed;
-    }
-
-    if (!has_fragment_) {
-        has_fragment_ = true;
-        fragment_start_dts_ = packet.dts_microseconds;
-    }
-    if (packet.stream == MediaStreamKind::Video) {
-        has_video_dts_ = true;
-        last_video_dts_ = packet.dts_microseconds;
-    } else {
-        has_audio_dts_ = true;
-        last_audio_dts_ = packet.dts_microseconds;
     }
     return Mp4MuxResult::Written;
 }
 
 vrrec_status_t FragmentedMp4MuxCoordinator::Finish() noexcept
 {
+    const std::lock_guard submit_lock(submit_mutex_);
     const std::lock_guard lock(mutex_);
-    if (terminal_) {
+    if (terminal_ || !started_) {
         return VRREC_STATUS_INVALID_STATE;
     }
 
-    if (has_fragment_ && muxer_.EndFragment() != VRREC_STATUS_OK) {
-        AbortLocked();
-        return VRREC_STATUS_INTERNAL_ERROR;
-    }
     if (muxer_.WriteTrailer() != VRREC_STATUS_OK) {
         AbortLocked();
         return VRREC_STATUS_INTERNAL_ERROR;
@@ -99,14 +103,81 @@ void FragmentedMp4MuxCoordinator::Abort() noexcept
     AbortLocked();
 }
 
+bool FragmentedMp4MuxCoordinator::IsConfigurationValid(
+    const FragmentedMp4StreamConfiguration &configuration) noexcept
+{
+    constexpr std::uint32_t maximum_dimension = 16'384;
+    const auto video_profile_valid =
+        configuration.video.profile == H264Profile::Main ||
+        configuration.video.profile == H264Profile::High;
+    const auto video_packet_format_valid =
+        configuration.video.packet_format == H264PacketFormat::AnnexB ||
+        configuration.video.packet_format ==
+            H264PacketFormat::AvccLengthPrefixed;
+    return configuration.video.packet_time_base ==
+               MicrosecondPacketTimeBase &&
+        configuration.audio.packet_time_base ==
+               MicrosecondPacketTimeBase &&
+        configuration.video.width != 0 &&
+        configuration.video.height != 0 &&
+        configuration.video.width <= maximum_dimension &&
+        configuration.video.height <= maximum_dimension &&
+        configuration.video.width % 2 == 0 &&
+        configuration.video.height % 2 == 0 && video_profile_valid &&
+        video_packet_format_valid &&
+        !configuration.video.codec_extradata.empty() &&
+        configuration.audio.sample_rate == 48'000 &&
+        configuration.audio.channel_count == 2 &&
+        configuration.audio.frame_size != 0 &&
+        configuration.audio.frame_size <=
+            static_cast<std::uint32_t>(
+                std::numeric_limits<std::int32_t>::max()) &&
+        configuration.audio.initial_padding_samples <=
+            static_cast<std::uint32_t>(
+                std::numeric_limits<std::int32_t>::max()) &&
+        configuration.audio.profile == AacProfile::LowComplexity &&
+        configuration.audio.channel_layout == AudioChannelLayout::Stereo &&
+        configuration.audio.packet_format ==
+            AacPacketFormat::RawAccessUnit &&
+        !configuration.audio.codec_extradata.empty() &&
+        configuration.fragment_policy ==
+            DefaultFragmentedMp4FragmentPolicy;
+}
+
 bool FragmentedMp4MuxCoordinator::IsPacketValid(
     const EncodedMediaPacket &packet) const noexcept
 {
     if ((packet.stream != MediaStreamKind::Video &&
-         packet.stream != MediaStreamKind::Audio) ||
-        packet.pts_microseconds < 0 || packet.dts_microseconds < 0 ||
-        packet.duration_microseconds <= 0 || packet.payload_size == 0) {
+        packet.stream != MediaStreamKind::Audio) ||
+        packet.pts_microseconds == UnknownMediaTimestamp ||
+        packet.dts_microseconds == UnknownMediaTimestamp ||
+        packet.pts_microseconds < packet.dts_microseconds ||
+        packet.duration_microseconds <= 0 || packet.payload.empty()) {
         return false;
+    }
+    const auto minimum_timestamp = packet.stream == MediaStreamKind::Video
+        ? 0
+        : minimum_audio_timestamp_microseconds_;
+    if (packet.pts_microseconds < minimum_timestamp ||
+        packet.dts_microseconds < minimum_timestamp ||
+        packet.pts_microseconds >
+            std::numeric_limits<std::int64_t>::max() -
+                packet.duration_microseconds ||
+        packet.dts_microseconds >
+            std::numeric_limits<std::int64_t>::max() -
+                packet.duration_microseconds) {
+        return false;
+    }
+
+    bool has_skip_samples = false;
+    for (const auto &side_data : packet.side_data) {
+        if (side_data.kind != EncodedPacketSideDataKind::SkipSamples ||
+            packet.stream != MediaStreamKind::Audio ||
+            side_data.payload.size() != SkipSamplesSideDataSize ||
+            has_skip_samples) {
+            return false;
+        }
+        has_skip_samples = true;
     }
 
     if (packet.stream == MediaStreamKind::Video) {

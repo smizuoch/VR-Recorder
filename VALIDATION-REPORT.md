@@ -29,18 +29,18 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 956件成功、失敗0、skip 0
+- managed: 974件成功、失敗0、skip 0
   - Domain 90
   - Application 282
-  - Compliance 186
+  - Compliance 204
   - Presentation 90
   - Integration 308
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
-- CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
+- CMake 3.28.3 configure／全target build／CTest: 41/41成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 87.42%（3051/3490）／branch 73.38%（1825/2487）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを116 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 88.53%（3480/3931）／branch 75.32%（2136/2836）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -142,14 +142,20 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - C ABI live video layoutを固定canvas／bounds／even寸法で検証してmutex保護し、次frameの明示destinationへ適用、source寸法不一致をprocessor前に拒否するlayout controller（GPU processor実体は未実装）
 - 偶数NV12入力、HighからMainへのcapability降格、品質優先VBR、2秒GOP、`width*height*fps*0.14`の8–80 Mbps clampと1.5倍maxrateを整数安全に導出するH.264設定境界
 - AAC-LC、48 kHz、stereo、192 kbpsと既存mixerのFloat32 interleaved source形式を明示し、backend固有sample変換をencoder adapterへ隔離する音声設定境界
-- A/V packetのPTS／DTS／duration／keyframeを直列化し、stream別DTS単調性、1秒以降keyframe優先／2秒上限fragment、graceful fragment→trailer→file flush、Abort時trailer禁止を保証するfMP4 mux coordinator
+- A/V packetの実byte payloadをpacket自身が所有し、PTS／DTS／duration／keyframeをcanonical microsecondsで直列化して、empty payloadのmux前拒否、stream別DTS単調性、graceful trailer→file flush、Abort時trailer禁止を保証するfMP4 mux coordinator。H.264／AAC descriptorはprofile／layout、Annex B／AVCC・raw AAC形式、owned extradata、AAC `frame_size`／`initial_padding_samples`、1/1,000,000 time base、1秒最小／2秒上限／keyframe優先fragment policyをheaderへ渡し、fragment cut／interleaveはproduction muxerへ委譲する
+- libavcodecのsend／receive契約を抽象Portで再現し、send／receive双方のEAGAIN、buffering、複数packet batch、EOF drain、packet unref、packet／side-data所有権、各allocation位置のOOM、unknown statusをfail-closed処理するportable FFmpeg encoder state machine（実`AVCodecContext`／`AVPacket` Portは未実装）
+- header成功後のstream time base readbackを必須化し、canonical microsecondsからstream time baseへのsigned timestamp／duration rescale、stream別readback failure、write／trailer／flush failure、正常Finish後のAbort no-opを検証するportable FFmpeg fMP4 muxer seam（実`AVFormatContext`／`AVStream` Portは未実装）
+- AAC descriptor由来のinitial-padding下限まで負PTS／DTSを許容し、それより前のaudio timestamp、videoの負timestamp、PTS < DTS、timestamp + duration overflow、empty payloadをmux前に拒否する境界。SkipSamples side dataはaudio-only、exact 10 bytes、packet当たり1個に限定する
+- mux headerをvideo／audio workerより先に開始し、invalid descriptor／header失敗ではstreamを開始せず、header開始中Abortでもworkerを復活させずmux Abortをexactly onceにするrecording-session境界
+- 初回H.264 production profileへ`maximum_b_frame_count = 0`を固定し、現行video非負DTS契約へvendor既定のframe reorderを混入させない設定境界
 - video encoderのbuffering／実packet batchを分離して共通fMP4 timelineへ投入し、mixed-stream batchをmux mutation前に拒否し、encoder／mux failureで双方をAbortし、正常Finish後のWrite／再Finishもterminal拒否するsink adapter
 - AAC encoderのbuffering／実packet batchを分離して同じfMP4 timelineへ投入し、mixed-stream batchをmux mutation前に拒否し、encoder／mux failureでcapture／encoder／muxerを停止し、正常Finish後の再入力をterminal拒否するsink adapter
-- video／audio flush packet投入後のstream完了をbarrier化し、両encoder成功後だけ最終fragment／trailer／file flushを一度実行し、重複完了／flush後packet／片側failureをfail-closed処理する共有mux finalization session
-- mux成功後の最新video／audio PTS差を80 ms閾値で監視し、excursion単位の再arm可能なprivacy-safe eventと最新／最大drift／event数を記録するA/V sync monitor（診断observer結果は録画成否へ影響しない）
+- video／audio flush packet投入後のstream完了をbarrier化し、両encoder成功後だけtrailer／file flushを一度実行し、重複完了／flush後packet／片側failureをfail-closed処理する共有mux finalization session
+- mux成功後の最新video／presentation epoch到達後のaudio PTS差を80 ms閾値で監視し、負のAAC priming packetはmuxしつつdrift統計から除外するA/V sync monitor。excursion単位の再arm可能なprivacy-safe eventと最新／最大drift／event数を記録し、診断observer結果は録画成否へ影響させない
+- mux observer／A/V drift callback前にcoordinator／shared-finalization／monitor lockを解放し、callback内のstatistics readback→Abortを自己deadlockなしで完了して後続packetをterminal拒否する再入境界
 - ABI構造体サイズと17 exportsを変えずにA/V drift eventをnative callbackからtyped P/Invoke callback、best-effort media event sink、privacy-safe structured logへ伝播する経路
 - encoder probeのDispose開始flagを呼出しthreadで同期確定し、in-flight native結果を`ObjectDisposedException`へ収束させてlibrary解放完了を`IAsyncDisposable`で待つlifetime境界
-- A/V sync monitorの非負video／audio PTSとabsolute driftをprivacy-safe native MediaEventへ正確に転送し、C ABI drift event経路へ接続するadapter
+- A/V sync monitorの非負video／presentation epoch以後のaudio PTSとabsolute driftをprivacy-safe native MediaEventへ正確に転送し、C ABI drift event経路へ接続するadapter
 - muxer、A/V sync monitor、MediaEvent adapter、共有dual-stream finalizationを安全なlifetime順序で所有し、成功packetのdrift観測と両encoder完了後のfinalizeを自動接続するnative composition boundary
 - 映像停止→音声終了→両stream joinの順序を固定し、開始rollbackと片側failure時のpeer／共有mux Abort、両側成功時だけの最終packet統計通知を保証するmedia recording session境界
 - 既存のvideo／stereo audio pipelineへpoll timeout、endpoint、session QPC、encoding frame windowを固定して渡し、終了理由を安定C ABI statusへ、packet統計を共通recording sessionへ変換するconfigured stream adapters
@@ -160,6 +166,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - condition-variableで同時RequestStopの結果を共有し、同時Joinを単一winnerへ限定して、video／audioのstop・joinとStopped eventをexactly onceにするrecording session境界
 - callback内Abortを許すrecursive callback quiescence、stop workerの自己join回避、Start成功後だけpending first-packet milestoneをcommitして失敗Startでは破棄するC ABI／backend lifetime境界
 - 外部API契約、テスト生成規則、実装済みfailure injection、実FFmpeg／D3D11／Spout2／WASAPI adapter導入時の必須Redを固定した`docs/NATIVE-PIPELINE-FAILURE-MATRIX.md`
+- unpackaged `win-x64` publish directoryを非公開の実機検証payloadとし、実機合格後だけMicrosoft Store MSIX候補へ進める二段階配布ADR。version／source revision／EXE hash／全payload inventory digest／Legal Bundle identityの不一致、実機証拠欠落・不合格、Partner Center identity欠落・placeholderをfail-closedで拒否し、MSIX候補だけでは公開可能にしないpromotion policy
 - mux成功packetの最新A/V offsetを`audio PTS - video PTS`の符号付き値としてmonitorからmux／recording pipeline／C ABI最終統計まで伝播する経路（閾値event用absolute driftとは分離）
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
@@ -168,13 +175,15 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 ### 未完了の主要release gate
 
-- 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
+- 録画開始前のhardware encoder失敗を同一file内のsoftware fallbackへ切り替え、最初のpacket後のencoder障害では現partを確定してsoftware encoderの次partを開始する基本設計を実装するか、terminal Abortへ仕様を明示改訂すること。現実装はterminal Abort
+- version／source commitを固定し法務承認されたFFmpegまたはMedia Foundationのconcrete encoder／muxer Portとfactory／compositionをproduction media backendへ接続すること。現状のC ABI backendは引き続き`BACKEND_UNAVAILABLE`
+- 実libavcodec／libavformatでのAAC sample変換・FIFO・frame sizing・flush／drain・負priming・SkipSamples・edit list、H.264 extradata／packet形式、fragment flagsを検証し、scratch fMP4をffprobe／decode／playbackで確認すること。side-data-only packetの扱いと、失敗outputを公開しないことも実証が必要
+- 実Spout2／D3D11／WASAPI接続とunpackaged `win-x64` EXEによる3秒録画・停止・確定・再生の実機検証
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
-- 初回setup 7・8番目のproduction verifier adapterとWindows上の実装済み10項目の検証実行、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
+- 初回setup 7・8番目のproduction verifier、Windows上での実装済み10項目、VR配置／OSC設定runtime反映、実アプリend-to-end検証
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
-- Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
-- coverage／mutation／native coverage／accessibility／localizationの全release gate
-- 独立法務review、署名、installer／最終payload再スキャン
+- Windows 10／11、NVIDIA／AMD／Intel、HMD／controller matrixとcoverage／mutation／native coverage／accessibility／localizationの全gate
+- 独立法務review、unpackaged実機検証payload、Authenticode／Store code signingと署名検証、Microsoft Store identity、MSIX packaging、sideload／WACK／package固有回帰、最終payload再スキャン
 
 ## English
 
@@ -205,18 +214,18 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 956 passed, 0 failed, 0 skipped
+- managed: 974 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 282
-  - Compliance 186
+  - Compliance 204
   - Presentation 90
   - Integration 308
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
-- CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
+- CMake 3.28.3 configure/full-target build/CTest: 41/41 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 87.42% lines (3051/3490) and 73.38% branches (1825/2487), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 116 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 88.53% lines (3480/3931) and 75.32% branches (2136/2836), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -318,14 +327,20 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A layout controller that validates C ABI live-video layouts against fixed canvas/bounds/even dimensions, stores them under a mutex, applies explicit destinations from the next frame, and rejects source-dimension mismatch before processing (the GPU processor implementation remains outstanding)
 - An H.264 configuration boundary that safely derives even NV12 input, High-to-Main capability fallback, quality VBR, a two-second GOP, the clamped 8–80 Mbps `width*height*fps*0.14` target, and a 1.5x maximum rate
 - An audio configuration boundary that fixes AAC-LC, 48 kHz, stereo, 192 kbps, and the mixer's interleaved Float32 source format while isolating backend-specific sample conversion in encoder adapters
-- An fMP4 mux coordinator that serializes A/V packet PTS/DTS/duration/keyframes, enforces per-stream DTS monotonicity, prefers keyframe cuts after one second with a hard two-second fragment limit, orders graceful fragment/trailer/file flush, and forbids trailers after abort
+- An fMP4 mux coordinator whose packets own their encoded byte payload, reject empty payloads before mux mutation, serialize A/V PTS/DTS/duration/keyframes in canonical microseconds, enforce per-stream DTS monotonicity, order graceful trailer/file flush, and forbid trailers after abort. Typed H.264/AAC descriptors carry profile/layout, Annex B/AVCC or raw-AAC format, owned extradata, AAC `frame_size`/`initial_padding_samples`, a 1/1,000,000 packet time base, and a one-second-minimum/two-second-maximum/keyframe-preferred fragment policy into the header while delegating cuts and interleaving to the production muxer
+- A portable FFmpeg encoder state machine that models the libavcodec send/receive contract and fail-closed handles EAGAIN from either direction, buffering, multi-packet batches, EOF drain, packet unref, packet/side-data ownership, OOM at every allocation position, and unknown statuses (concrete `AVCodecContext`/`AVPacket` ports remain outstanding)
+- A portable FFmpeg fMP4 muxer seam that requires post-header stream-time-base readback and validates signed timestamp/duration rescaling from canonical microseconds, per-stream readback failures, write/trailer/flush failures, and no-op Abort after a durable Finish (concrete `AVFormatContext`/`AVStream` ports remain outstanding)
+- A boundary that admits negative AAC PTS/DTS only down to the descriptor-derived initial-padding limit, while rejecting earlier audio timestamps, negative video timestamps, PTS before DTS, timestamp-plus-duration overflow, and empty payloads before mux mutation. SkipSamples side data is restricted to audio, exactly 10 bytes, and one item per packet
+- A recording-session boundary that starts the mux header before video/audio workers, starts no stream for invalid descriptors or header failure, and prevents worker resurrection while keeping mux abort exactly once when Abort races header startup
+- An initial H.264 production profile that fixes `maximum_b_frame_count = 0`, preventing vendor-default frame reordering from entering the current video-only nonnegative-DTS contract
 - A video sink adapter that separates encoder buffering from real packet batches, rejects mixed-stream batches before mux mutation, aborts both sides on encoder/mux failure, and terminally rejects writes or repeated finish after a successful finish
 - An AAC sink adapter that separates encoder buffering from real packet batches, rejects mixed-stream batches before mux mutation, stops capture/encoder/muxer on encoder or mux failure, and terminally rejects input after a successful finish
-- A shared mux finalization session that barriers stream completion after video/audio flush packets, runs final fragment/trailer/file flush once only after both encoders succeed, and fail-closed rejects duplicate completion, post-flush packets, or either-side failure
-- An A/V sync monitor that observes successfully muxed video/audio PTS at an 80 ms threshold, emits rearmable privacy-safe events per excursion, records latest/maximum drift and event count, and never lets diagnostic observer outcomes alter recording success
+- A shared mux finalization session that barriers stream completion after video/audio flush packets, runs trailer/file flush once only after both encoders succeed, and fail-closed rejects duplicate completion, post-flush packets, or either-side failure
+- An A/V sync monitor that compares successfully muxed video PTS with audio PTS after the presentation epoch at an 80 ms threshold, muxes but excludes negative AAC priming packets from drift statistics, emits rearmable privacy-safe events per excursion, records latest/maximum drift and event count, and never lets diagnostic observer outcomes alter recording success
+- A reentrancy boundary that releases coordinator, shared-finalization, and monitor locks before mux-observer/A/V-drift callbacks, allowing callback-time statistics readback followed by Abort without self-deadlock and terminally rejecting subsequent packets
 - An ABI-size- and 17-export-preserving path that propagates A/V drift events from native callbacks through typed P/Invoke callbacks and a best-effort media-event sink into privacy-safe structured logs
 - An encoder-probe lifetime boundary that synchronously marks disposal on the caller thread, converges in-flight native results to `ObjectDisposedException`, and exposes library-release completion through `IAsyncDisposable`
-- An adapter that forwards nonnegative A/V-monitor video/audio PTS and absolute drift exactly into privacy-safe native media events, connecting the monitor to the C ABI drift-event path
+- An adapter that forwards nonnegative video PTS and post-presentation-epoch audio PTS plus absolute drift exactly into privacy-safe native media events, connecting the monitor to the C ABI drift-event path
 - A native composition boundary that owns the muxer-facing coordinator, A/V sync monitor, MediaEvent adapter, and shared dual-stream finalization in safe lifetime order, automatically connecting successful packets to drift observation and both encoder completions to finalization
 - A media recording-session boundary that fixes video-stop, audio-end, and dual-stream-join ordering; rolls back partial starts; aborts the peer and shared mux on either-side failure; and publishes final packet counts only after both streams succeed
 - Configured stream adapters that pass poll timeout, endpoints, session QPC, and encoding frame windows into the existing video/stereo-audio pipelines, mapping their completion reasons to stable C ABI statuses and packet statistics to the common recording session
@@ -336,6 +351,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A recording-session boundary that shares concurrent RequestStop results through a condition variable and admits one Join winner, keeping per-stream stop/join calls and the Stopped event exactly once
 - C ABI/backend lifetime boundaries that allow Abort from inside a callback, avoid stop-worker self-join, and commit a pending first-packet milestone only after Start succeeds while discarding it on failed Start
 - `docs/NATIVE-PIPELINE-FAILURE-MATRIX.md`, which pins external API contracts, test-generation rules, implemented failure injection, and mandatory future Red tests for real FFmpeg, D3D11, Spout2, and WASAPI adapters
+- A two-stage Windows distribution ADR and fail-closed promotion policy that keep the unpackaged `win-x64` publish directory private for hardware validation, admit a Microsoft Store MSIX candidate only after matching version/source revision/EXE hash/full-payload inventory/Legal Bundle evidence, reject absent, failed, or placeholder evidence, and never treat an MSIX candidate alone as publishable
 - A path that carries the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` through the monitor, mux and recording pipelines into final C ABI statistics, separately from absolute drift used for threshold events
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
@@ -344,10 +360,12 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 
 ### Major outstanding release gates
 
-- Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
+- Implement the basic-design same-file software fallback for pre-recording hardware-encoder failure and the rollover from a post-first-packet encoder failure to a finalized current part plus software-encoded next part, or explicitly revise the specification to terminal abort; the current implementation terminally aborts
+- Concrete encoder/muxer ports and factory/composition backed by a version- and source-commit-pinned, legally approved FFmpeg or Media Foundation dependency; the C ABI production media backend still returns `BACKEND_UNAVAILABLE`
+- Real libavcodec/libavformat conformance covering AAC sample conversion, FIFO/frame sizing, flush/drain, negative priming, SkipSamples and edit lists; H.264 extradata/packet format; fragmentation flags; and scratch-fMP4 validation through ffprobe, decode, and playback. Side-data-only packet behavior and nonpublication of failed output also require evidence
+- Real Spout2/D3D11/WASAPI integration and unpackaged `win-x64` EXE hardware validation covering a three-second recording, stop, durable finalization, and playback
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
-- Production verifier adapters for first-run items seven/eight, Windows execution of the 10 implemented checks, runtime VR-placement/OSC settings, and end-to-end recording in the real application
+- Production verifier adapters for first-run items seven/eight, Windows execution of the 10 implemented checks, runtime VR-placement/OSC settings, and real-application end-to-end validation
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
-- Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
-- All coverage, mutation, native-coverage, accessibility, and localization release gates
-- Independent legal review, signing, and installer/final-payload rescanning
+- Windows 10/11, NVIDIA/AMD/Intel, HMD/controller matrix testing, plus every coverage, mutation, native-coverage, accessibility, and localization gate
+- Independent legal review, unpackaged hardware-validation payload generation, Authenticode/Store code signing and signature verification, Microsoft Store identity, MSIX packaging, sideload/WACK/package-specific regression, and final-payload rescanning

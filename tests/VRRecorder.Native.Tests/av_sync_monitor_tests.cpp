@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -44,7 +45,14 @@ public:
 
 EncodedMediaPacket Packet(MediaStreamKind stream, std::int64_t pts)
 {
-    return {stream, pts, pts, 1, false, 1};
+    return {
+        stream,
+        pts,
+        pts,
+        1,
+        false,
+        std::vector<std::byte>(1, std::byte{0x01}),
+    };
 }
 
 void WaitsForBothStreamsAndTreatsExactlyEightyMillisecondsAsHealthy()
@@ -91,7 +99,29 @@ void EmitsOncePerExcursionAndRearmsAfterRecovery()
     CHECK(snapshot.latest_audio_video_offset_microseconds == -90'001);
 }
 
-void RejectsInvalidStreamOrNegativePtsWithoutChangingStatistics()
+void IgnoresNegativeAacPrimingForDiagnosticsWithoutFailingMuxObservation()
+{
+    RecordingDriftEvents events;
+    AvSyncMonitor monitor(events);
+
+    CHECK(monitor.Observe(Packet(MediaStreamKind::Audio, -21'333)) ==
+        VRREC_STATUS_OK);
+    CHECK(monitor.Observe(Packet(MediaStreamKind::Video, 0)) ==
+        VRREC_STATUS_OK);
+    auto snapshot = monitor.Snapshot();
+    CHECK(!snapshot.has_both_streams);
+    CHECK(snapshot.latest_absolute_drift_microseconds == 0);
+    CHECK(events.events.empty());
+
+    CHECK(monitor.Observe(Packet(MediaStreamKind::Audio, 0)) ==
+        VRREC_STATUS_OK);
+    snapshot = monitor.Snapshot();
+    CHECK(snapshot.has_both_streams);
+    CHECK(snapshot.latest_absolute_drift_microseconds == 0);
+    CHECK(snapshot.latest_audio_video_offset_microseconds == 0);
+}
+
+void RejectsInvalidStreamMissingTimestampOrNegativeVideoWithoutChangingStatistics()
 {
     RecordingDriftEvents events;
     AvSyncMonitor monitor(events);
@@ -100,6 +130,10 @@ void RejectsInvalidStreamOrNegativePtsWithoutChangingStatistics()
     auto invalid = Packet(MediaStreamKind::Video, 0);
     invalid.stream = static_cast<MediaStreamKind>(99);
     CHECK(monitor.Observe(invalid) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(monitor.Observe(Packet(
+        MediaStreamKind::Audio,
+        std::numeric_limits<std::int64_t>::min())) ==
+        VRREC_STATUS_INVALID_ARGUMENT);
     const auto snapshot = monitor.Snapshot();
     CHECK(!snapshot.has_both_streams);
     CHECK(snapshot.threshold_event_count == 0);
@@ -111,6 +145,7 @@ int main()
 {
     WaitsForBothStreamsAndTreatsExactlyEightyMillisecondsAsHealthy();
     EmitsOncePerExcursionAndRearmsAfterRecovery();
-    RejectsInvalidStreamOrNegativePtsWithoutChangingStatistics();
+    IgnoresNegativeAacPrimingForDiagnosticsWithoutFailingMuxObservation();
+    RejectsInvalidStreamMissingTimestampOrNegativeVideoWithoutChangingStatistics();
     return 0;
 }

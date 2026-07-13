@@ -1,4 +1,5 @@
 #include "muxing_audio_encoder_sink.hpp"
+#include "fragmented_mp4_test_support.hpp"
 
 #include <cstddef>
 #include <cstdlib>
@@ -18,6 +19,7 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+using namespace vrrecorder::native::test;
 
 EncodedMediaPacket AudioPacket(std::int64_t timestamp)
 {
@@ -27,7 +29,7 @@ EncodedMediaPacket AudioPacket(std::int64_t timestamp)
         timestamp,
         21'333,
         false,
-        512,
+        std::vector<std::byte>(512, std::byte{0x02}),
     };
 }
 
@@ -65,16 +67,17 @@ public:
 
 class RecordingMuxer final : public FragmentedMp4Muxer {
 public:
+    vrrec_status_t WriteHeader(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t WritePacket(
         const EncodedMediaPacket &packet) noexcept override
     {
         packets.push_back(packet);
         return write_status;
-    }
-
-    vrrec_status_t EndFragment() noexcept override
-    {
-        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t WriteTrailer() noexcept override
@@ -106,6 +109,7 @@ void SubmitsEveryEncodedAacPacketToTheSharedMuxTimeline()
     };
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
     const std::vector<float> samples {0.25F, -0.25F, 0.5F, -0.5F};
@@ -123,6 +127,7 @@ void KeepsEncoderBufferingAsAZeroPacketSuccess()
     ScriptedPacketEncoder encoder;
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
 
@@ -139,6 +144,7 @@ void AbortsBothSidesWhenMuxingFails()
     RecordingMuxer backend;
     backend.write_status = VRREC_STATUS_INTERNAL_ERROR;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
 
@@ -156,6 +162,7 @@ void FlushesAacPacketsWithoutFinalizingTheSharedMuxer()
     encoder.finish = {VRREC_STATUS_OK, {AudioPacket(0)}};
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
 
@@ -172,6 +179,7 @@ void SuccessfulFinishTerminalizesTheAudioEncoderSink()
     ScriptedPacketEncoder encoder;
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
 
@@ -191,6 +199,7 @@ void EncoderFailureAbortsBothSidesAndRejectsFurtherWrites()
     encoder.encode = {VRREC_STATUS_INTERNAL_ERROR, {}};
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
     const std::vector<float> samples {0.0F, 0.0F};
@@ -216,6 +225,7 @@ void RejectsAMixedStreamBatchBeforeMutatingTheMuxer()
     };
     RecordingMuxer backend;
     FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
     SharedMuxFinalizationSession session(mux);
     MuxingAudioEncoderSink sink(encoder, session);
 

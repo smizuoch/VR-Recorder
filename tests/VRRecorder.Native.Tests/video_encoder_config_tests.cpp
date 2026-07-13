@@ -28,6 +28,7 @@ void UsesTheDesignDefaultsFor1080p30()
     CHECK(config.input_pixel_format == VRREC_SOURCE_PIXEL_FORMAT_NV12);
     CHECK(config.profile == H264Profile::High);
     CHECK(config.rate_control == VideoRateControl::QualityVbr);
+    CHECK(config.maximum_b_frame_count == 0);
     CHECK(config.gop_frame_count == 60);
     CHECK(config.target_bitrate_bits_per_second == 8'709'120);
     CHECK(config.maximum_bitrate_bits_per_second == 13'063'680);

@@ -21,8 +21,10 @@ endfunction()
 
 require_file("CMakeLists.txt")
 require_file("src/VRRecorder.Native/CMakeLists.txt")
+require_file("src/VRRecorder.Native/Makefile")
 require_file("src/VRRecorder.Native/vrrecorder_native.def")
 require_file("tests/VRRecorder.Native.Tests/CMakeLists.txt")
+require_file("tests/VRRecorder.Native.Tests/Makefile")
 require_file("tests/VRRecorder.Native.Tests/verify_exports.cmake")
 require_file(".github/workflows/native-windows.yml")
 
@@ -38,11 +40,35 @@ require_text(
     "src/VRRecorder.Native/CMakeLists.txt"
     "vrrecorder_native.def")
 require_text(
+    "src/VRRecorder.Native/CMakeLists.txt"
+    "src/ffmpeg_encoder_state_machine.cpp")
+require_text(
+    "src/VRRecorder.Native/CMakeLists.txt"
+    "src/ffmpeg_fragmented_mp4_muxer.cpp")
+require_text(
+    "src/VRRecorder.Native/Makefile"
+    "src/ffmpeg_encoder_state_machine.cpp")
+require_text(
+    "src/VRRecorder.Native/Makefile"
+    "src/ffmpeg_fragmented_mp4_muxer.cpp")
+require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_abi_contract")
 require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_c_header_smoke")
+require_text(
+    "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+    "add_test\\(NAME vrrecorder_native_ffmpeg_encoder_state_machine")
+require_text(
+    "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+    "add_test\\(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer")
+require_text(
+    "tests/VRRecorder.Native.Tests/Makefile"
+    "ffmpeg_encoder_state_machine_tests")
+require_text(
+    "tests/VRRecorder.Native.Tests/Makefile"
+    "ffmpeg_fragmented_mp4_muxer_tests")
 require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_exports")

@@ -7,15 +7,31 @@ MediaMuxPipeline::MediaMuxPipeline(
     MediaEventSink &events) noexcept
     : event_adapter_(events),
       monitor_(event_adapter_),
-      coordinator_(muxer, &monitor_),
+      coordinator_(muxer),
       finalization_(coordinator_)
 {
+}
+
+vrrec_status_t MediaMuxPipeline::Start(
+    const FragmentedMp4StreamConfiguration &configuration) noexcept
+{
+    return coordinator_.Begin(configuration);
 }
 
 Mp4MuxResult MediaMuxPipeline::Submit(
     const EncodedMediaPacket &packet) noexcept
 {
-    return finalization_.Submit(packet);
+    const std::lock_guard lock(submit_mutex_);
+    const auto result = finalization_.Submit(packet);
+    if (result != Mp4MuxResult::Written) {
+        return result;
+    }
+
+    if (monitor_.Observe(packet) != VRREC_STATUS_OK) {
+        finalization_.Abort();
+        return Mp4MuxResult::MuxFailed;
+    }
+    return Mp4MuxResult::Written;
 }
 
 vrrec_status_t MediaMuxPipeline::EncoderFinished(

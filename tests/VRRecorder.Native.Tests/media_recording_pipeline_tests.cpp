@@ -1,4 +1,5 @@
 #include "media_recording_pipeline.hpp"
+#include "fragmented_mp4_test_support.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -12,6 +13,7 @@ namespace {
 #define CHECK(condition) do { if (!(condition)) { std::cerr << "check failed at " << __FILE__ << ':' << __LINE__ << ": " #condition << '\n'; std::abort(); } } while (false)
 
 using namespace vrrecorder::native;
+using namespace vrrecorder::native::test;
 
 class FakeVideoSession final : public VideoPipelineSessionPort {
 public:
@@ -42,8 +44,20 @@ public:
 
 class FakeMuxSession final : public MediaMuxSessionPort {
 public:
+    explicit FakeMuxSession(std::vector<int> &order) noexcept
+        : order_(order)
+    {
+    }
+
+    vrrec_status_t Start(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        order_.push_back(0);
+        return VRREC_STATUS_OK;
+    }
     void Abort() noexcept override { ++abort_calls; }
     std::int64_t AudioVideoOffsetMicroseconds() const noexcept override { return -12'000; }
+    std::vector<int> &order_;
     std::size_t abort_calls = 0;
 };
 
@@ -63,7 +77,7 @@ void ComposesConfiguredPipelinesIntoOneRecordingLifecycle()
     std::vector<int> order;
     FakeVideoSession video(order);
     FakeAudioSession audio(order);
-    FakeMuxSession mux;
+    FakeMuxSession mux(order);
     RecordingEvents events;
     MediaRecordingPipeline pipeline(
         video,
@@ -72,6 +86,7 @@ void ComposesConfiguredPipelinesIntoOneRecordingLifecycle()
         {"desktop-id", "mic-id", 987'654},
         1'024,
         mux,
+        TestMp4Streams(),
         events);
 
     CHECK(pipeline.Start() == VRREC_STATUS_OK);
@@ -84,7 +99,7 @@ void ComposesConfiguredPipelinesIntoOneRecordingLifecycle()
     CHECK(audio.observed_routing == VRREC_AUDIO_ROUTING_MUTED);
     CHECK(pipeline.RequestStop() == VRREC_STATUS_OK);
     CHECK(pipeline.Join() == VRREC_STATUS_OK);
-    CHECK(order == std::vector<int>({1, 2, 6, 3, 4, 7, 8}));
+    CHECK(order == std::vector<int>({0, 1, 2, 6, 3, 4, 7, 8}));
 
     const auto statistics = pipeline.Statistics();
     CHECK(statistics.video.muxed_packet_count == 101);

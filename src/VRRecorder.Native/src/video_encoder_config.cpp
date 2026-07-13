@@ -41,6 +41,7 @@ vrrec_status_t CreateH264VideoEncoderConfig(
         VRREC_SOURCE_PIXEL_FORMAT_NV12,
         high_profile_supported ? H264Profile::High : H264Profile::Main,
         VideoRateControl::QualityVbr,
+        0,
     };
     return VRREC_STATUS_OK;
 }
