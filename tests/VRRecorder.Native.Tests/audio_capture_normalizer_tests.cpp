@@ -412,6 +412,38 @@ void RetainsThePacketAfterADevicePositionDiscontinuity()
     }
 }
 
+void RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics()
+{
+    const std::vector<float> center_and_lfe {0.25F, 0.5F};
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        2,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        8,
+        0x0000'000c,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(9'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  0,
+                  9'000'000,
+                  1,
+                  std::as_bytes(std::span<const float>(center_and_lfe)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::InvalidFormat);
+    CHECK(normalized.frame_count_48k == 0);
+    CHECK(normalized.interleaved_samples.empty());
+}
+
 }
 
 int main()
@@ -424,5 +456,6 @@ int main()
     ConvertsPackedPcm24WithSignExtension();
     ConvertsPcm24StoredInA32BitContainer();
     RetainsThePacketAfterADevicePositionDiscontinuity();
+    RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics();
     return 0;
 }
