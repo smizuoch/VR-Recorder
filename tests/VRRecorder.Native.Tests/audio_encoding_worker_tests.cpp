@@ -44,6 +44,10 @@ public:
             return StereoAudioMixResult::Failed;
         }
 
+        if (violate_contract) {
+            return StereoAudioMixResult::InvalidArgument;
+        }
+
         if (windows_returned_ < ready_windows_) {
             const auto start = windows_returned_ * frame_count_48k;
             ++windows_returned_;
@@ -91,6 +95,7 @@ public:
     std::size_t abort_calls = 0;
     bool fail_unexpectedly = false;
     bool fail_capture = false;
+    bool violate_contract = false;
 
 private:
     std::mutex mutex_;
@@ -220,6 +225,20 @@ void CaptureFailureReleasesBothPipelineEnds()
     CHECK(sink.finish_calls == 0);
 }
 
+void SourceContractFailureReleasesBothPipelineEnds()
+{
+    BlockingMixSource source(0);
+    source.violate_contract = true;
+    RecordingEncoderSink sink;
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::Failed);
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+}
+
 }
 
 int main()
@@ -229,5 +248,6 @@ int main()
     EncoderFailureAbortsWithoutCountingTheWindow();
     UnexpectedSourceAbortReleasesBothPipelineEnds();
     CaptureFailureReleasesBothPipelineEnds();
+    SourceContractFailureReleasesBothPipelineEnds();
     return 0;
 }
