@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <atomic>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -121,7 +122,7 @@ public:
     void WaitForStopDecision(const std::atomic_bool &second_done)
     {
         std::unique_lock lock(mutex_);
-        changed_.wait(lock, [&] {
+        changed_.wait_for(lock, std::chrono::milliseconds(100), [&] {
             return stop_calls >= 2 || second_done.load();
         });
     }
@@ -344,11 +345,15 @@ void ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce()
     std::atomic_bool second_done = false;
     std::thread first([&] { first_result = session.RequestStop(); });
     video.WaitForStop();
+    std::promise<void> second_started;
+    auto second_started_future = second_started.get_future();
     std::thread second([&] {
+        second_started.set_value();
         second_result = session.RequestStop();
         second_done.store(true);
         video.NotifyDecision();
     });
+    second_started_future.wait();
     video.WaitForStopDecision(second_done);
     video.ReleaseStop();
     first.join();
@@ -376,11 +381,15 @@ void ConcurrentJoinExecutesEachStreamJoinExactlyOnce()
     std::atomic_bool second_done = false;
     std::thread first([&] { first_result = session.Join(); });
     video.WaitForJoin();
+    std::promise<void> second_started;
+    auto second_started_future = second_started.get_future();
     std::thread second([&] {
+        second_started.set_value();
         second_result = session.Join();
         second_done.store(true);
         video.NotifyDecision();
     });
+    second_started_future.wait();
     video.WaitForJoinDecision(second_done);
     video.ReleaseJoin();
     first.join();
