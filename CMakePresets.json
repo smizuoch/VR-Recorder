@@ -1,0 +1,91 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "native-linux-debug",
+      "displayName": "Native portable Linux Debug",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/native-linux-debug",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "BUILD_TESTING": true,
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "native-windows-x64",
+      "displayName": "Native portable Windows x64",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/native-windows-x64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "BUILD_TESTING": true
+      }
+    },
+    {
+      "name": "native-windows-x64-ffmpeg",
+      "displayName": "Native Windows x64 with pinned FFmpeg adapters",
+      "inherits": "native-windows-x64",
+      "binaryDir": "${sourceDir}/build/native-windows-x64-ffmpeg",
+      "cacheVariables": {
+        "VRRECORDER_ENABLE_FFMPEG_ADAPTERS": true,
+        "VRRECORDER_FFMPEG_ROOT": "$env{VRRECORDER_FFMPEG_ROOT}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "native-linux-debug",
+      "configurePreset": "native-linux-debug"
+    },
+    {
+      "name": "native-windows-x64-release",
+      "configurePreset": "native-windows-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "native-windows-x64-ffmpeg-release",
+      "configurePreset": "native-windows-x64-ffmpeg",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "native-linux-debug",
+      "configurePreset": "native-linux-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "native-windows-x64-release",
+      "configurePreset": "native-windows-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "native-windows-x64-ffmpeg-release",
+      "configurePreset": "native-windows-x64-ffmpeg",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

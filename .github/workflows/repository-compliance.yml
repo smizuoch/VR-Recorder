@@ -10,7 +10,10 @@ on:
       - third-party/**
       - '**/packages.lock.json'
       - CMakeLists.txt
+      - CMakePresets.json
+      - cmake/**
       - src/VRRecorder.Native/**
+      - tests/cmake/**
       - tests/VRRecorder.Native.Tests/**
       - Directory.Build.props
       - Directory.Packages.props
@@ -26,7 +29,10 @@ on:
       - third-party/**
       - '**/packages.lock.json'
       - CMakeLists.txt
+      - CMakePresets.json
+      - cmake/**
       - src/VRRecorder.Native/**
+      - tests/cmake/**
       - tests/VRRecorder.Native.Tests/**
       - Directory.Build.props
       - Directory.Packages.props

@@ -5,13 +5,19 @@ on:
     paths:
       - .github/workflows/native-windows.yml
       - CMakeLists.txt
+      - CMakePresets.json
+      - cmake/**
       - src/VRRecorder.Native/**
+      - tests/cmake/**
       - tests/VRRecorder.Native.Tests/**
   push:
     paths:
       - .github/workflows/native-windows.yml
       - CMakeLists.txt
+      - CMakePresets.json
+      - cmake/**
       - src/VRRecorder.Native/**
+      - tests/cmake/**
       - tests/VRRecorder.Native.Tests/**
   workflow_dispatch:
 

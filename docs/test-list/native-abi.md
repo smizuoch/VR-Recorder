@@ -4,6 +4,7 @@
 
 - [x] 公開headerをC17とC++20の両方でcompileする
 - [x] CMake／CTestのWindows x64 build graphとMSVC CI契約を固定する
+- [x] production FFmpeg SDKを公式8.1.2のsource identity、完全library version、shared DLL／import library、LGPL-only configure evidenceへ固定し、不足・version違い・GPL混入をconfigure時に拒否する
 - [x] ABI v1のx64 struct sizeと固定幅fieldを検証する
 - [x] null／undersized／unsupported ABI入力をhandle生成前に拒否する
 - [x] backendのmux成功通知後だけFIRST_VIDEO_PACKET_MUXEDを1回発行する
@@ -31,6 +32,7 @@
 
 - [x] Compile the public header as both C17 and C++20
 - [x] Freeze the CMake/CTest Windows x64 build graph and MSVC CI contract
+- [x] Pin the production FFmpeg SDK to the official 8.1.2 source identity, exact library versions, shared DLL/import-library set, and LGPL-only configure evidence, rejecting missing files, version drift, and GPL enablement at configure time
 - [x] Verify ABI v1 x64 struct sizes and fixed-width fields
 - [x] Reject null, undersized, and unsupported-ABI inputs before allocating a handle
 - [x] Emit one FIRST_VIDEO_PACKET_MUXED event only after the backend reports a successful mux write

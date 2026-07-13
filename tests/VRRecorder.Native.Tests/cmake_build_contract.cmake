@@ -20,16 +20,28 @@ function(require_text relative_path required_pattern)
 endfunction()
 
 require_file("CMakeLists.txt")
+require_file("CMakePresets.json")
+require_file("cmake/PinnedFFmpeg.cmake")
 require_file("src/VRRecorder.Native/CMakeLists.txt")
 require_file("src/VRRecorder.Native/Makefile")
 require_file("src/VRRecorder.Native/vrrecorder_native.def")
 require_file("tests/VRRecorder.Native.Tests/CMakeLists.txt")
 require_file("tests/VRRecorder.Native.Tests/Makefile")
 require_file("tests/VRRecorder.Native.Tests/verify_exports.cmake")
+require_file("tests/cmake/pinned_ffmpeg_contract.cmake")
 require_file(".github/workflows/native-windows.yml")
 
 require_text("CMakeLists.txt" "add_subdirectory\\(src/VRRecorder.Native\\)")
 require_text("CMakeLists.txt" "add_subdirectory\\(tests/VRRecorder.Native.Tests\\)")
+require_text(
+    "CMakeLists.txt"
+    "option\\([^\\)]*VRRECORDER_ENABLE_FFMPEG_ADAPTERS")
+require_text(
+    "CMakeLists.txt"
+    "vrrecorder_import_pinned_ffmpeg_sdk")
+require_text(
+    "CMakeLists.txt"
+    "add_test\\(NAME vrrecorder_native_pinned_ffmpeg_contract")
 require_text(
     "src/VRRecorder.Native/CMakeLists.txt"
     "add_library\\(vrrecorder_native SHARED")
@@ -75,6 +87,8 @@ require_text(
 require_text(".github/workflows/native-windows.yml" "windows-latest")
 require_text(".github/workflows/native-windows.yml" "-A x64")
 require_text(".github/workflows/native-windows.yml" "ctest")
+require_text(".github/workflows/native-windows.yml" "CMakePresets.json")
+require_text(".github/workflows/native-windows.yml" "cmake/\\*\\*")
 
 file(
     STRINGS

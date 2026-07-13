@@ -59,7 +59,13 @@ public sealed class RepositoryComplianceTests
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- CMakeLists.txt"));
         Assert.Equal(2, workflowLines.Count(line =>
+            line == "- CMakePresets.json"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- cmake/**"));
+        Assert.Equal(2, workflowLines.Count(line =>
             line == "- src/VRRecorder.Native/**"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- tests/cmake/**"));
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- tests/VRRecorder.Native.Tests/**"));
     }

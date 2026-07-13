@@ -27,8 +27,34 @@ endfunction()
 include(CTest)
 find_package(Threads REQUIRED)
 
+option(
+    VRRECORDER_ENABLE_FFMPEG_ADAPTERS
+    "Build the Windows production adapters against the pinned FFmpeg SDK"
+    OFF)
+set(
+    VRRECORDER_FFMPEG_ROOT
+    ""
+    CACHE PATH
+    "Absolute path to the exact FFmpeg 8.1.2 Windows x64 shared SDK")
+
+if(VRRECORDER_ENABLE_FFMPEG_ADAPTERS)
+    if(NOT WIN32)
+        message(
+            FATAL_ERROR
+            "The production FFmpeg adapters are supported only on Windows x64")
+    endif()
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake")
+    vrrecorder_import_pinned_ffmpeg_sdk("${VRRECORDER_FFMPEG_ROOT}")
+endif()
+
 add_subdirectory(src/VRRecorder.Native)
 
 if(BUILD_TESTING)
     add_subdirectory(tests/VRRecorder.Native.Tests)
+    add_test(NAME vrrecorder_native_pinned_ffmpeg_contract
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DPINNED_FFMPEG_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_ffmpeg_contract.cmake")
 endif()
