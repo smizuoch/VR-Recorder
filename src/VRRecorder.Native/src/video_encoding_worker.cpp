@@ -204,6 +204,10 @@ void VideoEncodingWorker::Run() noexcept
 void VideoEncodingWorker::Finish() noexcept
 {
     const auto finish = sink_.Finish();
+    if (abort_requested_.load()) {
+        SetResult(VideoEncodingWorkerResult::Aborted);
+        return;
+    }
     if (finish.status != VRREC_STATUS_OK) {
         sink_.Abort();
         Fail(

@@ -3,11 +3,12 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <span>
 #include <vector>
 
 #include "audio_encoding_pump.hpp"
-#include "shared_mux_finalization_session.hpp"
+#include "encoded_media_packet_submission_port.hpp"
 
 namespace vrrecorder::native {
 
@@ -31,7 +32,7 @@ class MuxingAudioEncoderSink final : public StereoAudioEncoderSink {
 public:
     MuxingAudioEncoderSink(
         PacketAudioEncoder &encoder,
-        SharedMuxFinalizationSession &mux) noexcept;
+        EncodedMediaPacketSubmissionPort &mux) noexcept;
 
     StereoAudioEncoderWrite WritePcm48k(
         std::uint64_t start_frame_48k,
@@ -44,7 +45,8 @@ private:
         PacketAudioEncoderWrite encoded) noexcept;
 
     PacketAudioEncoder &encoder_;
-    SharedMuxFinalizationSession &mux_;
+    EncodedMediaPacketSubmissionPort &mux_;
+    std::mutex operation_mutex_;
     std::atomic_bool aborted_ = false;
     std::atomic_bool finished_ = false;
 };

@@ -16,43 +16,127 @@ SharedMuxFinalizationSession::~SharedMuxFinalizationSession()
 Mp4MuxResult SharedMuxFinalizationSession::Submit(
     const EncodedMediaPacket &packet) noexcept
 {
-    const std::lock_guard lock(mutex_);
-    if (terminal_ ||
-        (packet.stream == MediaStreamKind::Video && video_finished_) ||
-        (packet.stream == MediaStreamKind::Audio && audio_finished_)) {
-        return Mp4MuxResult::InvalidState;
+    return SubmitBatch(
+        packet.stream,
+        std::span<const EncodedMediaPacket>(&packet, 1));
+}
+
+Mp4MuxResult SharedMuxFinalizationSession::SubmitBatch(
+    MediaStreamKind producer,
+    std::span<const EncodedMediaPacket> packets) noexcept
+{
+    const std::lock_guard operation_lock(operation_mutex_);
+    Mp4MuxResult validation_result = Mp4MuxResult::Written;
+    {
+        const std::lock_guard state_lock(state_mutex_);
+        if (terminal_) {
+            return Mp4MuxResult::InvalidState;
+        }
+        if (producer != MediaStreamKind::Video &&
+            producer != MediaStreamKind::Audio) {
+            terminal_ = true;
+            abort_requested_ = true;
+            validation_result = Mp4MuxResult::InvalidPacket;
+        } else if (
+            (producer == MediaStreamKind::Video && video_finished_) ||
+            (producer == MediaStreamKind::Audio && audio_finished_)) {
+            terminal_ = true;
+            abort_requested_ = true;
+            validation_result = Mp4MuxResult::InvalidState;
+        } else {
+            for (const auto &packet : packets) {
+                if (packet.stream != producer) {
+                    terminal_ = true;
+                    abort_requested_ = true;
+                    validation_result = Mp4MuxResult::InvalidPacket;
+                    break;
+                }
+            }
+        }
     }
-    const auto result = mux_.Submit(packet);
-    if (result == Mp4MuxResult::MuxFailed ||
-        result == Mp4MuxResult::InvalidState) {
-        terminal_ = true;
+    if (validation_result != Mp4MuxResult::Written) {
+        mux_.Abort();
+        return validation_result;
     }
-    return result;
+
+    const auto result = mux_.SubmitBatch(packets);
+    if (result != Mp4MuxResult::Written) {
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            terminal_ = true;
+            abort_requested_ = true;
+        }
+        mux_.Abort();
+        return result;
+    }
+    {
+        const std::lock_guard state_lock(state_mutex_);
+        if (terminal_) {
+            return Mp4MuxResult::MuxFailed;
+        }
+    }
+    return Mp4MuxResult::Written;
 }
 
 vrrec_status_t SharedMuxFinalizationSession::EncoderFinished(
     MediaStreamKind stream) noexcept
 {
-    const std::lock_guard lock(mutex_);
-    if (terminal_ ||
-        (stream != MediaStreamKind::Video &&
-         stream != MediaStreamKind::Audio)) {
+    const std::lock_guard operation_lock(operation_mutex_);
+    bool abort = false;
+    bool finalize = false;
+    {
+        const std::lock_guard state_lock(state_mutex_);
+        if (terminal_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (stream != MediaStreamKind::Video &&
+            stream != MediaStreamKind::Audio) {
+            terminal_ = true;
+            abort_requested_ = true;
+            abort = true;
+        } else {
+            auto &finished = stream == MediaStreamKind::Video
+                ? video_finished_
+                : audio_finished_;
+            if (finished) {
+                terminal_ = true;
+                abort_requested_ = true;
+                abort = true;
+            } else {
+                finished = true;
+                finalize = video_finished_ && audio_finished_;
+                if (finalize) {
+                    terminal_ = true;
+                }
+            }
+        }
+    }
+    if (abort) {
+        mux_.Abort();
         return VRREC_STATUS_INVALID_STATE;
     }
-
-    auto &finished = stream == MediaStreamKind::Video
-        ? video_finished_
-        : audio_finished_;
-    if (finished) {
-        return VRREC_STATUS_INVALID_STATE;
-    }
-    finished = true;
-    if (!video_finished_ || !audio_finished_) {
+    if (!finalize) {
         return VRREC_STATUS_OK;
     }
-
-    terminal_ = true;
-    return mux_.Finish();
+    auto status = mux_.Finish();
+    bool abort_after_failure = false;
+    {
+        const std::lock_guard state_lock(state_mutex_);
+        if (abort_requested_) {
+            if (status == VRREC_STATUS_OK) {
+                status = VRREC_STATUS_INVALID_STATE;
+            }
+        } else if (status == VRREC_STATUS_OK) {
+            completed_ = true;
+        } else {
+            abort_requested_ = true;
+            abort_after_failure = true;
+        }
+    }
+    if (abort_after_failure) {
+        mux_.Abort();
+    }
+    return status;
 }
 
 void SharedMuxFinalizationSession::EncoderFailed(
@@ -63,11 +147,14 @@ void SharedMuxFinalizationSession::EncoderFailed(
 
 void SharedMuxFinalizationSession::Abort() noexcept
 {
-    const std::lock_guard lock(mutex_);
-    if (terminal_) {
-        return;
+    {
+        const std::lock_guard state_lock(state_mutex_);
+        if (completed_ || abort_requested_) {
+            return;
+        }
+        abort_requested_ = true;
+        terminal_ = true;
     }
-    terminal_ = true;
     mux_.Abort();
 }
 

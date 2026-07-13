@@ -1,10 +1,12 @@
 #ifndef VRRECORDER_NATIVE_FRAGMENTED_MP4_MUX_COORDINATOR_HPP
 #define VRRECORDER_NATIVE_FRAGMENTED_MP4_MUX_COORDINATOR_HPP
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <mutex>
+#include <span>
 #include <vector>
 
 #include "audio_encoder_config.hpp"
@@ -161,13 +163,23 @@ public:
     vrrec_status_t Begin(
         const FragmentedMp4StreamConfiguration &configuration) noexcept;
     Mp4MuxResult Submit(const EncodedMediaPacket &packet) noexcept;
+    Mp4MuxResult SubmitBatch(
+        std::span<const EncodedMediaPacket> packets) noexcept;
     vrrec_status_t Finish() noexcept;
     void Abort() noexcept;
+#if defined(VRRECORDER_NATIVE_TESTING)
+    bool IsAbortRequestedForTesting() const noexcept;
+#endif
 
 private:
     static bool IsConfigurationValid(
         const FragmentedMp4StreamConfiguration &configuration) noexcept;
-    bool IsPacketValid(const EncodedMediaPacket &packet) const noexcept;
+    bool IsPacketValid(
+        const EncodedMediaPacket &packet,
+        bool has_video_dts,
+        std::int64_t last_video_dts,
+        bool has_audio_dts,
+        std::int64_t last_audio_dts) const noexcept;
     void AbortLocked() noexcept;
 
     FragmentedMp4Muxer &muxer_;
@@ -182,6 +194,7 @@ private:
     bool started_ = false;
     bool terminal_ = false;
     bool aborted_ = false;
+    std::atomic_bool abort_requested_ = false;
 };
 
 }

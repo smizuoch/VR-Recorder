@@ -3,9 +3,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
-#include "shared_mux_finalization_session.hpp"
+#include "encoded_media_packet_submission_port.hpp"
 #include "video_encoding_pump.hpp"
 
 namespace vrrecorder::native {
@@ -30,7 +31,7 @@ class MuxingVideoEncoderSink final : public VideoEncoderSink {
 public:
     MuxingVideoEncoderSink(
         PacketVideoEncoder &encoder,
-        SharedMuxFinalizationSession &mux) noexcept;
+        EncodedMediaPacketSubmissionPort &mux) noexcept;
 
     VideoEncoderWrite Write(
         const ScheduledVideoFrame &frame) noexcept override;
@@ -42,7 +43,8 @@ private:
         PacketVideoEncoderWrite encoded) noexcept;
 
     PacketVideoEncoder &encoder_;
-    SharedMuxFinalizationSession &mux_;
+    EncodedMediaPacketSubmissionPort &mux_;
+    std::mutex operation_mutex_;
     std::atomic_bool aborted_ = false;
     std::atomic_bool finished_ = false;
 };

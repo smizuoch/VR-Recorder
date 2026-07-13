@@ -119,9 +119,14 @@ add_executable(
     "${native_source_root}/src/av_sync_monitor.cpp"
     "${native_source_root}/src/av_sync_media_event_adapter.cpp"
     "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp"
+    "${native_source_root}/src/muxing_audio_encoder_sink.cpp"
+    "${native_source_root}/src/muxing_video_encoder_sink.cpp"
     "${native_source_root}/src/shared_mux_finalization_session.cpp")
 target_compile_features(
     vrrecorder_native_media_mux_pipeline PRIVATE cxx_std_20)
+target_compile_definitions(
+    vrrecorder_native_media_mux_pipeline
+    PRIVATE VRRECORDER_NATIVE_TESTING=1)
 target_include_directories(
     vrrecorder_native_media_mux_pipeline
     PRIVATE
@@ -780,9 +785,7 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_muxing_video_encoder_sink
     muxing_video_encoder_sink_tests.cpp
-    "${native_source_root}/src/muxing_video_encoder_sink.cpp"
-    "${native_source_root}/src/shared_mux_finalization_session.cpp"
-    "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp")
+    "${native_source_root}/src/muxing_video_encoder_sink.cpp")
 target_compile_features(
     vrrecorder_native_muxing_video_encoder_sink PRIVATE cxx_std_20)
 target_include_directories(
@@ -800,9 +803,7 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_muxing_audio_encoder_sink
     muxing_audio_encoder_sink_tests.cpp
-    "${native_source_root}/src/muxing_audio_encoder_sink.cpp"
-    "${native_source_root}/src/shared_mux_finalization_session.cpp"
-    "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp")
+    "${native_source_root}/src/muxing_audio_encoder_sink.cpp")
 target_compile_features(
     vrrecorder_native_muxing_audio_encoder_sink PRIVATE cxx_std_20)
 target_include_directories(

@@ -8,7 +8,7 @@ namespace vrrecorder::native {
 
 MuxingVideoEncoderSink::MuxingVideoEncoderSink(
     PacketVideoEncoder &encoder,
-    SharedMuxFinalizationSession &mux) noexcept
+    EncodedMediaPacketSubmissionPort &mux) noexcept
     : encoder_(encoder),
       mux_(mux)
 {
@@ -17,6 +17,7 @@ MuxingVideoEncoderSink::MuxingVideoEncoderSink(
 VideoEncoderWrite MuxingVideoEncoderSink::Write(
     const ScheduledVideoFrame &frame) noexcept
 {
+    const std::lock_guard lock(operation_mutex_);
     if (aborted_.load() || finished_.load()) {
         return {
             VRREC_STATUS_INVALID_STATE,
@@ -30,6 +31,7 @@ VideoEncoderWrite MuxingVideoEncoderSink::Write(
 
 VideoEncoderWrite MuxingVideoEncoderSink::Finish() noexcept
 {
+    const std::lock_guard lock(operation_mutex_);
     if (aborted_.load() || finished_.exchange(true)) {
         return {
             VRREC_STATUS_INVALID_STATE,
@@ -40,14 +42,15 @@ VideoEncoderWrite MuxingVideoEncoderSink::Finish() noexcept
     }
     auto write = Commit(encoder_.Finish());
     if (write.status != VRREC_STATUS_OK) {
-        mux_.EncoderFailed(MediaStreamKind::Video);
         return write;
     }
     const auto finish_status = mux_.EncoderFinished(MediaStreamKind::Video);
-    if (finish_status != VRREC_STATUS_OK) {
+    if (finish_status != VRREC_STATUS_OK || aborted_.load()) {
         Abort();
         return {
-            finish_status,
+            finish_status != VRREC_STATUS_OK
+                ? finish_status
+                : VRREC_STATUS_INVALID_STATE,
             0,
             write.encode_latency_microseconds,
             VideoEncoderFailureStage::Muxing,
@@ -61,13 +64,21 @@ void MuxingVideoEncoderSink::Abort() noexcept
     if (aborted_.exchange(true)) {
         return;
     }
-    encoder_.Abort();
     mux_.EncoderFailed(MediaStreamKind::Video);
+    encoder_.Abort();
 }
 
 VideoEncoderWrite MuxingVideoEncoderSink::Commit(
     PacketVideoEncoderWrite encoded) noexcept
 {
+    if (aborted_.load()) {
+        return {
+            VRREC_STATUS_INVALID_STATE,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Encoding,
+        };
+    }
     if (encoded.status != VRREC_STATUS_OK) {
         Abort();
         return {
@@ -93,23 +104,45 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
         };
     }
 
-    std::uint64_t committed = 0;
-    for (const auto &packet : encoded.packets) {
-        if (mux_.Submit(packet) != Mp4MuxResult::Written) {
-            Abort();
-            return {
-                VRREC_STATUS_INTERNAL_ERROR,
-                0,
-                encoded.encode_latency_microseconds,
-                VideoEncoderFailureStage::Muxing,
-            };
-        }
-        ++committed;
+    if (encoded.packets.empty()) {
+        return {
+            VRREC_STATUS_OK,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::None,
+        };
+    }
+    if (aborted_.load()) {
+        return {
+            VRREC_STATUS_INVALID_STATE,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Encoding,
+        };
+    }
+    if (mux_.SubmitBatch(
+            MediaStreamKind::Video,
+            encoded.packets) != Mp4MuxResult::Written) {
+        Abort();
+        return {
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Muxing,
+        };
+    }
+    if (aborted_.load()) {
+        return {
+            VRREC_STATUS_INVALID_STATE,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Muxing,
+        };
     }
 
     return {
         VRREC_STATUS_OK,
-        committed,
+        encoded.packets.size(),
         encoded.encode_latency_microseconds,
         VideoEncoderFailureStage::None,
     };

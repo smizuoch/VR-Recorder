@@ -2,8 +2,13 @@
 #include "fragmented_mp4_test_support.hpp"
 
 #include <cstddef>
+#include <chrono>
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
+#include <span>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -58,6 +63,22 @@ public:
     std::size_t abort_calls = 0;
 };
 
+class AbortSharedSessionObserver final : public EncodedMediaPacketObserver {
+public:
+    vrrec_status_t Observe(const EncodedMediaPacket &) noexcept override
+    {
+        ++observe_calls;
+        CHECK(session != nullptr);
+        session->Abort();
+        abort_returned = true;
+        return VRREC_STATUS_OK;
+    }
+
+    SharedMuxFinalizationSession *session = nullptr;
+    std::size_t observe_calls = 0;
+    bool abort_returned = false;
+};
+
 EncodedMediaPacket VideoPacket()
 {
     return {
@@ -67,6 +88,18 @@ EncodedMediaPacket VideoPacket()
         33'333,
         true,
         std::vector<std::byte>(100, std::byte{0x01}),
+    };
+}
+
+EncodedMediaPacket AudioPacket()
+{
+    return {
+        MediaStreamKind::Audio,
+        0,
+        0,
+        21'333,
+        false,
+        std::vector<std::byte>(100, std::byte{0x02}),
     };
 }
 
@@ -101,6 +134,21 @@ void SupportsAudioFinishingBeforeVideo()
     CHECK(backend.order == std::vector<int>({3, 4}));
 }
 
+void EmptyBatchChecksStateWithoutFinishingItsProducer()
+{
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+    const std::span<const EncodedMediaPacket> empty;
+
+    CHECK(session.SubmitBatch(MediaStreamKind::Video, empty) ==
+          Mp4MuxResult::Written);
+    CHECK(backend.order.empty());
+    CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::Written);
+    CHECK(backend.order == std::vector<int>({1}));
+}
+
 void RejectsPacketsAfterTheirEncoderHasFinished()
 {
     RecordingMuxer backend;
@@ -111,8 +159,93 @@ void RejectsPacketsAfterTheirEncoderHasFinished()
     CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
           VRREC_STATUS_OK);
     CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::InvalidState);
+    CHECK(backend.abort_calls == 1);
+    CHECK(backend.order == std::vector<int>({5}));
     CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
           VRREC_STATUS_INVALID_STATE);
+}
+
+void DuplicateEncoderCompletionAbortsImmediately()
+{
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+
+    CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(backend.abort_calls == 1);
+    CHECK(backend.order == std::vector<int>({5}));
+    CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_INVALID_STATE);
+}
+
+void InvalidCompletionStreamAbortsImmediately()
+{
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+
+    CHECK(session.EncoderFinished(static_cast<MediaStreamKind>(99)) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(backend.abort_calls == 1);
+    CHECK(backend.order == std::vector<int>({5}));
+}
+
+void FinalizationAgainstAnUnstartedMuxAbortsImmediately()
+{
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+
+    CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(backend.abort_calls == 1);
+    CHECK(backend.order == std::vector<int>({5}));
+}
+
+void ObserverCanAbortTheSharedSessionWithoutDeadlocking()
+{
+    RecordingMuxer backend;
+    AbortSharedSessionObserver observer;
+    FragmentedMp4MuxCoordinator mux(backend, &observer);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+    observer.session = &session;
+
+    std::mutex watchdog_mutex;
+    std::condition_variable watchdog_changed;
+    bool submit_completed = false;
+    std::thread watchdog([&] {
+        std::unique_lock lock(watchdog_mutex);
+        if (!watchdog_changed.wait_for(
+                lock,
+                std::chrono::seconds(2),
+                [&] { return submit_completed; })) {
+            std::cerr << __func__
+                      << " timed out waiting for reentrant Abort\n";
+            std::abort();
+        }
+    });
+
+    const auto result = session.Submit(VideoPacket());
+    {
+        const std::lock_guard lock(watchdog_mutex);
+        submit_completed = true;
+    }
+    watchdog_changed.notify_all();
+    watchdog.join();
+
+    CHECK(result == Mp4MuxResult::MuxFailed);
+    CHECK(observer.observe_calls == 1);
+    CHECK(observer.abort_returned);
+    CHECK(backend.abort_calls == 1);
+    CHECK(session.Submit(AudioPacket()) == Mp4MuxResult::InvalidState);
 }
 
 void EncoderFailureAbortsWithoutWritingATrailer()
@@ -148,14 +281,64 @@ void PacketMuxFailureImmediatelyTerminalizesTheSharedSession()
     CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::InvalidState);
 }
 
+void InvalidBatchTerminalizesBeforeWritingItsValidPrefix()
+{
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+    auto invalid = VideoPacket();
+    invalid.dts_microseconds = 33'333;
+    invalid.pts_microseconds = 33'333;
+    invalid.duration_microseconds = 0;
+    const std::vector<EncodedMediaPacket> batch {
+        VideoPacket(),
+        invalid,
+    };
+
+    CHECK(session.SubmitBatch(MediaStreamKind::Video, batch) ==
+          Mp4MuxResult::InvalidPacket);
+    CHECK(backend.order == std::vector<int>({5}));
+    CHECK(backend.abort_calls == 1);
+    CHECK(session.SubmitBatch(
+              MediaStreamKind::Audio,
+              std::span<const EncodedMediaPacket> {}) ==
+          Mp4MuxResult::InvalidState);
+    CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_INVALID_STATE);
+}
+
+void RejectsAProducerStreamMismatchWithoutMuxMutation()
+{
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+    const std::vector<EncodedMediaPacket> batch {AudioPacket()};
+
+    CHECK(session.SubmitBatch(MediaStreamKind::Video, batch) ==
+          Mp4MuxResult::InvalidPacket);
+    CHECK(backend.order == std::vector<int>({5}));
+    CHECK(backend.abort_calls == 1);
+}
+
 }
 
 int main()
 {
     FinalizesOnlyAfterBothEncodersFlushSuccessfully();
     SupportsAudioFinishingBeforeVideo();
+    EmptyBatchChecksStateWithoutFinishingItsProducer();
     RejectsPacketsAfterTheirEncoderHasFinished();
+    DuplicateEncoderCompletionAbortsImmediately();
+    InvalidCompletionStreamAbortsImmediately();
+    FinalizationAgainstAnUnstartedMuxAbortsImmediately();
+    ObserverCanAbortTheSharedSessionWithoutDeadlocking();
     EncoderFailureAbortsWithoutWritingATrailer();
     PacketMuxFailureImmediatelyTerminalizesTheSharedSession();
+    InvalidBatchTerminalizesBeforeWritingItsValidPrefix();
+    RejectsAProducerStreamMismatchWithoutMuxMutation();
     return 0;
 }

@@ -134,6 +134,66 @@ public:
     std::size_t abort_calls = 0;
 };
 
+class BlockingFinishVideoSink final : public VideoEncoderSink {
+public:
+    VideoEncoderWrite Write(
+        const ScheduledVideoFrame &) noexcept override
+    {
+        const std::lock_guard lock(mutex);
+        ++write_calls;
+        return {VRREC_STATUS_OK, 1, 100};
+    }
+
+    VideoEncoderWrite Finish() noexcept override
+    {
+        std::unique_lock lock(mutex);
+        ++finish_calls;
+        finish_entered = true;
+        changed.notify_all();
+        changed.wait(lock, [&] { return release_finish; });
+        return finish;
+    }
+
+    void Abort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex);
+            ++abort_calls;
+        }
+        changed.notify_all();
+    }
+
+    void WaitForFinish()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return finish_entered; });
+    }
+
+    void WaitForAbort()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return abort_calls != 0; });
+    }
+
+    void ReleaseFinish()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_finish = true;
+        }
+        changed.notify_all();
+    }
+
+    std::mutex mutex;
+    std::condition_variable changed;
+    VideoEncoderWrite finish {VRREC_STATUS_OK, 7, 900};
+    std::size_t write_calls = 0;
+    std::size_t finish_calls = 0;
+    std::size_t abort_calls = 0;
+    bool finish_entered = false;
+    bool release_finish = false;
+};
+
 class RecordingMediaEvents final : public MediaEventSink {
 public:
     void FirstVideoPacketMuxed() noexcept override
@@ -236,6 +296,38 @@ void ForcedAbortDoesNotFlushOrRaiseFault()
     CHECK(events.fault_calls == 0);
 }
 
+void AbortDominatesAConcurrentGracefulFinish()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedCfrClock clock;
+    clock.ready_tick_count = 0;
+    BlockingFinishVideoSink sink;
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    CHECK(worker.RequestStop() == VRREC_STATUS_OK);
+    sink.WaitForFinish();
+    std::thread aborting([&] { worker.Abort(); });
+    sink.WaitForAbort();
+    sink.ReleaseFinish();
+    aborting.join();
+
+    CHECK(worker.Join() == VideoEncodingWorkerResult::Aborted);
+    const auto statistics = worker.Statistics();
+    CHECK(statistics.muxed_packet_count == 0);
+    CHECK(statistics.latest_encode_latency_microseconds == 0);
+    CHECK(statistics.maximum_encode_latency_microseconds == 0);
+    CHECK(events.first_packet_calls == 0);
+    CHECK(events.fault_calls == 0);
+    {
+        const std::lock_guard lock(sink.mutex);
+        CHECK(sink.write_calls == 0);
+        CHECK(sink.finish_calls == 1);
+        CHECK(sink.abort_calls == 1);
+    }
+}
+
 void UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault()
 {
     VideoCfrScheduler scheduler;
@@ -285,6 +377,7 @@ int main()
     GracefulStopFlushesAndReportsTheFirstPacketOnce();
     RuntimeEncoderFailureRaisesFaultAndDoesNotFlush();
     ForcedAbortDoesNotFlushOrRaiseFault();
+    AbortDominatesAConcurrentGracefulFinish();
     UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
     AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding();
     return 0;

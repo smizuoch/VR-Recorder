@@ -38,8 +38,12 @@ public:
     vrrec_status_t WritePacket(
         const EncodedMediaPacket &packet) noexcept override
     {
+        ++write_calls;
         order.push_back(packet.stream == MediaStreamKind::Video ? 1 : 2);
         packets.push_back(packet);
+        if (fail_write_call != 0 && write_calls == fail_write_call) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
         return write_status;
     }
 
@@ -69,7 +73,21 @@ public:
     vrrec_status_t trailer_status = VRREC_STATUS_OK;
     vrrec_status_t flush_status = VRREC_STATUS_OK;
     std::size_t header_calls = 0;
+    std::size_t write_calls = 0;
+    std::size_t fail_write_call = 0;
     std::size_t abort_calls = 0;
+};
+
+class RecordingPacketObserver final : public EncodedMediaPacketObserver {
+public:
+    vrrec_status_t Observe(
+        const EncodedMediaPacket &packet) noexcept override
+    {
+        packets.push_back(packet);
+        return VRREC_STATUS_OK;
+    }
+
+    std::vector<EncodedMediaPacket> packets;
 };
 
 class FailingPacketObserver final : public EncodedMediaPacketObserver {
@@ -197,6 +215,20 @@ void ZeroPacketFinishAndDestructorFollowHeaderLifecycle()
     }
     CHECK(muxer.order == std::vector<int>({0, 6}));
     CHECK(muxer.abort_calls == 1);
+}
+
+void EmptyBatchChecksLifecycleWithoutWritingAPacket()
+{
+    RecordingMuxer muxer;
+    FragmentedMp4MuxCoordinator coordinator(muxer);
+    const std::span<const EncodedMediaPacket> empty;
+
+    CHECK(coordinator.SubmitBatch(empty) == Mp4MuxResult::InvalidState);
+    Begin(coordinator);
+    CHECK(coordinator.SubmitBatch(empty) == Mp4MuxResult::Written);
+    CHECK(muxer.packets.empty());
+    CHECK(coordinator.Finish() == VRREC_STATUS_OK);
+    CHECK(coordinator.SubmitBatch(empty) == Mp4MuxResult::InvalidState);
 }
 
 void RejectsInvalidStreamDescriptorsBeforeHeaderMutation()
@@ -437,6 +469,47 @@ void RejectsNonMonotonicDtsPerStream()
     CHECK(muxer.packets.size() == 1);
 }
 
+void PreflightsAnEntireBatchBeforeWritingItsValidPrefix()
+{
+    RecordingMuxer muxer;
+    RecordingPacketObserver observer;
+    FragmentedMp4MuxCoordinator coordinator(muxer, &observer);
+    Begin(coordinator);
+    auto invalid = Video(33'333);
+    invalid.duration_microseconds = 0;
+    const std::vector<EncodedMediaPacket> batch {
+        Video(0, true),
+        invalid,
+    };
+
+    CHECK(coordinator.SubmitBatch(batch) == Mp4MuxResult::InvalidPacket);
+    CHECK(muxer.packets.empty());
+    CHECK(observer.packets.empty());
+}
+
+void AbortsAnNthWriteFailureWithoutObservingTheBatchPrefix()
+{
+    RecordingMuxer muxer;
+    muxer.fail_write_call = 2;
+    RecordingPacketObserver observer;
+    FragmentedMp4MuxCoordinator coordinator(muxer, &observer);
+    Begin(coordinator);
+    const std::vector<EncodedMediaPacket> batch {
+        Video(0, true),
+        Video(33'333),
+        Video(66'666),
+    };
+
+    CHECK(coordinator.SubmitBatch(batch) == Mp4MuxResult::MuxFailed);
+    CHECK(muxer.write_calls == 2);
+    CHECK(muxer.packets.size() == 2);
+    CHECK(observer.packets.empty());
+    CHECK(muxer.abort_calls == 1);
+    CHECK(coordinator.Submit(Video(99'999)) ==
+          Mp4MuxResult::InvalidState);
+    CHECK(coordinator.Finish() == VRREC_STATUS_INVALID_STATE);
+}
+
 void FinalizesFragmentTrailerAndFileInOrder()
 {
     RecordingMuxer muxer;
@@ -497,7 +570,12 @@ void ObserverCanAbortTheCoordinatorWithoutDeadlocking()
         }
     });
 
-    const auto result = coordinator.Submit(Video(0, true));
+    const std::vector<EncodedMediaPacket> batch {
+        Video(0, true),
+        Video(33'333),
+        Video(66'666),
+    };
+    const auto result = coordinator.SubmitBatch(batch);
     {
         const std::lock_guard lock(watchdog_mutex);
         submit_completed = true;
@@ -505,10 +583,10 @@ void ObserverCanAbortTheCoordinatorWithoutDeadlocking()
     watchdog_changed.notify_all();
     watchdog.join();
 
-    CHECK(result == Mp4MuxResult::Written);
+    CHECK(result == Mp4MuxResult::MuxFailed);
     CHECK(observer.observe_calls == 1);
     CHECK(observer.abort_returned);
-    CHECK(muxer.packets.size() == 1);
+    CHECK(muxer.packets.size() == 3);
     CHECK(muxer.abort_calls == 1);
     CHECK(coordinator.Submit(Audio(0)) == Mp4MuxResult::InvalidState);
     CHECK(coordinator.Finish() == VRREC_STATUS_INVALID_STATE);
@@ -547,6 +625,7 @@ int main()
 {
     RequiresOwnedStreamDescriptorsBeforeWritingPackets();
     ZeroPacketFinishAndDestructorFollowHeaderLifecycle();
+    EmptyBatchChecksLifecycleWithoutWritingAPacket();
     RejectsInvalidStreamDescriptorsBeforeHeaderMutation();
     HeaderFailureAbortsWithoutAcceptingPacketsOrTrailer();
     DelegatesFragmentCutsToTheMuxerHeaderPolicy();
@@ -555,6 +634,8 @@ int main()
     RejectsMalformedTimingAndSkipSamplesBeforeMuxMutation();
     OwnsPacketPayloadAndRejectsEmptyPayloadBeforeMuxMutation();
     RejectsNonMonotonicDtsPerStream();
+    PreflightsAnEntireBatchBeforeWritingItsValidPrefix();
+    AbortsAnNthWriteFailureWithoutObservingTheBatchPrefix();
     FinalizesFragmentTrailerAndFileInOrder();
     AbortNeverWritesATrailerAndIsIdempotent();
     ObserverFailureAbortsTheIncompleteFile();

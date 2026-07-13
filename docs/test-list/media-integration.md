@@ -31,16 +31,21 @@
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
 - [x] 初回H.264 configでB-frameを明示的に0へ固定する
-- [x] graceful finishだけがtrailer、file flushを順に実行し、Abortではtrailerを書かない
+- [x] AbortがFinishより先ならtrailerを開始せず、trailer完了時の再確認でAbortを観測した場合はfile flushを開始しない。既に開始したtrailer／flushはrollbackしない
 - [x] video encoderの0 packet bufferingと実packet batchを分離し、実packetだけを共通mux timelineへ投入する
 - [x] mux failure時はpacket統計をcommitせずvideo encoderとmuxerをともにAbortする
 - [x] AAC encoderの0 packet bufferingと実packet batchを分離し、audio packetだけを共有mux timelineへ投入する
 - [x] audio mux failureをencoder failureと分離し、未commit統計を除外してcapture／encoder／muxerを停止する
+- [x] audio／video sinkをdrift-awareな共通batch Portだけへ依存させ、内部finalization concrete型への迂回を型で拒否する
+- [x] batch全件をwrite前にpreflightし、N回目write failureでは後続を送らずprefixをdrift統計へcommitせず、logical packet countを0にする
+- [x] 同時A/V batchを非interleaveで直列化し、失敗中のpeer batchを0 writeで拒否する
+- [x] Encode中Abortはmuxを先にterminal化し、Write／Finishを直列化してencoder／completion／failure通知をexactly onceにする
+- [x] Finish中Abortをlogical winnerとし、sinkの成功packet数とaudio／video workerのflush packet／latency統計、first-packet／fault eventをcommitしない
 - [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux trailer／file flushを実行する
-- [x] flush済みstreamの追加packet／重複完了を拒否し、片側failure時はtrailerなしで共有muxをAbortする
+- [x] 未開始操作、重複Start／completion、完了済みstreamの追加packet、invalid producer／streamをpending muxのprotocol違反として即Abortし、片側failure後の成功finalizeを拒否する
 - [x] mux成功packetの最新A/V PTS差を監視し、80 ms超のexcursionごとに一度だけprivacy-safe診断eventを発行する
 - [x] A/V差が80 ms以内へ復帰したら再armし、最新／最大driftとevent数を集計する
-- [x] mux observer／A/V drift callbackをstate lock外で呼び、callback内の統計readback→Abortが自己deadlockせず、以後のpacketをterminal拒否する
+- [x] coordinator observerをcoordinator／Shared state lock外、production A/V drift callbackをshared-finalizationのreturn後かつmonitor state lock外で呼ぶ。submit／operation gateを保持したままobserver→coordinator／Shared Abortまたは統計readback→pipeline／sink Abortが自己deadlockせず、Abortしたin-flight batchを失敗0件にしてtail観測を止める。recursive Submit／Finishは契約外とする
 - [x] 80 ms超過eventをABIサイズ不変でnative→P/Invoke→typed callback→structured診断へ伝播し、pending Stopを完了しない
 - [x] encoder probeのDispose開始を同期確定し、in-flight native結果を抑止してlibrary解放まで非同期に待つ
 - [x] A/V monitorのvideo／audio PTSとabsolute driftをnative MediaEventへ改変せず転送する
@@ -52,6 +57,7 @@
 - [x] mux成功packetから最新の符号付きA/V offsetを`audio PTS - video PTS`で計算し、mux／recording pipelineを通してC ABI最終統計へ伝播する
 - [x] 非同期stop Joinとforced Abortをatomic terminal遷移で仲裁し、Abortが先行した場合はStopped／Saved相当の成功完了を抑止する
 - [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする
+- [ ] productionの同期drift callbackからfull session Abortする場合、operation gate待ちのpeer workerをcallback stack上でJoinせずcross-stream循環を防ぐ
 
 ## English
 
@@ -84,16 +90,21 @@
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video
 - [x] Explicitly configure zero B-frames for the initial H.264 production slice
-- [x] Run trailer and file flush in order only for graceful finish, never writing a trailer after abort
+- [x] Start no trailer when Abort wins before Finish, and start no file flush when the post-trailer check observes Abort; do not roll back a trailer or flush already in progress
 - [x] Distinguish zero-packet video-encoder buffering from real packet batches and submit only real packets to the shared mux timeline
 - [x] On mux failure, commit no packet statistics and abort both the video encoder and muxer
 - [x] Distinguish zero-packet AAC buffering from real packet batches and submit only audio packets to the shared mux timeline
 - [x] Separate audio mux failures from encoder failures, exclude uncommitted statistics, and stop capture, encoder, and muxer
+- [x] Make both encoder sinks depend only on the drift-aware common batch Port and reject construction with the internal concrete finalization session
+- [x] Preflight every packet before writing a batch, stop after an Nth write failure, commit no prefix to drift statistics, and report zero logical packets
+- [x] Serialize concurrent A/V batches without packet interleaving and reject a peer batch with zero writes after the active batch fails
+- [x] Terminalize muxing before waiting for an in-flight encoder Abort and serialize Write against Finish with exactly-once completion/failure notification
+- [x] Make Abort the logical winner during Finish and commit neither successful sink packet counts nor audio/video-worker flush packet/latency statistics or first-packet/fault events
 - [x] Wait at a barrier for successful video/audio encoder flushes and run mux trailer/file flush only after the second completion
-- [x] Reject packets or duplicate completion from a flushed stream and abort the shared mux without a trailer when either encoder fails
+- [x] Treat pre-start operations, duplicate Start/completion, packets from a finished stream, and invalid producers/streams as pending-mux protocol violations that abort immediately and cannot later finalize successfully
 - [x] Monitor latest A/V PTS drift from successfully muxed packets and emit one privacy-safe diagnostic event per excursion beyond 80 ms
 - [x] Rearm after A/V drift recovers to 80 ms or less and track latest/maximum drift and event count
-- [x] Invoke mux observers/A/V drift callbacks outside state locks so callback-time statistics readback followed by Abort cannot self-deadlock and later packets are terminally rejected
+- [x] Invoke coordinator observers outside coordinator/Shared state locks and production A/V-drift callbacks only after shared finalization returns and outside the monitor state lock. While retaining submit/operation gates, observer-to-coordinator/Shared Abort and statistics-readback-to-pipeline/sink Abort do not self-deadlock; an aborted in-flight batch reports zero and tail observation stops. Recursive Submit/Finish is outside the contract
 - [x] Propagate >80 ms events through native→P/Invoke→typed callback→structured diagnostics without ABI-size changes or completing a pending Stop
 - [x] Mark encoder-probe disposal synchronously, suppress in-flight native results, and asynchronously await library release
 - [x] Forward A/V monitor video/audio PTS and absolute drift unchanged into native media events
@@ -105,3 +116,4 @@
 - [x] Compute the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` and propagate it through mux/recording pipelines into final C ABI statistics
 - [x] Arbitrate asynchronous stop/join against forced abort with an atomic terminal transition, suppressing Stopped/Saved-equivalent success when abort wins
 - [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop
+- [ ] Prevent a full-session Abort from a synchronous production drift callback from joining a peer worker that is waiting on the same operation gate
