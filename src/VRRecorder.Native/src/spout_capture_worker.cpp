@@ -82,6 +82,7 @@ void SpoutCaptureWorker::Run() noexcept
         if (result == SpoutCaptureResult::Aborted && aborted_.load()) {
             SetResult(SpoutCaptureWorkerResult::Aborted);
         } else if (result == SpoutCaptureResult::SenderLost) {
+            source_.Abort();
             SetResult(SpoutCaptureWorkerResult::SenderLost);
         } else {
             source_.Abort();
