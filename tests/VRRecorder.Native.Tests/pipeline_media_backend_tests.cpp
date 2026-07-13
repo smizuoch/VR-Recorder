@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <string>
 
 namespace {
 
@@ -18,9 +19,27 @@ public:
     vrrec_status_t UpdateAudioRouting(vrrec_audio_routing_t routing) noexcept override { observed_routing = routing; ++routing_calls; return routing_status; }
     vrrec_status_t RequestStop() noexcept override { ++stop_calls; return stop_status; }
     void Abort() noexcept override { { const std::lock_guard lock(mutex); aborted = true; ++abort_calls; } changed.notify_all(); }
-    vrrec_status_t Join() noexcept override { std::unique_lock lock(mutex); join_entered = true; changed.notify_all(); changed.wait(lock, [this] { return allow_join || aborted; }); ++join_calls; return join_status; }
+    vrrec_status_t Join() noexcept override {
+        if (abort_from_join) {
+            {
+                const std::lock_guard lock(mutex);
+                join_entered = true;
+            }
+            changed.notify_all();
+            backend_to_abort->Abort();
+            {
+                const std::lock_guard lock(mutex);
+                ++join_calls;
+                join_abort_completed = true;
+            }
+            changed.notify_all();
+            return join_status;
+        }
+        std::unique_lock lock(mutex); join_entered = true; changed.notify_all(); changed.wait(lock, [this] { return allow_join || aborted; }); ++join_calls; return join_status;
+    }
     MediaRecordingPipelineStatistics Statistics() const noexcept override { return statistics; }
     void WaitForJoin() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return join_entered; }); }
+    void WaitForJoinAbort() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return join_abort_completed; }); }
     void ReleaseJoin() { { const std::lock_guard lock(mutex); allow_join = true; } changed.notify_all(); }
     mutable std::mutex mutex;
     std::condition_variable changed;
@@ -38,6 +57,9 @@ public:
     bool join_entered = false;
     bool allow_join = false;
     bool aborted = false;
+    bool abort_from_join = false;
+    bool join_abort_completed = false;
+    PipelineMediaBackend *backend_to_abort = nullptr;
 };
 
 class FakeLayoutPort final : public VideoLayoutUpdatePort {
@@ -97,11 +119,41 @@ void StopsAndJoinsAsynchronously()
     CHECK(pipeline.join_calls == 1);
 }
 
+int AbortFromTheStopWorkerChild()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    {
+        PipelineMediaBackend backend(pipeline, layout);
+        pipeline.abort_from_join = true;
+        pipeline.backend_to_abort = &backend;
+        if (backend.RequestStop() != VRREC_STATUS_OK) {
+            return 2;
+        }
+        pipeline.WaitForJoin();
+        pipeline.WaitForJoinAbort();
+    }
+    return pipeline.join_calls == 1 ? 0 : 3;
 }
 
-int main()
+void AbortFromTheStopWorkerDoesNotJoinItself(const char *executable)
 {
+    const auto command = std::string("\"") + executable +
+        "\" --abort-from-stop-worker";
+    CHECK(std::system(command.c_str()) == 0);
+}
+
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 2 &&
+        std::string(argv[1]) == "--abort-from-stop-worker") {
+        return AbortFromTheStopWorkerChild();
+    }
+
     AdaptsControlsAndStatistics();
     StopsAndJoinsAsynchronously();
+    AbortFromTheStopWorkerDoesNotJoinItself(argv[0]);
     return 0;
 }
