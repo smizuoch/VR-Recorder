@@ -82,6 +82,9 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
 vrrec_status_t ProcessingVideoEncoderSink::UpdateVideoLayout(
     const vrrec_video_layout_v1 &layout) noexcept
 {
+    if (aborted_.load()) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (layout.struct_size < sizeof(vrrec_video_layout_v1) ||
         layout.abi_version != VRREC_ABI_V1 ||
         layout.source_width == 0 || layout.source_height == 0 ||
