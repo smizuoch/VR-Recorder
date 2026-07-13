@@ -29,9 +29,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 948件成功、失敗0、skip 0
+- managed: 956件成功、失敗0、skip 0
   - Domain 90
-  - Application 274
+  - Application 282
   - Compliance 186
   - Presentation 90
   - Integration 308
@@ -97,6 +97,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - authenticated asset manifestからMaterial Symbols schema 2／承認済みrelease status／component identityと、M3 report schema 2／evaluated／release eligible／coverage 100%／unclassified・deferred・unresolved各0を確認した場合だけ12番目を進めるprobe。design-time exampleは明示拒否する
 - authenticated localization contractで英日、pseudo 200%、RTL、resource parity、drag代替、keyboard／controller／ray parityを確認し、release-eligible M3 reportにtooltip、accessible name coverage 100%、英日、pseudo、RTL、high contrastのrequired checkが揃う場合だけ11番目を進めるprobe
 - 手首overlay配置について、保存済みmode／transformをruntimeへ適用したreadback、実visible、ユーザーの可読性／操作非干渉確認が全て揃い、vectorを含め設定と完全一致する場合だけ成功するApplication probe境界（production OpenVR verifier未実装のためApp routerは未接続でfail-safe未完了）
+- 3秒試験録画について、要求3秒、実duration 3–4秒、MP4確定、validatorによるvideo／audio両stream、実playback開始の全証拠が揃う場合だけ成功するApplication probe境界（production recording／playback verifier未実装のためApp routerは未接続でfail-safe未完了）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -148,7 +149,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
-- 初回setupの残り2 probeとWindows上の実装済み10項目の検証実行、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
+- 初回setup 7・8番目のproduction verifier adapterとWindows上の実装済み10項目の検証実行、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -183,9 +184,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 948 passed, 0 failed, 0 skipped
+- managed: 956 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 274
+  - Application 282
   - Compliance 186
   - Presentation 90
   - Integration 308
@@ -251,6 +252,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A twelfth-item probe that reads authenticated asset manifests and requires Material Symbols schema 2/approved release status/component identity plus M3 report schema 2/evaluated/release-eligible/100% coverage/zero unclassified, deferred, and unresolved entries; design-time examples are explicitly rejected
 - An eleventh-item probe that requires the authenticated localization contract to cover Japanese/English, 200% pseudo locales, RTL, resource parity, drag alternatives, and keyboard/controller/ray parity, plus a release-eligible M3 report containing tooltip, 100% accessible-name coverage, Japanese/English, pseudo, RTL, and high-contrast required checks
 - An Application probe boundary for wrist-overlay placement that requires runtime-applied readback of the saved mode/transform, actual visibility, user confirmation of readability and unobstructed interaction, and exact vector equality; because the production OpenVR verifier is absent, it is intentionally not routed and remains fail-safe incomplete
+- An Application probe boundary for the three-second test recording that requires an exact three-second request, an observed 3–4 second duration, finalized MP4, validator-confirmed video and audio streams, and actual playback start; because the production recording/playback verifier is absent, it is intentionally not routed and remains fail-safe incomplete
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -302,7 +304,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
-- The remaining 2 first-run probes and Windows execution of the 10 implemented checks, runtime VR-placement/OSC settings, and end-to-end recording in the real application
+- Production verifier adapters for first-run items seven/eight, Windows execution of the 10 implemented checks, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
