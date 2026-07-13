@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.76%（2929/3376）／branch 72.45%（1741/2403）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 87.42%（3051/3490）／branch 73.38%（1825/2487）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -125,7 +125,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - clock付き48 kHz stereo packet、WASAPI silent相当の明示frame数、正確なdevice-loss frame、失敗したreplacement後の再試行、最大5秒のdefault endpoint再探索、待機中Abortを扱うcapture pump／runner
 - WASAPI Start／Readを同一専用threadで実行し、初期結果を同期返却して失敗／Abort／destructorで必ずjoinするcapture worker
 - desktop／microphone workerをrollback可能に開始し、timelineを同一48 kHz frame windowで読み、片側切断時だけを無音化し、skewを拒否してmixerへ固定sample数を渡すstereo capture session
-- mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離し、引数不正／確保失敗／capture中断・失敗を含む早期終了前にread出力を初期化して古いmix／mux／status診断値を返さないaudio encoding pump
+- mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離し、全早期終了前にread出力を初期化し、非連続／overflow windowとNaN／Infinity PCMをencoder前に拒否するaudio encoding pump
 - dedicated threadでaudio encoding pumpを連続実行し、graceful stopだけをflushし、Abort／encoder failureではcaptureとencoderを中断するworker
 - capture初期化後だけencodingを開始し、live routing、冪等stop、rollback、最終frame／packet統計を統合するaudio pipeline session
 - 各CFR tickで最新source frameを採用し、中間frame dropと直前frame duplicateを個別集計するnative video scheduler
@@ -143,8 +143,8 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 偶数NV12入力、HighからMainへのcapability降格、品質優先VBR、2秒GOP、`width*height*fps*0.14`の8–80 Mbps clampと1.5倍maxrateを整数安全に導出するH.264設定境界
 - AAC-LC、48 kHz、stereo、192 kbpsと既存mixerのFloat32 interleaved source形式を明示し、backend固有sample変換をencoder adapterへ隔離する音声設定境界
 - A/V packetのPTS／DTS／duration／keyframeを直列化し、stream別DTS単調性、1秒以降keyframe優先／2秒上限fragment、graceful fragment→trailer→file flush、Abort時trailer禁止を保証するfMP4 mux coordinator
-- video encoderのbuffering／実packet batchを分離して共通fMP4 timelineへ投入し、mux failureをencoder failureと区別して未commit統計を除外し双方をAbortするsink adapter
-- AAC encoderのbuffering／実packet batchを分離して同じfMP4 timelineへaudio packetを投入し、mux failureをaudio pump／workerまで独立伝播してcapture／encoder／muxerを停止するsink adapter
+- video encoderのbuffering／実packet batchを分離して共通fMP4 timelineへ投入し、mixed-stream batchをmux mutation前に拒否し、encoder／mux failureで双方をAbortし、正常Finish後のWrite／再Finishもterminal拒否するsink adapter
+- AAC encoderのbuffering／実packet batchを分離して同じfMP4 timelineへ投入し、mixed-stream batchをmux mutation前に拒否し、encoder／mux failureでcapture／encoder／muxerを停止し、正常Finish後の再入力をterminal拒否するsink adapter
 - video／audio flush packet投入後のstream完了をbarrier化し、両encoder成功後だけ最終fragment／trailer／file flushを一度実行し、重複完了／flush後packet／片側failureをfail-closed処理する共有mux finalization session
 - mux成功後の最新video／audio PTS差を80 ms閾値で監視し、excursion単位の再arm可能なprivacy-safe eventと最新／最大drift／event数を記録するA/V sync monitor（診断observer結果は録画成否へ影響しない）
 - ABI構造体サイズと17 exportsを変えずにA/V drift eventをnative callbackからtyped P/Invoke callback、best-effort media event sink、privacy-safe structured logへ伝播する経路
@@ -157,6 +157,9 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - recording pipelineをC ABI MediaBackendへ変換し、video layout／audio routing、ABI統計、冪等な非同期stop workerとAbort／destructorでの確実なjoinを提供するadapter
 - 非同期stop Joinとforced Abortのterminal状態をatomicに仲裁し、各stream join後もAbortを再検査して、Abort先行時にStopped／Saved相当eventを発行しないrecording session境界
 - Start／RequestStop中のAbort先行を各blocking stream call後に再検査し、開始済みstreamをAbort／Joinして、未開始audio／残りのgraceful sequenceをskipするrecording session境界
+- condition-variableで同時RequestStopの結果を共有し、同時Joinを単一winnerへ限定して、video／audioのstop・joinとStopped eventをexactly onceにするrecording session境界
+- callback内Abortを許すrecursive callback quiescence、stop workerの自己join回避、Start成功後だけpending first-packet milestoneをcommitして失敗Startでは破棄するC ABI／backend lifetime境界
+- 外部API契約、テスト生成規則、実装済みfailure injection、実FFmpeg／D3D11／Spout2／WASAPI adapter導入時の必須Redを固定した`docs/NATIVE-PIPELINE-FAILURE-MATRIX.md`
 - mux成功packetの最新A/V offsetを`audio PTS - video PTS`の符号付き値としてmonitorからmux／recording pipeline／C ABI最終統計まで伝播する経路（閾値event用absolute driftとは分離）
 - device loss／recoveryの入力roleと正確な48 kHz frameをpumpからsession経由でproduction MediaEventへ変換するadapter
 - 複数の安定Spout senderをpoll順で即決せず、VRChat service単位の前回選択を優先し、曖昧時だけaccessible desktop promptで選択・atomic保存する経路
@@ -213,7 +216,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.76% lines (2929/3376) and 72.45% branches (1741/2403), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 87.42% lines (3051/3490) and 73.38% branches (1825/2487), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -298,7 +301,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - Capture pumps/runners covering clocked 48 kHz packets, explicit WASAPI-style silent-frame counts, exact device-loss frames, recovery after a failed replacement, bounded five-second default-endpoint rediscovery, and abortable waits
 - Joined capture workers that run WASAPI Start/Read on one dedicated thread, synchronously report initialization, and join on failure, abort, or destruction
 - A rollback-safe stereo capture session that starts desktop/microphone workers, reads their timelines over the same 48 kHz frame window, silences only a disconnected side, rejects skew, and passes a fixed sample count into the mixer
-- An audio encoding pump that submits positioned mixed PCM windows through an encoder port, distinguishes buffered zero-packet writes from actual muxed-packet counts, and initializes its read output before every early exit—including invalid input, allocation failure, and capture abort/failure—so stale mix, mux, or status diagnostics cannot escape
+- An audio encoding pump that submits positioned mixed PCM windows through an encoder port, distinguishes buffered zero-packet writes from actual muxed-packet counts, initializes its read output before every early exit, and rejects noncontiguous/overflowing windows plus NaN/Infinity PCM before encoding
 - A dedicated encoding worker that flushes only on graceful stop and aborts both capture and encoding on forced abort or encoder failure
 - An audio pipeline session that starts encoding only after capture initialization and integrates live routing, idempotent stop, rollback, and final frame/packet statistics
 - A native video scheduler that selects the latest source frame at each CFR tick and separately counts discarded intermediate frames and duplicated previous outputs
@@ -316,8 +319,8 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An H.264 configuration boundary that safely derives even NV12 input, High-to-Main capability fallback, quality VBR, a two-second GOP, the clamped 8–80 Mbps `width*height*fps*0.14` target, and a 1.5x maximum rate
 - An audio configuration boundary that fixes AAC-LC, 48 kHz, stereo, 192 kbps, and the mixer's interleaved Float32 source format while isolating backend-specific sample conversion in encoder adapters
 - An fMP4 mux coordinator that serializes A/V packet PTS/DTS/duration/keyframes, enforces per-stream DTS monotonicity, prefers keyframe cuts after one second with a hard two-second fragment limit, orders graceful fragment/trailer/file flush, and forbids trailers after abort
-- A video sink adapter that separates encoder buffering from real packet batches, submits those batches to the shared fMP4 timeline, distinguishes mux from encoder failures, excludes uncommitted statistics, and aborts both sides on failure
-- An AAC sink adapter that separates encoder buffering from real packet batches, submits audio packets to the same fMP4 timeline, propagates mux failures distinctly through the audio pump/worker, and stops capture, encoder, and muxer
+- A video sink adapter that separates encoder buffering from real packet batches, rejects mixed-stream batches before mux mutation, aborts both sides on encoder/mux failure, and terminally rejects writes or repeated finish after a successful finish
+- An AAC sink adapter that separates encoder buffering from real packet batches, rejects mixed-stream batches before mux mutation, stops capture/encoder/muxer on encoder or mux failure, and terminally rejects input after a successful finish
 - A shared mux finalization session that barriers stream completion after video/audio flush packets, runs final fragment/trailer/file flush once only after both encoders succeed, and fail-closed rejects duplicate completion, post-flush packets, or either-side failure
 - An A/V sync monitor that observes successfully muxed video/audio PTS at an 80 ms threshold, emits rearmable privacy-safe events per excursion, records latest/maximum drift and event count, and never lets diagnostic observer outcomes alter recording success
 - An ABI-size- and 17-export-preserving path that propagates A/V drift events from native callbacks through typed P/Invoke callbacks and a best-effort media-event sink into privacy-safe structured logs
@@ -330,6 +333,9 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An adapter from the recording pipeline to the C ABI MediaBackend that supplies video layout/audio routing, ABI statistics, an idempotent asynchronous stop worker, and guaranteed joining on abort or destruction
 - A recording-session boundary that atomically arbitrates terminal state between asynchronous stop/join and forced abort, rechecks abort after each stream join, and never emits Stopped/Saved-equivalent success when abort wins
 - A recording-session boundary that rechecks an abort winner after every blocking stream call in Start/RequestStop, aborts and joins already-started streams, and skips unstarted audio or remaining graceful-stop work
+- A recording-session boundary that shares concurrent RequestStop results through a condition variable and admits one Join winner, keeping per-stream stop/join calls and the Stopped event exactly once
+- C ABI/backend lifetime boundaries that allow Abort from inside a callback, avoid stop-worker self-join, and commit a pending first-packet milestone only after Start succeeds while discarding it on failed Start
+- `docs/NATIVE-PIPELINE-FAILURE-MATRIX.md`, which pins external API contracts, test-generation rules, implemented failure injection, and mandatory future Red tests for real FFmpeg, D3D11, Spout2, and WASAPI adapters
 - A path that carries the latest signed A/V offset from successfully muxed packets as `audio PTS - video PTS` through the monitor, mux and recording pipelines into final C ABI statistics, separately from absolute drift used for threshold events
 - An adapter that propagates the input role and exact 48 kHz frame of device loss/recovery from capture pumps through the session into production media events
 - Deterministic multi-sender Spout selection that prefers the previous VRChat-service-scoped sender and otherwise uses an accessible desktop prompt with atomic persistence
