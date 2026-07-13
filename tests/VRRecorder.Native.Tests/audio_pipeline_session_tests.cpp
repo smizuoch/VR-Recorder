@@ -37,6 +37,12 @@ public:
         StereoAudioMixRead &read) noexcept override
     {
         std::unique_lock lock(mutex);
+        ++mix_calls;
+        changed.notify_all();
+        if (fail_immediately) {
+            return StereoAudioMixResult::Failed;
+        }
+
         if (windows_returned < ready_windows) {
             const auto start = windows_returned * frame_count_48k;
             ++windows_returned;
@@ -82,6 +88,12 @@ public:
         changed.wait(lock, [&] { return windows_returned >= count; });
     }
 
+    void WaitForMix()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return mix_calls > 0; });
+    }
+
     std::mutex mutex;
     std::condition_variable changed;
     StereoAudioCaptureSessionConfig last_config {};
@@ -93,7 +105,9 @@ public:
     std::size_t start_calls = 0;
     std::size_t routing_calls = 0;
     std::size_t abort_calls = 0;
+    std::size_t mix_calls = 0;
     bool aborted = false;
+    bool fail_immediately = false;
 };
 
 class CountingEncoderSink final : public StereoAudioEncoderSink {
@@ -114,9 +128,21 @@ public:
 
     void Abort() noexcept override
     {
-        ++abort_calls;
+        {
+            const std::lock_guard lock(mutex);
+            ++abort_calls;
+        }
+        changed.notify_all();
     }
 
+    void WaitForAbort()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return abort_calls > 0; });
+    }
+
+    std::mutex mutex;
+    std::condition_variable changed;
     std::size_t write_calls = 0;
     std::size_t finish_calls = 0;
     std::size_t abort_calls = 0;
@@ -180,6 +206,23 @@ void RejectsInvalidWindowsBeforeStartingCapture()
     CHECK(capture.start_calls == 0);
 }
 
+void WorkerFailureTerminalizesThePipelineOnStopRequest()
+{
+    FakeCaptureSession capture;
+    capture.fail_immediately = true;
+    CountingEncoderSink encoder;
+    StereoAudioPipelineSession session(capture, encoder);
+
+    CHECK(session.Start(Config(), 1'024) == VRREC_STATUS_OK);
+    encoder.WaitForAbort();
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.SetRouting(VRREC_AUDIO_ROUTING_MUTED) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.routing_calls == 0);
+    CHECK(capture.abort_calls == 1);
+    CHECK(encoder.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -187,5 +230,6 @@ int main()
     RunsACompleteGracefulAudioPipeline();
     DoesNotStartEncodingWhenCaptureInitializationFails();
     RejectsInvalidWindowsBeforeStartingCapture();
+    WorkerFailureTerminalizesThePipelineOnStopRequest();
     return 0;
 }
