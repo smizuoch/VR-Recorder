@@ -96,7 +96,7 @@ void StopsWhenTheSelectedSenderIsLost()
     CHECK(worker.Start(std::chrono::milliseconds(50)) == VRREC_STATUS_OK);
     CHECK(worker.Join() == SpoutCaptureWorkerResult::SenderLost);
     CHECK(source.poll_calls == 2);
-    CHECK(source.abort_calls == 0);
+    CHECK(source.abort_calls == 1);
 }
 
 void InvalidFramesFailTheWorker()
