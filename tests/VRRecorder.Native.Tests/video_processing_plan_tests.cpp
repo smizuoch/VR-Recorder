@@ -141,7 +141,7 @@ void RejectsExplicitLayoutsFromAnUnknownAbiContract()
     CHECK(CreateExplicitVideoProcessingPlan(
               Source(1'920, 1'080),
               layout,
-              plan) == VRREC_STATUS_INVALID_ARGUMENT);
+              plan) == VRREC_STATUS_UNSUPPORTED_ABI);
     CHECK(plan.output_width == 0);
 }
 
