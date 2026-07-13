@@ -36,6 +36,10 @@ public:
         StereoAudioMixRead &read) noexcept override
     {
         std::unique_lock lock(mutex_);
+        if (fail_unexpectedly) {
+            return StereoAudioMixResult::Aborted;
+        }
+
         if (windows_returned_ < ready_windows_) {
             const auto start = windows_returned_ * frame_count_48k;
             ++windows_returned_;
@@ -81,6 +85,7 @@ public:
     }
 
     std::size_t abort_calls = 0;
+    bool fail_unexpectedly = false;
 
 private:
     std::mutex mutex_;
@@ -182,6 +187,20 @@ void EncoderFailureAbortsWithoutCountingTheWindow()
     CHECK(worker.MuxedPacketCount() == 0);
 }
 
+void UnexpectedSourceAbortReleasesBothPipelineEnds()
+{
+    BlockingMixSource source(0);
+    source.fail_unexpectedly = true;
+    RecordingEncoderSink sink;
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::CaptureFailed);
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+}
+
 }
 
 int main()
@@ -189,5 +208,6 @@ int main()
     GracefulStopFlushesAfterAllSubmittedWindows();
     AbortDoesNotFlushTheEncoder();
     EncoderFailureAbortsWithoutCountingTheWindow();
+    UnexpectedSourceAbortReleasesBothPipelineEnds();
     return 0;
 }
