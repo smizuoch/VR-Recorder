@@ -26,6 +26,10 @@ public:
     VideoCfrClockResult WaitNext(std::uint64_t &tick) noexcept override
     {
         std::unique_lock lock(mutex);
+        if (fail_unexpectedly) {
+            return VideoCfrClockResult::Aborted;
+        }
+
         if (next_tick < ready_tick_count) {
             tick = next_tick++;
             changed.notify_all();
@@ -63,6 +67,7 @@ public:
     std::uint64_t next_tick = 0;
     std::size_t abort_calls = 0;
     bool aborted = false;
+    bool fail_unexpectedly = false;
 };
 
 class ScriptedVideoSink final : public VideoEncoderSink {
@@ -198,6 +203,24 @@ void ForcedAbortDoesNotFlushOrRaiseFault()
     CHECK(events.fault_calls == 0);
 }
 
+void UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedCfrClock clock;
+    clock.fail_unexpectedly = true;
+    ScriptedVideoSink sink;
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    CHECK(worker.Join() == VideoEncodingWorkerResult::ClockFailed);
+    CHECK(clock.abort_calls == 0);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+    CHECK(events.fault_calls == 1);
+    CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
+}
+
 }
 
 int main()
@@ -205,5 +228,6 @@ int main()
     GracefulStopFlushesAndReportsTheFirstPacketOnce();
     RuntimeEncoderFailureRaisesFaultAndDoesNotFlush();
     ForcedAbortDoesNotFlushOrRaiseFault();
+    UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
     return 0;
 }
