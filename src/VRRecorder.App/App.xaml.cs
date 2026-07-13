@@ -72,6 +72,10 @@ public partial class App
             AppContext.BaseDirectory,
             ProductVersion(),
             _legalVerifier);
+        var legalCatalogReader = new AuthenticatedLegalCatalogReader(
+            AppContext.BaseDirectory,
+            _legalVerifier,
+            LegalBundleVerificationScope.InstallRoot);
         _recordingSettings = new DesktopRecordingSettingsController(
             settingsStore,
             outputPaths,
@@ -140,16 +144,16 @@ public partial class App
                         settingsStore,
                         outputPaths,
                         legalOutputMirror),
+                [FirstRunSetupStep.OfflineLegalAccess] =
+                    new OfflineLegalAccessFirstRunSetupProbe(
+                        legalCatalogReader),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
                 _firstRunSetup,
                 setupProbe);
         _legalController = new DesktopLegalController(
-            new AuthenticatedLegalCatalogReader(
-                AppContext.BaseDirectory,
-                _legalVerifier,
-                LegalBundleVerificationScope.InstallRoot),
+            legalCatalogReader,
             new AuthenticatedLegalBundleFolderOpener(
                 AppContext.BaseDirectory,
                 AppContext.BaseDirectory,
