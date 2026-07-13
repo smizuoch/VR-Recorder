@@ -660,6 +660,22 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
+    public void DesktopComposesTrustedVrChatOscSetupDiscovery()
+    {
+        var appCode = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "App.xaml.cs"));
+
+        Assert.Contains("FirstRunSetupProbeRouter", appCode);
+        Assert.Contains("VrChatOscFirstRunSetupProbe", appCode);
+        Assert.Contains("OscQueryVrChatInstanceDiscovery", appCode);
+        Assert.Contains("WindowsDnsSdOscQueryServiceBrowser", appCode);
+        Assert.Contains("_setupOscHttp.Dispose()", appCode);
+    }
+
+    [Fact]
     public void DesktopProductionFactoryRecoversStaleCameraLeaseBeforeMediaPreflight()
     {
         var appDirectory = Path.Combine(
