@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using VRRecorder.Compliance.Repository;
 
@@ -263,6 +264,118 @@ public sealed class RepositoryComplianceTests
             Assert.Contains(issues, issue =>
                 issue.Code == "missing-native-artifact-registration" &&
                 issue.Subject == "openvr:openvr_api.dll");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ThirdPartyImportedTargetRequiresItsRuntimeArtifactMapping()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vr-recorder-native-target-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "third-party"));
+            Directory.CreateDirectory(Path.Combine(root, "src", "Native"));
+            Directory.CreateDirectory(
+                Path.Combine(root, "third-party", "source-archives"));
+            Directory.CreateDirectory(
+                Path.Combine(root, "third-party", "build-recipes"));
+            var sourceArchivePath = Path.Combine(
+                root,
+                "third-party",
+                "source-archives",
+                "ffmpeg-source.tar.xz");
+            File.WriteAllText(sourceArchivePath, "pinned ffmpeg source");
+            var sourceArchiveSha256 = Convert
+                .ToHexString(SHA256.HashData(File.ReadAllBytes(sourceArchivePath)))
+                .ToLowerInvariant();
+            File.WriteAllText(
+                Path.Combine(
+                    root,
+                    "third-party",
+                    "build-recipes",
+                    "ffmpeg-windows-x64.md"),
+                "pinned build recipe");
+            File.WriteAllText(
+                Path.Combine(root, "third-party", "registry.yml"),
+                $$"""
+                {
+                  "schemaVersion": 1,
+                  "registryVersion": 1,
+                  "components": [
+                    {
+                      "id": "ffmpeg",
+                      "nativeArtifacts": [
+                        {
+                          "platform": "windows-x64",
+                          "fileName": "avcodec-62.dll",
+                          "binarySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                          "sourceArchivePath": "third-party/source-archives/ffmpeg-source.tar.xz",
+                          "sourceArchiveSha256": "{{sourceArchiveSha256}}",
+                          "buildRecipePath": "third-party/build-recipes/ffmpeg-windows-x64.md"
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """);
+            var nativeLinkManifestPath = Path.Combine(
+                root,
+                "third-party",
+                "native-link-manifest.yml");
+            var nativeLinkManifest = """
+                {
+                  "schemaVersion": 1,
+                  "entries": [
+                    {
+                      "consumerTarget": "vrrecorder_native",
+                      "inputIdentity": "FFmpeg::avcodec",
+                      "inputKind": "ToolchainTarget",
+                      "platform": "windows-x64",
+                      "origin": "ThirdParty",
+                      "componentId": "ffmpeg",
+                      "artifactFileName": "avcodec-62.dll",
+                      "sourcePath": "src/Native/CMakeLists.txt"
+                    }
+                  ]
+                }
+                """;
+            File.WriteAllText(nativeLinkManifestPath, nativeLinkManifest);
+            File.WriteAllText(
+                Path.Combine(root, "src", "Native", "CMakeLists.txt"),
+                """
+                if(WIN32)
+                    target_link_libraries(
+                        vrrecorder_native
+                        PRIVATE
+                            FFmpeg::avcodec)
+                endif()
+                """);
+
+            var issues = RepositoryNativeLinkVerifier.Verify(root);
+
+            Assert.Empty(issues);
+
+            File.WriteAllText(
+                nativeLinkManifestPath,
+                nativeLinkManifest.Replace(
+                    "      \"artifactFileName\": \"avcodec-62.dll\",\n",
+                    string.Empty,
+                    StringComparison.Ordinal));
+
+            issues = RepositoryNativeLinkVerifier.Verify(root);
+
+            Assert.Contains(issues, issue =>
+                issue.Code == "invalid-native-link-manifest" &&
+                issue.Subject == "third-party/native-link-manifest.yml");
         }
         finally
         {

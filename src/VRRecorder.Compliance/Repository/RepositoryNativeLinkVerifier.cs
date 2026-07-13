@@ -88,7 +88,7 @@ public static partial class RepositoryNativeLinkVerifier
                 root,
                 registry,
                 entry.ComponentId!,
-                entry.InputIdentity,
+                entry.ArtifactFileName!,
                 entry.Platform);
             if (issue is not null)
             {
@@ -171,6 +171,20 @@ public static partial class RepositoryNativeLinkVerifier
             {
                 throw new InvalidDataException(
                     "A native-link source path is missing or unsafe.");
+            }
+
+            if (entry.Origin == NativeDependencyOrigin.ThirdParty)
+            {
+                if (string.IsNullOrWhiteSpace(entry.ArtifactFileName))
+                {
+                    throw new InvalidDataException(
+                        "A third-party native link needs its runtime artifact identity.");
+                }
+            }
+            else if (entry.ArtifactFileName is not null)
+            {
+                throw new InvalidDataException(
+                    "Only third-party native links may name a runtime artifact.");
             }
         }
     }
@@ -378,6 +392,7 @@ public static partial class RepositoryNativeLinkVerifier
         string Platform,
         NativeDependencyOrigin Origin,
         string? ComponentId,
+        string? ArtifactFileName,
         string SourcePath);
 
     private sealed record DiscoveredNativeLink(
