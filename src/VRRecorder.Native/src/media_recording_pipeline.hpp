@@ -21,7 +21,10 @@ public:
     virtual vrrec_status_t UpdateAudioRouting(
         vrrec_audio_routing_t routing) noexcept = 0;
     virtual vrrec_status_t RequestStop() noexcept = 0;
-    virtual void Abort() noexcept = 0;
+    // Logical termination only; must not join stream workers.
+    virtual void RequestAbort() noexcept = 0;
+    // Blocking cleanup for an owner or dedicated cleanup worker.
+    virtual void JoinAfterAbort() noexcept = 0;
     virtual vrrec_status_t Join() noexcept = 0;
     virtual MediaRecordingPipelineStatistics Statistics() const noexcept = 0;
 };
@@ -42,7 +45,8 @@ public:
     vrrec_status_t UpdateAudioRouting(
         vrrec_audio_routing_t routing) noexcept override;
     vrrec_status_t RequestStop() noexcept override;
-    void Abort() noexcept override;
+    void RequestAbort() noexcept override;
+    void JoinAfterAbort() noexcept override;
     vrrec_status_t Join() noexcept override;
     MediaRecordingPipelineStatistics Statistics() const noexcept override;
 

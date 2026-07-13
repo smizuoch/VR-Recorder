@@ -46,9 +46,14 @@ vrrec_status_t MediaRecordingPipeline::RequestStop() noexcept
     return recording_.RequestStop();
 }
 
-void MediaRecordingPipeline::Abort() noexcept
+void MediaRecordingPipeline::RequestAbort() noexcept
 {
-    recording_.Abort();
+    recording_.RequestAbort();
+}
+
+void MediaRecordingPipeline::JoinAfterAbort() noexcept
+{
+    recording_.JoinAfterAbort();
 }
 
 vrrec_status_t MediaRecordingPipeline::Join() noexcept

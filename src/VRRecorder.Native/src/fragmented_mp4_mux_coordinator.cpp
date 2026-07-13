@@ -175,9 +175,14 @@ vrrec_status_t FragmentedMp4MuxCoordinator::Finish() noexcept
     return VRREC_STATUS_OK;
 }
 
-void FragmentedMp4MuxCoordinator::Abort() noexcept
+void FragmentedMp4MuxCoordinator::RequestAbort() noexcept
 {
     abort_requested_.store(true);
+}
+
+void FragmentedMp4MuxCoordinator::Abort() noexcept
+{
+    RequestAbort();
     const std::lock_guard lock(mutex_);
     AbortLocked();
 }

@@ -167,6 +167,7 @@ public:
     Mp4MuxResult SubmitBatch(
         std::span<const EncodedMediaPacket> packets) noexcept;
     vrrec_status_t Finish() noexcept;
+    void RequestAbort() noexcept;
     void Abort() noexcept;
 #if defined(VRRECORDER_NATIVE_TESTING)
     bool IsAbortRequestedForTesting() const noexcept;

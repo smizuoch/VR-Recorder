@@ -60,7 +60,11 @@ public:
     virtual vrrec_status_t GetStatistics(
         vrrec_session_statistics_v1 &statistics) noexcept = 0;
     virtual vrrec_status_t RequestStop() noexcept = 0;
-    virtual void Abort() noexcept = 0;
+    // Makes the backend logically terminal and schedules cleanup. This is the
+    // only abort operation permitted from a synchronous event callback.
+    virtual void RequestAbort() noexcept = 0;
+    // Waits for all abort cleanup and worker joins. Owner threads only.
+    virtual void JoinAfterAbort() noexcept = 0;
 };
 
 std::unique_ptr<MediaBackend> CreateMediaBackend(

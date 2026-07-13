@@ -26,6 +26,7 @@ public:
     virtual ~MediaMuxSessionPort() = default;
     virtual vrrec_status_t Start(
         const FragmentedMp4StreamConfiguration &configuration) noexcept = 0;
+    virtual void RequestAbort() noexcept = 0;
     virtual void Abort() noexcept = 0;
     virtual std::int64_t AudioVideoOffsetMicroseconds() const noexcept
     {
@@ -46,10 +47,20 @@ public:
     MediaRecordingSession &operator=(const MediaRecordingSession &) = delete;
     vrrec_status_t Start() noexcept;
     vrrec_status_t RequestStop() noexcept;
+    void RequestAbort() noexcept;
+    void JoinAfterAbort() noexcept;
     void Abort() noexcept;
     vrrec_status_t Join() noexcept;
 
 private:
+    enum class AbortPhase : std::uint8_t {
+        Idle,
+        Requesting,
+        Requested,
+        NotNeeded,
+        CleanupCompleted,
+    };
+
     MediaStreamPipelinePort &video_;
     MediaStreamPipelinePort &audio_;
     MediaMuxSessionPort &mux_;
@@ -61,6 +72,11 @@ private:
     std::atomic_bool stop_requested_ = false;
     std::atomic_bool join_attempted_ = false;
     std::atomic_bool terminal_ = false;
+    std::atomic<AbortPhase> abort_phase_ = AbortPhase::Idle;
+    std::mutex abort_join_mutex_;
+    std::condition_variable abort_join_changed_;
+    bool abort_join_in_progress_ = false;
+    bool abort_join_completed_ = false;
     std::mutex stop_mutex_;
     std::condition_variable stop_changed_;
     bool stop_in_progress_ = false;

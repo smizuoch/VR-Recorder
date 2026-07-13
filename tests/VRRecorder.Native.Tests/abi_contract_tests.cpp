@@ -631,6 +631,48 @@ bool CallbackCanAbortItsOwnSessionWithoutDeadlocking()
     return true;
 }
 
+bool CallbackAbortDoesNotWaitForTheRuntimeOperationThatEmittedIt()
+{
+    AbortFromCallbackContext context;
+    const auto config = ValidConfig();
+    const auto callbacks = vrrec_callbacks_v1 {
+        sizeof(vrrec_callbacks_v1),
+        VRREC_ABI_V1,
+        AbortFromCallback,
+        &context,
+    };
+    CHECK(vrrec_session_create_v1(
+              &config,
+              &callbacks,
+              &context.session) == VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(context.session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::FaultDuringNextVideoLayoutUpdate();
+    auto completed = context.completed.get_future();
+    auto update_status = VRREC_STATUS_OK;
+    const auto layout = ValidRuntimeLayout();
+    std::thread updating([&] {
+        update_status =
+            vrrec_session_update_video_layout_v1(
+                context.session,
+                &layout);
+    });
+
+    if (completed.wait_for(std::chrono::milliseconds(250)) !=
+        std::future_status::ready) {
+        updating.detach();
+        std::cerr << __func__
+                  << " timed out waiting for callback Abort\n";
+        return false;
+    }
+
+    updating.join();
+    completed.get();
+    CHECK(context.abort_status == VRREC_STATUS_OK);
+    CHECK(update_status == VRREC_STATUS_INTERNAL_ERROR);
+    vrrec_session_destroy_v1(context.session);
+    return true;
+}
+
 bool FailedStartDoesNotPublishAPrematureFirstPacketMilestone()
 {
     EventLog log;
@@ -1962,6 +2004,7 @@ int main()
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
         !CallbackCanAbortItsOwnSessionWithoutDeadlocking() ||
+        !CallbackAbortDoesNotWaitForTheRuntimeOperationThatEmittedIt() ||
         !FailedStartDoesNotPublishAPrematureFirstPacketMilestone() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||

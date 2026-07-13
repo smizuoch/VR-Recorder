@@ -1169,6 +1169,26 @@ void AbortStopsTheWholeMuxGraphWithoutATrailer()
     CHECK(muxer.abort_calls == 1);
 }
 
+void LogicalAbortReachesTheMuxCoordinatorWithoutPhysicalCleanup()
+{
+    RecordingMuxer muxer;
+    RecordingMediaEvents events;
+    MediaMuxPipeline pipeline(muxer, events);
+    CHECK(pipeline.Start(TestMp4Streams()) == VRREC_STATUS_OK);
+
+    pipeline.RequestAbort();
+
+    CHECK(pipeline.IsMuxAbortRequestedForTesting());
+    CHECK(muxer.abort_calls == 0);
+    CHECK(muxer.order == std::vector<int>({0}));
+    CHECK(pipeline.Submit(Packet(MediaStreamKind::Video, 0)) ==
+          Mp4MuxResult::InvalidState);
+
+    pipeline.Abort();
+    CHECK(muxer.abort_calls == 1);
+    CHECK(muxer.order == std::vector<int>({0, 5}));
+}
+
 }
 
 int main()
@@ -1192,5 +1212,6 @@ int main()
     AbortDuringTrailerStopsBeforeFileFlush();
     FinalizesOnlyAfterBothStreamsFinish();
     AbortStopsTheWholeMuxGraphWithoutATrailer();
+    LogicalAbortReachesTheMuxCoordinatorWithoutPhysicalCleanup();
     return 0;
 }

@@ -215,19 +215,26 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
 
     vrrec_status_t Abort() noexcept
     {
+        const auto called_from_own_callback =
+            active_callback_session_ == this;
+        {
+            const std::lock_guard lock(state_mutex_);
+            state_ = SessionState::Aborted;
+        }
+
+        backend_->RequestAbort();
+        if (called_from_own_callback) {
+            return VRREC_STATUS_OK;
+        }
+
         {
             std::unique_lock lock(state_mutex_);
-            if (state_ == SessionState::Aborted) {
-                return VRREC_STATUS_OK;
-            }
-
-            state_ = SessionState::Aborted;
             state_condition_.wait(lock, [this] {
                 return active_runtime_operations_ == 0;
             });
         }
 
-        backend_->Abort();
+        backend_->JoinAfterAbort();
         const std::lock_guard callbacks_quiesced(callback_mutex_);
         return VRREC_STATUS_OK;
     }
@@ -450,12 +457,18 @@ private:
 
     void Emit(const vrrec_event_v1 &event) noexcept
     {
+        auto *previous_callback_session = active_callback_session_;
+        active_callback_session_ = this;
         try {
             callbacks_.on_event(callbacks_.user_data, &event);
         } catch (...) {
             // No exception may cross the C ABI callback boundary.
         }
+        active_callback_session_ = previous_callback_session;
     }
+
+    inline static thread_local vrrec_session *active_callback_session_ =
+        nullptr;
 
     std::string temporary_output_path_;
     std::string desktop_endpoint_id_;

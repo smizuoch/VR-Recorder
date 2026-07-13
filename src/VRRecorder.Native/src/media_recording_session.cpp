@@ -134,16 +134,71 @@ vrrec_status_t MediaRecordingSession::RequestStop() noexcept
 
 void MediaRecordingSession::Abort() noexcept
 {
-    if (terminal_.exchange(true)) {
+    RequestAbort();
+    JoinAfterAbort();
+}
+
+void MediaRecordingSession::RequestAbort() noexcept
+{
+    auto expected_phase = AbortPhase::Idle;
+    if (!abort_phase_.compare_exchange_strong(
+            expected_phase,
+            AbortPhase::Requesting)) {
         return;
     }
-    if (video_started_.load()) {
+
+    auto expected_terminal = false;
+    if (!terminal_.compare_exchange_strong(expected_terminal, true)) {
+        abort_phase_.store(AbortPhase::NotNeeded);
+        abort_phase_.notify_all();
+        return;
+    }
+
+    mux_.RequestAbort();
+    abort_phase_.store(AbortPhase::Requested);
+    abort_phase_.notify_all();
+}
+
+void MediaRecordingSession::JoinAfterAbort() noexcept
+{
+    auto phase = abort_phase_.load();
+    while (phase == AbortPhase::Requesting) {
+        abort_phase_.wait(phase);
+        phase = abort_phase_.load();
+    }
+    if (phase != AbortPhase::Requested) {
+        return;
+    }
+
+    {
+        std::unique_lock lock(abort_join_mutex_);
+        if (abort_join_completed_) {
+            return;
+        }
+        if (abort_join_in_progress_) {
+            abort_join_changed_.wait(lock, [this] {
+                return abort_join_completed_;
+            });
+            return;
+        }
+        abort_join_in_progress_ = true;
+    }
+
+    mux_.Abort();
+    if (video_started_.exchange(false)) {
         video_.Abort();
     }
-    if (audio_started_.load()) {
+    if (audio_started_.exchange(false)) {
         audio_.Abort();
     }
-    mux_.Abort();
+    {
+        const std::lock_guard lock(abort_join_mutex_);
+        abort_join_in_progress_ = false;
+        abort_join_completed_ = true;
+    }
+    abort_phase_.store(AbortPhase::CleanupCompleted);
+    abort_phase_.notify_all();
+    abort_join_changed_.notify_all();
 }
 
 vrrec_status_t MediaRecordingSession::Join() noexcept

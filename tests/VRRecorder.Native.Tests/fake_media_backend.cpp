@@ -181,9 +181,13 @@ public:
         return VRREC_STATUS_OK;
     }
 
-    void Abort() noexcept override
+    void RequestAbort() noexcept override
     {
         aborted_ = true;
+    }
+
+    void JoinAfterAbort() noexcept override
+    {
     }
 
     void CommitMuxedVideoPacket() noexcept

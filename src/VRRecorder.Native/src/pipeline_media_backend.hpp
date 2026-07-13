@@ -1,6 +1,7 @@
 #ifndef VRRECORDER_NATIVE_PIPELINE_MEDIA_BACKEND_HPP
 #define VRRECORDER_NATIVE_PIPELINE_MEDIA_BACKEND_HPP
 
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 
@@ -28,16 +29,30 @@ public:
     vrrec_status_t GetStatistics(
         vrrec_session_statistics_v1 &statistics) noexcept override;
     vrrec_status_t RequestStop() noexcept override;
-    void Abort() noexcept override;
+    void RequestAbort() noexcept override;
+    void JoinAfterAbort() noexcept override;
 
 private:
+    vrrec_status_t StartCleanupWorker() noexcept;
+    void RunCleanupWorker() noexcept;
     void JoinStopWorker() noexcept;
+    void ShutdownCleanupWorker() noexcept;
 
     MediaRecordingPipelinePort &pipeline_;
     VideoLayoutUpdatePort &layout_;
     std::mutex mutex_;
+    std::mutex stop_join_mutex_;
+    std::condition_variable changed_;
     std::thread stop_worker_;
+    std::thread cleanup_worker_;
     bool stop_requested_ = false;
+    bool stop_start_in_progress_ = false;
+    vrrec_status_t stop_status_ = VRREC_STATUS_INVALID_STATE;
+    bool abort_requested_ = false;
+    bool cleanup_requested_ = false;
+    bool cleanup_in_progress_ = false;
+    bool cleanup_completed_ = false;
+    bool cleanup_shutdown_ = false;
 };
 
 }

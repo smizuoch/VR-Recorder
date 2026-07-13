@@ -55,9 +55,11 @@ public:
         order_.push_back(0);
         return VRREC_STATUS_OK;
     }
+    void RequestAbort() noexcept override { ++request_abort_calls; }
     void Abort() noexcept override { ++abort_calls; }
     std::int64_t AudioVideoOffsetMicroseconds() const noexcept override { return -12'000; }
     std::vector<int> &order_;
+    std::size_t request_abort_calls = 0;
     std::size_t abort_calls = 0;
 };
 

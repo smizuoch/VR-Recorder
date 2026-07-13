@@ -116,6 +116,12 @@ void MediaMuxPipeline::EncoderFailed(MediaStreamKind stream) noexcept
     finalization_.EncoderFailed(stream);
 }
 
+void MediaMuxPipeline::RequestAbort() noexcept
+{
+    terminal_failure_.store(true);
+    coordinator_.RequestAbort();
+}
+
 void MediaMuxPipeline::Abort() noexcept
 {
     terminal_failure_.store(true);
