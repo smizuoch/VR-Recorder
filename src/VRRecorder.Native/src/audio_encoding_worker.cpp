@@ -99,6 +99,11 @@ std::uint64_t StereoAudioEncodingWorker::MuxedPacketCount() const noexcept
         : pumped + flushed;
 }
 
+bool StereoAudioEncodingWorker::IsFinished() const noexcept
+{
+    return finished_.load();
+}
+
 void StereoAudioEncodingWorker::Run() noexcept
 {
     while (true) {
@@ -113,7 +118,9 @@ void StereoAudioEncodingWorker::Run() noexcept
                 SetResult(StereoAudioEncodingWorkerResult::Aborted);
             } else if (stop_requested_.load()) {
                 const auto finish = sink_.Finish();
-                if (finish.status == VRREC_STATUS_OK) {
+                if (abort_requested_.load()) {
+                    SetResult(StereoAudioEncodingWorkerResult::Aborted);
+                } else if (finish.status == VRREC_STATUS_OK) {
                     flushed_packet_count_.store(
                         finish.muxed_packet_count);
                     SetResult(StereoAudioEncodingWorkerResult::Stopped);

@@ -2,7 +2,9 @@
 #define VRRECORDER_NATIVE_MEDIA_RECORDING_SESSION_HPP
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <mutex>
 
 #include "media_backend.hpp"
 
@@ -52,7 +54,13 @@ private:
     std::atomic_bool audio_started_ = false;
     std::atomic_bool start_attempted_ = false;
     std::atomic_bool stop_requested_ = false;
+    std::atomic_bool join_attempted_ = false;
     std::atomic_bool terminal_ = false;
+    std::mutex stop_mutex_;
+    std::condition_variable stop_changed_;
+    bool stop_in_progress_ = false;
+    bool stop_completed_ = false;
+    vrrec_status_t stop_status_ = VRREC_STATUS_INVALID_STATE;
 };
 
 }

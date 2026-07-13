@@ -39,6 +39,7 @@ public:
 
     std::uint64_t SubmittedFrameCount() const noexcept;
     std::uint64_t MuxedPacketCount() const noexcept;
+    bool IsFinished() const noexcept;
 
 private:
     void Run() noexcept;

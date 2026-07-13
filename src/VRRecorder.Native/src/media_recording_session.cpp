@@ -70,27 +70,50 @@ vrrec_status_t MediaRecordingSession::RequestStop() noexcept
         terminal_.load()) {
         return VRREC_STATUS_INVALID_STATE;
     }
-    if (stop_requested_.load()) {
-        return VRREC_STATUS_OK;
+
+    {
+        std::unique_lock lock(stop_mutex_);
+        if (stop_in_progress_) {
+            stop_changed_.wait(lock, [this] {
+                return !stop_in_progress_;
+            });
+            return stop_status_;
+        }
+        if (stop_completed_) {
+            return stop_status_;
+        }
+        stop_in_progress_ = true;
     }
+
+    const auto complete = [this](vrrec_status_t status) noexcept {
+        {
+            const std::lock_guard lock(stop_mutex_);
+            stop_status_ = status;
+            stop_completed_ = true;
+            stop_in_progress_ = false;
+        }
+        stop_changed_.notify_all();
+        return status;
+    };
+
     const auto video_status = video_.RequestStop();
     if (terminal_.load()) {
-        return VRREC_STATUS_INVALID_STATE;
+        return complete(VRREC_STATUS_INVALID_STATE);
     }
     if (video_status != VRREC_STATUS_OK) {
         Abort();
-        return video_status;
+        return complete(video_status);
     }
     const auto audio_status = audio_.RequestStop();
     if (terminal_.load()) {
-        return VRREC_STATUS_INVALID_STATE;
+        return complete(VRREC_STATUS_INVALID_STATE);
     }
     if (audio_status != VRREC_STATUS_OK) {
         Abort();
-        return audio_status;
+        return complete(audio_status);
     }
     stop_requested_.store(true);
-    return VRREC_STATUS_OK;
+    return complete(VRREC_STATUS_OK);
 }
 
 void MediaRecordingSession::Abort() noexcept
@@ -110,7 +133,8 @@ void MediaRecordingSession::Abort() noexcept
 vrrec_status_t MediaRecordingSession::Join() noexcept
 {
     if (!video_started_.load() || !audio_started_.load() ||
-        terminal_.load() || !stop_requested_.load()) {
+        terminal_.load() || !stop_requested_.load() ||
+        join_attempted_.exchange(true)) {
         return VRREC_STATUS_INVALID_STATE;
     }
     const auto video_status = video_.Join();

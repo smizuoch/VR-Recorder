@@ -164,6 +164,7 @@ AudioCaptureInputResult AudioCaptureInputRunner::Run(
             }
 
             if (pump_result != AudioCapturePumpResult::DeviceLost) {
+                pump.Abort();
                 return AudioCaptureInputResult::Failed;
             }
 

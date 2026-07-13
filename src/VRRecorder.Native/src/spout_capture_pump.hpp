@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <string>
 
 #include "spout_source_backend.hpp"
@@ -45,6 +46,7 @@ private:
     SpoutSourceBackend &backend_;
     VideoCfrScheduler &scheduler_;
     std::string selected_sender_id_;
+    std::mutex lifecycle_mutex_;
     std::atomic_bool aborted_ = false;
 };
 

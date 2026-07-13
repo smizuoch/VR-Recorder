@@ -33,23 +33,40 @@ vrrec_status_t StereoAudioPipelineSession::Start(
     }
 
     capture_started_.store(true);
+    if (aborted_.load()) {
+        if (capture_started_.exchange(false)) {
+            capture_.Abort();
+        }
+        return VRREC_STATUS_INVALID_STATE;
+    }
+
     const auto encoding_status = encoding_.Start(
         encoding_frame_count_48k);
     if (encoding_status != VRREC_STATUS_OK) {
-        capture_.Abort();
-        capture_started_.store(false);
+        if (capture_started_.exchange(false)) {
+            capture_.Abort();
+        }
         return encoding_status;
     }
 
     encoding_started_.store(true);
     active_.store(true);
+    if (aborted_.load()) {
+        active_.store(false);
+        if (encoding_started_.exchange(false)) {
+            encoding_.Abort();
+        }
+        capture_started_.store(false);
+        return VRREC_STATUS_INVALID_STATE;
+    }
     return VRREC_STATUS_OK;
 }
 
 vrrec_status_t StereoAudioPipelineSession::SetRouting(
     vrrec_audio_routing_t routing) noexcept
 {
-    if (!active_.load() || aborted_.load()) {
+    if (!active_.load() || aborted_.load() || encoding_.IsFinished()) {
+        active_.store(false);
         return VRREC_STATUS_INVALID_STATE;
     }
 
@@ -77,9 +94,10 @@ void StereoAudioPipelineSession::Abort() noexcept
     }
 
     active_.store(false);
-    if (encoding_started_.load()) {
+    if (encoding_started_.exchange(false)) {
         encoding_.Abort();
-    } else if (capture_started_.load()) {
+        capture_started_.store(false);
+    } else if (capture_started_.exchange(false)) {
         capture_.Abort();
     }
 }

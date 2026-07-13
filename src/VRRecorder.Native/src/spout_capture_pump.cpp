@@ -57,11 +57,18 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
         return SpoutCaptureResult::InvalidFrame;
     }
 
-    const auto push_status = scheduler_.Push({
-        frame.frame_sequence,
-        frame.monotonic_timestamp_microseconds,
-        frame.surface,
-    });
+    vrrec_status_t push_status;
+    {
+        const std::lock_guard lock(lifecycle_mutex_);
+        if (aborted_.load()) {
+            return SpoutCaptureResult::Aborted;
+        }
+        push_status = scheduler_.Push({
+            frame.frame_sequence,
+            frame.monotonic_timestamp_microseconds,
+            frame.surface,
+        });
+    }
     return push_status == VRREC_STATUS_OK
         ? SpoutCaptureResult::FrameAccepted
         : SpoutCaptureResult::InvalidFrame;
@@ -69,8 +76,11 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
 
 void SpoutCapturePump::Abort() noexcept
 {
-    if (aborted_.exchange(true)) {
-        return;
+    {
+        const std::lock_guard lock(lifecycle_mutex_);
+        if (aborted_.exchange(true)) {
+            return;
+        }
     }
 
     backend_.Abort();

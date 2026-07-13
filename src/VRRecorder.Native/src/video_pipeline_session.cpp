@@ -38,16 +38,38 @@ vrrec_status_t VideoPipelineSession::Start(
     }
 
     capture_started_.store(true);
+    if (aborted_.load()) {
+        if (capture_started_.exchange(false)) {
+            capture_.Abort();
+            capture_.Join();
+        }
+        return VRREC_STATUS_INVALID_STATE;
+    }
+
     const auto encoding_status = encoding_.Start();
     if (encoding_status != VRREC_STATUS_OK) {
-        capture_.Abort();
-        capture_.Join();
-        capture_started_.store(false);
+        if (capture_started_.exchange(false)) {
+            capture_.Abort();
+            capture_.Join();
+        }
         return encoding_status;
     }
 
     encoding_started_.store(true);
     active_.store(true);
+    if (aborted_.load()) {
+        active_.store(false);
+        if (encoding_started_.exchange(false)) {
+            encoding_.Abort();
+            encoding_.Join();
+        }
+        if (capture_started_.exchange(false)) {
+            capture_.Abort();
+            capture_.Join();
+        }
+        return VRREC_STATUS_INVALID_STATE;
+    }
+
     return VRREC_STATUS_OK;
 }
 
@@ -83,16 +105,18 @@ void VideoPipelineSession::Abort() noexcept
     }
 
     active_.store(false);
-    if (capture_started_.load()) {
+    const auto capture_started = capture_started_.exchange(false);
+    const auto encoding_started = encoding_started_.exchange(false);
+    if (capture_started) {
         capture_.Abort();
     }
-    if (encoding_started_.load()) {
+    if (encoding_started) {
         encoding_.Abort();
     }
-    if (capture_started_.load()) {
+    if (capture_started) {
         capture_.Join();
     }
-    if (encoding_started_.load()) {
+    if (encoding_started) {
         encoding_.Join();
     }
 }

@@ -44,6 +44,7 @@ vrrec_status_t AudioCapturePump::StartCore(
     }
 
     if (aborted_.load()) {
+        source_.Abort();
         timeline_.Abort();
         return VRREC_STATUS_INVALID_STATE;
     }

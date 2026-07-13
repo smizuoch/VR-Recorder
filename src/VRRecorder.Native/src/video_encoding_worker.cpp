@@ -137,6 +137,17 @@ void VideoEncodingWorker::Run() noexcept
             return;
         }
 
+        if (abort_requested_.load()) {
+            SetResult(VideoEncodingWorkerResult::Aborted);
+            finished_.store(true);
+            return;
+        }
+        if (stop_requested_.load()) {
+            Finish();
+            finished_.store(true);
+            return;
+        }
+
         VideoEncodingRead read {};
         const auto encoding_result = pump_.PumpTick(tick, read);
         if (encoding_result == VideoEncodingResult::Submitted) {
