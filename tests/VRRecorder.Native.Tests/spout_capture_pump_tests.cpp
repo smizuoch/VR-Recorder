@@ -2,10 +2,13 @@
 
 #include <chrono>
 #include <cstddef>
+#include <condition_variable>
 #include <cstdlib>
 #include <deque>
+#include <future>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -51,6 +54,59 @@ public:
 
 private:
     VideoSurfaceDescriptor descriptor_;
+};
+
+class BlockingDescriptorSurface final : public VideoSurface {
+public:
+    VideoSurfaceDescriptor Descriptor() const noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        descriptor_entered_ = true;
+        changed_.notify_all();
+        changed_.wait(lock, [this] { return release_descriptor_; });
+        return {
+            42,
+            1'920,
+            1'080,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        };
+    }
+
+    void *NativeHandle() const noexcept override
+    {
+        return reinterpret_cast<void *>(1);
+    }
+
+    VideoSurfaceAcquireResult AcquireForRead(
+        std::chrono::milliseconds) noexcept override
+    {
+        return VideoSurfaceAcquireResult::Acquired;
+    }
+
+    void ReleaseFromRead() noexcept override
+    {
+    }
+
+    void WaitForDescriptor() const
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return descriptor_entered_; });
+    }
+
+    void ReleaseDescriptor()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_descriptor_ = true;
+        }
+        changed_.notify_all();
+    }
+
+private:
+    mutable std::mutex mutex_;
+    mutable std::condition_variable changed_;
+    mutable bool descriptor_entered_ = false;
+    bool release_descriptor_ = false;
 };
 
 struct PollResult final {
@@ -204,6 +260,28 @@ void AbortStopsPollingAndReleasesTheBackend()
     CHECK(backend.poll_calls == 0);
 }
 
+void AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler()
+{
+    ScriptedSpoutBackend backend;
+    auto frame = Frame("selected", 30, 3'000'000);
+    const auto surface = std::make_shared<BlockingDescriptorSurface>();
+    frame.surface = surface;
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(frame)});
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    auto polling = std::async(std::launch::async, [&] {
+        return pump.PollOne(std::chrono::milliseconds(100));
+    });
+    surface->WaitForDescriptor();
+    pump.Abort();
+    surface->ReleaseDescriptor();
+
+    CHECK(polling.get() == SpoutCaptureResult::Aborted);
+    CHECK(scheduler.Statistics().source_frame_count == 0);
+    CHECK(backend.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -213,5 +291,6 @@ int main()
     RejectsFramesFromAnotherSender();
     RejectsSurfaceMetadataThatDoesNotMatchTheTexture();
     AbortStopsPollingAndReleasesTheBackend();
+    AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler();
     return 0;
 }

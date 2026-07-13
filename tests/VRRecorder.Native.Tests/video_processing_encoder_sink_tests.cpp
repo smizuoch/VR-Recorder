@@ -3,9 +3,12 @@
 
 #include <chrono>
 #include <cstddef>
+#include <condition_variable>
 #include <cstdlib>
+#include <future>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace {
@@ -61,9 +64,15 @@ public:
         const VideoProcessingPlan &plan,
         std::shared_ptr<VideoSurface> &output) noexcept override
     {
+        std::unique_lock lock(mutex);
         ++process_calls;
         last_source = source;
         last_plan = plan;
+        process_entered = true;
+        changed.notify_all();
+        if (block_process) {
+            changed.wait(lock, [&] { return release_process; });
+        }
         output = next_output;
         return status;
     }
@@ -76,6 +85,21 @@ public:
         }
     }
 
+    void WaitForProcess()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return process_entered; });
+    }
+
+    void ReleaseProcess()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_process = true;
+        }
+        changed.notify_all();
+    }
+
     std::shared_ptr<VideoSurface> next_output;
     std::shared_ptr<VideoSurface> last_source;
     VideoProcessingPlan last_plan {};
@@ -83,6 +107,11 @@ public:
     std::vector<int> *order = nullptr;
     std::size_t process_calls = 0;
     std::size_t abort_calls = 0;
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool block_process = false;
+    bool process_entered = false;
+    bool release_process = false;
 };
 
 class RecordingEncoder final : public VideoEncoderSink {
@@ -199,6 +228,28 @@ void RejectsAnInvalidProcessorOutputSurface()
     CHECK(encoder.frames.empty());
 }
 
+void RejectsAnInputSurfaceWithoutANativeHandleBeforeProcessing()
+{
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12);
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+    const auto source = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+    source->native_handle = nullptr;
+
+    const auto write = sink.Write({0, 1, 0, 0, false, source});
+    CHECK(write.status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(write.failure_stage == VideoEncoderFailureStage::Processing);
+    CHECK(processor.process_calls == 0);
+    CHECK(encoder.frames.empty());
+}
+
 vrrec_video_layout_v1 PortraitLayout();
 
 void DelegatesFinishAndAbortsProcessorBeforeEncoder()
@@ -284,6 +335,63 @@ void FinishTerminalizesFrameProcessingAndLayoutUpdates()
     CHECK(encoder.frames.empty());
 }
 
+void AbortPreventsAnInFlightProcessedFrameFromReachingTheEncoder()
+{
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12);
+    processor.block_process = true;
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+    const auto source = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+
+    auto writing = std::async(std::launch::async, [&] {
+        return sink.Write({0, 1, 0, 0, false, source});
+    });
+    processor.WaitForProcess();
+    sink.Abort();
+    processor.ReleaseProcess();
+    const auto write = writing.get();
+
+    CHECK(write.status == VRREC_STATUS_INVALID_STATE);
+    CHECK(write.failure_stage == VideoEncoderFailureStage::Processing);
+    CHECK(encoder.frames.empty());
+}
+
+void FinishPreventsAnInFlightProcessedFrameFromReachingTheEncoder()
+{
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12);
+    processor.block_process = true;
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+    const auto source = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+
+    auto writing = std::async(std::launch::async, [&] {
+        return sink.Write({0, 1, 0, 0, false, source});
+    });
+    processor.WaitForProcess();
+    CHECK(sink.Finish().status == VRREC_STATUS_OK);
+    processor.ReleaseProcess();
+    const auto write = writing.get();
+
+    CHECK(write.status == VRREC_STATUS_INVALID_STATE);
+    CHECK(write.failure_stage == VideoEncoderFailureStage::Processing);
+    CHECK(encoder.frames.empty());
+    CHECK(encoder.finish_calls == 1);
+}
+
 void RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout()
 {
     RecordingProcessor processor;
@@ -314,9 +422,12 @@ int main()
     ConvertsToValidatedNv12BeforeCallingTheEncoder();
     ClassifiesProcessorFailureAndSkipsTheEncoder();
     RejectsAnInvalidProcessorOutputSurface();
+    RejectsAnInputSurfaceWithoutANativeHandleBeforeProcessing();
     DelegatesFinishAndAbortsProcessorBeforeEncoder();
     AppliesValidatedLiveLayoutToTheNextFrame();
     FinishTerminalizesFrameProcessingAndLayoutUpdates();
+    AbortPreventsAnInFlightProcessedFrameFromReachingTheEncoder();
+    FinishPreventsAnInFlightProcessedFrameFromReachingTheEncoder();
     RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout();
     return 0;
 }

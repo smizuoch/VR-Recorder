@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -215,6 +216,55 @@ void ReportsEncoderFailureWithoutCountingTheWindow()
     CHECK(pump.MuxedPacketCount() == 0);
 }
 
+void RejectsNoncontiguousMixedWindowsBeforeCallingTheEncoderAgain()
+{
+    ScriptedMixSource source;
+    source.scripts = {
+        {StereoAudioMixResult::Mixed, Read(2'048, 1'024), 0.25F},
+        {StereoAudioMixResult::Mixed, Read(2'048, 1'024), 0.5F},
+    };
+    RecordingEncoderSink sink;
+    StereoAudioEncodingPump pump(source, sink);
+    StereoAudioEncodingRead read {};
+
+    CHECK(pump.PumpNext(1'024, read) ==
+          StereoAudioEncodingResult::Submitted);
+    CHECK(pump.PumpNext(1'024, read) ==
+          StereoAudioEncodingResult::CaptureFailed);
+    CHECK(sink.calls.size() == 1);
+    CHECK(pump.SubmittedFrameCount() == 1'024);
+}
+
+void RejectsNonfinitePcmAndOverflowingWindowsBeforeEncoding()
+{
+    ScriptedMixSource nonfinite_source;
+    nonfinite_source.scripts.push_back({
+        StereoAudioMixResult::Mixed,
+        Read(0, 1),
+        std::numeric_limits<float>::quiet_NaN(),
+    });
+    RecordingEncoderSink nonfinite_sink;
+    StereoAudioEncodingPump nonfinite_pump(
+        nonfinite_source,
+        nonfinite_sink);
+    StereoAudioEncodingRead read {};
+    CHECK(nonfinite_pump.PumpNext(1, read) ==
+          StereoAudioEncodingResult::CaptureFailed);
+    CHECK(nonfinite_sink.calls.empty());
+
+    ScriptedMixSource overflow_source;
+    overflow_source.scripts.push_back({
+        StereoAudioMixResult::Mixed,
+        Read(std::numeric_limits<std::uint64_t>::max(), 2),
+        0.25F,
+    });
+    RecordingEncoderSink overflow_sink;
+    StereoAudioEncodingPump overflow_pump(overflow_source, overflow_sink);
+    CHECK(overflow_pump.PumpNext(2, read) ==
+          StereoAudioEncodingResult::CaptureFailed);
+    CHECK(overflow_sink.calls.empty());
+}
+
 }
 
 int main()
@@ -223,5 +273,7 @@ int main()
     SubmitsSilenceEvenWhenTheEncoderBuffersTheFrame();
     DoesNotCallTheEncoderAfterCaptureAbort();
     ReportsEncoderFailureWithoutCountingTheWindow();
+    RejectsNoncontiguousMixedWindowsBeforeCallingTheEncoderAgain();
+    RejectsNonfinitePcmAndOverflowingWindowsBeforeEncoding();
     return 0;
 }

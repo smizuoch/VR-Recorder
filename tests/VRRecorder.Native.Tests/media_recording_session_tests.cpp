@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <condition_variable>
 #include <cstdlib>
+#include <atomic>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -71,7 +72,9 @@ public:
         stop_entered_ = true;
         changed_.notify_all();
         if (block_stop_) {
-            changed_.wait(lock, [this] { return aborted_; });
+            changed_.wait(lock, [this] {
+                return aborted_ || release_stop_;
+            });
         }
         return VRREC_STATUS_OK;
     }
@@ -89,10 +92,13 @@ public:
     vrrec_status_t Join() noexcept override
     {
         std::unique_lock lock(mutex_);
+        ++join_entries_;
         join_entered_ = true;
         changed_.notify_all();
         if (block_join_) {
-            changed_.wait(lock, [this] { return aborted_; });
+            changed_.wait(lock, [this] {
+                return aborted_ || release_join_;
+            });
         }
         ++join_calls;
         return VRREC_STATUS_OK;
@@ -112,6 +118,22 @@ public:
         changed_.wait(lock, [this] { return stop_entered_; });
     }
 
+    void WaitForStopDecision(const std::atomic_bool &second_done)
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [&] {
+            return stop_calls >= 2 || second_done.load();
+        });
+    }
+
+    void WaitForJoinDecision(const std::atomic_bool &second_done)
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [&] {
+            return join_entries_ >= 2 || second_done.load();
+        });
+    }
+
     void WaitForStart()
     {
         std::unique_lock lock(mutex_);
@@ -127,6 +149,29 @@ public:
         changed_.notify_all();
     }
 
+    void ReleaseStop()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_stop_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    void ReleaseJoin()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_join_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    void NotifyDecision() noexcept
+    {
+        changed_.notify_all();
+    }
+
     std::mutex mutex_;
     std::condition_variable changed_;
     bool block_join_;
@@ -137,10 +182,13 @@ public:
     bool stop_entered_ = false;
     bool join_entered_ = false;
     bool aborted_ = false;
+    bool release_stop_ = false;
+    bool release_join_ = false;
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
     std::size_t stop_calls = 0;
     std::size_t start_calls = 0;
+    std::size_t join_entries_ = 0;
 };
 
 class RecordingEvents final : public MediaEventSink {
@@ -281,6 +329,73 @@ void AbortDuringVideoStartRollsBackWithoutStartingAudio()
     CHECK(mux.abort_calls == 1);
 }
 
+void ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce()
+{
+    std::vector<int> order;
+    ConcurrentStreamPipeline video(false, true);
+    ConcurrentStreamPipeline audio(false);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(video, audio, mux, events);
+    CHECK(session.Start() == VRREC_STATUS_OK);
+
+    auto first_result = VRREC_STATUS_INTERNAL_ERROR;
+    auto second_result = VRREC_STATUS_INTERNAL_ERROR;
+    std::atomic_bool second_done = false;
+    std::thread first([&] { first_result = session.RequestStop(); });
+    video.WaitForStop();
+    std::thread second([&] {
+        second_result = session.RequestStop();
+        second_done.store(true);
+        video.NotifyDecision();
+    });
+    video.WaitForStopDecision(second_done);
+    video.ReleaseStop();
+    first.join();
+    second.join();
+
+    CHECK(first_result == VRREC_STATUS_OK);
+    CHECK(second_result == VRREC_STATUS_OK);
+    CHECK(video.stop_calls == 1);
+    CHECK(audio.stop_calls == 1);
+}
+
+void ConcurrentJoinExecutesEachStreamJoinExactlyOnce()
+{
+    std::vector<int> order;
+    ConcurrentStreamPipeline video(true);
+    ConcurrentStreamPipeline audio(false);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(video, audio, mux, events);
+    CHECK(session.Start() == VRREC_STATUS_OK);
+    CHECK(session.RequestStop() == VRREC_STATUS_OK);
+
+    auto first_result = VRREC_STATUS_INTERNAL_ERROR;
+    auto second_result = VRREC_STATUS_INTERNAL_ERROR;
+    std::atomic_bool second_done = false;
+    std::thread first([&] { first_result = session.Join(); });
+    video.WaitForJoin();
+    std::thread second([&] {
+        second_result = session.Join();
+        second_done.store(true);
+        video.NotifyDecision();
+    });
+    video.WaitForJoinDecision(second_done);
+    video.ReleaseJoin();
+    first.join();
+    second.join();
+
+    CHECK((first_result == VRREC_STATUS_OK &&
+           second_result == VRREC_STATUS_INVALID_STATE) ||
+          (second_result == VRREC_STATUS_OK &&
+           first_result == VRREC_STATUS_INVALID_STATE));
+    CHECK(video.join_entries_ == 1);
+    CHECK(video.join_calls == 1);
+    CHECK(audio.join_calls == 1);
+    CHECK(events.stopped_calls == 1);
+}
+
 }
 
 int main()
@@ -291,5 +406,7 @@ int main()
     AbortDuringJoinSuppressesSuccessfulStoppedCompletion();
     AbortDuringStopRequestSkipsTheRemainingGracefulSequence();
     AbortDuringVideoStartRollsBackWithoutStartingAudio();
+    ConcurrentStopRequestsExecuteEachStreamStopExactlyOnce();
+    ConcurrentJoinExecutesEachStreamJoinExactlyOnce();
     return 0;
 }

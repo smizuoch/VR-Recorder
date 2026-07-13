@@ -476,6 +476,59 @@ void RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits()
     CHECK(normalized.interleaved_samples.empty());
 }
 
+void ClearsThePreviousNormalizedPacketWhenAContractCheckFails()
+{
+    const std::vector<float> stereo {0.25F, -0.25F};
+    auto format = vrrecorder::native::CapturePcmFormat {
+        48'000,
+        2,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        8,
+        0x0000'0003,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(11'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  100,
+                  11'000'000,
+                  1,
+                  std::as_bytes(std::span<const float>(stereo)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(normalized.frame_count_48k == 1);
+    CHECK(!normalized.interleaved_samples.empty());
+
+    format.sample_rate_hz = 0;
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  101,
+                  11'000'100,
+                  1,
+                  std::as_bytes(std::span<const float>(stereo)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::InvalidFormat);
+    CHECK(normalized.start_frame_48k == 0);
+    CHECK(normalized.device_position == 0);
+    CHECK(normalized.qpc_100ns == 0);
+    CHECK(normalized.frame_count_48k == 0);
+    CHECK(normalized.interleaved_samples.empty());
+    CHECK(!normalized.silent);
+    CHECK(!normalized.discontinuity);
+}
+
 }
 
 int main()
@@ -490,5 +543,6 @@ int main()
     RetainsThePacketAfterADevicePositionDiscontinuity();
     RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics();
     RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits();
+    ClearsThePreviousNormalizedPacketWhenAContractCheckFails();
     return 0;
 }

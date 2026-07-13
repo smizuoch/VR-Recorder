@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -26,6 +27,13 @@ public:
     VideoCfrClockResult WaitNext(std::uint64_t &tick) noexcept override
     {
         std::unique_lock lock(mutex);
+        if (block_next_tick) {
+            wait_entered = true;
+            changed.notify_all();
+            changed.wait(lock, [&] { return release_tick; });
+            tick = next_tick++;
+            return VideoCfrClockResult::Tick;
+        }
         if (fail_unexpectedly) {
             return VideoCfrClockResult::Aborted;
         }
@@ -61,6 +69,27 @@ public:
         changed.wait(lock, [&] { return next_tick >= count; });
     }
 
+    void WaitUntilBlocked()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return wait_entered; });
+    }
+
+    void WaitUntilAborted()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return aborted; });
+    }
+
+    void ReleaseTick()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_tick = true;
+        }
+        changed.notify_all();
+    }
+
     std::mutex mutex;
     std::condition_variable changed;
     std::uint64_t ready_tick_count = 2;
@@ -68,6 +97,9 @@ public:
     std::size_t abort_calls = 0;
     bool aborted = false;
     bool fail_unexpectedly = false;
+    bool block_next_tick = false;
+    bool wait_entered = false;
+    bool release_tick = false;
 };
 
 class ScriptedVideoSink final : public VideoEncoderSink {
@@ -222,6 +254,30 @@ void UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault()
     CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
 }
 
+void AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding()
+{
+    VideoCfrScheduler scheduler;
+    CHECK(scheduler.Push({30, 3'000'000}) == VRREC_STATUS_OK);
+    ScriptedCfrClock clock;
+    clock.block_next_tick = true;
+    ScriptedVideoSink sink;
+    sink.writes.push_back({VRREC_STATUS_OK, 1, 100});
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    clock.WaitUntilBlocked();
+    std::thread aborting([&] { worker.Abort(); });
+    clock.WaitUntilAborted();
+    clock.ReleaseTick();
+    aborting.join();
+
+    CHECK(worker.Join() == VideoEncodingWorkerResult::Aborted);
+    CHECK(sink.write_calls == 0);
+    CHECK(events.first_packet_calls == 0);
+    CHECK(events.fault_calls == 0);
+}
+
 }
 
 int main()
@@ -230,5 +286,6 @@ int main()
     RuntimeEncoderFailureRaisesFaultAndDoesNotFlush();
     ForcedAbortDoesNotFlushOrRaiseFault();
     UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
+    AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding();
     return 0;
 }

@@ -77,6 +77,9 @@ public:
     void Abort() noexcept override
     {
         ++abort_calls;
+        if (shared_abort_calls != nullptr) {
+            ++*shared_abort_calls;
+        }
     }
 
     vrrec_status_t start_status = VRREC_STATUS_OK;
@@ -84,9 +87,73 @@ public:
     std::size_t next_read = 0;
     int start_calls = 0;
     int abort_calls = 0;
+    std::shared_ptr<int> shared_abort_calls;
     AudioCaptureRole started_role = AudioCaptureRole::Microphone;
     std::string endpoint;
     std::int64_t session_start_qpc_100ns = 0;
+};
+
+class BlockingStartAudioCaptureSource final : public AudioCaptureSource {
+public:
+    vrrec_status_t Start(
+        const AudioCaptureSourceConfig &) noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        start_entered_ = true;
+        changed_.notify_all();
+        changed_.wait(lock, [&] { return release_start_; });
+        live_ = true;
+        return VRREC_STATUS_OK;
+    }
+
+    AudioCaptureRead Read() noexcept override
+    {
+        return {};
+    }
+
+    void Abort() noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        ++abort_calls;
+        if (live_) {
+            live_ = false;
+        }
+    }
+
+    void WaitForStart()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [&] { return start_entered_; });
+    }
+
+    void ReleaseStart()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_start_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    bool IsLive() const
+    {
+        const std::lock_guard lock(mutex_);
+        return live_;
+    }
+
+    std::size_t AbortCalls() const
+    {
+        const std::lock_guard lock(mutex_);
+        return abort_calls;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    bool start_entered_ = false;
+    bool release_start_ = false;
+    bool live_ = false;
+    std::size_t abort_calls = 0;
 };
 
 class FailingRecoverySourceProvider final
@@ -746,6 +813,56 @@ void ReportsInitialCaptureStartFailureExactlyOnce()
     CHECK(starts.statuses[0] == VRREC_STATUS_BACKEND_UNAVAILABLE);
 }
 
+void FatalPacketFailureAbortsTheSourceAndTimeline()
+{
+    auto abort_calls = std::make_shared<int>(0);
+    auto source = std::make_unique<FakeAudioCaptureSource>();
+    source->shared_abort_calls = abort_calls;
+    source->reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0,
+        100,
+        5'000'000,
+        2,
+        {0.25F, -0.25F},
+        false,
+        false,
+        0,
+    });
+    FailingRecoverySourceProvider provider(std::move(source));
+    RecordingRecoveryWaiter waiter;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+
+    CHECK(runner.Run(Config()) == AudioCaptureInputResult::Failed);
+    CHECK(*abort_calls == 1);
+    const std::vector<float> samples {0.0F, 0.0F};
+    CHECK(timeline.Push({
+              0,
+              {0, 5'000'000, 10'000'000},
+              samples,
+              false,
+          }) == AudioTimelineResult::Aborted);
+}
+
+void AbortDuringSourceStartPerformsPostStartCleanup()
+{
+    BlockingStartAudioCaptureSource source;
+    StereoCaptureTimeline timeline(8);
+    AudioCapturePump pump(source, timeline);
+    auto starting = std::async(std::launch::async, [&] {
+        return pump.Start(Config());
+    });
+    source.WaitForStart();
+
+    pump.Abort();
+    source.ReleaseStart();
+
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    CHECK(!source.IsLive());
+    CHECK(source.AbortCalls() == 2);
+}
+
 }
 
 int main()
@@ -762,5 +879,7 @@ int main()
     AbortReleasesARecoveryWaitImmediately();
     ReportsInitialCaptureStartExactlyOnce();
     ReportsInitialCaptureStartFailureExactlyOnce();
+    FatalPacketFailureAbortsTheSourceAndTimeline();
+    AbortDuringSourceStartPerformsPostStartCleanup();
     return 0;
 }

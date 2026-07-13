@@ -3,8 +3,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <condition_variable>
 #include <cstdlib>
+#include <future>
 #include <iostream>
+#include <mutex>
 #include <vector>
 
 namespace {
@@ -30,8 +33,15 @@ public:
     vrrec_status_t Start(
         std::chrono::milliseconds timeout) noexcept override
     {
+        std::unique_lock lock(mutex);
         order_.push_back(1);
         last_timeout = timeout;
+        ++start_calls;
+        start_entered = true;
+        changed.notify_all();
+        if (block_start) {
+            changed.wait(lock, [&] { return release_start; });
+        }
         return start_status;
     }
 
@@ -47,12 +57,33 @@ public:
         return join_result;
     }
 
+    void WaitForStart()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return start_entered; });
+    }
+
+    void ReleaseStart()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_start = true;
+        }
+        changed.notify_all();
+    }
+
     std::vector<int> &order_;
     vrrec_status_t start_status = VRREC_STATUS_OK;
     SpoutCaptureWorkerResult join_result = SpoutCaptureWorkerResult::Aborted;
     std::chrono::milliseconds last_timeout {0};
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
+    std::size_t start_calls = 0;
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool block_start = false;
+    bool start_entered = false;
+    bool release_start = false;
 };
 
 class FakeEncodingWorker final : public VideoEncodingWorkerPort {
@@ -64,7 +95,14 @@ public:
 
     vrrec_status_t Start() noexcept override
     {
+        std::unique_lock lock(mutex);
         order_.push_back(2);
+        ++start_calls;
+        start_entered = true;
+        changed.notify_all();
+        if (block_start) {
+            changed.wait(lock, [&] { return release_start; });
+        }
         return start_status;
     }
 
@@ -92,6 +130,21 @@ public:
         return statistics;
     }
 
+    void WaitForStart()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return start_entered; });
+    }
+
+    void ReleaseStart()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_start = true;
+        }
+        changed.notify_all();
+    }
+
     std::vector<int> &order_;
     vrrec_status_t start_status = VRREC_STATUS_OK;
     vrrec_status_t stop_status = VRREC_STATUS_OK;
@@ -105,6 +158,12 @@ public:
     std::size_t stop_calls = 0;
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
+    std::size_t start_calls = 0;
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool block_start = false;
+    bool start_entered = false;
+    bool release_start = false;
 };
 
 class RecordingEvents final : public MediaEventSink {
@@ -254,6 +313,52 @@ void StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked()
     CHECK(session.Join() == VideoPipelineResult::InvalidState);
 }
 
+void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
+{
+    std::vector<int> order;
+    FakeCaptureWorker capture(order);
+    capture.block_start = true;
+    FakeEncodingWorker encoding(order);
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(std::chrono::milliseconds(100));
+    });
+    capture.WaitForStart();
+    session.Abort();
+    capture.ReleaseStart();
+
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
+    CHECK(encoding.start_calls == 0);
+    CHECK(encoding.abort_calls == 0);
+}
+
+void AbortDuringEncodingStartRollsBackBothWorkers()
+{
+    std::vector<int> order;
+    FakeCaptureWorker capture(order);
+    FakeEncodingWorker encoding(order);
+    encoding.block_start = true;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(std::chrono::milliseconds(100));
+    });
+    encoding.WaitForStart();
+    session.Abort();
+    encoding.ReleaseStart();
+
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
+    CHECK(encoding.abort_calls == 1);
+    CHECK(encoding.join_calls == 1);
+}
+
 }
 
 int main()
@@ -264,5 +369,7 @@ int main()
     EncoderFailureAbortsCapture();
     AbortDoesNotReturnUntilBothWorkersAreJoined();
     StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked();
+    AbortDuringCaptureStartRollsBackWithoutStartingEncoding();
+    AbortDuringEncodingStartRollsBackBothWorkers();
     return 0;
 }

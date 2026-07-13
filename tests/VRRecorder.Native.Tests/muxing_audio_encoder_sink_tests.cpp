@@ -167,6 +167,68 @@ void FlushesAacPacketsWithoutFinalizingTheSharedMuxer()
     CHECK(backend.abort_calls == 0);
 }
 
+void SuccessfulFinishTerminalizesTheAudioEncoderSink()
+{
+    ScriptedPacketEncoder encoder;
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
+
+    CHECK(sink.Finish().status == VRREC_STATUS_OK);
+    CHECK(sink.WritePcm48k(0, std::vector<float> {0.0F, 0.0F}).status ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(sink.Finish().status == VRREC_STATUS_INVALID_STATE);
+    CHECK(encoder.encode_calls == 0);
+    CHECK(encoder.finish_calls == 1);
+    CHECK(encoder.abort_calls == 0);
+    CHECK(backend.abort_calls == 0);
+}
+
+void EncoderFailureAbortsBothSidesAndRejectsFurtherWrites()
+{
+    ScriptedPacketEncoder encoder;
+    encoder.encode = {VRREC_STATUS_INTERNAL_ERROR, {}};
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
+    const std::vector<float> samples {0.0F, 0.0F};
+
+    const auto failed = sink.WritePcm48k(0, samples);
+    CHECK(failed.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(failed.failure_stage == AudioEncoderFailureStage::Encoding);
+    CHECK(encoder.abort_calls == 1);
+    CHECK(backend.abort_calls == 1);
+    CHECK(sink.WritePcm48k(1, samples).status ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(encoder.encode_calls == 1);
+}
+
+void RejectsAMixedStreamBatchBeforeMutatingTheMuxer()
+{
+    ScriptedPacketEncoder encoder;
+    auto wrong_stream = AudioPacket(21'333);
+    wrong_stream.stream = MediaStreamKind::Video;
+    encoder.encode = {
+        VRREC_STATUS_OK,
+        {AudioPacket(0), wrong_stream},
+    };
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+    MuxingAudioEncoderSink sink(encoder, session);
+
+    const auto write = sink.WritePcm48k(
+        0,
+        std::vector<float> {0.0F, 0.0F});
+    CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(write.failure_stage == AudioEncoderFailureStage::Muxing);
+    CHECK(backend.packets.empty());
+    CHECK(encoder.abort_calls == 1);
+    CHECK(backend.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -175,5 +237,8 @@ int main()
     KeepsEncoderBufferingAsAZeroPacketSuccess();
     AbortsBothSidesWhenMuxingFails();
     FlushesAacPacketsWithoutFinalizingTheSharedMuxer();
+    SuccessfulFinishTerminalizesTheAudioEncoderSink();
+    EncoderFailureAbortsBothSidesAndRejectsFurtherWrites();
+    RejectsAMixedStreamBatchBeforeMutatingTheMuxer();
     return 0;
 }

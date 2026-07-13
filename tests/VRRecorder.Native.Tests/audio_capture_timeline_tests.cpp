@@ -120,7 +120,7 @@ void AbortWakesAReaderWithoutAdvancingTheTimeline()
 
     vrrecorder::native::StereoCaptureTimeline timeline(960);
     std::vector<float> output(480U * 2U, -1.0F);
-    vrrecorder::native::AudioTimelineRead read {};
+    vrrecorder::native::AudioTimelineRead read {99, true, true};
     std::promise<void> reader_started;
     auto reader_started_future = reader_started.get_future();
     auto waiting = std::async(std::launch::async, [&] {
@@ -135,6 +135,9 @@ void AbortWakesAReaderWithoutAdvancingTheTimeline()
     CHECK(waiting.wait_for(1s) == std::future_status::ready);
     CHECK(waiting.get() ==
           vrrecorder::native::AudioTimelineResult::Aborted);
+    CHECK(read.start_frame_48k == 0);
+    CHECK(!read.input_available);
+    CHECK(!read.underrun);
     CHECK(timeline.FramePosition() == 0);
     CHECK(timeline.BufferedFrames() == 0);
     for (const auto sample : output) {

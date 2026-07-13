@@ -168,7 +168,7 @@ void AbortReleasesABlockedMixAndIsIdempotent()
     StereoAudioMixer mixer(VRREC_AUDIO_ROUTING_MIXED, 0.0, 0.0);
     StereoAudioMixCoordinator coordinator(desktop, microphone, mixer);
     std::vector<float> output(4, -1.0F);
-    StereoAudioMixRead read {};
+    StereoAudioMixRead read {99, 7, true, true, true, true};
     auto mixing = std::async(std::launch::async, [&] {
         return coordinator.MixNext(2, output, read);
     });
@@ -179,6 +179,12 @@ void AbortReleasesABlockedMixAndIsIdempotent()
 
     CHECK(mixing.wait_for(1s) == std::future_status::ready);
     CHECK(mixing.get() == StereoAudioMixResult::Aborted);
+    CHECK(read.start_frame_48k == 0);
+    CHECK(read.frame_count_48k == 0);
+    CHECK(!read.desktop_available);
+    CHECK(!read.microphone_available);
+    CHECK(!read.desktop_underrun);
+    CHECK(!read.microphone_underrun);
     CHECK(coordinator.MixNext(2, output, read) ==
           StereoAudioMixResult::Aborted);
 }

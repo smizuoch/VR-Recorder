@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <span>
@@ -122,19 +123,50 @@ public:
 
     StereoAudioEncoderWrite Finish() noexcept override
     {
+        std::unique_lock lock(mutex);
         ++finish_calls;
+        finish_entered = true;
+        changed.notify_all();
+        if (block_finish) {
+            changed.wait(lock, [&] { return release_finish; });
+        }
         return finish_result;
     }
 
     void Abort() noexcept override
     {
-        ++abort_calls;
+        {
+            const std::lock_guard lock(mutex);
+            ++abort_calls;
+        }
+        changed.notify_all();
     }
 
     void WaitForWrites(std::size_t count)
     {
         std::unique_lock lock(mutex);
         changed.wait(lock, [&] { return write_calls >= count; });
+    }
+
+    void WaitForFinish()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return finish_entered; });
+    }
+
+    void WaitForAbort()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return abort_calls > 0; });
+    }
+
+    void ReleaseFinish()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_finish = true;
+        }
+        changed.notify_all();
     }
 
     std::mutex mutex;
@@ -144,6 +176,9 @@ public:
     std::size_t write_calls = 0;
     std::size_t finish_calls = 0;
     std::size_t abort_calls = 0;
+    bool block_finish = false;
+    bool finish_entered = false;
+    bool release_finish = false;
 };
 
 void GracefulStopFlushesAfterAllSubmittedWindows()
@@ -240,6 +275,30 @@ void SourceContractFailureReleasesBothPipelineEnds()
     CHECK(sink.finish_calls == 0);
 }
 
+void AbortDominatesAConcurrentGracefulFinish()
+{
+    BlockingMixSource source(0);
+    RecordingEncoderSink sink;
+    sink.block_finish = true;
+    sink.finish_result = {VRREC_STATUS_OK, 7};
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    CHECK(worker.RequestStop() == VRREC_STATUS_OK);
+    sink.WaitForFinish();
+    auto aborting = std::async(std::launch::async, [&] {
+        worker.Abort();
+    });
+    sink.WaitForAbort();
+    sink.ReleaseFinish();
+    aborting.get();
+
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::Aborted);
+    CHECK(worker.MuxedPacketCount() == 0);
+    CHECK(sink.finish_calls == 1);
+    CHECK(sink.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -250,5 +309,6 @@ int main()
     UnexpectedSourceAbortReleasesBothPipelineEnds();
     CaptureFailureReleasesBothPipelineEnds();
     SourceContractFailureReleasesBothPipelineEnds();
+    AbortDominatesAConcurrentGracefulFinish();
     return 0;
 }

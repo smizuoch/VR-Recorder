@@ -285,9 +285,15 @@ void RollsBackDesktopWhenMicrophoneStartFails()
     CHECK(desktop_state->abort_calls == 1);
     CHECK(microphone_state->abort_calls == 0);
     std::vector<float> output(4, -1.0F);
-    StereoAudioMixRead read {};
+    StereoAudioMixRead read {99, 7, true, true, true, true};
     CHECK(session.MixNext(2, output, read) ==
           StereoAudioMixResult::InvalidState);
+    CHECK(read.start_frame_48k == 0);
+    CHECK(read.frame_count_48k == 0);
+    CHECK(!read.desktop_available);
+    CHECK(!read.microphone_available);
+    CHECK(!read.desktop_underrun);
+    CHECK(!read.microphone_underrun);
 }
 
 void RejectsInvalidRoutingBeforeStartingInputs()

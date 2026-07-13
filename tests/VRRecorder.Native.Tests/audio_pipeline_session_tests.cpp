@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <span>
@@ -26,8 +27,14 @@ public:
     vrrec_status_t Start(
         const StereoAudioCaptureSessionConfig &config) noexcept override
     {
+        std::unique_lock lock(mutex);
         ++start_calls;
         last_config = config;
+        start_entered = true;
+        changed.notify_all();
+        if (block_start) {
+            changed.wait(lock, [&] { return release_start; });
+        }
         return start_status;
     }
 
@@ -94,6 +101,21 @@ public:
         changed.wait(lock, [&] { return mix_calls > 0; });
     }
 
+    void WaitForStart()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return start_entered; });
+    }
+
+    void ReleaseStart()
+    {
+        {
+            const std::lock_guard lock(mutex);
+            release_start = true;
+        }
+        changed.notify_all();
+    }
+
     std::mutex mutex;
     std::condition_variable changed;
     StereoAudioCaptureSessionConfig last_config {};
@@ -108,6 +130,9 @@ public:
     std::size_t mix_calls = 0;
     bool aborted = false;
     bool fail_immediately = false;
+    bool block_start = false;
+    bool start_entered = false;
+    bool release_start = false;
 };
 
 class CountingEncoderSink final : public StereoAudioEncoderSink {
@@ -215,12 +240,37 @@ void WorkerFailureTerminalizesThePipelineOnStopRequest()
 
     CHECK(session.Start(Config(), 1'024) == VRREC_STATUS_OK);
     encoder.WaitForAbort();
+    CHECK(session.SetRouting(VRREC_AUDIO_ROUTING_MUTED) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.routing_calls == 0);
     CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
     CHECK(session.SetRouting(VRREC_AUDIO_ROUTING_MUTED) ==
           VRREC_STATUS_INVALID_STATE);
     CHECK(capture.routing_calls == 0);
     CHECK(capture.abort_calls == 1);
     CHECK(encoder.abort_calls == 1);
+}
+
+void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
+{
+    FakeCaptureSession capture;
+    capture.block_start = true;
+    capture.ready_windows = 0;
+    CountingEncoderSink encoder;
+    StereoAudioPipelineSession session(capture, encoder);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(Config(), 1'024);
+    });
+    capture.WaitForStart();
+    session.Abort();
+    capture.ReleaseStart();
+
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.abort_calls == 1);
+    CHECK(encoder.write_calls == 0);
+    CHECK(encoder.finish_calls == 0);
+    CHECK(encoder.abort_calls == 0);
 }
 
 }
@@ -231,5 +281,6 @@ int main()
     DoesNotStartEncodingWhenCaptureInitializationFails();
     RejectsInvalidWindowsBeforeStartingCapture();
     WorkerFailureTerminalizesThePipelineOnStopRequest();
+    AbortDuringCaptureStartRollsBackWithoutStartingEncoding();
     return 0;
 }

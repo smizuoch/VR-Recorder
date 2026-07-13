@@ -35,6 +35,7 @@ public:
     PacketVideoEncoderWrite Encode(
         const ScheduledVideoFrame &frame) noexcept override
     {
+        ++encode_calls;
         frames.push_back(frame);
         return encode;
     }
@@ -53,6 +54,7 @@ public:
     PacketVideoEncoderWrite encode {VRREC_STATUS_OK, 0, {}};
     PacketVideoEncoderWrite finish {VRREC_STATUS_OK, 0, {}};
     std::vector<ScheduledVideoFrame> frames;
+    std::size_t encode_calls = 0;
     std::size_t finish_calls = 0;
     std::size_t abort_calls = 0;
 };
@@ -164,6 +166,64 @@ void FlushesEncoderPacketsWithoutFinalizingTheSharedMuxer()
     CHECK(backend.abort_calls == 0);
 }
 
+void SuccessfulFinishTerminalizesTheVideoEncoderSink()
+{
+    ScriptedPacketEncoder encoder;
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
+
+    CHECK(sink.Finish().status == VRREC_STATUS_OK);
+    CHECK(sink.Write({}).status == VRREC_STATUS_INVALID_STATE);
+    CHECK(sink.Finish().status == VRREC_STATUS_INVALID_STATE);
+    CHECK(encoder.encode_calls == 0);
+    CHECK(encoder.finish_calls == 1);
+    CHECK(encoder.abort_calls == 0);
+    CHECK(backend.abort_calls == 0);
+}
+
+void EncoderFailureAbortsBothSidesAndRejectsFurtherFrames()
+{
+    ScriptedPacketEncoder encoder;
+    encoder.encode = {VRREC_STATUS_INTERNAL_ERROR, 50, {}};
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
+
+    const auto failed = sink.Write({});
+    CHECK(failed.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(failed.failure_stage == VideoEncoderFailureStage::Encoding);
+    CHECK(encoder.abort_calls == 1);
+    CHECK(backend.abort_calls == 1);
+    CHECK(sink.Write({}).status == VRREC_STATUS_INVALID_STATE);
+    CHECK(encoder.encode_calls == 1);
+}
+
+void RejectsAMixedStreamBatchBeforeMutatingTheMuxer()
+{
+    ScriptedPacketEncoder encoder;
+    auto wrong_stream = VideoPacket(33'333);
+    wrong_stream.stream = MediaStreamKind::Audio;
+    encoder.encode = {
+        VRREC_STATUS_OK,
+        100,
+        {VideoPacket(0), wrong_stream},
+    };
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+    MuxingVideoEncoderSink sink(encoder, session);
+
+    const auto write = sink.Write({});
+    CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(write.failure_stage == VideoEncoderFailureStage::Muxing);
+    CHECK(backend.packets.empty());
+    CHECK(encoder.abort_calls == 1);
+    CHECK(backend.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -172,5 +232,8 @@ int main()
     KeepsEncoderBufferingAsAZeroPacketSuccess();
     AbortsBothSidesWhenMuxingFails();
     FlushesEncoderPacketsWithoutFinalizingTheSharedMuxer();
+    SuccessfulFinishTerminalizesTheVideoEncoderSink();
+    EncoderFailureAbortsBothSidesAndRejectsFurtherFrames();
+    RejectsAMixedStreamBatchBeforeMutatingTheMuxer();
     return 0;
 }
