@@ -24,7 +24,7 @@ public:
         const EncodedMediaPacket &) noexcept override
     {
         order.push_back(1);
-        return VRREC_STATUS_OK;
+        return write_status;
     }
 
     vrrec_status_t EndFragment() noexcept override
@@ -52,6 +52,7 @@ public:
     }
 
     std::vector<int> order;
+    vrrec_status_t write_status = VRREC_STATUS_OK;
     std::size_t abort_calls = 0;
 };
 
@@ -117,6 +118,22 @@ void EncoderFailureAbortsWithoutWritingATrailer()
           VRREC_STATUS_INVALID_STATE);
 }
 
+void PacketMuxFailureImmediatelyTerminalizesTheSharedSession()
+{
+    RecordingMuxer backend;
+    backend.write_status = VRREC_STATUS_INTERNAL_ERROR;
+    FragmentedMp4MuxCoordinator mux(backend);
+    SharedMuxFinalizationSession session(mux);
+
+    CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::MuxFailed);
+    CHECK(backend.abort_calls == 1);
+    CHECK(session.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(session.Submit(VideoPacket()) == Mp4MuxResult::InvalidState);
+}
+
 }
 
 int main()
@@ -125,5 +142,6 @@ int main()
     SupportsAudioFinishingBeforeVideo();
     RejectsPacketsAfterTheirEncoderHasFinished();
     EncoderFailureAbortsWithoutWritingATrailer();
+    PacketMuxFailureImmediatelyTerminalizesTheSharedSession();
     return 0;
 }
