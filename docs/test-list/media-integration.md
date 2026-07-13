@@ -59,6 +59,7 @@
 - [x] 非同期stop Joinとforced Abortをatomic terminal遷移で仲裁し、Abortが先行した場合はStopped／Saved相当の成功完了を抑止する
 - [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする。外部JoinAfterAbortはStart内rollback完了まで待ち、cleanup ownershipを取ったstreamへRequestAbortを再送する
 - [x] productionの同期drift callbackからfull session Abortする場合、callback stackではmuxと両workerへlogical RequestAbortだけを伝播し、prestarted cleanup workerが物理Abort／Joinを回収する。audio→video／video→audioの両方向を実worker graph＋subprocess watchdogで固定する
+- [x] inner audio／video pipelineでもblocking Start／routing／RequestStop／JoinとAbortを仲裁し、Start rollback完了までcleanupを待つ。通常Joinとcleanupで物理Abort ownershipを失わず、video captureのSenderLost／Failedが競合してもAbortをlogical winnerとしてFaultedを抑止し、capture Abortをexactly onceにする
 
 ## English
 
@@ -119,3 +120,4 @@
 - [x] Arbitrate asynchronous stop/join against forced abort with an atomic terminal transition, suppressing Stopped/Saved-equivalent success when abort wins
 - [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop. Make external JoinAfterAbort wait for in-Start rollback and reissue RequestAbort for every stream claimed by cleanup
 - [x] Propagate only logical RequestAbort to the mux and both workers from a synchronous production drift callback, and let a prestarted cleanup worker reclaim physical Abort/Join outside the callback stack. Cover both audio-to-video and video-to-audio directions with the real worker graph and a subprocess watchdog
+- [x] Arbitrate Abort against blocking Start/routing/RequestStop/Join inside the audio/video pipelines, wait for startup rollback before cleanup returns, preserve one physical-abort owner across normal Join and cleanup, and, in video, make Abort win over concurrent SenderLost/Failed without Faulted while requesting capture abort exactly once

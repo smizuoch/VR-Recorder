@@ -46,8 +46,9 @@ ctest --preset native-linux-debug-ffmpeg
 - 同じ公式tarballから再現生成した隔離FFmpeg 8.1.2 SDKでの厳格build／実libavcodec／libswresample／libavformat CTest: 47/47成功。実AAC packet encoder、実libavformat Port、実AAC descriptor→実MOV header結合testはASan／UBSan＋leak検出とGCC TSanで各10回反復成功し、packet encoderと結合testは通常構成でも各100回反復成功
 - common batch submissionのcoordinator／finalization／pipeline／両sinkとvideo workerの失敗境界6 targetはASan／UBSan／leak検出で6/6成功、GCC TSanをASLR無効化下で各10回成功。pipelineの決定的Abort競合testは通常構成で100回、両sinkの競合testは各50回成功
 - full media graph callback Abort、audio worker、video workerの3 targetは通常構成で各100回反復成功。callback起点とpeer workerの向きをaudio→video／video→audioの両方向で検証。Start／Abort publicationを含むrecording-session競合群は20回反復成功
+- audio／video pipeline-session targetは通常構成で各200回、ASan／UBSan＋leak検出で各30回反復成功。Start rollback、routing／RequestStop／Join中のAbort winner、通常Joinとcleanup間の物理Abort ownership、video SenderLost／Failed時のFaulted抑止、capture Abort exactly onceを検証。GCC TSanはfixtureの共有order raceを除去後も、この環境の`unexpected memory mapping`でprocess開始前に停止したため、この2 targetのTSan成功は主張しない
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを116 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 88.53%（3480/3931）／branch 75.32%（2136/2836）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを116 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 直前checkpointではline 88.53%（3480/3931）／branch 75.32%（2136/2836）で設計thresholdどおり非0終了。今回のpipeline lifecycle変更後は再採取していない
 
 CMake／CTestは現在のnative graphに対して再実行済みです。FFmpeg source archiveのSHA-256、完全header／shared-library version、runtime versionを固定したLinux GCCでの成功証拠です。Windows MSVC workflowはrepositoryにありますが、この報告ではproduction FFmpeg SDK、event-driven WASAPI source、またはWindows実行成功を主張しません。
 
@@ -134,14 +135,14 @@ CMake／CTestは現在のnative graphに対して再実行済みです。FFmpeg 
 - desktop／microphone workerをrollback可能に開始し、timelineを同一48 kHz frame windowで読み、片側切断時だけを無音化し、skewを拒否してmixerへ固定sample数を渡すstereo capture session
 - mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering時の0 packetと実mux packet数を分離し、全早期終了前にread出力を初期化し、非連続／overflow windowとNaN／Infinity PCMをencoder前に拒否するaudio encoding pump
 - dedicated threadでaudio encoding pumpを連続実行し、graceful stopだけをflushし、Abort／encoder failureではcaptureとencoderを中断するworker
-- capture初期化後だけencodingを開始し、live routing、冪等stop、rollback、最終frame／packet統計を統合するaudio pipeline session
+- capture Start（失敗復帰を含む）、live routing、encoding RequestStop／Joinの各blocking境界でAbort winnerを再検査し、Start rollback完了と競合Joinの終了までcleanupを待ち、物理source／sink Abort ownershipと最終frame／packet統計を保つaudio pipeline session
 - 各CFR tickで最新source frameを採用し、中間frame dropと直前frame duplicateを個別集計するnative video scheduler
 - scheduled frameをvideo encoder Portへ渡し、buffering、first mux packet、runtime failure、最新／最大latencyを集計するpump
 - dedicated CFR clock threadでvideo pumpを実行し、first packet callback、graceful flush、Abort、runtime faultをMediaEventへ統合し、graceful Finish中のAbortではAbortedを優先してflush packet／latency統計とfirst-packet／fault eventをcommitしないworker
 - selected Spout senderのframe metadataだけを検証してCFR schedulerへ渡し、timeout、sender loss、Abortを分離するcapture pump
 - bounded poll timeoutでSpout pumpを専用thread実行し、timeout継続、sender loss、terminal failure、Abort/joinを管理するworker
-- capture先行開始、encoder開始失敗時rollback、capture先行停止、capture／encoder相互runtime failure時のpeer Abort、sender loss MediaEvent fault、最終video統計を統合するpipeline session
-- encoder開始rollbackでcaptureをAbort／Joinし、forced Abortでもcapture／encoding両workerをjoinしてcontrol call復帰時のthread quiescenceを保証するvideo pipeline lifetime境界
+- capture／encoding Startのrollback完了待ちとRequestStop／Joinのterminal winnerを統合し、Abort先行時はStopped／SenderLost／CaptureFailedよりAbortedを優先してFaultedを抑止し、capture Abortをexactly onceにするvideo pipeline session
+- 通常JoinとAbort cleanupのどちらかがencodingの物理cleanupを必ず所有し、両workerと競合Joinが完了するまでcontrol callを復帰させないvideo pipeline lifetime境界
 - Adapter LUID／実寸／pixel format／native handleを持つGPU surfaceの共有所有権をSpout captureからCFR outputへ伝播し、texture descriptorとframe metadataの不一致を拒否する境界
 - shared GPU surfaceをbounded timeoutでAcquireし、encoder writeの成功／失敗後に必ずReleaseし、一時timeoutを次tickへ継続、同期failureをMediaEvent faultへ変換するencoding境界
 - texture実寸の奇数辺を最大1px正規化し、cropなしのSingleFileFit配置、RGBA channel swap、NV12出力をD3D11 processor向け不変planへ変換するportable計算境界（GPU変換実体は未実装）
@@ -243,8 +244,9 @@ ctest --preset native-linux-debug-ffmpeg
 - Strict build/real-libavcodec/libswresample/libavformat CTest against an isolated FFmpeg 8.1.2 SDK reproducibly built from the same official tarball: 47/47 passed; the real AAC packet encoder, real libavformat port, and real-AAC-descriptor-to-real-MOV-header integration test each passed 10 repeated runs under ASan/UBSan with leak detection and GCC TSan, while the packet encoder and integration test also passed 100 normal repeated runs each
 - The six common-batch-submission failure-boundary targets (coordinator, finalization, pipeline, both sinks, and the video worker) passed 6/6 under ASan/UBSan with leak detection and 10 runs each under GCC TSan with ASLR disabled; the pipeline's deterministic Abort race tests also passed 100 normal runs, and both sink race tests passed 50 normal runs each
 - The full-media-graph callback-Abort target plus the audio and video worker targets each passed 100 normal repeated runs, covering both audio-to-video and video-to-audio callback/peer directions; the recording-session race suite, including Start/Abort publication, passed 20 repeated runs
+- The audio and video pipeline-session targets each passed 200 normal repeated runs and 30 ASan/UBSan runs with leak detection. They cover startup rollback, Abort winning during routing/RequestStop/Join, physical-abort ownership between normal Join and cleanup, Faulted suppression for video SenderLost/Failed races, and exactly-once capture Abort. GCC TSan still stopped before process startup with this environment's `unexpected memory mapping` after the fixture's shared-order race was removed, so no TSan-success claim is made for these two targets
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 116 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 88.53% lines (3480/3931) and 75.32% branches (2136/2836), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 116 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; at the preceding checkpoint it measured 88.53% lines (3480/3931) and 75.32% branches (2136/2836), exiting nonzero as designed. Coverage has not been recollected after this pipeline-lifecycle change
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence with the FFmpeg source-archive SHA-256, exact header/shared-library versions, and runtime version pinned. A Windows MSVC workflow is present in the repository, but this report does not claim validation of the production FFmpeg SDK, MSVC compilation of the event-driven WASAPI source, or Windows execution.
 
@@ -331,14 +333,14 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A rollback-safe stereo capture session that starts desktop/microphone workers, reads their timelines over the same 48 kHz frame window, silences only a disconnected side, rejects skew, and passes a fixed sample count into the mixer
 - An audio encoding pump that submits positioned mixed PCM windows through an encoder port, distinguishes buffered zero-packet writes from actual muxed-packet counts, initializes its read output before every early exit, and rejects noncontiguous/overflowing windows plus NaN/Infinity PCM before encoding
 - A dedicated encoding worker that flushes only on graceful stop and aborts both capture and encoding on forced abort or encoder failure
-- An audio pipeline session that starts encoding only after capture initialization and integrates live routing, idempotent stop, rollback, and final frame/packet statistics
+- An audio pipeline session that rechecks the Abort winner after blocking capture Start (including failed return), live routing, encoding RequestStop, and Join; waits for startup rollback and a concurrent Join before cleanup returns; and preserves physical source/sink-abort ownership plus final frame/packet statistics
 - A native video scheduler that selects the latest source frame at each CFR tick and separately counts discarded intermediate frames and duplicated previous outputs
 - A video encoding pump that submits scheduled frames through an encoder port and tracks buffering, first muxed packet, runtime failure, and latest/maximum latency
 - A dedicated CFR-clock worker that integrates video pumping, first-packet callbacks, graceful flush, abort, and runtime faults into media events, while making Abort dominate an in-flight graceful Finish without committing flush packet/latency statistics or first-packet/fault events
 - A capture pump that validates metadata from only the selected Spout sender, feeds the CFR scheduler, and distinguishes timeout, sender loss, and abort
 - A joined Spout capture worker that polls with a bounded timeout and manages timeout continuation, sender loss, terminal failure, and abort
-- A video pipeline session that integrates capture-first startup, rollback on encoder startup failure, capture-first shutdown, peer abort for capture/encoder runtime failures, sender-loss media faults, and final video statistics
-- A video-pipeline lifetime boundary that aborts and joins capture during encoder-start rollback and joins both capture/encoding workers on forced abort, guaranteeing thread quiescence before the control call returns
+- A video pipeline session that waits for capture/encoding-start rollback, arbitrates RequestStop/Join through one terminal winner, makes Abort outrank Stopped/SenderLost/CaptureFailed without Faulted, and requests capture Abort exactly once
+- A video-pipeline lifetime boundary in which either normal Join or Abort cleanup necessarily owns physical encoding cleanup and no control call returns before both workers and a concurrent Join are quiescent
 - A GPU-surface boundary that carries shared ownership, adapter LUID, actual dimensions, pixel format, and a native handle from Spout capture through CFR output while rejecting texture/frame metadata mismatches
 - An encoding boundary that acquires shared GPU surfaces with a bounded timeout, releases them after both successful and failed writes, continues after transient timeouts, and maps synchronization failures to media faults
 - A portable planning boundary that normalizes odd texture edges by at most one pixel and produces immutable no-crop SingleFileFit placement, RGBA channel-swap, and NV12-output instructions for a D3D11 processor (the GPU transformation implementation remains outstanding)

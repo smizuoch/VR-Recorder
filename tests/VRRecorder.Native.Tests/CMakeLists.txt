@@ -1071,6 +1071,9 @@ add_test(NAME vrrecorder_native_audio_encoding_worker
     COMMAND vrrecorder_native_audio_encoding_worker)
 add_test(NAME vrrecorder_native_audio_pipeline_session
     COMMAND vrrecorder_native_audio_pipeline_session)
+set_tests_properties(
+    vrrecorder_native_audio_pipeline_session
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_audio_media_event_adapter
     COMMAND vrrecorder_native_audio_media_event_adapter)
 add_test(NAME vrrecorder_native_video_cfr_scheduler
@@ -1123,6 +1126,9 @@ add_test(NAME vrrecorder_native_spout_capture_worker
     COMMAND vrrecorder_native_spout_capture_worker)
 add_test(NAME vrrecorder_native_video_pipeline_session
     COMMAND vrrecorder_native_video_pipeline_session)
+set_tests_properties(
+    vrrecorder_native_video_pipeline_session
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_exports
     COMMAND
         "${CMAKE_COMMAND}"

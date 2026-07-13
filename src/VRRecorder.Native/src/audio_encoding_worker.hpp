@@ -62,6 +62,7 @@ private:
     std::atomic_bool stop_requested_ = false;
     std::atomic_bool abort_requested_ = false;
     std::atomic_bool abort_cleanup_started_ = false;
+    std::atomic_bool terminal_ = false;
     std::atomic_bool finished_ = false;
 };
 

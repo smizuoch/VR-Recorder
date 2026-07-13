@@ -57,14 +57,28 @@ public:
     StereoAudioPipelineStatistics Statistics() const noexcept override;
 
 private:
+    enum class StartPhase : std::uint8_t {
+        NotStarted,
+        Starting,
+        Completed,
+    };
+
+    enum class TerminalOutcome : std::uint8_t {
+        Open,
+        AbortRequested,
+        Completed,
+    };
+
     StereoAudioCaptureSessionPort &capture_;
     StereoAudioEncodingWorker encoding_;
     std::mutex abort_join_mutex_;
-    std::atomic_bool start_attempted_ = false;
+    std::atomic<StartPhase> start_phase_ = StartPhase::NotStarted;
     std::atomic_bool capture_started_ = false;
     std::atomic_bool encoding_started_ = false;
+    std::atomic_bool join_in_progress_ = false;
     std::atomic_bool active_ = false;
-    std::atomic_bool aborted_ = false;
+    std::atomic<TerminalOutcome> terminal_outcome_ =
+        TerminalOutcome::Open;
 };
 
 }

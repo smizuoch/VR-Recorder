@@ -21,6 +21,7 @@
 - [x] graceful stopではcaptureを先に中断してからencoderをflushし、sender loss時はencoderをAbortしてfaultを通知する
 - [x] encoder／CFR clockが先に失敗した場合は待機中のcaptureをAbortして双方をjoinする
 - [x] forced Abortはcapture／encoding双方へ停止signalを送り、両workerをjoinしてから戻る
+- [x] Start rollbackと通常Joinの完了前にAbort cleanupを早期復帰させず、RequestStop／JoinとAbortを単一terminal winnerで仲裁する。SenderLost／Failedと競合したAbortはFaultedを抑止し、capture Abortとencoding物理cleanupをexactly once回収する
 - [x] Spout textureの共有所有権とdescriptorをcaptureからCFR出力へ保持し、metadata不一致を拒否する
 - [x] shared surfaceをbounded timeoutでAcquireし、encoder成功／失敗の双方でReleaseし、timeoutと同期failureを分離する
 - [x] 奇数textureを右／下へ最大1pxパディングし、整数演算のSingleFileFitで偶数contain配置とNV12処理計画を生成する
@@ -49,6 +50,7 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] On graceful stop, halt capture before flushing the encoder; on sender loss, abort encoding and report a fault
 - [x] If the encoder or CFR clock fails first, abort the waiting capture worker and join both sides
 - [x] On forced abort, signal both capture and encoding to stop and join both workers before returning
+- [x] Do not return Abort cleanup before startup rollback or a concurrent normal Join completes; arbitrate RequestStop/Join with Abort through one terminal winner, suppress Faulted when Abort races SenderLost/Failed, and reclaim capture abort plus physical encoding cleanup exactly once
 - [x] Retain shared Spout-texture ownership and its descriptor from capture through CFR output, rejecting metadata mismatches
 - [x] Acquire shared surfaces with a bounded timeout, release them after both encoder success and failure, and distinguish timeout from synchronization failure
 - [x] Pad odd textures by at most one pixel on the right/bottom and use integer SingleFileFit math to produce an even contain placement and NV12 processing plan

@@ -52,11 +52,11 @@ vrrec_status_t StereoAudioEncodingWorker::Start(
 vrrec_status_t StereoAudioEncodingWorker::RequestStop() noexcept
 {
     if (!started_.load() || abort_requested_.load() ||
-        (finished_.load() && !stop_requested_.load())) {
+        (terminal_.load() && !stop_requested_.load())) {
         return VRREC_STATUS_INVALID_STATE;
     }
 
-    if (!stop_requested_.exchange(true) && !finished_.load()) {
+    if (!stop_requested_.exchange(true) && !terminal_.load()) {
         source_.Abort();
     }
 
@@ -71,7 +71,7 @@ void StereoAudioEncodingWorker::Abort() noexcept
 
 void StereoAudioEncodingWorker::RequestAbort() noexcept
 {
-    if (!finished_.load()) {
+    if (!terminal_.load()) {
         abort_requested_.store(true);
     }
 }
@@ -109,7 +109,7 @@ std::uint64_t StereoAudioEncodingWorker::MuxedPacketCount() const noexcept
 
 bool StereoAudioEncodingWorker::IsFinished() const noexcept
 {
-    return finished_.load();
+    return terminal_.load();
 }
 
 void StereoAudioEncodingWorker::Run() noexcept
@@ -138,35 +138,35 @@ void StereoAudioEncodingWorker::Run() noexcept
                         finish.muxed_packet_count);
                     SetResult(StereoAudioEncodingWorkerResult::Stopped);
                 } else {
-                    sink_.Abort();
                     SetResult(
                         finish.failure_stage ==
                                 AudioEncoderFailureStage::Muxing
                             ? StereoAudioEncodingWorkerResult::MuxFailed
                             : StereoAudioEncodingWorkerResult::EncoderFailed);
+                    sink_.Abort();
                 }
             } else {
+                SetResult(StereoAudioEncodingWorkerResult::CaptureFailed);
                 source_.Abort();
                 sink_.Abort();
-                SetResult(StereoAudioEncodingWorkerResult::CaptureFailed);
             }
         } else if (result == StereoAudioEncodingResult::EncoderFailed) {
-            source_.Abort();
-            sink_.Abort();
             SetResult(StereoAudioEncodingWorkerResult::EncoderFailed);
-        } else if (result == StereoAudioEncodingResult::MuxFailed) {
             source_.Abort();
             sink_.Abort();
+        } else if (result == StereoAudioEncodingResult::MuxFailed) {
             SetResult(StereoAudioEncodingWorkerResult::MuxFailed);
+            source_.Abort();
+            sink_.Abort();
         } else if (result == StereoAudioEncodingResult::CaptureFailed ||
                    result == StereoAudioEncodingResult::InvalidState) {
-            source_.Abort();
-            sink_.Abort();
             SetResult(StereoAudioEncodingWorkerResult::CaptureFailed);
-        } else {
             source_.Abort();
             sink_.Abort();
+        } else {
             SetResult(StereoAudioEncodingWorkerResult::Failed);
+            source_.Abort();
+            sink_.Abort();
         }
 
         finished_.store(true);
@@ -186,8 +186,11 @@ void StereoAudioEncodingWorker::JoinThread() noexcept
 void StereoAudioEncodingWorker::SetResult(
     StereoAudioEncodingWorkerResult result) noexcept
 {
-    const std::lock_guard lock(state_mutex_);
-    result_ = result;
+    {
+        const std::lock_guard lock(state_mutex_);
+        result_ = result;
+    }
+    terminal_.store(true);
 }
 
 }

@@ -8,6 +8,7 @@
 #include <future>
 #include <iostream>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace {
@@ -23,9 +24,28 @@ namespace {
 
 using namespace vrrecorder::native;
 
+class CallOrder final {
+public:
+    void Push(int call)
+    {
+        const std::lock_guard lock(mutex_);
+        calls_.push_back(call);
+    }
+
+    bool operator==(const std::vector<int> &expected) const
+    {
+        const std::lock_guard lock(mutex_);
+        return calls_ == expected;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::vector<int> calls_;
+};
+
 class FakeCaptureWorker final : public SpoutCaptureWorkerPort {
 public:
-    explicit FakeCaptureWorker(std::vector<int> &order)
+    explicit FakeCaptureWorker(CallOrder &order)
         : order_(order)
     {
     }
@@ -34,7 +54,7 @@ public:
         std::chrono::milliseconds timeout) noexcept override
     {
         std::unique_lock lock(mutex);
-        order_.push_back(1);
+        order_.Push(1);
         last_timeout = timeout;
         ++start_calls;
         start_entered = true;
@@ -47,7 +67,7 @@ public:
 
     void Abort() noexcept override
     {
-        order_.push_back(3);
+        order_.Push(3);
         ++abort_calls;
     }
 
@@ -72,7 +92,7 @@ public:
         changed.notify_all();
     }
 
-    std::vector<int> &order_;
+    CallOrder &order_;
     vrrec_status_t start_status = VRREC_STATUS_OK;
     SpoutCaptureWorkerResult join_result = SpoutCaptureWorkerResult::Aborted;
     std::chrono::milliseconds last_timeout {0};
@@ -88,7 +108,7 @@ public:
 
 class FakeEncodingWorker final : public VideoEncodingWorkerPort {
 public:
-    explicit FakeEncodingWorker(std::vector<int> &order)
+    explicit FakeEncodingWorker(CallOrder &order)
         : order_(order)
     {
     }
@@ -96,7 +116,7 @@ public:
     vrrec_status_t Start() noexcept override
     {
         std::unique_lock lock(mutex);
-        order_.push_back(2);
+        order_.Push(2);
         ++start_calls;
         start_entered = true;
         changed.notify_all();
@@ -108,7 +128,7 @@ public:
 
     vrrec_status_t RequestStop() noexcept override
     {
-        order_.push_back(4);
+        order_.Push(4);
         ++stop_calls;
         return stop_status;
     }
@@ -127,7 +147,7 @@ public:
 
     void Abort() noexcept override
     {
-        order_.push_back(5);
+        order_.Push(5);
         ++abort_calls;
     }
 
@@ -157,7 +177,7 @@ public:
         changed.notify_all();
     }
 
-    std::vector<int> &order_;
+    CallOrder &order_;
     vrrec_status_t start_status = VRREC_STATUS_OK;
     vrrec_status_t stop_status = VRREC_STATUS_OK;
     VideoEncodingWorkerResult join_result = VideoEncodingWorkerResult::Stopped;
@@ -178,6 +198,228 @@ public:
     bool block_start = false;
     bool start_entered = false;
     bool release_start = false;
+};
+
+class CoordinatedCaptureWorker final : public SpoutCaptureWorkerPort {
+public:
+    vrrec_status_t Start(
+        std::chrono::milliseconds timeout) noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        last_timeout_ = timeout;
+        ++start_calls_;
+        return start_status;
+    }
+
+    void Abort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            ++abort_calls_;
+            if (abort_releases_join) {
+                release_join_ = true;
+            }
+        }
+        changed_.notify_all();
+    }
+
+    SpoutCaptureWorkerResult Join() noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        ++join_entries_;
+        changed_.notify_all();
+        if (block_join) {
+            changed_.wait(lock, [this] { return release_join_; });
+        }
+        ++join_calls_;
+        return join_result;
+    }
+
+    void WaitForJoinEntries(std::size_t count)
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this, count] {
+            return join_entries_ >= count;
+        });
+    }
+
+    void ReleaseJoin()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_join_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    std::size_t AbortCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return abort_calls_;
+    }
+
+    std::size_t JoinCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return join_calls_;
+    }
+
+    vrrec_status_t start_status = VRREC_STATUS_OK;
+    SpoutCaptureWorkerResult join_result =
+        SpoutCaptureWorkerResult::Aborted;
+    bool block_join = false;
+    bool abort_releases_join = false;
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::chrono::milliseconds last_timeout_ {0};
+    std::size_t start_calls_ = 0;
+    std::size_t abort_calls_ = 0;
+    std::size_t join_entries_ = 0;
+    std::size_t join_calls_ = 0;
+    bool release_join_ = false;
+};
+
+class CoordinatedEncodingWorker final : public VideoEncodingWorkerPort {
+public:
+    vrrec_status_t Start() noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        ++start_calls_;
+        return start_status;
+    }
+
+    vrrec_status_t RequestStop() noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        ++stop_calls_;
+        stop_entered_ = true;
+        changed_.notify_all();
+        if (block_stop) {
+            changed_.wait(lock, [this] { return release_stop_; });
+        }
+        return stop_status;
+    }
+
+    void RequestAbort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            ++request_abort_calls_;
+            if (request_abort_releases_join) {
+                release_join_ = true;
+            }
+        }
+        changed_.notify_all();
+    }
+
+    void JoinAfterAbort() noexcept override
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            ++join_after_abort_calls_;
+            if (cleanup_releases_join) {
+                release_join_ = true;
+            }
+        }
+        changed_.notify_all();
+        static_cast<void>(Join());
+    }
+
+    void Abort() noexcept override
+    {
+        RequestAbort();
+        JoinAfterAbort();
+    }
+
+    VideoEncodingWorkerResult Join() noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        ++join_entries_;
+        changed_.notify_all();
+        if (block_join) {
+            changed_.wait(lock, [this] { return release_join_; });
+        }
+        ++join_calls_;
+        return join_result;
+    }
+
+    VideoEncodingStatistics Statistics() const noexcept override
+    {
+        return {
+            {0, 0, 0, 0},
+            0,
+            0,
+            0,
+        };
+    }
+
+    void WaitForStop()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return stop_entered_; });
+    }
+
+    void WaitForJoinEntries(std::size_t count)
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this, count] {
+            return join_entries_ >= count;
+        });
+    }
+
+    void ReleaseStop()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_stop_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    void ReleaseJoin()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_join_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    std::size_t RequestAbortCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return request_abort_calls_;
+    }
+
+    std::size_t JoinAfterAbortCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return join_after_abort_calls_;
+    }
+
+    vrrec_status_t start_status = VRREC_STATUS_OK;
+    vrrec_status_t stop_status = VRREC_STATUS_OK;
+    VideoEncodingWorkerResult join_result =
+        VideoEncodingWorkerResult::Aborted;
+    bool block_stop = false;
+    bool block_join = false;
+    bool cleanup_releases_join = false;
+    bool request_abort_releases_join = false;
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::size_t start_calls_ = 0;
+    std::size_t stop_calls_ = 0;
+    std::size_t request_abort_calls_ = 0;
+    std::size_t join_after_abort_calls_ = 0;
+    std::size_t join_entries_ = 0;
+    std::size_t join_calls_ = 0;
+    bool stop_entered_ = false;
+    bool release_stop_ = false;
+    bool release_join_ = false;
 };
 
 class RecordingEvents final : public MediaEventSink {
@@ -213,7 +455,7 @@ public:
 
 void StartsCaptureBeforeEncodingAndStopsInSafeOrder()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     FakeEncodingWorker encoding(order);
     RecordingEvents events;
@@ -241,7 +483,7 @@ void StartsCaptureBeforeEncodingAndStopsInSafeOrder()
 
 void RollsBackCaptureWhenEncodingCannotStart()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     FakeEncodingWorker encoding(order);
     encoding.start_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
@@ -258,7 +500,7 @@ void RollsBackCaptureWhenEncodingCannotStart()
 
 void SenderLossAbortsEncodingAndRaisesMediaFault()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     capture.join_result = SpoutCaptureWorkerResult::SenderLost;
     FakeEncodingWorker encoding(order);
@@ -275,7 +517,7 @@ void SenderLossAbortsEncodingAndRaisesMediaFault()
 
 void EncoderFailureAbortsCapture()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     FakeEncodingWorker encoding(order);
     encoding.join_result = VideoEncodingWorkerResult::EncoderFailed;
@@ -291,7 +533,7 @@ void EncoderFailureAbortsCapture()
 
 void AbortDoesNotReturnUntilBothWorkersAreJoined()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     FakeEncodingWorker encoding(order);
     encoding.join_result = VideoEncodingWorkerResult::Aborted;
@@ -309,7 +551,7 @@ void AbortDoesNotReturnUntilBothWorkersAreJoined()
 
 void StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     FakeEncodingWorker encoding(order);
     encoding.stop_status = VRREC_STATUS_INTERNAL_ERROR;
@@ -329,7 +571,7 @@ void StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked()
 
 void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     capture.block_start = true;
     FakeEncodingWorker encoding(order);
@@ -340,10 +582,14 @@ void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
         return session.Start(std::chrono::milliseconds(100));
     });
     capture.WaitForStart();
-    session.Abort();
+    session.RequestAbort();
+    auto aborting = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
     capture.ReleaseStart();
 
     CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    aborting.get();
     CHECK(capture.abort_calls == 1);
     CHECK(capture.join_calls == 1);
     CHECK(encoding.start_calls == 0);
@@ -352,7 +598,7 @@ void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
 
 void AbortDuringEncodingStartRollsBackBothWorkers()
 {
-    std::vector<int> order;
+    CallOrder order;
     FakeCaptureWorker capture(order);
     FakeEncodingWorker encoding(order);
     encoding.block_start = true;
@@ -363,20 +609,289 @@ void AbortDuringEncodingStartRollsBackBothWorkers()
         return session.Start(std::chrono::milliseconds(100));
     });
     encoding.WaitForStart();
-    session.Abort();
+    session.RequestAbort();
+    auto aborting = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
     encoding.ReleaseStart();
 
     CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    aborting.get();
     CHECK(capture.abort_calls == 1);
     CHECK(capture.join_calls == 1);
     CHECK(encoding.abort_calls == 1);
     CHECK(encoding.join_calls == 1);
 }
 
+void AbortCleanupWaitsForCaptureStartRollback()
+{
+    CallOrder order;
+    FakeCaptureWorker capture(order);
+    capture.block_start = true;
+    FakeEncodingWorker encoding(order);
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(std::chrono::milliseconds(100));
+    });
+    capture.WaitForStart();
+    session.RequestAbort();
+
+    std::promise<void> cleanup_invoking;
+    auto cleanup_invoked = cleanup_invoking.get_future();
+    auto cleanup = std::async(std::launch::async, [&] {
+        cleanup_invoking.set_value();
+        session.JoinAfterAbort();
+    });
+    cleanup_invoked.wait();
+    const auto cleanup_returned_before_start =
+        cleanup.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
+
+    capture.ReleaseStart();
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    cleanup.get();
+
+    CHECK(!cleanup_returned_before_start);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
+    CHECK(encoding.start_calls == 0);
+    CHECK(events.fault_calls == 0);
 }
 
-int main()
+void AbortCleanupWaitsForEncodingStartRollback()
 {
+    CallOrder order;
+    FakeCaptureWorker capture(order);
+    FakeEncodingWorker encoding(order);
+    encoding.block_start = true;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(std::chrono::milliseconds(100));
+    });
+    encoding.WaitForStart();
+    session.RequestAbort();
+
+    std::promise<void> cleanup_invoking;
+    auto cleanup_invoked = cleanup_invoking.get_future();
+    auto cleanup = std::async(std::launch::async, [&] {
+        cleanup_invoking.set_value();
+        session.JoinAfterAbort();
+    });
+    cleanup_invoked.wait();
+    const auto cleanup_returned_before_start =
+        cleanup.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
+
+    encoding.ReleaseStart();
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    cleanup.get();
+
+    CHECK(!cleanup_returned_before_start);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
+    CHECK(encoding.abort_calls == 1);
+    CHECK(encoding.join_calls == 1);
+    CHECK(events.fault_calls == 0);
+}
+
+void AbortWinsAgainstAnInFlightEncodingStopRequest()
+{
+    CoordinatedCaptureWorker capture;
+    CoordinatedEncodingWorker encoding;
+    encoding.block_stop = true;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+    CHECK(session.Start(std::chrono::milliseconds(100)) ==
+          VRREC_STATUS_OK);
+
+    auto stopping = std::async(std::launch::async, [&] {
+        return session.RequestStop();
+    });
+    encoding.WaitForStop();
+    session.RequestAbort();
+    auto cleanup = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
+
+    encoding.ReleaseStop();
+    const auto stop_status = stopping.get();
+    cleanup.get();
+
+    CHECK(stop_status == VRREC_STATUS_INVALID_STATE);
+    CHECK(encoding.RequestAbortCalls() >= 1);
+    CHECK(events.fault_calls == 0);
+}
+
+void AbortWinsAgainstAnInFlightEncodingJoin()
+{
+    CoordinatedCaptureWorker capture;
+    CoordinatedEncodingWorker encoding;
+    encoding.block_join = true;
+    encoding.cleanup_releases_join = true;
+    encoding.join_result = VideoEncodingWorkerResult::Stopped;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+    CHECK(session.Start(std::chrono::milliseconds(100)) ==
+          VRREC_STATUS_OK);
+    CHECK(session.RequestStop() == VRREC_STATUS_OK);
+
+    auto joining = std::async(std::launch::async, [&] {
+        return session.Join();
+    });
+    encoding.WaitForJoinEntries(1);
+    session.RequestAbort();
+    auto cleanup = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
+
+    const auto result = joining.get();
+    cleanup.get();
+
+    CHECK(result == VideoPipelineResult::Aborted);
+    CHECK(capture.AbortCalls() == 1);
+    CHECK(encoding.JoinAfterAbortCalls() == 1);
+    CHECK(events.fault_calls == 0);
+}
+
+void JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort()
+{
+    CoordinatedCaptureWorker capture;
+    capture.block_join = true;
+    capture.abort_releases_join = true;
+    CoordinatedEncodingWorker encoding;
+    encoding.block_join = true;
+    encoding.request_abort_releases_join = true;
+    encoding.join_result = VideoEncodingWorkerResult::Aborted;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+    CHECK(session.Start(std::chrono::milliseconds(100)) ==
+          VRREC_STATUS_OK);
+
+    auto joining = std::async(std::launch::async, [&] {
+        return session.Join();
+    });
+    capture.WaitForJoinEntries(1);
+    encoding.WaitForJoinEntries(1);
+    session.RequestAbort();
+
+    CHECK(joining.get() == VideoPipelineResult::Aborted);
+    session.JoinAfterAbort();
+    CHECK(capture.AbortCalls() == 1);
+    CHECK(encoding.JoinAfterAbortCalls() == 1);
+    CHECK(events.fault_calls == 0);
+}
+
+struct CaptureJoinAbortObservation {
+    VideoPipelineResult result;
+    std::size_t fault_calls;
+    std::size_t capture_abort_calls;
+    std::size_t capture_join_calls;
+};
+
+CaptureJoinAbortObservation ObserveAbortDuringCaptureJoin(
+    SpoutCaptureWorkerResult capture_result)
+{
+    CoordinatedCaptureWorker capture;
+    capture.block_join = true;
+    capture.join_result = capture_result;
+    CoordinatedEncodingWorker encoding;
+    encoding.join_result = VideoEncodingWorkerResult::Aborted;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+    CHECK(session.Start(std::chrono::milliseconds(100)) ==
+          VRREC_STATUS_OK);
+
+    auto joining = std::async(std::launch::async, [&] {
+        return session.Join();
+    });
+    capture.WaitForJoinEntries(1);
+    session.RequestAbort();
+    auto cleanup = std::async(std::launch::async, [&] {
+        session.JoinAfterAbort();
+    });
+
+    capture.ReleaseJoin();
+    const auto result = joining.get();
+    cleanup.get();
+
+    return {
+        result,
+        events.fault_calls,
+        capture.AbortCalls(),
+        capture.JoinCalls(),
+    };
+}
+
+void AbortWinsAgainstSenderLossFromAnInFlightCaptureJoin()
+{
+    const auto observed = ObserveAbortDuringCaptureJoin(
+        SpoutCaptureWorkerResult::SenderLost);
+    CHECK(observed.result == VideoPipelineResult::Aborted);
+    CHECK(observed.capture_abort_calls == 1);
+    CHECK(observed.capture_join_calls >= 1);
+}
+
+void AbortSuppressesSenderLossFaultFromAnInFlightCaptureJoin()
+{
+    const auto observed = ObserveAbortDuringCaptureJoin(
+        SpoutCaptureWorkerResult::SenderLost);
+    CHECK(observed.fault_calls == 0);
+}
+
+void AbortWinsAgainstFailureFromAnInFlightCaptureJoin()
+{
+    const auto observed = ObserveAbortDuringCaptureJoin(
+        SpoutCaptureWorkerResult::Failed);
+    CHECK(observed.result == VideoPipelineResult::Aborted);
+    CHECK(observed.capture_abort_calls == 1);
+    CHECK(observed.capture_join_calls >= 1);
+}
+
+void AbortSuppressesCaptureFailureFaultFromAnInFlightCaptureJoin()
+{
+    const auto observed = ObserveAbortDuringCaptureJoin(
+        SpoutCaptureWorkerResult::Failed);
+    CHECK(observed.fault_calls == 0);
+}
+
+bool RunRequestedTest(const std::string &name)
+{
+    if (name == "capture-start") {
+        AbortCleanupWaitsForCaptureStartRollback();
+    } else if (name == "encoding-start") {
+        AbortCleanupWaitsForEncodingStartRollback();
+    } else if (name == "request-stop") {
+        AbortWinsAgainstAnInFlightEncodingStopRequest();
+    } else if (name == "encoding-join") {
+        AbortWinsAgainstAnInFlightEncodingJoin();
+    } else if (name == "join-owned-cleanup") {
+        JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort();
+    } else if (name == "sender-loss-result") {
+        AbortWinsAgainstSenderLossFromAnInFlightCaptureJoin();
+    } else if (name == "sender-loss-fault") {
+        AbortSuppressesSenderLossFaultFromAnInFlightCaptureJoin();
+    } else if (name == "capture-failure-result") {
+        AbortWinsAgainstFailureFromAnInFlightCaptureJoin();
+    } else if (name == "capture-failure-fault") {
+        AbortSuppressesCaptureFailureFaultFromAnInFlightCaptureJoin();
+    } else {
+        return false;
+    }
+    return true;
+}
+
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 2) {
+        return RunRequestedTest(argv[1]) ? 0 : 2;
+    }
+
     StartsCaptureBeforeEncodingAndStopsInSafeOrder();
     RollsBackCaptureWhenEncodingCannotStart();
     SenderLossAbortsEncodingAndRaisesMediaFault();
@@ -385,5 +900,14 @@ int main()
     StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked();
     AbortDuringCaptureStartRollsBackWithoutStartingEncoding();
     AbortDuringEncodingStartRollsBackBothWorkers();
+    AbortCleanupWaitsForCaptureStartRollback();
+    AbortCleanupWaitsForEncodingStartRollback();
+    AbortWinsAgainstAnInFlightEncodingStopRequest();
+    AbortWinsAgainstAnInFlightEncodingJoin();
+    JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort();
+    AbortWinsAgainstSenderLossFromAnInFlightCaptureJoin();
+    AbortSuppressesSenderLossFaultFromAnInFlightCaptureJoin();
+    AbortWinsAgainstFailureFromAnInFlightCaptureJoin();
+    AbortSuppressesCaptureFailureFaultFromAnInFlightCaptureJoin();
     return 0;
 }
