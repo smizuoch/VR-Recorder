@@ -22,7 +22,12 @@ Mp4MuxResult SharedMuxFinalizationSession::Submit(
         (packet.stream == MediaStreamKind::Audio && audio_finished_)) {
         return Mp4MuxResult::InvalidState;
     }
-    return mux_.Submit(packet);
+    const auto result = mux_.Submit(packet);
+    if (result == Mp4MuxResult::MuxFailed ||
+        result == Mp4MuxResult::InvalidState) {
+        terminal_ = true;
+    }
+    return result;
 }
 
 vrrec_status_t SharedMuxFinalizationSession::EncoderFinished(
