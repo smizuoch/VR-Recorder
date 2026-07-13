@@ -72,7 +72,7 @@ public:
     {
         order_.push_back(4);
         ++stop_calls;
-        return VRREC_STATUS_OK;
+        return stop_status;
     }
 
     void Abort() noexcept override
@@ -94,6 +94,7 @@ public:
 
     std::vector<int> &order_;
     vrrec_status_t start_status = VRREC_STATUS_OK;
+    vrrec_status_t stop_status = VRREC_STATUS_OK;
     VideoEncodingWorkerResult join_result = VideoEncodingWorkerResult::Stopped;
     VideoEncodingStatistics statistics {
         {10, 8, 2, 1},
@@ -233,6 +234,26 @@ void AbortDoesNotReturnUntilBothWorkersAreJoined()
     CHECK(encoding.join_calls == 1);
 }
 
+void StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked()
+{
+    std::vector<int> order;
+    FakeCaptureWorker capture(order);
+    FakeEncodingWorker encoding(order);
+    encoding.stop_status = VRREC_STATUS_INTERNAL_ERROR;
+    encoding.join_result = VideoEncodingWorkerResult::Aborted;
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    CHECK(session.Start(std::chrono::milliseconds(100)) == VRREC_STATUS_OK);
+    CHECK(session.RequestStop() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.abort_calls == 1);
+    CHECK(encoding.abort_calls == 1);
+    CHECK(capture.join_calls == 1);
+    CHECK(encoding.join_calls == 1);
+    CHECK(session.Join() == VideoPipelineResult::InvalidState);
+}
+
 }
 
 int main()
@@ -242,5 +263,6 @@ int main()
     SenderLossAbortsEncodingAndRaisesMediaFault();
     EncoderFailureAbortsCapture();
     AbortDoesNotReturnUntilBothWorkersAreJoined();
+    StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked();
     return 0;
 }
