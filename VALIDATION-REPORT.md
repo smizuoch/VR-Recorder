@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.38%（2803/3283）／branch 69.82%（1608/2303）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.93%（2851/3318）／branch 71.49%（1665/2329）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -61,7 +61,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 | Infrastructure.Storage | 85.16% | 70.86% |
 | Presentation.Wrist | 73.75% | 63.15% |
 
-全体および各主要assemblyのline／branch 90%ゲートは未達です。mutation score 75%、native line／branch coverage 90%、Windows UI Automation、hardware-in-the-loopも未測定です。
+全体および各主要assemblyのline／branch 90%ゲートは未達です。native coverageは測定済みですがline／branchとも90%未達です。mutation score 75%、Windows UI Automation、hardware-in-the-loopは未測定です。
 
 ### このcheckpointで検証済みの主な境界
 
@@ -196,7 +196,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.38% lines (2803/3283) and 69.82% branches (1608/2303), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.93% lines (2851/3318) and 71.49% branches (1665/2329), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -217,7 +217,7 @@ Following design section 18.5, Cobertura coverage was collected by running only 
 | Infrastructure.Storage | 85.16% | 70.86% |
 | Presentation.Wrist | 73.75% | 63.15% |
 
-The 90% line and branch gates, both overall and per major assembly, are not met. The 75% mutation score, 90% native line and branch coverage, Windows UI Automation, and hardware-in-the-loop gates have not been measured.
+The 90% line and branch gates, both overall and per major assembly, are not met. Native coverage has been measured but remains below 90% for both lines and branches. The 75% mutation score, Windows UI Automation, and hardware-in-the-loop gates have not been measured.
 
 ### Main boundaries validated at this checkpoint
 
