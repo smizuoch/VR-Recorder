@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.93%（2851/3318）／branch 71.49%（1665/2329）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 85.96%（2853/3319）／branch 71.53%（1666/2329）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -66,6 +66,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 ### このcheckpointで検証済みの主な境界
 
 - 録画状態遷移、countdown／auto-stop、signal監視、容量低下停止、同一file確定
+- 停止要求のないvideo CFR clock abortを障害として通知し、encoder sinkを確実にabortする資源解放境界
 - CameraLease所有権、部分取得rollback、stale leaseのowned Streaming復旧
 - OSCQuery target解決、UDP write確認、SteamVR Input Action ABI
 - SingleFileFit contain計算とruntime layout更新、native最終statistics取得
@@ -196,7 +197,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.93% lines (2851/3318) and 71.49% branches (1665/2329), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 85.96% lines (2853/3319) and 71.53% branches (1666/2329), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -222,6 +223,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 ### Main boundaries validated at this checkpoint
 
 - Recording state transitions, countdown/auto-stop, signal supervision, low-space stop, and same-file finalization
+- Resource release when the video CFR clock aborts without a stop request: report the fault and reliably abort the encoder sink
 - CameraLease ownership, partial-acquisition rollback, and owned Streaming recovery from stale leases
 - OSCQuery target resolution, confirmed UDP writes, and the SteamVR Input Action ABI
 - SingleFileFit contain calculation, runtime layout updates, and final native statistics retrieval
