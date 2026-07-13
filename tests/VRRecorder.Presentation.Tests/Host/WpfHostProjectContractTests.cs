@@ -677,6 +677,8 @@ public sealed class WpfHostProjectContractTests
             appCode);
         Assert.Contains("WindowsMicrophonePrivacyAccess", appCode);
         Assert.Contains("WindowsAudioEndpointCatalog", appCode);
+        Assert.Contains("EncoderSelfTestFirstRunSetupProbe", appCode);
+        Assert.Contains("TransientEncoderProbe", appCode);
         Assert.Contains("OscQueryVrChatInstanceDiscovery", appCode);
         Assert.Contains("WindowsDnsSdOscQueryServiceBrowser", appCode);
         Assert.Contains("_setupOscHttp.Dispose()", appCode);
