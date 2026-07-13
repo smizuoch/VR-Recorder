@@ -99,17 +99,22 @@ public partial class App
             ConnectTimeout = TimeSpan.FromSeconds(2),
             UseProxy = false,
         });
+        var setupOscDiscovery = new OscQueryVrChatInstanceDiscovery(
+            new WindowsDnsSdOscQueryServiceBrowser(),
+            _setupOscHttp,
+            TimeSpan.FromSeconds(3));
         var setupProbe = new FirstRunSetupProbeRouter(
             new Dictionary<FirstRunSetupStep, IFirstRunSetupProbe>
             {
                 [FirstRunSetupStep.SteamVrDetection] =
                     new WindowsSteamVrInstallationProbe(),
                 [FirstRunSetupStep.VrChatOscDetection] =
-                    new VrChatOscFirstRunSetupProbe(
-                        new OscQueryVrChatInstanceDiscovery(
-                            new WindowsDnsSdOscQueryServiceBrowser(),
-                            _setupOscHttp,
-                            TimeSpan.FromSeconds(3))),
+                    new VrChatOscFirstRunSetupProbe(setupOscDiscovery),
+                [FirstRunSetupStep.CameraOscEndpoint] =
+                    new CameraOscEndpointFirstRunSetupProbe(
+                        setupOscDiscovery,
+                        new ConfirmedUdpVrChatCameraGatewayFactory(
+                            _setupOscHttp)),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
