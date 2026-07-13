@@ -147,6 +147,9 @@ public partial class App
                 [FirstRunSetupStep.OfflineLegalAccess] =
                     new OfflineLegalAccessFirstRunSetupProbe(
                         legalCatalogReader),
+                [FirstRunSetupStep.DesignAssetConformance] =
+                    new DesignAssetConformanceFirstRunSetupProbe(
+                        legalCatalogReader),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
