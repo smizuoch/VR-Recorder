@@ -51,7 +51,8 @@ vrrec_status_t VideoEncodingWorker::Start() noexcept
 
 vrrec_status_t VideoEncodingWorker::RequestStop() noexcept
 {
-    if (!started_.load() || abort_requested_.load()) {
+    if (!started_.load() || abort_requested_.load() ||
+        (finished_.load() && !stop_requested_.load())) {
         return VRREC_STATUS_INVALID_STATE;
     }
 
