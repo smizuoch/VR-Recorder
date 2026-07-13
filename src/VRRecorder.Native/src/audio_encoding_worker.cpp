@@ -143,6 +143,7 @@ void StereoAudioEncodingWorker::Run() noexcept
             sink_.Abort();
             SetResult(StereoAudioEncodingWorkerResult::CaptureFailed);
         } else {
+            source_.Abort();
             sink_.Abort();
             SetResult(StereoAudioEncodingWorkerResult::Failed);
         }
