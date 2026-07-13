@@ -444,6 +444,38 @@ void RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics()
     CHECK(normalized.interleaved_samples.empty());
 }
 
+void RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits()
+{
+    const std::vector<std::int32_t> malformed {1};
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::PcmSignedInteger,
+        32,
+        24,
+        4,
+        0x0000'0004,
+    };
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(10'000'000);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  0,
+                  10'000'000,
+                  1,
+                  std::as_bytes(std::span<const std::int32_t>(malformed)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::InvalidPacket);
+    CHECK(normalized.frame_count_48k == 0);
+    CHECK(normalized.interleaved_samples.empty());
+}
+
 }
 
 int main()
@@ -457,5 +489,6 @@ int main()
     ConvertsPcm24StoredInA32BitContainer();
     RetainsThePacketAfterADevicePositionDiscontinuity();
     RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics();
+    RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits();
     return 0;
 }
