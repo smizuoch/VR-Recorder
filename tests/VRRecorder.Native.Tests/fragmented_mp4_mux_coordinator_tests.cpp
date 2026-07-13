@@ -63,6 +63,17 @@ public:
     std::size_t abort_calls = 0;
 };
 
+class FailingPacketObserver final : public EncodedMediaPacketObserver {
+public:
+    vrrec_status_t Observe(const EncodedMediaPacket &) noexcept override
+    {
+        ++observe_calls;
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+
+    std::size_t observe_calls = 0;
+};
+
 EncodedMediaPacket Video(
     std::int64_t timestamp_microseconds,
     bool key_frame = false)
@@ -158,6 +169,20 @@ void AbortNeverWritesATrailerAndIsIdempotent()
     CHECK(muxer.abort_calls == 1);
 }
 
+void ObserverFailureAbortsTheIncompleteFile()
+{
+    RecordingMuxer muxer;
+    FailingPacketObserver observer;
+    FragmentedMp4MuxCoordinator coordinator(muxer, &observer);
+
+    CHECK(coordinator.Submit(Video(0, true)) == Mp4MuxResult::MuxFailed);
+    CHECK(observer.observe_calls == 1);
+    CHECK(muxer.packets.size() == 1);
+    CHECK(muxer.abort_calls == 1);
+    CHECK(coordinator.Finish() == VRREC_STATUS_INVALID_STATE);
+    CHECK(coordinator.Submit(Audio(0)) == Mp4MuxResult::InvalidState);
+}
+
 }
 
 int main()
@@ -168,5 +193,6 @@ int main()
     RejectsNonMonotonicDtsPerStream();
     FinalizesFragmentTrailerAndFileInOrder();
     AbortNeverWritesATrailerAndIsIdempotent();
+    ObserverFailureAbortsTheIncompleteFile();
     return 0;
 }
