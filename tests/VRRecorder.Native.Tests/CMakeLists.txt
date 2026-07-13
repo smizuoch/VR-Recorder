@@ -1042,6 +1042,9 @@ add_test(NAME vrrecorder_native_media_recording_pipeline
     COMMAND vrrecorder_native_media_recording_pipeline)
 add_test(NAME vrrecorder_native_pipeline_media_backend
     COMMAND vrrecorder_native_pipeline_media_backend)
+set_tests_properties(
+    vrrecorder_native_pipeline_media_backend
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_full_media_graph_abort
     COMMAND vrrecorder_native_full_media_graph_abort)
 set_tests_properties(

@@ -6,9 +6,11 @@
 #include <cstdlib>
 #include <future>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -18,9 +20,27 @@ using namespace vrrecorder::native;
 
 class FakeRecordingPipeline final : public MediaRecordingPipelinePort {
 public:
-    vrrec_status_t Start() noexcept override { ++start_calls; return start_status; }
+    vrrec_status_t Start() noexcept override {
+        std::unique_lock lock(mutex);
+        ++start_calls;
+        start_entered = true;
+        changed.notify_all();
+        if (block_start) {
+            changed.wait(lock, [this] { return allow_start; });
+        }
+        return start_status;
+    }
     vrrec_status_t UpdateAudioRouting(vrrec_audio_routing_t routing) noexcept override { observed_routing = routing; ++routing_calls; return routing_status; }
-    vrrec_status_t RequestStop() noexcept override { ++stop_calls; return stop_status; }
+    vrrec_status_t RequestStop() noexcept override {
+        std::unique_lock lock(mutex);
+        ++stop_calls;
+        stop_entered = true;
+        changed.notify_all();
+        if (block_stop) {
+            changed.wait(lock, [this] { return allow_stop; });
+        }
+        return stop_status;
+    }
     void RequestAbort() noexcept override {
         {
             const std::lock_guard lock(mutex);
@@ -59,9 +79,13 @@ public:
     }
     MediaRecordingPipelineStatistics Statistics() const noexcept override { return statistics; }
     void WaitForJoin() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return join_entered; }); }
+    void WaitForStart() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return start_entered; }); }
+    void WaitForStop() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return stop_entered; }); }
     void WaitForJoinAbort() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return join_abort_completed; }); }
     void WaitForAbort() { std::unique_lock lock(mutex); changed.wait(lock, [this] { return abort_entered; }); }
     void ReleaseJoin() { { const std::lock_guard lock(mutex); allow_join = true; } changed.notify_all(); }
+    void ReleaseStart() { { const std::lock_guard lock(mutex); allow_start = true; } changed.notify_all(); }
+    void ReleaseStop() { { const std::lock_guard lock(mutex); allow_stop = true; } changed.notify_all(); }
     void ReleaseAbort() { { const std::lock_guard lock(mutex); allow_abort = true; } changed.notify_all(); }
     mutable std::mutex mutex;
     std::condition_variable changed;
@@ -78,7 +102,13 @@ public:
     std::size_t abort_calls = 0;
     std::size_t join_calls = 0;
     bool join_entered = false;
+    bool start_entered = false;
+    bool stop_entered = false;
     bool allow_join = false;
+    bool allow_start = false;
+    bool allow_stop = false;
+    bool block_start = false;
+    bool block_stop = false;
     bool aborted = false;
     bool abort_requested = false;
     bool abort_entered = false;
@@ -96,6 +126,112 @@ public:
     vrrec_video_layout_v1 observed {};
     vrrec_status_t status = VRREC_STATUS_OK;
     std::size_t calls = 0;
+};
+
+class ScriptedThreadFactory final : public PipelineMediaThreadFactoryPort {
+public:
+    explicit ScriptedThreadFactory(std::vector<vrrec_status_t> statuses)
+        : statuses_(std::move(statuses))
+    {
+    }
+
+    vrrec_status_t Start(
+        std::thread &thread,
+        PipelineMediaThreadEntry entry,
+        void *context) noexcept override
+    {
+        const auto status = call_count < statuses_.size()
+            ? statuses_[call_count]
+            : VRREC_STATUS_OK;
+        ++call_count;
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+
+        try {
+            thread = std::thread(entry, context);
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+
+    std::size_t call_count = 0;
+
+private:
+    std::vector<vrrec_status_t> statuses_;
+};
+
+class EmptySuccessThreadFactory final
+    : public PipelineMediaThreadFactoryPort {
+public:
+    vrrec_status_t Start(
+        std::thread &,
+        PipelineMediaThreadEntry,
+        void *) noexcept override
+    {
+        ++call_count;
+        return VRREC_STATUS_OK;
+    }
+
+    std::size_t call_count = 0;
+};
+
+class BlockingStopFailureThreadFactory final
+    : public PipelineMediaThreadFactoryPort {
+public:
+    vrrec_status_t Start(
+        std::thread &thread,
+        PipelineMediaThreadEntry entry,
+        void *context) noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        const auto call = call_count_++;
+        if (call == 1) {
+            stop_launch_entered_ = true;
+            changed_.notify_all();
+            changed_.wait(lock, [this] { return release_stop_launch_; });
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        }
+        lock.unlock();
+
+        try {
+            thread = std::thread(entry, context);
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+
+    void WaitForStopLaunch()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return stop_launch_entered_; });
+    }
+
+    void ReleaseStopLaunch()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_stop_launch_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    std::size_t CallCount() const
+    {
+        const std::lock_guard lock(mutex_);
+        return call_count_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::size_t call_count_ = 0;
+    bool stop_launch_entered_ = false;
+    bool release_stop_launch_ = false;
 };
 
 vrrec_video_layout_v1 Layout()
@@ -234,6 +370,278 @@ void ExternalAbortJoinWaitsForTheSharedCleanupCompletion()
     CHECK(pipeline.abort_calls == 1);
 }
 
+void CleanupWorkerCreationFailurePreventsPipelineStart()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    ScriptedThreadFactory threads({VRREC_STATUS_OUT_OF_MEMORY});
+    PipelineMediaBackend backend(pipeline, layout, threads);
+
+    CHECK(backend.Start() == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(threads.call_count == 1);
+    CHECK(pipeline.start_calls == 0);
+}
+
+void CleanupWorkerFailureFallsBackToExactlyOneSynchronousCleanup()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    ScriptedThreadFactory threads({VRREC_STATUS_OUT_OF_MEMORY});
+    {
+        PipelineMediaBackend backend(pipeline, layout, threads);
+        CHECK(backend.Start() == VRREC_STATUS_OUT_OF_MEMORY);
+        backend.JoinAfterAbort();
+    }
+
+    CHECK(threads.call_count == 1);
+    CHECK(pipeline.start_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+}
+
+void AbortUsesOnlyThePrestartedCleanupWorker()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    ScriptedThreadFactory threads({VRREC_STATUS_OK});
+    PipelineMediaBackend backend(pipeline, layout, threads);
+
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+    CHECK(threads.call_count == 1);
+    backend.RequestAbort();
+    backend.JoinAfterAbort();
+
+    CHECK(threads.call_count == 1);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void AbortWinsWhilePipelineStartReturnsSuccess()
+{
+    FakeRecordingPipeline pipeline;
+    pipeline.block_start = true;
+    FakeLayoutPort layout;
+    PipelineMediaBackend backend(pipeline, layout);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return backend.Start();
+    });
+    pipeline.WaitForStart();
+    backend.RequestAbort();
+    pipeline.ReleaseStart();
+
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    backend.JoinAfterAbort();
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void StopWorkerCreationFailureIsCachedAndCleansUp()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    ScriptedThreadFactory threads({
+        VRREC_STATUS_OK,
+        VRREC_STATUS_OUT_OF_MEMORY,
+    });
+    PipelineMediaBackend backend(pipeline, layout, threads);
+
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+    CHECK(backend.RequestStop() == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(backend.RequestStop() == VRREC_STATUS_OUT_OF_MEMORY);
+    backend.JoinAfterAbort();
+
+    CHECK(threads.call_count == 2);
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void PipelineStopFailureIsCachedAfterCleanup()
+{
+    FakeRecordingPipeline pipeline;
+    pipeline.stop_status = VRREC_STATUS_INTERNAL_ERROR;
+    FakeLayoutPort layout;
+    PipelineMediaBackend backend(pipeline, layout);
+
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+    CHECK(backend.RequestStop() == VRREC_STATUS_INTERNAL_ERROR);
+    backend.JoinAfterAbort();
+    CHECK(backend.RequestStop() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void EveryPipelineStopFailureTriggersCleanup()
+{
+    FakeRecordingPipeline pipeline;
+    pipeline.stop_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    FakeLayoutPort layout;
+    PipelineMediaBackend backend(pipeline, layout);
+
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+    CHECK(backend.RequestStop() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    backend.JoinAfterAbort();
+    CHECK(backend.RequestStop() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void ConcurrentStopCallersShareTheFailureResult()
+{
+    FakeRecordingPipeline pipeline;
+    pipeline.block_stop = true;
+    pipeline.stop_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    FakeLayoutPort layout;
+    PipelineMediaBackend backend(pipeline, layout);
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+
+    auto first = std::async(std::launch::async, [&] {
+        return backend.RequestStop();
+    });
+    pipeline.WaitForStop();
+
+    std::promise<void> second_entered;
+    auto entered = second_entered.get_future();
+    auto second = std::async(std::launch::async, [&] {
+        second_entered.set_value();
+        return backend.RequestStop();
+    });
+    entered.wait();
+    const auto second_returned_before_completion =
+        second.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
+
+    pipeline.ReleaseStop();
+    CHECK(first.get() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(second.get() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(!second_returned_before_completion);
+    CHECK(backend.RequestStop() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    backend.JoinAfterAbort();
+
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void EmptySuccessfulThreadCreationFailsClosed()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    EmptySuccessThreadFactory threads;
+    PipelineMediaBackend backend(pipeline, layout, threads);
+
+    CHECK(backend.Start() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(threads.call_count == 1);
+    CHECK(pipeline.start_calls == 0);
+}
+
+void AbortWinsWhilePipelineStopReturnsFailure()
+{
+    FakeRecordingPipeline pipeline;
+    pipeline.block_stop = true;
+    pipeline.stop_status = VRREC_STATUS_INTERNAL_ERROR;
+    FakeLayoutPort layout;
+    PipelineMediaBackend backend(pipeline, layout);
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+
+    auto stopping = std::async(std::launch::async, [&] {
+        return backend.RequestStop();
+    });
+    pipeline.WaitForStop();
+    backend.RequestAbort();
+    pipeline.ReleaseStop();
+
+    CHECK(stopping.get() == VRREC_STATUS_INVALID_STATE);
+    backend.JoinAfterAbort();
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void InternalThreadCreationFailuresAreMappedAndCached()
+{
+    {
+        FakeRecordingPipeline pipeline;
+        FakeLayoutPort layout;
+        ScriptedThreadFactory threads({VRREC_STATUS_INTERNAL_ERROR});
+        PipelineMediaBackend backend(pipeline, layout, threads);
+
+        CHECK(backend.Start() == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(threads.call_count == 1);
+        CHECK(pipeline.start_calls == 0);
+    }
+
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    ScriptedThreadFactory threads({
+        VRREC_STATUS_OK,
+        VRREC_STATUS_INTERNAL_ERROR,
+    });
+    PipelineMediaBackend backend(pipeline, layout, threads);
+
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+    CHECK(backend.RequestStop() == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(backend.RequestStop() == VRREC_STATUS_INTERNAL_ERROR);
+    backend.JoinAfterAbort();
+    CHECK(threads.call_count == 2);
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void AbortWinsWhileStopThreadLaunchFails()
+{
+    FakeRecordingPipeline pipeline;
+    FakeLayoutPort layout;
+    BlockingStopFailureThreadFactory threads;
+    PipelineMediaBackend backend(pipeline, layout, threads);
+    CHECK(backend.Start() == VRREC_STATUS_OK);
+
+    auto stopping = std::async(std::launch::async, [&] {
+        return backend.RequestStop();
+    });
+    threads.WaitForStopLaunch();
+    backend.RequestAbort();
+    threads.ReleaseStopLaunch();
+
+    CHECK(stopping.get() == VRREC_STATUS_INVALID_STATE);
+    backend.JoinAfterAbort();
+    CHECK(threads.CallCount() == 2);
+    CHECK(pipeline.stop_calls == 1);
+    CHECK(pipeline.join_calls == 0);
+    CHECK(pipeline.abort_calls == 1);
+}
+
+void DestructorWaitsForTheStopWorker()
+{
+    FakeRecordingPipeline pipeline;
+    pipeline.join_waits_for_release = true;
+    FakeLayoutPort layout;
+    auto backend = std::make_unique<PipelineMediaBackend>(pipeline, layout);
+    CHECK(backend->Start() == VRREC_STATUS_OK);
+    CHECK(backend->RequestStop() == VRREC_STATUS_OK);
+    pipeline.WaitForJoin();
+
+    std::promise<void> destroyed;
+    auto completed = destroyed.get_future();
+    std::thread destroyer([&] {
+        backend.reset();
+        destroyed.set_value();
+    });
+    pipeline.WaitForAbort();
+    const auto returned_before_join =
+        completed.wait_for(std::chrono::milliseconds(50)) ==
+        std::future_status::ready;
+
+    pipeline.ReleaseJoin();
+    destroyer.join();
+
+    CHECK(!returned_before_join);
+    CHECK(pipeline.join_calls == 1);
+    CHECK(pipeline.abort_calls == 1);
+}
+
 int AbortFromTheStopWorkerChild()
 {
     FakeRecordingPipeline pipeline;
@@ -245,7 +653,9 @@ int AbortFromTheStopWorkerChild()
         }
         pipeline.abort_from_join = true;
         pipeline.backend_to_abort = &backend;
-        if (backend.RequestStop() != VRREC_STATUS_OK) {
+        const auto stop_status = backend.RequestStop();
+        if (stop_status != VRREC_STATUS_OK &&
+            stop_status != VRREC_STATUS_INVALID_STATE) {
             return 2;
         }
         pipeline.WaitForJoin();
@@ -265,9 +675,43 @@ void AbortFromTheStopWorkerDoesNotJoinItself(const char *executable)
 
 int main(int argc, char **argv)
 {
-    if (argc == 2 &&
-        std::string(argv[1]) == "--abort-from-stop-worker") {
-        return AbortFromTheStopWorkerChild();
+    if (argc == 2) {
+        const auto requested = std::string(argv[1]);
+        if (requested == "--abort-from-stop-worker") {
+            return AbortFromTheStopWorkerChild();
+        }
+        if (requested == "--cleanup-thread-failure") {
+            CleanupWorkerCreationFailurePreventsPipelineStart();
+            return 0;
+        }
+        if (requested == "--start-abort") {
+            AbortWinsWhilePipelineStartReturnsSuccess();
+            return 0;
+        }
+        if (requested == "--stop-thread-failure") {
+            StopWorkerCreationFailureIsCachedAndCleansUp();
+            return 0;
+        }
+        if (requested == "--stop-failure-cache") {
+            PipelineStopFailureIsCachedAfterCleanup();
+            return 0;
+        }
+        if (requested == "--empty-thread") {
+            EmptySuccessfulThreadCreationFailsClosed();
+            return 0;
+        }
+        if (requested == "--stop-abort") {
+            AbortWinsWhilePipelineStopReturnsFailure();
+            return 0;
+        }
+        if (requested == "--internal-thread-failure") {
+            InternalThreadCreationFailuresAreMappedAndCached();
+            return 0;
+        }
+        if (requested == "--launch-abort") {
+            AbortWinsWhileStopThreadLaunchFails();
+            return 0;
+        }
     }
 
     AdaptsControlsAndStatistics();
@@ -275,6 +719,19 @@ int main(int argc, char **argv)
     AbortReturnsBeforeBlockingPipelineCleanupCompletes();
     AbortDoesNotJoinAStopWorkerWaitingForTheAbortCaller();
     ExternalAbortJoinWaitsForTheSharedCleanupCompletion();
+    CleanupWorkerCreationFailurePreventsPipelineStart();
+    CleanupWorkerFailureFallsBackToExactlyOneSynchronousCleanup();
+    AbortUsesOnlyThePrestartedCleanupWorker();
+    AbortWinsWhilePipelineStartReturnsSuccess();
+    StopWorkerCreationFailureIsCachedAndCleansUp();
+    PipelineStopFailureIsCachedAfterCleanup();
+    EveryPipelineStopFailureTriggersCleanup();
+    ConcurrentStopCallersShareTheFailureResult();
+    EmptySuccessfulThreadCreationFailsClosed();
+    AbortWinsWhilePipelineStopReturnsFailure();
+    InternalThreadCreationFailuresAreMappedAndCached();
+    AbortWinsWhileStopThreadLaunchFails();
+    DestructorWaitsForTheStopWorker();
     AbortFromTheStopWorkerDoesNotJoinItself(argv[0]);
     return 0;
 }

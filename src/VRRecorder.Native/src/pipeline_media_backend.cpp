@@ -5,11 +5,51 @@
 #include <utility>
 
 namespace vrrecorder::native {
+namespace {
+
+class StandardPipelineMediaThreadFactory final
+    : public PipelineMediaThreadFactoryPort {
+public:
+    vrrec_status_t Start(
+        std::thread &thread,
+        PipelineMediaThreadEntry entry,
+        void *context) noexcept override
+    {
+        try {
+            thread = std::thread(entry, context);
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (const std::system_error &) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+};
+
+PipelineMediaThreadFactoryPort &DefaultThreadFactory() noexcept
+{
+    static StandardPipelineMediaThreadFactory factory;
+    return factory;
+}
+
+}
 
 PipelineMediaBackend::PipelineMediaBackend(
     MediaRecordingPipelinePort &pipeline,
     VideoLayoutUpdatePort &layout) noexcept
-    : pipeline_(pipeline), layout_(layout)
+    : PipelineMediaBackend(pipeline, layout, DefaultThreadFactory())
+{
+}
+
+PipelineMediaBackend::PipelineMediaBackend(
+    MediaRecordingPipelinePort &pipeline,
+    VideoLayoutUpdatePort &layout,
+    PipelineMediaThreadFactoryPort &thread_factory) noexcept
+    : pipeline_(pipeline),
+      layout_(layout),
+      thread_factory_(thread_factory)
 {
 }
 
@@ -33,7 +73,14 @@ vrrec_status_t PipelineMediaBackend::Start() noexcept
             return VRREC_STATUS_INVALID_STATE;
         }
     }
-    return pipeline_.Start();
+    const auto status = pipeline_.Start();
+    {
+        const std::lock_guard lock(mutex_);
+        if (abort_requested_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+    }
+    return status;
 }
 
 vrrec_status_t PipelineMediaBackend::UpdateVideoLayout(
@@ -71,10 +118,7 @@ vrrec_status_t PipelineMediaBackend::RequestStop() noexcept
 {
     {
         std::unique_lock lock(mutex_);
-        if (abort_requested_) {
-            return VRREC_STATUS_INVALID_STATE;
-        }
-        if (stop_requested_) {
+        if (stop_completed_) {
             return stop_status_;
         }
         if (stop_start_in_progress_) {
@@ -83,21 +127,20 @@ vrrec_status_t PipelineMediaBackend::RequestStop() noexcept
             });
             return stop_status_;
         }
+        if (abort_requested_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
         stop_start_in_progress_ = true;
     }
 
     auto status = pipeline_.RequestStop();
     std::thread worker;
     if (status == VRREC_STATUS_OK) {
-        try {
-            worker = std::thread([this]() noexcept {
-                static_cast<void>(pipeline_.Join());
-            });
-        } catch (const std::bad_alloc &) {
-            status = VRREC_STATUS_OUT_OF_MEMORY;
-        } catch (const std::system_error &) {
-            status = VRREC_STATUS_INTERNAL_ERROR;
-        } catch (...) {
+        status = thread_factory_.Start(
+            worker,
+            &PipelineMediaBackend::RunStopWorkerEntry,
+            this);
+        if (status == VRREC_STATUS_OK && !worker.joinable()) {
             status = VRREC_STATUS_INTERNAL_ERROR;
         }
     }
@@ -107,15 +150,15 @@ vrrec_status_t PipelineMediaBackend::RequestStop() noexcept
         const std::lock_guard lock(mutex_);
         if (worker.joinable()) {
             stop_worker_ = std::move(worker);
-            stop_requested_ = true;
         }
-        if (abort_requested_ && status == VRREC_STATUS_OK) {
+        const auto abort_won = abort_requested_;
+        if (abort_won) {
             status = VRREC_STATUS_INVALID_STATE;
         }
         stop_status_ = status;
+        stop_completed_ = true;
         stop_start_in_progress_ = false;
-        abort_after_failure = status == VRREC_STATUS_OUT_OF_MEMORY ||
-            status == VRREC_STATUS_INTERNAL_ERROR;
+        abort_after_failure = !abort_won && status != VRREC_STATUS_OK;
     }
     changed_.notify_all();
 
@@ -181,17 +224,28 @@ vrrec_status_t PipelineMediaBackend::StartCleanupWorker() noexcept
         return VRREC_STATUS_INVALID_STATE;
     }
 
-    try {
-        cleanup_worker_ =
-            std::thread(&PipelineMediaBackend::RunCleanupWorker, this);
-    } catch (const std::bad_alloc &) {
-        return VRREC_STATUS_OUT_OF_MEMORY;
-    } catch (const std::system_error &) {
-        return VRREC_STATUS_INTERNAL_ERROR;
-    } catch (...) {
+    const auto status = thread_factory_.Start(
+        cleanup_worker_,
+        &PipelineMediaBackend::RunCleanupWorkerEntry,
+        this);
+    if (status != VRREC_STATUS_OK) {
+        return status;
+    }
+    if (!cleanup_worker_.joinable()) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }
     return VRREC_STATUS_OK;
+}
+
+void PipelineMediaBackend::RunStopWorkerEntry(void *context) noexcept
+{
+    auto &backend = *static_cast<PipelineMediaBackend *>(context);
+    static_cast<void>(backend.pipeline_.Join());
+}
+
+void PipelineMediaBackend::RunCleanupWorkerEntry(void *context) noexcept
+{
+    static_cast<PipelineMediaBackend *>(context)->RunCleanupWorker();
 }
 
 void PipelineMediaBackend::RunCleanupWorker() noexcept

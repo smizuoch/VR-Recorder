@@ -11,11 +11,26 @@
 
 namespace vrrecorder::native {
 
+using PipelineMediaThreadEntry = void (*)(void *) noexcept;
+
+class PipelineMediaThreadFactoryPort {
+public:
+    virtual ~PipelineMediaThreadFactoryPort() = default;
+    virtual vrrec_status_t Start(
+        std::thread &thread,
+        PipelineMediaThreadEntry entry,
+        void *context) noexcept = 0;
+};
+
 class PipelineMediaBackend final : public MediaBackend {
 public:
     PipelineMediaBackend(
         MediaRecordingPipelinePort &pipeline,
         VideoLayoutUpdatePort &layout) noexcept;
+    PipelineMediaBackend(
+        MediaRecordingPipelinePort &pipeline,
+        VideoLayoutUpdatePort &layout,
+        PipelineMediaThreadFactoryPort &thread_factory) noexcept;
     ~PipelineMediaBackend() override;
 
     PipelineMediaBackend(const PipelineMediaBackend &) = delete;
@@ -33,6 +48,8 @@ public:
     void JoinAfterAbort() noexcept override;
 
 private:
+    static void RunStopWorkerEntry(void *context) noexcept;
+    static void RunCleanupWorkerEntry(void *context) noexcept;
     vrrec_status_t StartCleanupWorker() noexcept;
     void RunCleanupWorker() noexcept;
     void JoinStopWorker() noexcept;
@@ -40,12 +57,13 @@ private:
 
     MediaRecordingPipelinePort &pipeline_;
     VideoLayoutUpdatePort &layout_;
+    PipelineMediaThreadFactoryPort &thread_factory_;
     std::mutex mutex_;
     std::mutex stop_join_mutex_;
     std::condition_variable changed_;
     std::thread stop_worker_;
     std::thread cleanup_worker_;
-    bool stop_requested_ = false;
+    bool stop_completed_ = false;
     bool stop_start_in_progress_ = false;
     vrrec_status_t stop_status_ = VRREC_STATUS_INVALID_STATE;
     bool abort_requested_ = false;
