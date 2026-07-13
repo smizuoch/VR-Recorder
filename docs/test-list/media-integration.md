@@ -41,7 +41,8 @@
 - [x] batch全件をwrite前にpreflightし、N回目write failureでは後続を送らずprefixをdrift統計へcommitせず、logical packet countを0にする
 - [x] 同時A/V batchを非interleaveで直列化し、失敗中のpeer batchを0 writeで拒否する
 - [x] Encode中Abortはmuxを先にterminal化し、Write／Finishを直列化してencoder／completion／failure通知をexactly onceにする
-- [x] Finish中Abortとin-flight Write失敗復帰後のAbortをlogical winnerとし、sinkの成功packet数とaudio／video workerのflush packet／latency統計、first-packet／fault eventをcommitしない
+- [x] Finish中Abortとin-flight Write成功／失敗復帰前のAbortをlogical winnerとし、sinkの成功packet数とaudio／video workerのframe／packet／latency統計、first-packet／fault eventをcommitしない
+- [x] audio／video encoding workerのthread生成OOM／internal／non-joinableと生成中Abortを共通factoryで注入し、publication完了前にcleanupを返さない。生成失敗winnerでは未起動下流を変更せず、Abort winnerではwrite／event／統計0とexactly-once cleanupを固定する
 - [x] video／audio encoderのflush成功をbarrierで待ち、二つ目の完了後だけmux trailer／file flushを実行する
 - [x] 未開始操作、重複Start／completion、完了済みstreamの追加packet、invalid producer／streamをpending muxのprotocol違反として即Abortし、片側failure後の成功finalizeを拒否する
 - [x] mux成功packetの最新A/V PTS差を監視し、80 ms超のexcursionごとに一度だけprivacy-safe診断eventを発行する
@@ -104,7 +105,8 @@
 - [x] Preflight every packet before writing a batch, stop after an Nth write failure, commit no prefix to drift statistics, and report zero logical packets
 - [x] Serialize concurrent A/V batches without packet interleaving and reject a peer batch with zero writes after the active batch fails
 - [x] Terminalize muxing before waiting for an in-flight encoder Abort and serialize Write against Finish with exactly-once completion/failure notification
-- [x] Make Abort the logical winner during Finish and after an in-flight Write returns failure, committing neither successful sink packet counts nor audio/video-worker flush packet/latency statistics or first-packet/fault events
+- [x] Make Abort the logical winner during Finish and before an in-flight Write returns success or failure, committing neither successful sink packet counts nor audio/video-worker frame/packet/latency statistics or first-packet/fault events
+- [x] Inject audio/video encoding-worker thread OOM, internal failure, non-joinable success, and launch-time Abort through the common factory; do not return cleanup before publication, leave unstarted downstream components untouched for a launch-failure winner, and preserve zero writes/events/statistics plus exactly-once cleanup for an Abort winner
 - [x] Wait at a barrier for successful video/audio encoder flushes and run mux trailer/file flush only after the second completion
 - [x] Treat pre-start operations, duplicate Start/completion, packets from a finished stream, and invalid producers/streams as pending-mux protocol violations that abort immediately and cannot later finalize successfully
 - [x] Monitor latest A/V PTS drift from successfully muxed packets and emit one privacy-safe diagnostic event per excursion beyond 80 ms

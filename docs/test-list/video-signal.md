@@ -13,6 +13,7 @@
 - [x] encoder buffering後の最初のmux packetだけを録画開始確定eventとして識別する
 - [x] runtime encoder failureのpacket／latencyを成功統計へ加算しない
 - [x] video workerはgraceful stopだけをflushし、Abort／runtime failureではflushしない
+- [x] video encoding thread生成のOOM／internal／non-joinableを終端失敗にし、生成中Abortを優先して遅延threadをjoinし、Faulted／first packet／flush統計とAbort後に成功復帰したWriteのpacket／latencyを抑止する
 - [x] first mux packet callbackをwriteまたはflushの最初の一度だけ発行する
 - [x] selected Spout sender以外のframeをCFR schedulerへ入れない
 - [x] Spout poll timeout、sender loss、Abortを別結果として扱う
@@ -42,6 +43,7 @@ The fresh-frame rules from Basic Design v0.3 §§4.2, 10.2, 18.4, and 24 are imp
 - [x] Identify only the first muxed packet after encoder buffering as the recording-start commit event
 - [x] Do not commit packet or latency statistics from a runtime encoder failure
 - [x] Flush the video encoder only for graceful stop, not for abort or runtime failure
+- [x] Terminalize video-encoding thread OOM, internal failure, and non-joinable success; let Abort win during launch, join delayed threads, and suppress Faulted, first-packet, flush-stat, and post-Abort successful-Write packet/latency commits
 - [x] Emit the first-muxed-packet callback only once, whether produced by a write or final flush
 - [x] Never admit a frame from an unselected Spout sender into the CFR scheduler
 - [x] Keep Spout poll timeout, sender loss, and abort as distinct outcomes

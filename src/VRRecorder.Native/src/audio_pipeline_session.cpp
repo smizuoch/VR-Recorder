@@ -5,8 +5,19 @@ namespace vrrecorder::native {
 StereoAudioPipelineSession::StereoAudioPipelineSession(
     StereoAudioCaptureSessionPort &capture,
     StereoAudioEncoderSink &encoder) noexcept
+    : StereoAudioPipelineSession(
+          capture,
+          encoder,
+          DefaultNativeThreadFactory())
+{
+}
+
+StereoAudioPipelineSession::StereoAudioPipelineSession(
+    StereoAudioCaptureSessionPort &capture,
+    StereoAudioEncoderSink &encoder,
+    NativeThreadFactoryPort &thread_factory) noexcept
     : capture_(capture),
-      encoding_(capture, encoder)
+      encoding_(capture, encoder, thread_factory)
 {
 }
 
@@ -40,15 +51,29 @@ vrrec_status_t StereoAudioPipelineSession::Start(
         }
     } completion {start_phase_};
 
-    if (terminal_outcome_.load() != TerminalOutcome::Open) {
-        return VRREC_STATUS_INVALID_STATE;
+    {
+        const std::lock_guard state_lock(start_abort_mutex_);
+        if (terminal_outcome_.load() != TerminalOutcome::Open) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
     }
 
     const auto capture_status = capture_.Start(config);
     if (capture_status == VRREC_STATUS_OK) {
         capture_started_.store(true);
     }
-    if (terminal_outcome_.load() != TerminalOutcome::Open) {
+
+    auto abort_won_during_capture_start = false;
+    {
+        const std::lock_guard state_lock(start_abort_mutex_);
+        abort_won_during_capture_start =
+            terminal_outcome_.load() != TerminalOutcome::Open;
+        if (!abort_won_during_capture_start &&
+            capture_status == VRREC_STATUS_OK) {
+            encoding_starting_ = true;
+        }
+    }
+    if (abort_won_during_capture_start) {
         if (capture_started_.exchange(false)) {
             capture_.Abort();
         }
@@ -58,25 +83,48 @@ vrrec_status_t StereoAudioPipelineSession::Start(
         return capture_status;
     }
 
-    const auto encoding_status = encoding_.Start(
-        encoding_frame_count_48k);
-    if (encoding_status == VRREC_STATUS_OK) {
-        encoding_started_.store(true);
-        active_.store(true);
-    }
-    if (terminal_outcome_.load() != TerminalOutcome::Open) {
-        active_.store(false);
-        if (encoding_started_.exchange(false)) {
-            encoding_.RequestAbort();
-            encoding_.JoinAfterAbort();
+    const auto encoding_status = encoding_.Start(encoding_frame_count_48k);
+
+    auto abort_won_during_encoding_start = false;
+    auto cleanup_encoding = false;
+    auto cleanup_capture = false;
+    {
+        const std::lock_guard state_lock(start_abort_mutex_);
+        encoding_starting_ = false;
+        if (encoding_status == VRREC_STATUS_OK) {
+            encoding_started_.store(true);
         }
-        capture_started_.store(false);
+
+        abort_won_during_encoding_start =
+            terminal_outcome_.load() != TerminalOutcome::Open;
+        if (abort_won_during_encoding_start) {
+            active_.store(false);
+            if (encoding_started_.exchange(false)) {
+                encoding_.RequestAbort();
+                cleanup_encoding = true;
+                capture_started_.store(false);
+            } else if (encoding_abort_committed_) {
+                cleanup_encoding = true;
+                capture_started_.store(false);
+            } else {
+                cleanup_capture = capture_started_.exchange(false);
+            }
+        } else if (encoding_status == VRREC_STATUS_OK) {
+            active_.store(true);
+        } else {
+            cleanup_capture = capture_started_.exchange(false);
+        }
+    }
+
+    if (cleanup_encoding) {
+        encoding_.JoinAfterAbort();
+    } else if (cleanup_capture) {
+        capture_.Abort();
+    }
+    if (abort_won_during_encoding_start) {
         return VRREC_STATUS_INVALID_STATE;
     }
     if (encoding_status != VRREC_STATUS_OK) {
-        if (capture_started_.exchange(false)) {
-            capture_.Abort();
-        }
         return encoding_status;
     }
     return VRREC_STATUS_OK;
@@ -127,6 +175,7 @@ void StereoAudioPipelineSession::Abort() noexcept
 
 void StereoAudioPipelineSession::RequestAbort() noexcept
 {
+    const std::lock_guard state_lock(start_abort_mutex_);
     auto expected_outcome = TerminalOutcome::Open;
     if (!terminal_outcome_.compare_exchange_strong(
             expected_outcome,
@@ -142,8 +191,9 @@ void StereoAudioPipelineSession::RequestAbort() noexcept
     }
 
     active_.store(false);
-    if (encoding_started_.load()) {
-        encoding_.RequestAbort();
+    if (encoding_starting_ || encoding_started_.load()) {
+        encoding_abort_committed_ =
+            encoding_.RequestAbort() || encoding_abort_committed_;
     }
 }
 

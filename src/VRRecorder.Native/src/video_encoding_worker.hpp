@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "media_backend.hpp"
+#include "native_thread_factory.hpp"
 #include "video_encoding_pump.hpp"
 
 namespace vrrecorder::native {
@@ -55,6 +56,12 @@ public:
         VideoCfrClock &clock,
         VideoEncoderSink &sink,
         MediaEventSink &events) noexcept;
+    VideoEncodingWorker(
+        VideoCfrScheduler &scheduler,
+        VideoCfrClock &clock,
+        VideoEncoderSink &sink,
+        MediaEventSink &events,
+        NativeThreadFactoryPort &thread_factory) noexcept;
     ~VideoEncodingWorker();
 
     VideoEncodingWorker(const VideoEncodingWorker &) = delete;
@@ -69,24 +76,36 @@ public:
     VideoEncodingStatistics Statistics() const noexcept override;
 
 private:
+    static void RunEntry(void *context) noexcept;
     void Run() noexcept;
     void Finish() noexcept;
     void Fail(
         VideoEncodingWorkerResult result,
         vrrec_status_t status,
-        const char *message) noexcept;
-    void SetResult(VideoEncodingWorkerResult result) noexcept;
+        const char *message,
+        bool abort_clock) noexcept;
+    bool SetResult(VideoEncodingWorkerResult result) noexcept;
+    bool CommitStopped(
+        const VideoEncoderWrite &finish,
+        bool &report_first_packet) noexcept;
+    bool CommitSubmitted(
+        const VideoEncodingRead &read,
+        bool &report_first_packet) noexcept;
     void JoinThread() noexcept;
 
     VideoCfrClock &clock_;
     VideoEncoderSink &sink_;
     MediaEventSink &events_;
+    NativeThreadFactoryPort &thread_factory_;
     VideoEncodingPump pump_;
     std::mutex state_mutex_;
     std::mutex join_mutex_;
     std::thread thread_;
     VideoEncodingWorkerResult result_ =
         VideoEncodingWorkerResult::InvalidState;
+    std::atomic<std::uint64_t> committed_muxed_packet_count_ {0};
+    std::atomic<std::uint64_t> committed_latest_latency_microseconds_ {0};
+    std::atomic<std::uint64_t> committed_maximum_latency_microseconds_ {0};
     std::atomic<std::uint64_t> flushed_packet_count_ {0};
     std::atomic<std::uint64_t> flushed_latency_microseconds_ {0};
     std::atomic_bool started_ = false;

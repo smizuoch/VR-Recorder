@@ -38,6 +38,10 @@ public:
     StereoAudioPipelineSession(
         StereoAudioCaptureSessionPort &capture,
         StereoAudioEncoderSink &encoder) noexcept;
+    StereoAudioPipelineSession(
+        StereoAudioCaptureSessionPort &capture,
+        StereoAudioEncoderSink &encoder,
+        NativeThreadFactoryPort &thread_factory) noexcept;
     ~StereoAudioPipelineSession();
 
     StereoAudioPipelineSession(const StereoAudioPipelineSession &) = delete;
@@ -71,10 +75,13 @@ private:
 
     StereoAudioCaptureSessionPort &capture_;
     StereoAudioEncodingWorker encoding_;
+    std::mutex start_abort_mutex_;
     std::mutex abort_join_mutex_;
     std::atomic<StartPhase> start_phase_ = StartPhase::NotStarted;
     std::atomic_bool capture_started_ = false;
+    bool encoding_starting_ = false;
     std::atomic_bool encoding_started_ = false;
+    bool encoding_abort_committed_ = false;
     std::atomic_bool join_in_progress_ = false;
     std::atomic_bool active_ = false;
     std::atomic<TerminalOutcome> terminal_outcome_ =

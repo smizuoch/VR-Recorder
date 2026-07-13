@@ -256,6 +256,78 @@ public:
     bool release_finish = false;
 };
 
+class BlockingThreadFactory final : public NativeThreadFactoryPort {
+public:
+    BlockingThreadFactory(
+        vrrec_status_t status = VRREC_STATUS_OUT_OF_MEMORY,
+        bool create_thread_on_success = false) noexcept
+        : status_(status),
+          create_thread_on_success_(create_thread_on_success)
+    {
+    }
+
+    vrrec_status_t Start(
+        std::thread &thread,
+        NativeThreadEntry entry,
+        void *context) noexcept override
+    {
+        {
+            std::unique_lock lock(mutex_);
+            ++start_calls_;
+            worker_context_ = context;
+            start_entered_ = true;
+            changed_.notify_all();
+            changed_.wait(lock, [this] { return release_start_; });
+        }
+        if (status_ == VRREC_STATUS_OK && create_thread_on_success_) {
+            thread = std::thread(entry, context);
+        }
+        return status_;
+    }
+
+    void WaitForStart()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return start_entered_; });
+    }
+
+    void ReleaseStart()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            release_start_ = true;
+        }
+        changed_.notify_all();
+    }
+
+    bool EncodingWorkerIsFinished() const
+    {
+        StereoAudioEncodingWorker *worker = nullptr;
+        {
+            const std::lock_guard lock(mutex_);
+            worker = static_cast<StereoAudioEncodingWorker *>(
+                worker_context_);
+        }
+        return worker != nullptr && worker->IsFinished();
+    }
+
+    std::size_t StartCalls() const
+    {
+        const std::lock_guard lock(mutex_);
+        return start_calls_;
+    }
+
+private:
+    vrrec_status_t status_;
+    bool create_thread_on_success_;
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::size_t start_calls_ = 0;
+    void *worker_context_ = nullptr;
+    bool start_entered_ = false;
+    bool release_start_ = false;
+};
+
 StereoAudioCaptureSessionConfig Config()
 {
     return {"render-id", "mic-id", 900'000};
@@ -505,6 +577,151 @@ void JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort()
     CHECK(encoder.abort_calls == 1);
 }
 
+void AbortDuringEncodingThreadFailureReclaimsCapture()
+{
+    FakeCaptureSession capture;
+    capture.ready_windows = 0;
+    CountingEncoderSink encoder;
+    BlockingThreadFactory thread_factory;
+    StereoAudioPipelineSession session(
+        capture,
+        encoder,
+        thread_factory);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(Config(), 1'024);
+    });
+    thread_factory.WaitForStart();
+    session.RequestAbort();
+    CHECK(thread_factory.EncodingWorkerIsFinished());
+
+    std::promise<void> cleanup_invoking;
+    auto cleanup_invoked = cleanup_invoking.get_future();
+    auto cleanup = std::async(std::launch::async, [&] {
+        cleanup_invoking.set_value();
+        session.JoinAfterAbort();
+    });
+    cleanup_invoked.wait();
+    CHECK(cleanup.wait_for(std::chrono::milliseconds(50)) !=
+          std::future_status::ready);
+
+    thread_factory.ReleaseStart();
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    cleanup.get();
+
+    CHECK(thread_factory.StartCalls() == 1);
+    CHECK(capture.start_calls == 1);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.mix_calls == 0);
+    CHECK(encoder.write_calls == 0);
+    CHECK(encoder.finish_calls == 0);
+    CHECK(encoder.abort_calls == 1);
+    const auto statistics = session.Statistics();
+    CHECK(statistics.submitted_frame_count == 0);
+    CHECK(statistics.muxed_packet_count == 0);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.Join() ==
+          StereoAudioEncodingWorkerResult::InvalidState);
+    CHECK(session.Start(Config(), 1'024) ==
+          VRREC_STATUS_INVALID_STATE);
+
+    session.Abort();
+    CHECK(capture.abort_calls == 1);
+    CHECK(encoder.abort_calls == 1);
+}
+
+void AbortDuringSuccessfulEncodingThreadCreationPreventsFirstWindow()
+{
+    FakeCaptureSession capture;
+    capture.ready_windows = 1;
+    CountingEncoderSink encoder;
+    BlockingThreadFactory thread_factory(VRREC_STATUS_OK, true);
+    StereoAudioPipelineSession session(
+        capture,
+        encoder,
+        thread_factory);
+
+    auto starting = std::async(std::launch::async, [&] {
+        return session.Start(Config(), 1'024);
+    });
+    thread_factory.WaitForStart();
+    session.RequestAbort();
+    CHECK(thread_factory.EncodingWorkerIsFinished());
+
+    std::promise<void> cleanup_invoking;
+    auto cleanup_invoked = cleanup_invoking.get_future();
+    auto cleanup = std::async(std::launch::async, [&] {
+        cleanup_invoking.set_value();
+        session.JoinAfterAbort();
+    });
+    cleanup_invoked.wait();
+    CHECK(cleanup.wait_for(std::chrono::milliseconds(50)) !=
+          std::future_status::ready);
+
+    thread_factory.ReleaseStart();
+    CHECK(starting.get() == VRREC_STATUS_INVALID_STATE);
+    cleanup.get();
+
+    CHECK(thread_factory.StartCalls() == 1);
+    CHECK(capture.start_calls == 1);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.mix_calls == 0);
+    CHECK(encoder.write_calls == 0);
+    CHECK(encoder.finish_calls == 0);
+    CHECK(encoder.abort_calls == 1);
+    const auto statistics = session.Statistics();
+    CHECK(statistics.submitted_frame_count == 0);
+    CHECK(statistics.muxed_packet_count == 0);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+
+    session.Abort();
+    CHECK(capture.abort_calls == 1);
+    CHECK(encoder.abort_calls == 1);
+}
+
+void EncodingThreadCreationFailureRollsBackCapture(
+    vrrec_status_t factory_status,
+    vrrec_status_t expected_status,
+    bool create_thread_on_success = false)
+{
+    FakeCaptureSession capture;
+    capture.ready_windows = 0;
+    CountingEncoderSink encoder;
+    BlockingThreadFactory thread_factory(
+        factory_status,
+        create_thread_on_success);
+    thread_factory.ReleaseStart();
+    StereoAudioPipelineSession session(
+        capture,
+        encoder,
+        thread_factory);
+
+    CHECK(session.Start(Config(), 1'024) == expected_status);
+    CHECK(thread_factory.StartCalls() == 1);
+    CHECK(capture.start_calls == 1);
+    CHECK(capture.abort_calls == 1);
+    CHECK(capture.mix_calls == 0);
+    CHECK(encoder.write_calls == 0);
+    CHECK(encoder.finish_calls == 0);
+    CHECK(encoder.abort_calls == 0);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.Start(Config(), 1'024) ==
+          VRREC_STATUS_INVALID_STATE);
+}
+
+void AudioEncodingThreadCreationFailuresRollBackCapture()
+{
+    EncodingThreadCreationFailureRollsBackCapture(
+        VRREC_STATUS_OUT_OF_MEMORY,
+        VRREC_STATUS_OUT_OF_MEMORY);
+    EncodingThreadCreationFailureRollsBackCapture(
+        VRREC_STATUS_INTERNAL_ERROR,
+        VRREC_STATUS_INTERNAL_ERROR);
+    EncodingThreadCreationFailureRollsBackCapture(
+        VRREC_STATUS_OK,
+        VRREC_STATUS_INTERNAL_ERROR);
+}
+
 }
 
 int main()
@@ -519,5 +736,8 @@ int main()
     AbortDominatesABlockingEncodingStopRequest();
     AbortCleanupUnblocksAnInFlightEncodingJoin();
     JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort();
+    AbortDuringEncodingThreadFailureReclaimsCapture();
+    AbortDuringSuccessfulEncodingThreadCreationPreventsFirstWindow();
+    AudioEncodingThreadCreationFailuresRollBackCapture();
     return 0;
 }

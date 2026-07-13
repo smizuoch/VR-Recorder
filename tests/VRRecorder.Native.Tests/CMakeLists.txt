@@ -1138,6 +1138,10 @@ add_test(NAME vrrecorder_native_spout_capture_worker
 add_test(NAME vrrecorder_native_video_pipeline_session
     COMMAND vrrecorder_native_video_pipeline_session)
 set_tests_properties(
+    vrrecorder_native_audio_encoding_worker
+    vrrecorder_native_video_encoding_worker
+    PROPERTIES TIMEOUT 5)
+set_tests_properties(
     vrrecorder_native_video_pipeline_session
     PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_exports
