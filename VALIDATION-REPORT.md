@@ -29,9 +29,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 930件成功、失敗0、skip 0
+- managed: 932件成功、失敗0、skip 0
   - Domain 90
-  - Application 256
+  - Application 258
   - Compliance 186
   - Presentation 90
   - Integration 308
@@ -86,12 +86,13 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - System／English／Japaneseのoptional schema v1 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
 - VR hand／Wrist Dock・World PinとOSC auto discovery／loopback fallback host・portをlocalized／accessible settings controlへ投影し、overlay transformやportの同時更新を保持して個別保存する経路（OpenVR／fallback snapshot backendへのruntime適用は未実装）
 - 設計上の12初回setup項目をversion付き固定順序として扱い、厳格JSONをatomic保存して完了済みprefixから再開し、破損／順序外完了／旧versionの完了誤認をfail-safeで拒否するApp構成済み経路（画面／実機probeは未実装）
-- 初回setupの現在項目を12個の個別localized resource、1-origin step番号、全体件数、進捗率へ投影する英日／200% pseudo／high-contrast／accessible WPF画面。録画権利認可より先に未完了を表示し、閉じても録画を無効のまま保ち、画面自身には完了APIを持たせない（先頭6項目以外のprobe接続は未実装）
+- 初回setupの現在項目を12個の個別localized resource、1-origin step番号、全体件数、進捗率へ投影する英日／200% pseudo／high-contrast／accessible WPF画面。録画権利認可より先に未完了を表示し、閉じても録画を無効のまま保ち、画面自身には完了APIを持たせない（先頭6項目と9番目以外のprobe接続は未実装）
 - 現在の初回setup項目をexact probe routerへ渡し、成功時だけ順序付き進捗をatomic保存するverification経路。SteamVR App ID 250820のWindows Steam登録 `Installed=1`、または既存のloopback／identity／camera capability検証済みOSCQuery discoveryに1件以上のVRChat候補がある場合だけ先頭2項目を進める（Windows実行と残り10 probeは未検証／未実装）
 - 単一の検証済みVRChat候補だけについて現在camera modeをOSCQuery snapshotから読み、同一modeのUDP writeを既存の200 ms×2回echoで確認して状態を変えずにcamera endpoint項目を進めるprobe。候補0／複数、mode不明、echo失敗はfail-safeで未完了を保つ
 - Windows microphone consent registryが明示`Allow`で、保存済みopaque capture IDがactive microphone catalogにordinal完全一致する場合だけprivacy／device項目を進めるprobe。`default-capture`、inactive device、拒否／未知／読取失敗はfail-safeで未完了を保つ
 - 保存済みencoder preferenceをnative合成frame probeへ渡し、実packet生成時だけself-test項目を進めるprobe。native DLLは検証時だけloadし、結果／失敗後に必ず解放する（AutoはGPU signal未確定のためMedia Foundation softwareを検証）
 - packaged manifestを使うnative SteamVR runtimeで録画／microphone toggle actionの初回stateを各2秒以内に取得し、両方がactiveの場合だけbinding項目を進めるprobe。manifest存在だけ、inactive、timeout、backend unavailableは未完了を保つ
+- 保存済み録画出力先へauthenticated Legal Bundleをversion付きでmirrorし、install root／staging／既存mirrorのhash、identity、unexpected payload、symlinkをfail-closed再検証できた場合だけ9番目を進めるprobe（固定順序のため7・8番目実装後に到達）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -143,7 +144,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 - 実Spout2／D3D11、承認済みencoder／muxer adapterを持つproduction media backend
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
-- 初回setupの残り6 probeとWindows上の先頭6項目の検証実行、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
+- 初回setupの残り5 probeとWindows上の先頭6項目／Legal mirror検証実行、VR配置／OSC設定のruntime反映、実アプリのend-to-end録画
 - 承認済みMaterial Symbols asset、rights ledger、FFmpeg source offer、最終依存inventory
 - Windows 10／11およびNVIDIA／AMD／Intel、HMD／controllerでの実機試験
 - coverage／mutation／native coverage／accessibility／localizationの全release gate
@@ -178,9 +179,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 930 passed, 0 failed, 0 skipped
+- managed: 932 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 256
+  - Application 258
   - Compliance 186
   - Presentation 90
   - Integration 308
@@ -235,12 +236,13 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A settings path that three-way merges System/English/Japanese as an optional schema-v1 locale, applies it to WPF string/layout resources at startup with CLI-override precedence, and reapplies it immediately after a successful save
 - A settings path that projects VR hand/Wrist Dock/World Pin and OSC auto-discovery/loopback fallback host/ports into localized accessible controls and persists explicit edits while retaining concurrent overlay-transform or port updates (runtime application to OpenVR and a fallback snapshot backend remains outstanding)
 - An App-composed path that models the 12 specified first-run setup items as a versioned fixed order, atomically persists strict JSON, resumes from a completed prefix, and fails safe on corruption, out-of-order completion, or completion from an older version (hardware probes remain outstanding)
-- An English/Japanese, deterministic 200%-pseudo, high-contrast, accessible WPF window that projects the current first-run item, one-based step number, total count, and overall progress; it appears before rights authorization, keeps recording disabled after close while incomplete, and exposes no self-approval API (probe wiring beyond the first six items remains outstanding)
+- An English/Japanese, deterministic 200%-pseudo, high-contrast, accessible WPF window that projects the current first-run item, one-based step number, total count, and overall progress; it appears before rights authorization, keeps recording disabled after close while incomplete, and exposes no self-approval API (probe wiring beyond the first six and ninth items remains outstanding)
 - A verification path that routes only the current first-run item to its exact probe and atomically saves ordered progress only after success; the first two items advance only for SteamVR App ID 250820 `Installed=1`, or at least one VRChat candidate from the existing OSCQuery discovery after loopback, identity, and camera-capability validation (Windows execution and the remaining 10 probes are unverified/outstanding)
 - A camera-endpoint probe that, only for one validated VRChat candidate, reads the current camera mode from the OSCQuery snapshot and writes the same mode through the existing two-attempt 200 ms UDP echo confirmation, avoiding a state change; zero/multiple candidates, unknown mode, or failed echo remain incomplete
 - A microphone privacy/device probe that advances only when the Windows microphone consent registration explicitly says `Allow` and the saved opaque capture ID exactly matches an active microphone endpoint; `default-capture`, inactive devices, denied/unknown consent, and read failures remain incomplete
 - An encoder self-test probe that passes the saved encoder preference to the native synthetic-frame probe and advances only after an actual packet is produced; the native DLL is loaded only for verification and always released afterward (Auto tests Media Foundation software because no GPU signal is established yet)
 - A SteamVR binding probe that uses the packaged manifest through the native runtime and advances only when initial states for both recording and microphone toggle actions arrive within two seconds each and are active; manifest presence alone, inactive actions, timeout, or backend unavailability remain incomplete
+- A ninth-item probe that mirrors the authenticated Legal Bundle to the saved recording output under a product-version directory and advances only after fail-closed hash, identity, unexpected-payload, and symlink checks of the install root, staging, and existing mirror (fixed ordering makes it reachable after items seven and eight)
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
@@ -292,7 +294,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 
 - Real Spout2/D3D11 and a production media backend with approved encoder/muxer adapters
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
-- The remaining 6 first-run probes and Windows execution of the first six checks, runtime VR-placement/OSC settings, and end-to-end recording in the real application
+- The remaining 5 first-run probes and Windows execution of the first six checks/Legal mirror verification, runtime VR-placement/OSC settings, and end-to-end recording in the real application
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Hardware testing on Windows 10/11, NVIDIA/AMD/Intel, HMDs, and controllers
 - All coverage, mutation, native-coverage, accessibility, and localization release gates
