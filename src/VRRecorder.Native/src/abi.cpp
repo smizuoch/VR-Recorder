@@ -434,7 +434,7 @@ private:
     std::unique_ptr<vrrecorder::native::MediaBackend> backend_;
     std::mutex state_mutex_;
     std::condition_variable state_condition_;
-    std::mutex callback_mutex_;
+    std::recursive_mutex callback_mutex_;
     SessionState state_ = SessionState::Created;
     bool stop_requested_ = false;
     bool first_packet_emitted_ = false;
