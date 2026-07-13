@@ -199,6 +199,8 @@ void RejectsAnInvalidProcessorOutputSurface()
     CHECK(encoder.frames.empty());
 }
 
+vrrec_video_layout_v1 PortraitLayout();
+
 void DelegatesFinishAndAbortsProcessorBeforeEncoder()
 {
     std::vector<int> order;
@@ -213,6 +215,8 @@ void DelegatesFinishAndAbortsProcessorBeforeEncoder()
     sink.Abort();
     sink.Abort();
     CHECK(order == std::vector<int>({1, 2}));
+    CHECK(sink.UpdateVideoLayout(PortraitLayout()) ==
+          VRREC_STATUS_INVALID_STATE);
 }
 
 vrrec_video_layout_v1 PortraitLayout()
