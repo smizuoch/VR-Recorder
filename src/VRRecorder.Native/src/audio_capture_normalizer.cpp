@@ -267,10 +267,18 @@ bool StereoCaptureNormalizer48k::IsFormatSupported(
     const CapturePcmFormat &format) noexcept
 {
     constexpr std::uint16_t maximum_channel_count = 8;
+    const auto channel_layout_supported =
+        (format.channel_count == 1 &&
+         (format.speaker_mask == 0 ||
+          format.speaker_mask == 0x0000'0004)) ||
+        (format.channel_count == OutputChannelCount &&
+         (format.speaker_mask == 0 ||
+          format.speaker_mask == 0x0000'0003)) ||
+        (format.channel_count > OutputChannelCount &&
+         std::popcount(format.speaker_mask) == format.channel_count);
     if (format.sample_rate_hz == 0 || format.channel_count == 0 ||
         format.channel_count > maximum_channel_count ||
-        (format.channel_count > OutputChannelCount &&
-         std::popcount(format.speaker_mask) != format.channel_count)) {
+        !channel_layout_supported) {
         return false;
     }
 
