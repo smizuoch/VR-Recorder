@@ -53,6 +53,12 @@ struct EventLog {
     std::vector<CapturedEvent> events;
 };
 
+struct AbortFromCallbackContext {
+    vrrec_session_t *session = nullptr;
+    vrrec_status_t abort_status = VRREC_STATUS_INTERNAL_ERROR;
+    std::promise<void> completed;
+};
+
 void VRREC_CALL CaptureEvent(
     void *user_data,
     const vrrec_event_v1 *event)
@@ -66,6 +72,15 @@ void VRREC_CALL CaptureEvent(
         event->audio_packet_count,
         event->message_utf8 == nullptr ? "" : event->message_utf8,
     });
+}
+
+void VRREC_CALL AbortFromCallback(
+    void *user_data,
+    const vrrec_event_v1 *)
+{
+    auto &context = *static_cast<AbortFromCallbackContext *>(user_data);
+    context.abort_status = vrrec_session_abort_v1(context.session);
+    context.completed.set_value();
 }
 
 vrrec_session_config_v1 ValidConfig()
@@ -578,6 +593,41 @@ bool EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones()
     CHECK(log.events[1].audio_packet_count == 142);
 
     vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool CallbackCanAbortItsOwnSessionWithoutDeadlocking()
+{
+    AbortFromCallbackContext context;
+    const auto config = ValidConfig();
+    const auto callbacks = vrrec_callbacks_v1 {
+        sizeof(vrrec_callbacks_v1),
+        VRREC_ABI_V1,
+        AbortFromCallback,
+        &context,
+    };
+    CHECK(vrrec_session_create_v1(
+              &config,
+              &callbacks,
+              &context.session) == VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(context.session) == VRREC_STATUS_OK);
+    auto completed = context.completed.get_future();
+    std::thread emitting([] {
+        vrrecorder::native::testing::CommitMuxedVideoPacket();
+    });
+
+    if (completed.wait_for(std::chrono::milliseconds(250)) !=
+        std::future_status::ready) {
+        emitting.detach();
+        std::cerr << __func__
+                  << " timed out waiting for callback Abort\n";
+        return false;
+    }
+
+    emitting.join();
+    completed.get();
+    CHECK(context.abort_status == VRREC_STATUS_OK);
+    vrrec_session_destroy_v1(context.session);
     return true;
 }
 
@@ -1886,6 +1936,7 @@ int main()
         !StopWaitsForAnInFlightAudioRoutingUpdate() ||
         !QueriesVersionedSessionStatistics() ||
         !EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones() ||
+        !CallbackCanAbortItsOwnSessionWithoutDeadlocking() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
