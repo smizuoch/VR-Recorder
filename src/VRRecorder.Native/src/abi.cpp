@@ -74,14 +74,43 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
             }
 
             state_ = SessionState::Started;
+            start_in_progress_ = true;
+            first_packet_pending_ = false;
         }
 
         const auto status = backend_->Start();
-        if (status != VRREC_STATUS_OK) {
-            const std::lock_guard lock(state_mutex_);
-            if (state_ == SessionState::Started) {
-                state_ = SessionState::Created;
+        const std::lock_guard callback_lock(callback_mutex_);
+        auto emit_first_packet = false;
+        std::uint64_t sequence = 0;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            start_in_progress_ = false;
+            if (status != VRREC_STATUS_OK) {
+                first_packet_pending_ = false;
+                if (state_ == SessionState::Started) {
+                    state_ = SessionState::Created;
+                }
+            } else if (state_ == SessionState::Started &&
+                       first_packet_pending_ &&
+                       !first_packet_emitted_) {
+                first_packet_pending_ = false;
+                first_packet_emitted_ = true;
+                sequence = ++sequence_;
+                emit_first_packet = true;
             }
+        }
+
+        if (emit_first_packet) {
+            Emit(vrrec_event_v1 {
+                sizeof(vrrec_event_v1),
+                VRREC_ABI_V1,
+                VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED,
+                VRREC_STATUS_OK,
+                sequence,
+                0,
+                0,
+                nullptr,
+            });
         }
 
         return status;
@@ -210,6 +239,10 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         {
             const std::lock_guard state_lock(state_mutex_);
             if (state_ != SessionState::Started || first_packet_emitted_) {
+                return;
+            }
+            if (start_in_progress_) {
+                first_packet_pending_ = true;
                 return;
             }
 
@@ -437,6 +470,8 @@ private:
     std::recursive_mutex callback_mutex_;
     SessionState state_ = SessionState::Created;
     bool stop_requested_ = false;
+    bool start_in_progress_ = false;
+    bool first_packet_pending_ = false;
     bool first_packet_emitted_ = false;
     bool desktop_audio_available_ = true;
     bool microphone_audio_available_ = true;
