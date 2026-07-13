@@ -49,8 +49,10 @@ Mp4MuxResult FragmentedMp4MuxCoordinator::Submit(
         AbortLocked();
         return Mp4MuxResult::MuxFailed;
     }
-    if (observer_ != nullptr) {
-        static_cast<void>(observer_->Observe(packet));
+    if (observer_ != nullptr &&
+        observer_->Observe(packet) != VRREC_STATUS_OK) {
+        AbortLocked();
+        return Mp4MuxResult::MuxFailed;
     }
 
     if (!has_fragment_) {
