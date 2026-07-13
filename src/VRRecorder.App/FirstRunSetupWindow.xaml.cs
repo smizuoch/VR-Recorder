@@ -84,6 +84,10 @@ public partial class FirstRunSetupWindow : Window
                 Apply(await _controller.LoadAsync(CancellationToken.None));
             }
         }
+        catch (Exception)
+        {
+            ApplyStatus("Setup_Verification_Failed");
+        }
         finally
         {
             VerifySetupButton.IsEnabled = true;

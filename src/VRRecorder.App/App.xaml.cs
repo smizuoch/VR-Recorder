@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Net.Http;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
@@ -12,6 +13,7 @@ using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Infrastructure.Storage;
 using VRRecorder.Infrastructure.Media;
+using VRRecorder.Infrastructure.Osc;
 using VRRecorder.Infrastructure.SteamVr;
 
 namespace VRRecorder.App;
@@ -41,6 +43,7 @@ public partial class App
     private readonly FirstRunSetupUiController _firstRunSetupUi;
     private readonly FirstRunSetupVerificationController
         _firstRunSetupVerification;
+    private readonly HttpMessageInvoker _setupOscHttp;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private Task? _steamVrInputTask;
     private IDisposable? _trayNotificationSubscription;
@@ -90,10 +93,28 @@ public partial class App
             FirstRunSetupPath(settingsPath));
         _firstRunSetup = new FirstRunSetupController(_firstRunSetupStore);
         _firstRunSetupUi = new FirstRunSetupUiController(_firstRunSetup);
+        _setupOscHttp = new HttpMessageInvoker(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            ConnectTimeout = TimeSpan.FromSeconds(2),
+            UseProxy = false,
+        });
+        var setupProbe = new FirstRunSetupProbeRouter(
+            new Dictionary<FirstRunSetupStep, IFirstRunSetupProbe>
+            {
+                [FirstRunSetupStep.SteamVrDetection] =
+                    new WindowsSteamVrInstallationProbe(),
+                [FirstRunSetupStep.VrChatOscDetection] =
+                    new VrChatOscFirstRunSetupProbe(
+                        new OscQueryVrChatInstanceDiscovery(
+                            new WindowsDnsSdOscQueryServiceBrowser(),
+                            _setupOscHttp,
+                            TimeSpan.FromSeconds(3))),
+            });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
                 _firstRunSetup,
-                new WindowsSteamVrInstallationProbe());
+                setupProbe);
         _legalController = new DesktopLegalController(
             new AuthenticatedLegalCatalogReader(
                 AppContext.BaseDirectory,
@@ -283,7 +304,14 @@ public partial class App
                     }
                     finally
                     {
-                        _firstRunSetupStore.Dispose();
+                        try
+                        {
+                            _firstRunSetupStore.Dispose();
+                        }
+                        finally
+                        {
+                            _setupOscHttp.Dispose();
+                        }
                     }
                 }
             }
