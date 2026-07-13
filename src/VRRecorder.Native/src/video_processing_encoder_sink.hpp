@@ -50,6 +50,7 @@ private:
     mutable std::mutex layout_mutex_;
     std::optional<vrrec_video_layout_v1> layout_;
     std::atomic_bool aborted_ = false;
+    std::atomic_bool finished_ = false;
 };
 
 }
