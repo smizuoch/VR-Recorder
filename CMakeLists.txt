@@ -73,4 +73,7 @@ if(BUILD_TESTING)
             "-DPINNED_FFMPEG_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_ffmpeg_contract.cmake")
+    set_tests_properties(
+        vrrecorder_native_pinned_ffmpeg_contract
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
