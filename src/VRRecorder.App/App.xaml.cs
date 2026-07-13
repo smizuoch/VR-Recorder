@@ -66,14 +66,16 @@ public partial class App
         _legalVerifier = new AuthenticatedLegalBundleVerifier(
             new AssemblyMetadataAuthenticatedLegalBundleAnchorSource(
                 typeof(App).Assembly));
+        var outputPaths = new RecordingOutputPathResolver(
+            new WindowsDownloadsOutputPathProvider());
+        var legalOutputMirror = new AuthenticatedLegalBundleOutputMirror(
+            AppContext.BaseDirectory,
+            ProductVersion(),
+            _legalVerifier);
         _recordingSettings = new DesktopRecordingSettingsController(
             settingsStore,
-            new RecordingOutputPathResolver(
-                new WindowsDownloadsOutputPathProvider()),
-            new AuthenticatedLegalBundleOutputMirror(
-                AppContext.BaseDirectory,
-                ProductVersion(),
-                _legalVerifier),
+            outputPaths,
+            legalOutputMirror,
             new WindowsAudioEndpointCatalog(),
             this);
         _diagnosticsController = new DesktopDiagnosticsController(
@@ -133,6 +135,11 @@ public partial class App
                                 AppContext.BaseDirectory,
                                 NativeLibraryFileName),
                             AppContext.BaseDirectory)),
+                [FirstRunSetupStep.LegalBundleVerification] =
+                    new LegalBundleVerificationFirstRunSetupProbe(
+                        settingsStore,
+                        outputPaths,
+                        legalOutputMirror),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
