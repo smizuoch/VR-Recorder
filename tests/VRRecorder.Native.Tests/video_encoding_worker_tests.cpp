@@ -176,6 +176,7 @@ void RuntimeEncoderFailureRaisesFaultAndDoesNotFlush()
 
     CHECK(worker.Start() == VRREC_STATUS_OK);
     CHECK(worker.Join() == VideoEncodingWorkerResult::EncoderFailed);
+    CHECK(worker.RequestStop() == VRREC_STATUS_INVALID_STATE);
     CHECK(events.first_packet_calls == 0);
     CHECK(events.fault_calls == 1);
     CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
