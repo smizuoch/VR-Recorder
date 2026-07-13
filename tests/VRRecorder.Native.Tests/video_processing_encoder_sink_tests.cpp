@@ -257,6 +257,33 @@ void AppliesValidatedLiveLayoutToTheNextFrame()
     CHECK(processor.last_plan.destination_height == 1'080);
 }
 
+void FinishTerminalizesFrameProcessingAndLayoutUpdates()
+{
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12);
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+
+    CHECK(sink.Finish().status == VRREC_STATUS_OK);
+    CHECK(sink.UpdateVideoLayout(PortraitLayout()) ==
+          VRREC_STATUS_INVALID_STATE);
+    const auto write = sink.Write({
+        0,
+        1,
+        0,
+        0,
+        false,
+        Surface(1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_BGRA8),
+    });
+    CHECK(write.status == VRREC_STATUS_INVALID_STATE);
+    CHECK(write.failure_stage == VideoEncoderFailureStage::Processing);
+    CHECK(processor.process_calls == 0);
+    CHECK(encoder.frames.empty());
+}
+
 void RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout()
 {
     RecordingProcessor processor;
@@ -289,6 +316,7 @@ int main()
     RejectsAnInvalidProcessorOutputSurface();
     DelegatesFinishAndAbortsProcessorBeforeEncoder();
     AppliesValidatedLiveLayoutToTheNextFrame();
+    FinishTerminalizesFrameProcessingAndLayoutUpdates();
     RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout();
     return 0;
 }
