@@ -115,6 +115,11 @@ public partial class App
                         setupOscDiscovery,
                         new ConfirmedUdpVrChatCameraGatewayFactory(
                             _setupOscHttp)),
+                [FirstRunSetupStep.MicrophonePrivacyAndDevice] =
+                    new MicrophonePrivacyAndDeviceFirstRunSetupProbe(
+                        settingsStore,
+                        new WindowsAudioEndpointCatalog(),
+                        new WindowsMicrophonePrivacyAccess()),
             });
         _firstRunSetupVerification =
             new FirstRunSetupVerificationController(
