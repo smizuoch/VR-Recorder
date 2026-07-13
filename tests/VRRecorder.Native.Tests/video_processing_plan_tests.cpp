@@ -111,6 +111,40 @@ void RejectsExplicitDestinationsOutsideTheCanvas()
     CHECK(plan.destination_height == 0);
 }
 
+void RejectsExplicitLayoutsFromAnUnknownAbiContract()
+{
+    auto layout = vrrec_video_layout_v1 {
+        sizeof(vrrec_video_layout_v1),
+        VRREC_ABI_V1,
+        1'920,
+        1'080,
+        1'920,
+        1'080,
+        0,
+        0,
+        1'920,
+        1'080,
+        VRREC_CANVAS_BACKGROUND_BLACK,
+        VRREC_VIDEO_ROTATION_NONE,
+    };
+    VideoProcessingPlan plan {};
+
+    layout.struct_size -= 1;
+    CHECK(CreateExplicitVideoProcessingPlan(
+              Source(1'920, 1'080),
+              layout,
+              plan) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(plan.output_width == 0);
+
+    layout.struct_size = sizeof(vrrec_video_layout_v1);
+    layout.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(CreateExplicitVideoProcessingPlan(
+              Source(1'920, 1'080),
+              layout,
+              plan) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(plan.output_width == 0);
+}
+
 }
 
 int main()
@@ -120,5 +154,6 @@ int main()
     MarksRgbaInputForRedBlueChannelNormalization();
     RejectsOddOrZeroOutputCanvas();
     RejectsExplicitDestinationsOutsideTheCanvas();
+    RejectsExplicitLayoutsFromAnUnknownAbiContract();
     return 0;
 }
