@@ -1,45 +1,16 @@
 #include "pipeline_media_backend.hpp"
 
-#include <new>
-#include <system_error>
 #include <utility>
 
 namespace vrrecorder::native {
-namespace {
-
-class StandardPipelineMediaThreadFactory final
-    : public PipelineMediaThreadFactoryPort {
-public:
-    vrrec_status_t Start(
-        std::thread &thread,
-        PipelineMediaThreadEntry entry,
-        void *context) noexcept override
-    {
-        try {
-            thread = std::thread(entry, context);
-        } catch (const std::bad_alloc &) {
-            return VRREC_STATUS_OUT_OF_MEMORY;
-        } catch (const std::system_error &) {
-            return VRREC_STATUS_INTERNAL_ERROR;
-        } catch (...) {
-            return VRREC_STATUS_INTERNAL_ERROR;
-        }
-        return VRREC_STATUS_OK;
-    }
-};
-
-PipelineMediaThreadFactoryPort &DefaultThreadFactory() noexcept
-{
-    static StandardPipelineMediaThreadFactory factory;
-    return factory;
-}
-
-}
 
 PipelineMediaBackend::PipelineMediaBackend(
     MediaRecordingPipelinePort &pipeline,
     VideoLayoutUpdatePort &layout) noexcept
-    : PipelineMediaBackend(pipeline, layout, DefaultThreadFactory())
+    : PipelineMediaBackend(
+          pipeline,
+          layout,
+          DefaultNativeThreadFactory())
 {
 }
 

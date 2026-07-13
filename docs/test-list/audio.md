@@ -26,6 +26,7 @@
 - [x] 二入力のframe skewをmix前に拒否し、blocked readをAbortで解除する
 - [x] WASAPI Start／Readを同一専用threadで実行し、初期化失敗時とAbort時にjoinする
 - [x] microphone初期化失敗時は開始済みdesktop workerをrollbackし、部分開始sessionを残さない
+- [x] audio capture thread生成のOOM／internal／non-joinable成功を終端失敗として公開し、未起動providerへ触れず、microphone生成失敗時はdesktopを同期Abort／Joinする
 - [x] mixed PCMの開始frameと固定sample数をencoder Portへ渡し、buffering中もsilent timelineを維持する
 - [x] capture timeline overrunとmixed-window underrunをinput role／正確な48 kHz frame付きでnative media event sinkへ通知する
 - [x] audio healthをABI size不変のevent kindからtyped managed callback、bounded診断queue、privacy-safe bundleへ伝播する
@@ -65,6 +66,7 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Reject dual-input frame skew before mixing and release blocked reads on abort
 - [x] Run WASAPI Start/Read on one dedicated thread and join it after initialization failure or abort
 - [x] Roll back a started desktop worker when microphone initialization fails, leaving no partially started session
+- [x] Publish audio-capture thread OOM, internal failure, and non-joinable success as terminal failures without touching an unstarted provider, and synchronously abort/join desktop when microphone launch fails
 - [x] Submit positioned, fixed-size mixed PCM windows to the encoder port while preserving silent timelines during buffering
 - [x] Notify the native media-event sink of capture-timeline overruns and mixed-window underruns with the input role and exact 48 kHz frame
 - [x] Propagate audio health from ABI-size-preserving event kinds through typed managed callbacks, the bounded diagnostics queue, and privacy-safe bundles

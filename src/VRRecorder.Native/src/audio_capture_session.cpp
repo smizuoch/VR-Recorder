@@ -14,6 +14,31 @@ StereoAudioCaptureSession::StereoAudioCaptureSession(
     double desktop_gain_db,
     double microphone_gain_db,
     AudioCaptureAvailabilitySink *availability_sink)
+    : StereoAudioCaptureSession(
+          desktop_provider,
+          desktop_waiter,
+          microphone_provider,
+          microphone_waiter,
+          timeline_capacity_frames,
+          initial_routing,
+          desktop_gain_db,
+          microphone_gain_db,
+          DefaultNativeThreadFactory(),
+          availability_sink)
+{
+}
+
+StereoAudioCaptureSession::StereoAudioCaptureSession(
+    AudioCaptureSourceProvider &desktop_provider,
+    AudioCaptureRecoveryWaiter &desktop_waiter,
+    AudioCaptureSourceProvider &microphone_provider,
+    AudioCaptureRecoveryWaiter &microphone_waiter,
+    std::size_t timeline_capacity_frames,
+    vrrec_audio_routing_t initial_routing,
+    double desktop_gain_db,
+    double microphone_gain_db,
+    NativeThreadFactoryPort &thread_factory,
+    AudioCaptureAvailabilitySink *availability_sink)
     : desktop_timeline_(timeline_capacity_frames),
       microphone_timeline_(timeline_capacity_frames),
       mixer_(initial_routing, desktop_gain_db, microphone_gain_db),
@@ -21,11 +46,13 @@ StereoAudioCaptureSession::StereoAudioCaptureSession(
           desktop_provider,
           desktop_waiter,
           desktop_timeline_,
+          thread_factory,
           availability_sink),
       microphone_worker_(
           microphone_provider,
           microphone_waiter,
           microphone_timeline_,
+          thread_factory,
           availability_sink),
       mix_coordinator_(
           desktop_timeline_,

@@ -124,6 +124,7 @@ public:
     vrrec_status_t Create(
         std::unique_ptr<AudioCaptureSource> &source) noexcept override
     {
+        ++create_calls;
         if (source_ == nullptr) {
             return VRREC_STATUS_BACKEND_UNAVAILABLE;
         }
@@ -132,8 +133,39 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    std::atomic_int create_calls = 0;
+
 private:
     std::unique_ptr<AudioCaptureSource> source_;
+};
+
+class ScriptedThreadFactory final : public NativeThreadFactoryPort {
+public:
+    explicit ScriptedThreadFactory(std::vector<vrrec_status_t> statuses)
+        : statuses_(std::move(statuses))
+    {
+    }
+
+    vrrec_status_t Start(
+        std::thread &thread,
+        NativeThreadEntry entry,
+        void *context) noexcept override
+    {
+        ++start_calls;
+        const auto status = next_status_ < statuses_.size()
+            ? statuses_[next_status_++]
+            : VRREC_STATUS_INTERNAL_ERROR;
+        if (status == VRREC_STATUS_OK) {
+            thread = std::thread(entry, context);
+        }
+        return status;
+    }
+
+    std::size_t start_calls = 0;
+
+private:
+    std::vector<vrrec_status_t> statuses_;
+    std::size_t next_status_ = 0;
 };
 
 class RecordingWaiter final : public AudioCaptureRecoveryWaiter {
@@ -374,6 +406,101 @@ void PropagatesDesktopLossWithItsExactFrame()
     session.Abort();
 }
 
+void DesktopThreadCreationFailureDoesNotStartEitherInput()
+{
+    auto desktop_state = std::make_shared<SourceState>();
+    auto microphone_state = std::make_shared<SourceState>();
+    SingleSourceProvider desktop_provider(
+        std::make_unique<PacketThenBlockingSource>(
+            desktop_state,
+            VRREC_STATUS_OK,
+            0.25F,
+            2));
+    SingleSourceProvider microphone_provider(
+        std::make_unique<PacketThenBlockingSource>(
+            microphone_state,
+            VRREC_STATUS_OK,
+            0.5F,
+            2));
+    RecordingWaiter desktop_waiter;
+    RecordingWaiter microphone_waiter;
+    ScriptedThreadFactory thread_factory({VRREC_STATUS_OUT_OF_MEMORY});
+    StereoAudioCaptureSession session(
+        desktop_provider,
+        desktop_waiter,
+        microphone_provider,
+        microphone_waiter,
+        16,
+        VRREC_AUDIO_ROUTING_MIXED,
+        0.0,
+        0.0,
+        thread_factory);
+
+    CHECK(session.Start(Config()) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(thread_factory.start_calls == 1);
+    CHECK(desktop_provider.create_calls == 0);
+    CHECK(microphone_provider.create_calls == 0);
+    CHECK(desktop_state->start_calls == 0);
+    CHECK(microphone_state->start_calls == 0);
+    CHECK(session.Start(Config()) == VRREC_STATUS_INVALID_STATE);
+
+    session.Abort();
+    CHECK(desktop_waiter.abort_calls == 0);
+    CHECK(microphone_waiter.abort_calls == 0);
+    CHECK(desktop_state->abort_calls == 0);
+    CHECK(microphone_state->abort_calls == 0);
+}
+
+void MicrophoneThreadCreationFailureRollsBackDesktop()
+{
+    auto desktop_state = std::make_shared<SourceState>();
+    auto microphone_state = std::make_shared<SourceState>();
+    SingleSourceProvider desktop_provider(
+        std::make_unique<PacketThenBlockingSource>(
+            desktop_state,
+            VRREC_STATUS_OK,
+            0.25F,
+            2));
+    SingleSourceProvider microphone_provider(
+        std::make_unique<PacketThenBlockingSource>(
+            microphone_state,
+            VRREC_STATUS_OK,
+            0.5F,
+            2));
+    RecordingWaiter desktop_waiter;
+    RecordingWaiter microphone_waiter;
+    ScriptedThreadFactory thread_factory(
+        {VRREC_STATUS_OK, VRREC_STATUS_INTERNAL_ERROR});
+    StereoAudioCaptureSession session(
+        desktop_provider,
+        desktop_waiter,
+        microphone_provider,
+        microphone_waiter,
+        16,
+        VRREC_AUDIO_ROUTING_MIXED,
+        0.0,
+        0.0,
+        thread_factory);
+
+    CHECK(session.Start(Config()) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(thread_factory.start_calls == 2);
+    CHECK(desktop_provider.create_calls == 1);
+    CHECK(microphone_provider.create_calls == 0);
+    CHECK(desktop_state->start_calls == 1);
+    CHECK(microphone_state->start_calls == 0);
+    CHECK(desktop_state->abort_calls == 1);
+    CHECK(microphone_state->abort_calls == 0);
+    CHECK(desktop_waiter.abort_calls == 1);
+    CHECK(microphone_waiter.abort_calls == 0);
+    CHECK(session.Start(Config()) == VRREC_STATUS_INVALID_STATE);
+
+    session.Abort();
+    CHECK(desktop_state->abort_calls == 1);
+    CHECK(desktop_waiter.abort_calls == 1);
+    CHECK(microphone_state->abort_calls == 0);
+    CHECK(microphone_waiter.abort_calls == 0);
+}
+
 }
 
 int main()
@@ -382,5 +509,7 @@ int main()
     RollsBackDesktopWhenMicrophoneStartFails();
     RejectsInvalidRoutingBeforeStartingInputs();
     PropagatesDesktopLossWithItsExactFrame();
+    DesktopThreadCreationFailureDoesNotStartEitherInput();
+    MicrophoneThreadCreationFailureRollsBackDesktop();
     return 0;
 }

@@ -1070,6 +1070,10 @@ add_test(NAME vrrecorder_native_audio_capture_input_worker
     COMMAND vrrecorder_native_audio_capture_input_worker)
 add_test(NAME vrrecorder_native_audio_capture_session
     COMMAND vrrecorder_native_audio_capture_session)
+set_tests_properties(
+    vrrecorder_native_audio_capture_input_worker
+    vrrecorder_native_audio_capture_session
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_audio_mix_coordinator
     COMMAND vrrecorder_native_audio_mix_coordinator)
 add_test(NAME vrrecorder_native_audio_encoding_pump

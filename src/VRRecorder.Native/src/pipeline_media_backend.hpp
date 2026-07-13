@@ -7,20 +7,13 @@
 
 #include "media_backend.hpp"
 #include "media_recording_pipeline.hpp"
+#include "native_thread_factory.hpp"
 #include "video_layout_update_port.hpp"
 
 namespace vrrecorder::native {
 
-using PipelineMediaThreadEntry = void (*)(void *) noexcept;
-
-class PipelineMediaThreadFactoryPort {
-public:
-    virtual ~PipelineMediaThreadFactoryPort() = default;
-    virtual vrrec_status_t Start(
-        std::thread &thread,
-        PipelineMediaThreadEntry entry,
-        void *context) noexcept = 0;
-};
+using PipelineMediaThreadEntry = NativeThreadEntry;
+using PipelineMediaThreadFactoryPort = NativeThreadFactoryPort;
 
 class PipelineMediaBackend final : public MediaBackend {
 public:
