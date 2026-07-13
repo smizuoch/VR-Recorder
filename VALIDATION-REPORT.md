@@ -29,9 +29,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 943件成功、失敗0、skip 0
+- managed: 948件成功、失敗0、skip 0
   - Domain 90
-  - Application 269
+  - Application 274
   - Compliance 186
   - Presentation 90
   - Integration 308
@@ -96,6 +96,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - authenticated catalogの全component／全typed legal documentをinstall rootからofflineで読み、component/reference identityが一致し全文が非空の場合だけ10番目を進めるprobe。license、notice、copyright、attribution、asset manifestを同じfail-closed readerで検証する
 - authenticated asset manifestからMaterial Symbols schema 2／承認済みrelease status／component identityと、M3 report schema 2／evaluated／release eligible／coverage 100%／unclassified・deferred・unresolved各0を確認した場合だけ12番目を進めるprobe。design-time exampleは明示拒否する
 - authenticated localization contractで英日、pseudo 200%、RTL、resource parity、drag代替、keyboard／controller／ray parityを確認し、release-eligible M3 reportにtooltip、accessible name coverage 100%、英日、pseudo、RTL、high contrastのrequired checkが揃う場合だけ11番目を進めるprobe
+- 手首overlay配置について、保存済みmode／transformをruntimeへ適用したreadback、実visible、ユーザーの可読性／操作非干渉確認が全て揃い、vectorを含め設定と完全一致する場合だけ成功するApplication probe境界（production OpenVR verifier未実装のためApp routerは未接続でfail-safe未完了）
 - desktop／microphoneのdevice loss／recoveryを48 kHz frame位置付きで伝える非terminal native ABI、型付きmanaged bridge、callback時刻を保つbounded診断queue、session-scoped desktop／tray fan-out
 - first packet確定後のencoder／GPU vendor／geometry／FPSと、graceful stop後のdrop／duplicate／encode latency／A/V offsetをprivate identityなしで記録・再投影する経路
 - 録画中Mic／Muteの復元可能なcontrol state、FIFO更新とstop barrier、17番目のnative routing export、desktop／wrist／SteamVR Micの共有command経路
@@ -182,9 +183,9 @@ cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
 ```
 
-- managed: 943 passed, 0 failed, 0 skipped
+- managed: 948 passed, 0 failed, 0 skipped
   - Domain 90
-  - Application 269
+  - Application 274
   - Compliance 186
   - Presentation 90
   - Integration 308
@@ -249,6 +250,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A tenth-item probe that reads every typed legal document for every authenticated catalog component offline from the install root and advances only when component/reference identity matches and full text is nonempty; licenses, notices, copyrights, attributions, and asset manifests use the same fail-closed reader
 - A twelfth-item probe that reads authenticated asset manifests and requires Material Symbols schema 2/approved release status/component identity plus M3 report schema 2/evaluated/release-eligible/100% coverage/zero unclassified, deferred, and unresolved entries; design-time examples are explicitly rejected
 - An eleventh-item probe that requires the authenticated localization contract to cover Japanese/English, 200% pseudo locales, RTL, resource parity, drag alternatives, and keyboard/controller/ray parity, plus a release-eligible M3 report containing tooltip, 100% accessible-name coverage, Japanese/English, pseudo, RTL, and high-contrast required checks
+- An Application probe boundary for wrist-overlay placement that requires runtime-applied readback of the saved mode/transform, actual visibility, user confirmation of readability and unobstructed interaction, and exact vector equality; because the production OpenVR verifier is absent, it is intentionally not routed and remains fail-safe incomplete
 - Nonterminal native ABI events, typed managed bridging, callback-time-preserving bounded diagnostics, and session-scoped desktop/tray fan-out for desktop-audio and microphone loss/recovery with 48 kHz frame positions
 - Privacy-safe logging and reprojection of the committed encoder/GPU-vendor/geometry/FPS profile and final drop/duplicate/encode-latency/A/V-offset statistics
 - Reversible live Mic/Mute control state, FIFO updates with a stop barrier, the seventeenth native routing export, and shared desktop/wrist/SteamVR microphone command paths
