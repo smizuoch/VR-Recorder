@@ -6,6 +6,7 @@
 #include <mutex>
 #include <thread>
 
+#include "native_thread_factory.hpp"
 #include "spout_capture_pump.hpp"
 
 namespace vrrecorder::native {
@@ -30,6 +31,9 @@ public:
 class SpoutCaptureWorker final : public SpoutCaptureWorkerPort {
 public:
     explicit SpoutCaptureWorker(SpoutCaptureSource &source) noexcept;
+    SpoutCaptureWorker(
+        SpoutCaptureSource &source,
+        NativeThreadFactoryPort &thread_factory) noexcept;
     ~SpoutCaptureWorker();
 
     SpoutCaptureWorker(const SpoutCaptureWorker &) = delete;
@@ -41,11 +45,13 @@ public:
     SpoutCaptureWorkerResult Join() noexcept override;
 
 private:
+    static void RunEntry(void *context) noexcept;
     void Run() noexcept;
-    void SetResult(SpoutCaptureWorkerResult result) noexcept;
+    bool SetResult(SpoutCaptureWorkerResult result) noexcept;
     void JoinThread() noexcept;
 
     SpoutCaptureSource &source_;
+    NativeThreadFactoryPort &thread_factory_;
     std::mutex state_mutex_;
     std::mutex join_mutex_;
     std::thread thread_;

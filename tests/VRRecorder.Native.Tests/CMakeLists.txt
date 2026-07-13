@@ -1006,7 +1006,10 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_video_pipeline_session
     video_pipeline_session_tests.cpp
-    "${native_source_root}/src/video_pipeline_session.cpp")
+    "${native_source_root}/src/video_pipeline_session.cpp"
+    "${native_source_root}/src/video_encoding_worker.cpp"
+    "${native_source_root}/src/video_encoding_pump.cpp"
+    "${native_source_root}/src/video_cfr_scheduler.cpp")
 target_compile_features(
     vrrecorder_native_video_pipeline_session PRIVATE cxx_std_20)
 target_include_directories(
@@ -1142,6 +1145,7 @@ set_tests_properties(
     vrrecorder_native_video_encoding_worker
     PROPERTIES TIMEOUT 5)
 set_tests_properties(
+    vrrecorder_native_spout_capture_worker
     vrrecorder_native_video_pipeline_session
     PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_exports

@@ -1,13 +1,18 @@
 #include "spout_capture_worker.hpp"
 
-#include <new>
-#include <system_error>
-
 namespace vrrecorder::native {
 
 SpoutCaptureWorker::SpoutCaptureWorker(
     SpoutCaptureSource &source) noexcept
-    : source_(source)
+    : SpoutCaptureWorker(source, DefaultNativeThreadFactory())
+{
+}
+
+SpoutCaptureWorker::SpoutCaptureWorker(
+    SpoutCaptureSource &source,
+    NativeThreadFactoryPort &thread_factory) noexcept
+    : source_(source),
+      thread_factory_(thread_factory)
 {
 }
 
@@ -25,41 +30,54 @@ vrrec_status_t SpoutCaptureWorker::Start(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (started_.exchange(true)) {
+    std::unique_lock launch_lock(join_mutex_);
+    if (started_.exchange(true) || aborted_.load() || finished_.load()) {
         return VRREC_STATUS_INVALID_STATE;
     }
 
     poll_timeout_ = poll_timeout;
-    try {
-        thread_ = std::thread(&SpoutCaptureWorker::Run, this);
-    } catch (const std::bad_alloc &) {
+    const auto launch_status = thread_factory_.Start(
+        thread_,
+        &SpoutCaptureWorker::RunEntry,
+        this);
+    const auto effective_launch_status =
+        launch_status == VRREC_STATUS_OK && !thread_.joinable()
+        ? VRREC_STATUS_INTERNAL_ERROR
+        : launch_status;
+    if (effective_launch_status != VRREC_STATUS_OK) {
         SetResult(SpoutCaptureWorkerResult::Failed);
-        finished_.store(true);
-        return VRREC_STATUS_OUT_OF_MEMORY;
-    } catch (const std::system_error &) {
-        SetResult(SpoutCaptureWorkerResult::Failed);
-        finished_.store(true);
-        return VRREC_STATUS_INTERNAL_ERROR;
-    } catch (...) {
-        SetResult(SpoutCaptureWorkerResult::Failed);
-        finished_.store(true);
-        return VRREC_STATUS_INTERNAL_ERROR;
+        return aborted_.load()
+            ? VRREC_STATUS_INVALID_STATE
+            : effective_launch_status;
     }
 
-    return VRREC_STATUS_OK;
+    launch_lock.unlock();
+    return aborted_.load()
+        ? VRREC_STATUS_INVALID_STATE
+        : VRREC_STATUS_OK;
+}
+
+void SpoutCaptureWorker::RunEntry(void *context) noexcept
+{
+    static_cast<SpoutCaptureWorker *>(context)->Run();
 }
 
 void SpoutCaptureWorker::Abort() noexcept
 {
-    if (finished_.load()) {
-        JoinThread();
-        return;
+    auto abort_source = false;
+    {
+        const std::lock_guard lock(state_mutex_);
+        if (!finished_.load()) {
+            aborted_.store(true);
+            result_ = SpoutCaptureWorkerResult::Aborted;
+            finished_.store(true);
+            abort_source = true;
+        }
     }
 
-    if (!aborted_.exchange(true)) {
+    if (abort_source) {
         source_.Abort();
     }
-
     JoinThread();
 }
 
@@ -73,32 +91,46 @@ SpoutCaptureWorkerResult SpoutCaptureWorker::Join() noexcept
 void SpoutCaptureWorker::Run() noexcept
 {
     while (true) {
+        if (aborted_.load()) {
+            SetResult(SpoutCaptureWorkerResult::Aborted);
+            return;
+        }
+
         const auto result = source_.PollOne(poll_timeout_);
+        if (aborted_.load()) {
+            SetResult(SpoutCaptureWorkerResult::Aborted);
+            return;
+        }
         if (result == SpoutCaptureResult::FrameAccepted ||
             result == SpoutCaptureResult::Timeout) {
             continue;
         }
 
-        if (result == SpoutCaptureResult::Aborted && aborted_.load()) {
-            SetResult(SpoutCaptureWorkerResult::Aborted);
-        } else if (result == SpoutCaptureResult::SenderLost) {
-            source_.Abort();
-            SetResult(SpoutCaptureWorkerResult::SenderLost);
+        if (result == SpoutCaptureResult::SenderLost) {
+            if (SetResult(SpoutCaptureWorkerResult::SenderLost)) {
+                source_.Abort();
+            }
         } else {
-            source_.Abort();
-            SetResult(SpoutCaptureWorkerResult::Failed);
+            if (SetResult(SpoutCaptureWorkerResult::Failed)) {
+                source_.Abort();
+            }
         }
 
-        finished_.store(true);
         return;
     }
 }
 
-void SpoutCaptureWorker::SetResult(
+bool SpoutCaptureWorker::SetResult(
     SpoutCaptureWorkerResult result) noexcept
 {
     const std::lock_guard lock(state_mutex_);
+    if (finished_.load()) {
+        return false;
+    }
+
     result_ = result;
+    finished_.store(true);
+    return true;
 }
 
 void SpoutCaptureWorker::JoinThread() noexcept

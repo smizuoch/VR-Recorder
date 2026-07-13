@@ -8,9 +8,23 @@ VideoPipelineSession::VideoPipelineSession(
     SpoutCaptureWorkerPort &capture,
     VideoEncodingWorkerPort &encoding,
     MediaEventSink &events) noexcept
+    : VideoPipelineSession(
+          capture,
+          encoding,
+          events,
+          DefaultNativeThreadFactory())
+{
+}
+
+VideoPipelineSession::VideoPipelineSession(
+    SpoutCaptureWorkerPort &capture,
+    VideoEncodingWorkerPort &encoding,
+    MediaEventSink &events,
+    NativeThreadFactoryPort &join_thread_factory) noexcept
     : capture_(capture),
       encoding_(encoding),
-      events_(events)
+      events_(events),
+      join_thread_factory_(join_thread_factory)
 {
 }
 
@@ -24,6 +38,36 @@ void VideoPipelineSession::AbortCaptureOnce() noexcept
     if (!capture_abort_requested_.exchange(true)) {
         capture_.Abort();
     }
+}
+
+void VideoPipelineSession::CaptureJoinEntry(void *context) noexcept
+{
+    auto &join = *static_cast<CaptureJoinContext *>(context);
+    join.result = join.session.capture_.Join();
+    if (join.result == SpoutCaptureWorkerResult::SenderLost ||
+        join.result == SpoutCaptureWorkerResult::Failed) {
+        join.session.encoding_.Abort();
+    }
+}
+
+void VideoPipelineSession::CleanupStartedWorkers() noexcept
+{
+    const auto capture_started = capture_started_.exchange(false);
+    const auto encoding_started = encoding_started_.exchange(false);
+    if (encoding_started) {
+        encoding_.RequestAbort();
+    }
+    if (capture_started) {
+        AbortCaptureOnce();
+    }
+    if (encoding_started) {
+        encoding_.JoinAfterAbort();
+    }
+    if (capture_started) {
+        capture_.Join();
+    }
+    active_.store(false);
+    finished_.store(true);
 }
 
 vrrec_status_t VideoPipelineSession::Start(
@@ -52,15 +96,29 @@ vrrec_status_t VideoPipelineSession::Start(
         }
     } completion {start_phase_};
 
-    if (terminal_outcome_.load() != TerminalOutcome::Open) {
-        return VRREC_STATUS_INVALID_STATE;
+    {
+        const std::lock_guard state_lock(start_abort_mutex_);
+        if (terminal_outcome_.load() != TerminalOutcome::Open) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
     }
 
     const auto capture_status = capture_.Start(poll_timeout);
     if (capture_status == VRREC_STATUS_OK) {
         capture_started_.store(true);
     }
-    if (terminal_outcome_.load() != TerminalOutcome::Open) {
+
+    auto abort_won_during_capture_start = false;
+    {
+        const std::lock_guard state_lock(start_abort_mutex_);
+        abort_won_during_capture_start =
+            terminal_outcome_.load() != TerminalOutcome::Open;
+        if (!abort_won_during_capture_start &&
+            capture_status == VRREC_STATUS_OK) {
+            encoding_starting_ = true;
+        }
+    }
+    if (abort_won_during_capture_start) {
         if (capture_started_.exchange(false)) {
             AbortCaptureOnce();
             capture_.Join();
@@ -72,27 +130,47 @@ vrrec_status_t VideoPipelineSession::Start(
     }
 
     const auto encoding_status = encoding_.Start();
-    if (encoding_status == VRREC_STATUS_OK) {
-        encoding_started_.store(true);
-        active_.store(true);
+
+    auto abort_won_during_encoding_start = false;
+    auto cleanup_encoding = false;
+    auto cleanup_capture = false;
+    {
+        const std::lock_guard state_lock(start_abort_mutex_);
+        encoding_starting_ = false;
+        if (encoding_status == VRREC_STATUS_OK) {
+            encoding_started_.store(true);
+        }
+
+        abort_won_during_encoding_start =
+            terminal_outcome_.load() != TerminalOutcome::Open;
+        if (abort_won_during_encoding_start) {
+            active_.store(false);
+            if (encoding_started_.exchange(false)) {
+                encoding_abort_requested_ = true;
+                encoding_.RequestAbort();
+                cleanup_encoding = true;
+            } else if (encoding_abort_requested_) {
+                cleanup_encoding = true;
+            }
+            cleanup_capture = capture_started_.exchange(false);
+        } else if (encoding_status == VRREC_STATUS_OK) {
+            active_.store(true);
+        } else {
+            cleanup_capture = capture_started_.exchange(false);
+        }
     }
-    if (terminal_outcome_.load() != TerminalOutcome::Open) {
-        active_.store(false);
-        if (encoding_started_.exchange(false)) {
-            encoding_.RequestAbort();
-            encoding_.JoinAfterAbort();
-        }
-        if (capture_started_.exchange(false)) {
-            AbortCaptureOnce();
-            capture_.Join();
-        }
+
+    if (cleanup_encoding) {
+        encoding_.JoinAfterAbort();
+    }
+    if (cleanup_capture) {
+        AbortCaptureOnce();
+        capture_.Join();
+    }
+    if (abort_won_during_encoding_start) {
         return VRREC_STATUS_INVALID_STATE;
     }
     if (encoding_status != VRREC_STATUS_OK) {
-        if (capture_started_.exchange(false)) {
-            AbortCaptureOnce();
-            capture_.Join();
-        }
         return encoding_status;
     }
 
@@ -137,6 +215,7 @@ void VideoPipelineSession::Abort() noexcept
 
 void VideoPipelineSession::RequestAbort() noexcept
 {
+    const std::lock_guard state_lock(start_abort_mutex_);
     auto expected_outcome = TerminalOutcome::Open;
     if (!terminal_outcome_.compare_exchange_strong(
             expected_outcome,
@@ -152,7 +231,8 @@ void VideoPipelineSession::RequestAbort() noexcept
     }
 
     active_.store(false);
-    if (encoding_started_.load()) {
+    if (encoding_starting_ || encoding_started_.load()) {
+        encoding_abort_requested_ = true;
         encoding_.RequestAbort();
     }
 }
@@ -173,22 +253,7 @@ void VideoPipelineSession::JoinAfterAbort() noexcept
         }
 
         if (outcome == TerminalOutcome::AbortRequested) {
-            const auto capture_started = capture_started_.exchange(false);
-            const auto encoding_started = encoding_started_.exchange(false);
-            if (encoding_started) {
-                encoding_.RequestAbort();
-            }
-            if (capture_started) {
-                AbortCaptureOnce();
-            }
-            if (encoding_started) {
-                encoding_.JoinAfterAbort();
-            }
-            if (capture_started) {
-                capture_.Join();
-            }
-            active_.store(false);
-            finished_.store(true);
+            CleanupStartedWorkers();
         }
     }
 
@@ -226,23 +291,23 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
 
     auto capture_result = SpoutCaptureWorkerResult::InvalidState;
     std::thread capture_join_thread;
-    try {
-        capture_join_thread = std::thread([this, &capture_result]() noexcept {
-            capture_result = capture_.Join();
-            if (capture_result == SpoutCaptureWorkerResult::SenderLost ||
-                capture_result == SpoutCaptureWorkerResult::Failed) {
-                encoding_.Abort();
-            }
-        });
-    } catch (...) {
-        AbortCaptureOnce();
-        encoding_.Abort();
-        capture_.Join();
-        encoding_.Join();
-        active_.store(false);
-        capture_started_.store(false);
-        encoding_started_.store(false);
-        finished_.store(true);
+    CaptureJoinContext capture_join_context {*this, capture_result};
+    const auto launch_status = join_thread_factory_.Start(
+        capture_join_thread,
+        &VideoPipelineSession::CaptureJoinEntry,
+        &capture_join_context);
+    const auto effective_launch_status =
+        launch_status == VRREC_STATUS_OK && !capture_join_thread.joinable()
+        ? VRREC_STATUS_INTERNAL_ERROR
+        : launch_status;
+    if (effective_launch_status != VRREC_STATUS_OK) {
+        {
+            const std::lock_guard cleanup_lock(abort_join_mutex_);
+            CleanupStartedWorkers();
+        }
+        if (capture_join_thread.joinable()) {
+            capture_join_thread.join();
+        }
         auto expected_outcome = TerminalOutcome::Open;
         if (!terminal_outcome_.compare_exchange_strong(
                 expected_outcome,
