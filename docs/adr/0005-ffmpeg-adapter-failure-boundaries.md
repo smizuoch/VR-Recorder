@@ -21,7 +21,9 @@ mux側では`avformat_write_header`が`AVStream.time_base`を変更し得る。p
 
 `VRRECORDER_ENABLE_FFMPEG_ADAPTERS`はWindows x64専用のopt-inとし、`VRRECORDER_FFMPEG_ROOT`以外のsystem pathを探索しない。受理するSDKは公式release 8.1.2、tag `n8.1.2`、commit `38b88335f99e76ed89ff3c93f877fdefce736c13`、公式tar.xz SHA-256 `464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c`へ固定する。
 
-SDK検査は4 libraryの完全version、public header、MSVC import library、major付きshared DLL、build evidenceを照合する。build evidenceのconfigure引数はshared／最小library／native AAC／`h264_mf`／MP4／file protocolのallowlistと完全一致させ、GPL、nonfree、version3、`--enable-lib*`、autodetectを拒否する。actual Windows DLLとhashが得られるまではcanonical第三者台帳やnative-link manifestへplaceholderを登録しない。
+SDK検査は4 libraryの完全version、public header、MSVC import library、major付きshared DLL、build evidenceを照合する。build evidenceのconfigure引数はshared／最小library／native AAC／`h264_mf`／D3D11VA／MP4／file protocolのallowlistと完全一致させ、GPL、nonfree、version3、`--enable-lib*`、autodetectを拒否する。IAMFとx86 assemblyは明示無効化し、MP4が不可避にselectするAC-3 parserと`aac_adtstoasc`／`vp9_superframe` bitstream filterも完全一致で固定する。actual Windows DLLとhashが得られるまではcanonical第三者台帳やnative-link manifestへplaceholderを登録しない。
+
+Linux上の実API契約テストは`eng/build-ffmpeg-contract-test-sdk.sh <absolute-sdk-path>`で同じ公式tarballから隔離SDKを作り、`VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT`へ渡した場合だけ追加する。このSDKはAAC Portのcontract test専用で、Windows配布artifactや法務承認の代替にしない。
 
 ### Encoder state machine
 

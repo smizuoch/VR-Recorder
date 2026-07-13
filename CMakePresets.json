@@ -37,6 +37,15 @@
       }
     },
     {
+      "name": "native-linux-debug-ffmpeg",
+      "displayName": "Native Linux Debug with real FFmpeg contract tests",
+      "inherits": "native-linux-debug",
+      "binaryDir": "${sourceDir}/build/native-linux-debug-ffmpeg",
+      "cacheVariables": {
+        "VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT": "$env{VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT}"
+      }
+    },
+    {
       "name": "native-windows-x64-ffmpeg",
       "displayName": "Native Windows x64 with pinned FFmpeg adapters",
       "inherits": "native-windows-x64",
@@ -58,6 +67,10 @@
       "configuration": "Release"
     },
     {
+      "name": "native-linux-debug-ffmpeg",
+      "configurePreset": "native-linux-debug-ffmpeg"
+    },
+    {
       "name": "native-windows-x64-ffmpeg-release",
       "configurePreset": "native-windows-x64-ffmpeg",
       "configuration": "Release"
@@ -75,6 +88,13 @@
       "name": "native-windows-x64-release",
       "configurePreset": "native-windows-x64",
       "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "native-linux-debug-ffmpeg",
+      "configurePreset": "native-linux-debug-ffmpeg",
       "output": {
         "outputOnFailure": true
       }

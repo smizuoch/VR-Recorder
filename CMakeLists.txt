@@ -36,6 +36,11 @@ set(
     ""
     CACHE PATH
     "Absolute path to the exact FFmpeg 8.1.2 Windows x64 shared SDK")
+set(
+    VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT
+    ""
+    CACHE PATH
+    "Optional exact FFmpeg 8.1.2 Linux SDK for real libavcodec tests")
 
 if(VRRECORDER_ENABLE_FFMPEG_ADAPTERS)
     if(NOT WIN32)
@@ -43,8 +48,19 @@ if(VRRECORDER_ENABLE_FFMPEG_ADAPTERS)
             FATAL_ERROR
             "The production FFmpeg adapters are supported only on Windows x64")
     endif()
+    if(NOT MSVC)
+        message(
+            FATAL_ERROR
+            "The production FFmpeg SDK contract requires the MSVC toolchain")
+    endif()
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake")
     vrrecorder_import_pinned_ffmpeg_sdk("${VRRECORDER_FFMPEG_ROOT}")
+endif()
+
+if(BUILD_TESTING AND NOT VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT STREQUAL "")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake")
+    vrrecorder_import_ffmpeg_contract_test_sdk(
+        "${VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT}")
 endif()
 
 add_subdirectory(src/VRRecorder.Native)

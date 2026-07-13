@@ -4,9 +4,9 @@
 
 ### 現在の判定
 
-実装進行中であり、release適格ではありません。2026-07-13現在、Linux／WSL2で実行できるmanagedテスト、Windows x64向けWPF cross-build、Linux native ABIを検証しています。Windows上でのWPF実行、Spout2、D3D11、WASAPI、FFmpeg、OpenVR、実VRChat、Windows 10／11、GPU／HMDの検証は未実施です。
+実装進行中であり、release適格ではありません。2026-07-13現在、Linux／WSL2で実行できるmanagedテスト、Windows x64向けWPF cross-build、Linux native ABI、公式FFmpeg 8.1.2での実libavcodec AAC Portを検証しています。Windows上でのWPF実行、Spout2、D3D11、WASAPI、production FFmpeg、OpenVR、実VRChat、Windows 10／11、GPU／HMDの検証は未実施です。
 
-desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、VRChat service単位のSpout sender前回選択と曖昧時のdesktop prompt、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、media profile／最終native統計を含むprivacy-safe診断bundleの明示exportも配線済みです。録画中のMic／Muteはnative ABIからdesktop／wrist／SteamVR入力まで復元可能な状態を保って配線済みです。native内部にはPCM／floatとsample rate／channel差を48 kHz stereoへ正規化する処理、event-driven WASAPI loopback／microphone source、packet境界／gap／device loss／recovery／Abortを扱うcapture timelineと再探索runner、WASAPIのStart／Readを同一専用threadへ固定して同期初期化とRAII joinを行うworker、desktop／microphoneの開始rollbackと同一frame window mixを所有するcapture sessionがあります。ただしこれらをencoder／muxerへ接続するproduction native media backendとSteamVR backendは意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
+desktop production compositionはP/Invoke Spout source、encoder probe、native recording engine、OSC、storage、Legal mirror、runtime fault stop、SteamVR inputまで配線済みです。stale CameraLease／未確定録画の起動時回復、複数VRChatの厳密選択、VRChat service単位のSpout sender前回選択と曖昧時のdesktop prompt、録画設定UI、4状態tray、保存path／カメラ復元警告、bounded callback queueとsession-scoped UIを備えた音声device喪失／復旧の非terminal通知、media profile／最終native統計を含むprivacy-safe診断bundleの明示exportも配線済みです。録画中のMic／Muteはnative ABIからdesktop／wrist／SteamVR入力まで復元可能な状態を保って配線済みです。native内部にはPCM／floatとsample rate／channel差を48 kHz stereoへ正規化する処理、event-driven WASAPI loopback／microphone source、packet境界／gap／device loss／recovery／Abortを扱うcapture timelineと再探索runner、WASAPIのStart／Readを同一専用threadへ固定して同期初期化とRAII joinを行うworker、desktop／microphoneの開始rollbackと同一frame window mixを所有するcapture sessionがあります。公式8.1.2のopen済みcontextを一意所有する実libavcodec AAC Portも追加しましたが、context／frame生成、sample変換／FIFO、H.264、libavformat muxer、factory／compositionは未接続です。そのためproduction native media backendとSteamVR backendは引き続き意図的に`BACKEND_UNAVAILABLE`を返します。承認済みWindows x64 native DLLとffprobeもRelease入力として未提供です。したがって、現状は設計契約と境界実装を検証する開発checkpointであり、録画可能な製品ではありません。
 
 第三者台帳の現在のentryはtest-only NuGet依存のcandidateです。version、NuGet content hash、package archive SHA-256、上流commit、license全文hashを固定していますが、全entryの`approval.status`は`pending-independent-review`です。native link／runtime-load manifestは現行のfirst-party、Windows system、toolchain call siteを照合し、未登録追加をcandidate gateで拒否します。最終staging gateはPE内容、所有者、runtime scope、台帳schema／承認、component version／source commit、binary／source archive hashをLegal Bundle生成前に照合し、standalone native componentをTXT noticeとSPDXへ含めます。ただし承認済み第三者native componentはまだ0件です。署名・公開・end-user Legal Bundleの承認を意味しません。
 
@@ -27,22 +27,27 @@ make -C tests/VRRecorder.Native.Tests coverage-gate
 cmake -S . -B build/cmake-validation
 cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
+eng/build-ffmpeg-contract-test-sdk.sh /tmp/vrrecorder-ffmpeg-contract-v2
+VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT=/tmp/vrrecorder-ffmpeg-contract-v2 cmake --preset native-linux-debug-ffmpeg
+cmake --build --preset native-linux-debug-ffmpeg
+ctest --preset native-linux-debug-ffmpeg
 ```
 
-- managed: 974件成功、失敗0、skip 0
+- managed: 975件成功、失敗0、skip 0
   - Domain 90
   - Application 282
-  - Compliance 204
+  - Compliance 205
   - Presentation 90
   - Integration 308
 - WPF `win-x64` cross-build: warning 0、error 0
 - native Make ABI／audio pipeline／availability-event／Spout capture worker／video CFR／encoding-worker contract: 成功
 - native公開symbol allowlist: 17/17一致
-- CMake 3.28.3 configure／全target build／CTest: 41/41成功（公開symbol 17/17とCMake build contractを含む）
+- CMake 3.28.3通常構成のconfigure／全target build／CTest: 42/42成功（公開symbol 17/17、pinned FFmpeg SDK contract、CMake build contractを含む）
+- 同じ公式tarballから再現生成した隔離FFmpeg 8.1.2 SDKでの厳格build／実libavcodec CTest: 43/43成功。実AAC Port単体もASan／UBSanとleak検出下で10回反復成功
 - format/analyzer: 差分なし
 - GCC標準gcov JSONを116 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 88.53%（3480/3931）／branch 75.32%（2136/2836）のため設計thresholdどおり非0終了
 
-CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
+CMake／CTestは現在のnative graphに対して再実行済みです。FFmpeg source archiveのSHA-256、完全header／shared-library version、runtime versionを固定したLinux GCCでの成功証拠です。Windows MSVC workflowはrepositoryにありますが、この報告ではproduction FFmpeg SDK、event-driven WASAPI source、またはWindows実行成功を主張しません。
 
 ### 直前checkpointの結合テスト単独coverage
 
@@ -143,7 +148,8 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 偶数NV12入力、HighからMainへのcapability降格、品質優先VBR、2秒GOP、`width*height*fps*0.14`の8–80 Mbps clampと1.5倍maxrateを整数安全に導出するH.264設定境界
 - AAC-LC、48 kHz、stereo、192 kbpsと既存mixerのFloat32 interleaved source形式を明示し、backend固有sample変換をencoder adapterへ隔離する音声設定境界
 - A/V packetの実byte payloadをpacket自身が所有し、PTS／DTS／duration／keyframeをcanonical microsecondsで直列化して、empty payloadのmux前拒否、stream別DTS単調性、graceful trailer→file flush、Abort時trailer禁止を保証するfMP4 mux coordinator。H.264／AAC descriptorはprofile／layout、Annex B／AVCC・raw AAC形式、owned extradata、AAC `frame_size`／`initial_padding_samples`、1/1,000,000 time base、1秒最小／2秒上限／keyframe優先fragment policyをheaderへ渡し、fragment cut／interleaveはproduction muxerへ委譲する
-- libavcodecのsend／receive契約を抽象Portで再現し、send／receive双方のEAGAIN、buffering、複数packet batch、EOF drain、packet unref、packet／side-data所有権、各allocation位置のOOM、unknown statusをfail-closed処理するportable FFmpeg encoder state machine（実`AVCodecContext`／`AVPacket` Portは未実装）
+- libavcodecのsend／receive契約を抽象Portで再現し、send／receive双方のEAGAIN、buffering、複数packet batch、EOF drain、packet unref、packet／side-data所有権、各allocation位置のOOM、unknown statusをfail-closed処理するportable FFmpeg encoder state machine
+- 公式FFmpeg 8.1.2のopen済み`AVCodecContext`を全経路で一意所有し、実`AVFrame`をsend `EAGAIN`中も参照保持、実`AVPacket`を明示unrefまでborrowし、負のAAC priming／`AV_NOPTS_VALUE`を含むtimestampをcanonical microsecondsへ変換するlibavcodec AAC Port。runtime version不一致、allocation failure、borrow違反、drain EOF、Abortをterminalに処理する
 - header成功後のstream time base readbackを必須化し、canonical microsecondsからstream time baseへのsigned timestamp／duration rescale、stream別readback failure、write／trailer／flush failure、正常Finish後のAbort no-opを検証するportable FFmpeg fMP4 muxer seam（実`AVFormatContext`／`AVStream` Portは未実装）
 - AAC descriptor由来のinitial-padding下限まで負PTS／DTSを許容し、それより前のaudio timestamp、videoの負timestamp、PTS < DTS、timestamp + duration overflow、empty payloadをmux前に拒否する境界。SkipSamples side dataはaudio-only、exact 10 bytes、packet当たり1個に限定する
 - mux headerをvideo／audio workerより先に開始し、invalid descriptor／header失敗ではstreamを開始せず、header開始中Abortでもworkerを復活させずmux Abortをexactly onceにするrecording-session境界
@@ -176,8 +182,8 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 ### 未完了の主要release gate
 
 - 録画開始前のhardware encoder失敗を同一file内のsoftware fallbackへ切り替え、最初のpacket後のencoder障害では現partを確定してsoftware encoderの次partを開始する基本設計を実装するか、terminal Abortへ仕様を明示改訂すること。現実装はterminal Abort
-- version／source commitを固定し法務承認されたFFmpegまたはMedia Foundationのconcrete encoder／muxer Portとfactory／compositionをproduction media backendへ接続すること。現状のC ABI backendは引き続き`BACKEND_UNAVAILABLE`
-- 実libavcodec／libavformatでのAAC sample変換・FIFO・frame sizing・flush／drain・負priming・SkipSamples・edit list、H.264 extradata／packet形式、fragment flagsを検証し、scratch fMP4をffprobe／decode／playbackで確認すること。side-data-only packetの扱いと、失敗outputを公開しないことも実証が必要
+- 実AAC libavcodec Portにcontext／frame factory、sample変換／FIFO、H.264 Port、実libavformat muxer、factory／compositionを加え、version／source commit固定かつ法務承認済みdependencyとしてproduction media backendへ接続すること。現状のC ABI backendは引き続き`BACKEND_UNAVAILABLE`
+- 実libavcodec／libavformatでAAC frame sizing／flush／drain／負priming／SkipSamples／edit list、H.264 extradata／packet形式、fragment flagsを検証し、scratch fMP4をffprobe／decode／playbackで確認すること。side-data-only packetと追加packet flagのencoder別実測、失敗outputを公開しないことも必要
 - 実Spout2／D3D11／WASAPI接続とunpackaged `win-x64` EXEによる3秒録画・停止・確定・再生の実機検証
 - 実OpenVR overlay、Wrist renderer、haptics、move／pin操作
 - 初回setup 7・8番目のproduction verifier、Windows上での実装済み10項目、VR配置／OSC設定runtime反映、実アプリend-to-end検証
@@ -189,9 +195,9 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 
 ### Current verdict
 
-Implementation is in progress and is not release-eligible. As of 2026-07-13, validation covers managed tests runnable on Linux/WSL2, a Windows x64 WPF cross-build, and the Linux native ABI. Running WPF on Windows and validating Spout2, D3D11, WASAPI, FFmpeg, OpenVR, real VRChat, Windows 10/11, GPUs, and HMDs remain outstanding.
+Implementation is in progress and is not release-eligible. As of 2026-07-13, validation covers managed tests runnable on Linux/WSL2, a Windows x64 WPF cross-build, the Linux native ABI, and a real libavcodec AAC port against official FFmpeg 8.1.2. Running WPF on Windows and validating Spout2, D3D11, WASAPI, production FFmpeg, OpenVR, real VRChat, Windows 10/11, GPUs, and HMDs remain outstanding.
 
-The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, service-scoped previous Spout-sender selection with a desktop ambiguity prompt, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export including the media profile/final native statistics are also wired. Live Mic/Mute control now preserves reversible state from the native ABI through desktop, wrist, and SteamVR input. Native internals include PCM/float sample-rate and channel normalization to 48 kHz stereo, event-driven WASAPI loopback/microphone sources, capture timelines and recovery runners covering packet boundaries, gaps, device loss/recovery, and abort, joined workers that keep WASAPI Start/Read on dedicated same threads, and a rollback-safe stereo capture session that feeds aligned desktop/microphone frame windows into the mixer. The production native media backend that connects these boundaries to an encoder/muxer, and the SteamVR backend, still intentionally return `BACKEND_UNAVAILABLE`; approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is therefore a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
+The desktop production composition now wires the P/Invoke Spout source, encoder probe, native recording engine, OSC, storage, Legal mirror, runtime-fault stop path, and SteamVR input. Startup recovery for stale CameraLease/unfinalized recordings, exact multi-VRChat selection, service-scoped previous Spout-sender selection with a desktop ambiguity prompt, recording settings UI, the four-state tray, saved-path/camera-restore notifications, nonterminal audio-device loss/recovery notifications with bounded callback queues and session-scoped UI, and explicit privacy-safe diagnostic-bundle export including the media profile/final native statistics are also wired. Live Mic/Mute control now preserves reversible state from the native ABI through desktop, wrist, and SteamVR input. Native internals include PCM/float sample-rate and channel normalization to 48 kHz stereo, event-driven WASAPI loopback/microphone sources, capture timelines and recovery runners covering packet boundaries, gaps, device loss/recovery, and abort, joined workers that keep WASAPI Start/Read on dedicated same threads, and a rollback-safe stereo capture session that feeds aligned desktop/microphone frame windows into the mixer. A real libavcodec AAC port now uniquely owns an already-open official-8.1.2 context, but context/frame creation, sample conversion/FIFO, H.264, the libavformat muxer, and factory/composition wiring remain outstanding. The production native media backend and SteamVR backend therefore still intentionally return `BACKEND_UNAVAILABLE`; approved Windows x64 native-DLL and ffprobe Release inputs have not been supplied. This is a development checkpoint for design contracts and boundary implementations, not a recording-capable product.
 
 The current third-party registry entries are candidates for test-only NuGet dependencies. Versions, NuGet content hashes, package-archive SHA-256 values, upstream commits, and full-license-text hashes are pinned, but every entry has `approval.status` set to `pending-independent-review`. Native link and runtime-load manifests reconcile current first-party, Windows-system, and toolchain call sites and reject unregistered additions at the candidate gate. The final-staging gate now checks PE content, ownership, runtime scope, registry schema/approval, component version/source commit, and binary/source-archive hashes before Legal Bundle generation, and includes standalone native components in text notices and SPDX. There are still zero approved third-party native components. This is not approval for signing, publication, or an end-user Legal Bundle.
 
@@ -212,22 +218,27 @@ make -C tests/VRRecorder.Native.Tests coverage-gate
 cmake -S . -B build/cmake-validation
 cmake --build build/cmake-validation --parallel
 ctest --test-dir build/cmake-validation --output-on-failure
+eng/build-ffmpeg-contract-test-sdk.sh /tmp/vrrecorder-ffmpeg-contract-v2
+VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT=/tmp/vrrecorder-ffmpeg-contract-v2 cmake --preset native-linux-debug-ffmpeg
+cmake --build --preset native-linux-debug-ffmpeg
+ctest --preset native-linux-debug-ffmpeg
 ```
 
-- managed: 974 passed, 0 failed, 0 skipped
+- managed: 975 passed, 0 failed, 0 skipped
   - Domain 90
   - Application 282
-  - Compliance 204
+  - Compliance 205
   - Presentation 90
   - Integration 308
 - WPF `win-x64` cross-build: 0 warnings, 0 errors
 - native Make ABI/audio-pipeline/availability-event/Spout-capture-worker/video-CFR/encoding-worker contracts: passed
 - native public-symbol allowlist: exact 17/17 match
-- CMake 3.28.3 configure/full-target build/CTest: 41/41 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
+- CMake 3.28.3 baseline configure/full-target build/CTest: 42/42 passed, including the exact 17/17 public-symbol, pinned-FFmpeg-SDK-contract, and CMake-build-contract checks
+- Strict build/real-libavcodec CTest against an isolated FFmpeg 8.1.2 SDK reproducibly built from the same official tarball: 43/43 passed; the real AAC port also passed 10 repeated runs under ASan/UBSan with leak detection
 - format/analyzers: no changes required
 - A connected `coverage-gate` target that collects and merges 116 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 88.53% lines (3480/3931) and 75.32% branches (2136/2836), so it exits nonzero as designed
 
-CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
+CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence with the FFmpeg source-archive SHA-256, exact header/shared-library versions, and runtime version pinned. A Windows MSVC workflow is present in the repository, but this report does not claim validation of the production FFmpeg SDK, MSVC compilation of the event-driven WASAPI source, or Windows execution.
 
 ### Integration-test-only coverage from the preceding checkpoint
 
@@ -328,7 +339,8 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - An H.264 configuration boundary that safely derives even NV12 input, High-to-Main capability fallback, quality VBR, a two-second GOP, the clamped 8–80 Mbps `width*height*fps*0.14` target, and a 1.5x maximum rate
 - An audio configuration boundary that fixes AAC-LC, 48 kHz, stereo, 192 kbps, and the mixer's interleaved Float32 source format while isolating backend-specific sample conversion in encoder adapters
 - An fMP4 mux coordinator whose packets own their encoded byte payload, reject empty payloads before mux mutation, serialize A/V PTS/DTS/duration/keyframes in canonical microseconds, enforce per-stream DTS monotonicity, order graceful trailer/file flush, and forbid trailers after abort. Typed H.264/AAC descriptors carry profile/layout, Annex B/AVCC or raw-AAC format, owned extradata, AAC `frame_size`/`initial_padding_samples`, a 1/1,000,000 packet time base, and a one-second-minimum/two-second-maximum/keyframe-preferred fragment policy into the header while delegating cuts and interleaving to the production muxer
-- A portable FFmpeg encoder state machine that models the libavcodec send/receive contract and fail-closed handles EAGAIN from either direction, buffering, multi-packet batches, EOF drain, packet unref, packet/side-data ownership, OOM at every allocation position, and unknown statuses (concrete `AVCodecContext`/`AVPacket` ports remain outstanding)
+- A portable FFmpeg encoder state machine that models the libavcodec send/receive contract and fail-closed handles EAGAIN from either direction, buffering, multi-packet batches, EOF drain, packet unref, packet/side-data ownership, OOM at every allocation position, and unknown statuses
+- A real libavcodec AAC port that uniquely owns an already-open official-FFmpeg-8.1.2 `AVCodecContext`, retains the real `AVFrame` across send EAGAIN, borrows a real `AVPacket` until explicit unref, and converts timestamps including negative AAC priming and `AV_NOPTS_VALUE` into canonical microseconds; it terminally handles runtime-version drift, allocation failures, borrow violations, drain EOF, and abort
 - A portable FFmpeg fMP4 muxer seam that requires post-header stream-time-base readback and validates signed timestamp/duration rescaling from canonical microseconds, per-stream readback failures, write/trailer/flush failures, and no-op Abort after a durable Finish (concrete `AVFormatContext`/`AVStream` ports remain outstanding)
 - A boundary that admits negative AAC PTS/DTS only down to the descriptor-derived initial-padding limit, while rejecting earlier audio timestamps, negative video timestamps, PTS before DTS, timestamp-plus-duration overflow, and empty payloads before mux mutation. SkipSamples side data is restricted to audio, exactly 10 bytes, and one item per packet
 - A recording-session boundary that starts the mux header before video/audio workers, starts no stream for invalid descriptors or header failure, and prevents worker resurrection while keeping mux abort exactly once when Abort races header startup
@@ -361,8 +373,8 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 ### Major outstanding release gates
 
 - Implement the basic-design same-file software fallback for pre-recording hardware-encoder failure and the rollover from a post-first-packet encoder failure to a finalized current part plus software-encoded next part, or explicitly revise the specification to terminal abort; the current implementation terminally aborts
-- Concrete encoder/muxer ports and factory/composition backed by a version- and source-commit-pinned, legally approved FFmpeg or Media Foundation dependency; the C ABI production media backend still returns `BACKEND_UNAVAILABLE`
-- Real libavcodec/libavformat conformance covering AAC sample conversion, FIFO/frame sizing, flush/drain, negative priming, SkipSamples and edit lists; H.264 extradata/packet format; fragmentation flags; and scratch-fMP4 validation through ffprobe, decode, and playback. Side-data-only packet behavior and nonpublication of failed output also require evidence
+- Add context/frame factories, sample conversion/FIFO, an H.264 port, a real libavformat muxer, and factory/composition wiring around the real AAC libavcodec port, then admit the version/source-commit-pinned dependency through legal approval and connect it to the production media backend; the C ABI backend still returns `BACKEND_UNAVAILABLE`
+- Real libavcodec/libavformat conformance covering AAC frame sizing, flush/drain, negative priming, SkipSamples and edit lists; H.264 extradata/packet format; fragmentation flags; and scratch-fMP4 validation through ffprobe, decode, and playback. Encoder-specific measurement of side-data-only packets and additional packet flags, plus nonpublication of failed output, also remain required
 - Real Spout2/D3D11/WASAPI integration and unpackaged `win-x64` EXE hardware validation covering a three-second recording, stop, durable finalization, and playback
 - Real OpenVR overlay, wrist renderer, haptics, and move/pin controls
 - Production verifier adapters for first-run items seven/eight, Windows execution of the 10 implemented checks, runtime VR-placement/OSC settings, and real-application end-to-end validation

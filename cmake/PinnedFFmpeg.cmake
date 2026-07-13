@@ -14,7 +14,7 @@ set(
     "--prefix=<SDK_ROOT>"
     "--toolchain=msvc"
     "--arch=x86_64"
-    "--target-os=win64"
+    "--target-os=win32"
     "--enable-shared"
     "--disable-static"
     "--disable-programs"
@@ -30,10 +30,13 @@ set(
     "--disable-bzlib"
     "--disable-lzma"
     "--disable-debug"
+    "--disable-iamf"
+    "--disable-x86asm"
     "--enable-avcodec"
     "--enable-avformat"
     "--enable-avutil"
     "--enable-swresample"
+    "--enable-d3d11va"
     "--enable-mediafoundation"
     "--enable-encoder=aac"
     "--enable-encoder=h264_mf"
@@ -105,18 +108,7 @@ function(_vrrecorder_ffmpeg_require_version header macro expected)
     endif()
 endfunction()
 
-function(vrrecorder_validate_pinned_ffmpeg_sdk root)
-    if(root STREQUAL "" OR NOT IS_ABSOLUTE "${root}")
-        message(FATAL_ERROR "VRRECORDER_FFMPEG_ROOT must be an absolute path")
-    endif()
-
-    cmake_path(NORMAL_PATH root OUTPUT_VARIABLE normalized_root)
-    set(include_root "${normalized_root}/include")
-    set(library_root "${normalized_root}/lib")
-    set(runtime_root "${normalized_root}/bin")
-    set(evidence_path
-        "${normalized_root}/share/vrrecorder/ffmpeg-build-evidence.json")
-
+function(_vrrecorder_ffmpeg_validate_exact_headers include_root)
     foreach(header IN ITEMS
             "libavcodec/avcodec.h"
             "libavformat/avformat.h"
@@ -155,7 +147,7 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         "${include_root}/libavutil/version.h"
         LIBAVUTIL_VERSION_MICRO 102)
     _vrrecorder_ffmpeg_require_version(
-        "${include_root}/libswresample/version.h"
+        "${include_root}/libswresample/version_major.h"
         LIBSWRESAMPLE_VERSION_MAJOR 6)
     _vrrecorder_ffmpeg_require_version(
         "${include_root}/libswresample/version.h"
@@ -163,6 +155,21 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
     _vrrecorder_ffmpeg_require_version(
         "${include_root}/libswresample/version.h"
         LIBSWRESAMPLE_VERSION_MICRO 102)
+endfunction()
+
+function(vrrecorder_validate_pinned_ffmpeg_sdk root)
+    if(root STREQUAL "" OR NOT IS_ABSOLUTE "${root}")
+        message(FATAL_ERROR "VRRECORDER_FFMPEG_ROOT must be an absolute path")
+    endif()
+
+    cmake_path(NORMAL_PATH root OUTPUT_VARIABLE normalized_root)
+    set(include_root "${normalized_root}/include")
+    set(library_root "${normalized_root}/lib")
+    set(runtime_root "${normalized_root}/bin")
+    set(evidence_path
+        "${normalized_root}/share/vrrecorder/ffmpeg-build-evidence.json")
+
+    _vrrecorder_ffmpeg_validate_exact_headers("${include_root}")
 
     foreach(component IN ITEMS avcodec avformat avutil swresample)
         _vrrecorder_ffmpeg_require_file(
@@ -236,11 +243,20 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         "${evidence}" enabledMuxers
         mov mp4)
     _vrrecorder_ffmpeg_require_exact_array(
+        "${evidence}" enabledParsers
+        ac3)
+    _vrrecorder_ffmpeg_require_exact_array(
+        "${evidence}" enabledBitstreamFilters
+        aac_adtstoasc vp9_superframe)
+    _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledProtocols
         file)
     _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledExternalLibraries
         mediafoundation)
+    _vrrecorder_ffmpeg_require_exact_array(
+        "${evidence}" enabledHardwareAccelerationLibraries
+        d3d11va)
 endfunction()
 
 function(vrrecorder_import_pinned_ffmpeg_sdk root)
@@ -281,4 +297,52 @@ function(vrrecorder_import_pinned_ffmpeg_sdk root)
     set_property(
         TARGET FFmpeg::swresample
         PROPERTY INTERFACE_LINK_LIBRARIES FFmpeg::avutil)
+endfunction()
+
+function(vrrecorder_import_ffmpeg_contract_test_sdk root)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(
+            FATAL_ERROR
+            "The unpackaged FFmpeg contract-test SDK is Linux-only")
+    endif()
+    if(root STREQUAL "" OR NOT IS_ABSOLUTE "${root}")
+        message(
+            FATAL_ERROR
+            "VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT must be an absolute path")
+    endif()
+
+    cmake_path(NORMAL_PATH root OUTPUT_VARIABLE normalized_root)
+    _vrrecorder_ffmpeg_validate_exact_headers("${normalized_root}/include")
+    set(
+        avcodec_library
+        "${normalized_root}/lib/libavcodec.so.62.28.102")
+    set(
+        avutil_library
+        "${normalized_root}/lib/libavutil.so.60.26.102")
+    _vrrecorder_ffmpeg_require_file(
+        "${avcodec_library}" "contract-test libavcodec")
+    _vrrecorder_ffmpeg_require_file(
+        "${avutil_library}" "contract-test libavutil")
+
+    foreach(component IN ITEMS avcodec avutil)
+        if(TARGET "FFmpegContractTest::${component}")
+            message(
+                FATAL_ERROR
+                "FFmpeg contract-test target already exists: ${component}")
+        endif()
+    endforeach()
+
+    add_library(FFmpegContractTest::avutil SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractTest::avutil
+        PROPERTIES
+            IMPORTED_LOCATION "${avutil_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include")
+    add_library(FFmpegContractTest::avcodec SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractTest::avcodec
+        PROPERTIES
+            IMPORTED_LOCATION "${avcodec_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
+            INTERFACE_LINK_LIBRARIES FFmpegContractTest::avutil)
 endfunction()

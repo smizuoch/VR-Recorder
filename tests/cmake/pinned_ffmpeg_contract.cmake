@@ -48,8 +48,10 @@ file(
     "#define LIBAVUTIL_VERSION_MINOR 26\n"
     "#define LIBAVUTIL_VERSION_MICRO 102\n")
 file(
+    WRITE "${sdk_root}/include/libswresample/version_major.h"
+    "#define LIBSWRESAMPLE_VERSION_MAJOR 6\n")
+file(
     WRITE "${sdk_root}/include/libswresample/version.h"
-    "#define LIBSWRESAMPLE_VERSION_MAJOR 6\n"
     "#define LIBSWRESAMPLE_VERSION_MINOR 3\n"
     "#define LIBSWRESAMPLE_VERSION_MICRO 102\n")
 
@@ -84,7 +86,7 @@ file(
     "    \"--prefix=${sdk_root}\",\n"
     "    \"--toolchain=msvc\",\n"
     "    \"--arch=x86_64\",\n"
-    "    \"--target-os=win64\",\n"
+    "    \"--target-os=win32\",\n"
     "    \"--enable-shared\",\n"
     "    \"--disable-static\",\n"
     "    \"--disable-programs\",\n"
@@ -100,10 +102,13 @@ file(
     "    \"--disable-bzlib\",\n"
     "    \"--disable-lzma\",\n"
     "    \"--disable-debug\",\n"
+    "    \"--disable-iamf\",\n"
+    "    \"--disable-x86asm\",\n"
     "    \"--enable-avcodec\",\n"
     "    \"--enable-avformat\",\n"
     "    \"--enable-avutil\",\n"
     "    \"--enable-swresample\",\n"
+    "    \"--enable-d3d11va\",\n"
     "    \"--enable-mediafoundation\",\n"
     "    \"--enable-encoder=aac\",\n"
     "    \"--enable-encoder=h264_mf\",\n"
@@ -113,8 +118,11 @@ file(
     "  \"enabledLibraries\": [\"avcodec\", \"avformat\", \"avutil\", \"swresample\"],\n"
     "  \"enabledEncoders\": [\"aac\", \"h264_mf\"],\n"
     "  \"enabledMuxers\": [\"mov\", \"mp4\"],\n"
+    "  \"enabledParsers\": [\"ac3\"],\n"
+    "  \"enabledBitstreamFilters\": [\"aac_adtstoasc\", \"vp9_superframe\"],\n"
     "  \"enabledProtocols\": [\"file\"],\n"
-    "  \"enabledExternalLibraries\": [\"mediafoundation\"]\n"
+    "  \"enabledExternalLibraries\": [\"mediafoundation\"],\n"
+    "  \"enabledHardwareAccelerationLibraries\": [\"d3d11va\"]\n"
     "}\n")
 file(READ "${evidence_path}" valid_evidence)
 
@@ -171,6 +179,15 @@ string(
     external_library_evidence "${valid_evidence}")
 file(WRITE "${evidence_path}" "${external_library_evidence}")
 run_validation(FALSE "unknown external library")
+file(WRITE "${evidence_path}" "${valid_evidence}")
+
+string(
+    REPLACE
+        "[\"aac_adtstoasc\", \"vp9_superframe\"]"
+        "[\"aac_adtstoasc\", \"noise\", \"vp9_superframe\"]"
+    bitstream_filter_evidence "${valid_evidence}")
+file(WRITE "${evidence_path}" "${bitstream_filter_evidence}")
+run_validation(FALSE "unknown bitstream filter")
 file(WRITE "${evidence_path}" "${valid_evidence}")
 
 file(

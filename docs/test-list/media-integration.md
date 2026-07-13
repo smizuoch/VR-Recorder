@@ -20,7 +20,8 @@
 - [x] first packet確定後のmedia profileとgraceful stop後のnative最終統計を録画結果を変えず診断へ発行する
 - [x] A/V packetのPTS/DTSをcanonical microsecondsで保持してstream別DTSを検証する
 - [x] encoded packetが実byte payloadを所有し、encoder元buffer変更後も内容を保ち、empty payloadをmux mutation前に拒否する
-- [x] portable FFmpeg seamでsend／receiveを0／複数packet、EAGAIN操作再試行、drain EOF、部分batch失敗、各ownership確保位置のOOM、Abort競合で状態機械化し、成功packetを必ずunrefする（実AVFrame identityはproduction adapter gate）
+- [x] portable FFmpeg seamでsend／receiveを0／複数packet、EAGAIN操作再試行、drain EOF、部分batch失敗、各ownership確保位置のOOM、Abort競合で状態機械化し、成功packetを必ずunrefする
+- [x] 公式FFmpeg 8.1.2の実libavcodec AAC Portでopen済みcontext所有権、実AVFrameのEAGAIN保持、実AVPacket borrow／unref、負priming／unknown timestampのmicrosecond変換、OOM、drain EOF、terminal Abortを検証する
 - [x] AACのSkipSamples side dataをaudio-only／exact 10-byteのtyped・owned値としてmuxまで保持し、side-data-only／unknown／wrong-size／duplicate／video side dataをfail-closedにする
 - [x] AACの`frame_size`／`initial_padding_samples`をdescriptorへ保持し、bounded negative priming PTS／DTSをmuxへ維持しながらpresentation 0未満をA/V drift観測だけから除外する
 - [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する（実`av_packet_rescale_ts`算術はproduction adapter gate）
@@ -70,7 +71,8 @@
 - [x] Publish the committed media profile and final native statistics without changing recording start/stop outcomes
 - [x] Preserve A/V packet PTS/DTS in canonical microseconds and validate DTS per stream
 - [x] Own actual encoded-packet bytes, retain them after mutation of the encoder source buffer, and reject empty payloads before mux mutation
-- [x] Model send/receive in the portable FFmpeg seam as a state machine covering zero/multiple packets, EAGAIN operation retry, drain EOF, partial-batch failure, every packet-ownership OOM position, abort races, and unref of every successful packet (real AVFrame identity remains a production-adapter gate)
+- [x] Model send/receive in the portable FFmpeg seam as a state machine covering zero/multiple packets, EAGAIN operation retry, drain EOF, partial-batch failure, every packet-ownership OOM position, abort races, and unref of every successful packet
+- [x] Validate opened-context ownership, real-AVFrame retention across EAGAIN, real-AVPacket borrow/unref, microsecond conversion of negative priming and unknown timestamps, OOM, drain EOF, and terminal abort through a real libavcodec AAC port built against official FFmpeg 8.1.2
 - [x] Carry AAC SkipSamples as audio-only, exactly 10-byte typed owned data through muxing while failing closed on side-data-only, unknown, wrong-size, duplicate, or video side data
 - [x] Carry AAC `frame_size`/`initial_padding_samples`, preserve the bounded negative priming PTS/DTS for muxing, and exclude pre-presentation-zero packets only from A/V drift observation
 - [x] In the portable mux seam, read back actual video/audio time bases after the header, pass immutable canonical packets into the rescale port, and reject fake-rescale sentinels, end-time overflow, zero duration, or DTS collisions before interleaved write (real `av_packet_rescale_ts` arithmetic remains a production-adapter gate)

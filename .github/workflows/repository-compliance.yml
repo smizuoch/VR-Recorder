@@ -12,6 +12,7 @@ on:
       - CMakeLists.txt
       - CMakePresets.json
       - cmake/**
+      - eng/build-ffmpeg-contract-test-sdk.sh
       - src/VRRecorder.Native/**
       - tests/cmake/**
       - tests/VRRecorder.Native.Tests/**
@@ -31,6 +32,7 @@ on:
       - CMakeLists.txt
       - CMakePresets.json
       - cmake/**
+      - eng/build-ffmpeg-contract-test-sdk.sh
       - src/VRRecorder.Native/**
       - tests/cmake/**
       - tests/VRRecorder.Native.Tests/**

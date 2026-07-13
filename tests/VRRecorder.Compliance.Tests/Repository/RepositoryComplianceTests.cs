@@ -63,6 +63,8 @@ public sealed class RepositoryComplianceTests
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- cmake/**"));
         Assert.Equal(2, workflowLines.Count(line =>
+            line == "- eng/build-ffmpeg-contract-test-sdk.sh"));
+        Assert.Equal(2, workflowLines.Count(line =>
             line == "- src/VRRecorder.Native/**"));
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- tests/cmake/**"));

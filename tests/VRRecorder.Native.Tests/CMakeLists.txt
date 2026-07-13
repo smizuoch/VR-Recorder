@@ -595,6 +595,53 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_ffmpeg_encoder_state_machine)
 
+set(ffmpeg_libavcodec_test_dependency "")
+if(TARGET FFmpeg::avcodec)
+    set(ffmpeg_libavcodec_test_dependency FFmpeg::avcodec)
+elseif(TARGET FFmpegContractTest::avcodec)
+    set(ffmpeg_libavcodec_test_dependency FFmpegContractTest::avcodec)
+endif()
+
+if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
+    add_executable(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port
+        ffmpeg_libavcodec_encoder_port_tests.cpp
+        "${native_source_root}/src/ffmpeg_libavcodec_encoder_port.cpp"
+        "${native_source_root}/src/ffmpeg_encoder_state_machine.cpp")
+    target_compile_features(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port PRIVATE cxx_std_20)
+    target_compile_definitions(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port
+        PRIVATE VRRECORDER_NATIVE_TESTING=1)
+    target_include_directories(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port
+        PRIVATE
+            "${native_source_root}/include"
+            "${native_source_root}/src")
+    target_link_libraries(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port
+        PRIVATE
+            ${ffmpeg_libavcodec_test_dependency}
+            Threads::Threads)
+    set_target_properties(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port
+        PROPERTIES
+            CXX_EXTENSIONS OFF)
+    vrrecorder_enable_strict_warnings(
+        vrrecorder_native_ffmpeg_libavcodec_encoder_port)
+    if(WIN32)
+        add_custom_command(
+            TARGET vrrecorder_native_ffmpeg_libavcodec_encoder_port
+            POST_BUILD
+            COMMAND
+                "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:FFmpeg::avcodec>"
+                "$<TARGET_FILE:FFmpeg::avutil>"
+                "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_libavcodec_encoder_port>"
+            VERBATIM)
+    endif()
+endif()
+
 add_executable(
     vrrecorder_native_ffmpeg_fragmented_mp4_muxer
     ffmpeg_fragmented_mp4_muxer_tests.cpp
@@ -845,6 +892,10 @@ add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator
     COMMAND vrrecorder_native_fragmented_mp4_mux_coordinator)
 add_test(NAME vrrecorder_native_ffmpeg_encoder_state_machine
     COMMAND vrrecorder_native_ffmpeg_encoder_state_machine)
+if(TARGET vrrecorder_native_ffmpeg_libavcodec_encoder_port)
+    add_test(NAME vrrecorder_native_ffmpeg_libavcodec_encoder_port
+        COMMAND vrrecorder_native_ffmpeg_libavcodec_encoder_port)
+endif()
 add_test(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer
     COMMAND vrrecorder_native_ffmpeg_fragmented_mp4_muxer)
 add_test(NAME vrrecorder_native_shared_mux_finalization_session

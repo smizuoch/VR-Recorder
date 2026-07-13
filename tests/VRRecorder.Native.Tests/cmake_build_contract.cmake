@@ -22,6 +22,7 @@ endfunction()
 require_file("CMakeLists.txt")
 require_file("CMakePresets.json")
 require_file("cmake/PinnedFFmpeg.cmake")
+require_file("eng/build-ffmpeg-contract-test-sdk.sh")
 require_file("src/VRRecorder.Native/CMakeLists.txt")
 require_file("src/VRRecorder.Native/Makefile")
 require_file("src/VRRecorder.Native/vrrecorder_native.def")
@@ -41,7 +42,70 @@ require_text(
     "vrrecorder_import_pinned_ffmpeg_sdk")
 require_text(
     "CMakeLists.txt"
+    "VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT")
+require_text(
+    "CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_pinned_ffmpeg_contract")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "--disable-autodetect")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "--disable-iamf")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "--disable-x86asm")
+require_text(
+    "eng/build-ffmpeg-contract-test-sdk.sh"
+    "--enable-encoder=aac")
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    set(unsafe_sdk_root "${CMAKE_CURRENT_BINARY_DIR}/unsafe-ffmpeg-sdk-root")
+    file(REMOVE_RECURSE "${unsafe_sdk_root}")
+    file(MAKE_DIRECTORY "${unsafe_sdk_root}/share/vrrecorder")
+    file(WRITE "${unsafe_sdk_root}/must-survive.txt" "user-owned\n")
+    file(
+        WRITE
+        "${unsafe_sdk_root}/share/vrrecorder/contract-test-build.txt"
+        "forged-marker\n")
+    execute_process(
+        COMMAND
+            "${repository_root}/eng/build-ffmpeg-contract-test-sdk.sh"
+            "${unsafe_sdk_root}"
+        RESULT_VARIABLE unsafe_sdk_result
+        OUTPUT_QUIET
+        ERROR_QUIET)
+    if(unsafe_sdk_result EQUAL 0 OR
+       NOT EXISTS "${unsafe_sdk_root}/must-survive.txt")
+        message(
+            FATAL_ERROR
+            "FFmpeg contract-test SDK builder must preserve unowned directories")
+    endif()
+
+    set(unsafe_work_sdk_root
+        "${CMAKE_CURRENT_BINARY_DIR}/unsafe-ffmpeg-work-sdk")
+    set(unsafe_work_root "${unsafe_work_sdk_root}.work")
+    file(REMOVE_RECURSE "${unsafe_work_sdk_root}" "${unsafe_work_root}")
+    file(MAKE_DIRECTORY "${unsafe_work_root}/source")
+    file(WRITE "${unsafe_work_root}/source/must-survive.txt" "user-owned\n")
+    execute_process(
+        COMMAND
+            "${repository_root}/eng/build-ffmpeg-contract-test-sdk.sh"
+            "${unsafe_work_sdk_root}"
+        RESULT_VARIABLE unsafe_work_result
+        OUTPUT_QUIET
+        ERROR_QUIET)
+    if(unsafe_work_result EQUAL 0 OR
+       NOT EXISTS "${unsafe_work_root}/source/must-survive.txt")
+        message(
+            FATAL_ERROR
+            "FFmpeg contract-test SDK builder must preserve unowned work directories")
+    endif()
+endif()
+
 require_text(
     "src/VRRecorder.Native/CMakeLists.txt"
     "add_library\\(vrrecorder_native SHARED")
@@ -72,6 +136,9 @@ require_text(
 require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_ffmpeg_encoder_state_machine")
+require_text(
+    "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+    "add_test\\(NAME vrrecorder_native_ffmpeg_libavcodec_encoder_port")
 require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer")
