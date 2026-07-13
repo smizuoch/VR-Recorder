@@ -40,7 +40,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native公開symbol allowlist: 17/17一致
 - CMake 3.28.3 configure／全target build／CTest: 39/39成功（公開symbol 17/17とCMake build contractを含む）
 - format/analyzer: 差分なし
-- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.56%（2892/3341）／branch 72.27%（1699/2351）のため設計thresholdどおり非0終了
+- GCC標準gcov JSONを112 artifactから収集・mergeし、compiler生成`throw` edgeを除いたfirst-party nativeのline／source branch各90%を独立判定する`coverage-gate` target: 実測line 86.65%（2901/3348）／branch 72.37%（1710/2363）のため設計thresholdどおり非0終了
 
 CMake／CTestは現在のnative graphに対して再実行済みです。Linux GCCでの成功証拠であり、Windows MSVC workflowはrepositoryにありますが、この報告ではevent-driven WASAPI sourceのMSVC compileまたはWindows実行成功を主張しません。
 
@@ -76,6 +76,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。Linux G
 - 選択中Spout sender消失時に`SenderLost`結果を保持しながらcapture sourceをabortし、receiver資源を確実に解放する境界
 - encoded packet observer失敗時に`Written`を返さずmuxerをabort・terminal化し、不完全MP4のtrailer／flushを禁止するfail-closed境界
 - shared muxでpacket submitが`MuxFailed`／`InvalidState`となった時点で即terminal化し、後続encoder完了を成功として受理しない境界
+- audio normalizerがmono／stereoの未指定または標準speaker maskだけを許可し、Center+LFE等をL/Rとして誤配線しないformat境界
 - CameraLease所有権、部分取得rollback、stale leaseのowned Streaming復旧
 - OSCQuery target解決、UDP write確認、SteamVR Input Action ABI
 - SingleFileFit contain計算とruntime layout更新、native最終statistics取得
@@ -206,7 +207,7 @@ ctest --test-dir build/cmake-validation --output-on-failure
 - native public-symbol allowlist: exact 17/17 match
 - CMake 3.28.3 configure/full-target build/CTest: 39/39 passed, including the exact 17/17 public-symbol and CMake-build-contract checks
 - format/analyzers: no changes required
-- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.56% lines (2892/3341) and 72.27% branches (1699/2351), so it exits nonzero as designed
+- A connected `coverage-gate` target that collects and merges 112 standard GCC gcov JSON artifacts, excludes compiler-generated `throw` edges, and independently enforces 90% first-party native line/source-branch thresholds; current measurements are 86.65% lines (2901/3348) and 72.37% branches (1710/2363), so it exits nonzero as designed
 
 CMake/CTest has now been rerun against the current native graph. This is Linux GCC evidence; a Windows MSVC workflow is present in the repository, but this report does not claim that the event-driven WASAPI source has compiled under MSVC or run on Windows.
 
@@ -242,6 +243,7 @@ The 90% line and branch gates, both overall and per major assembly, are not met.
 - A selected Spout sender loss preserves the `SenderLost` result while aborting the capture source to reliably release receiver resources
 - An encoded-packet observer failure returns `MuxFailed`, aborts and terminalizes the muxer, and prevents trailer/flush of the incomplete MP4
 - A shared-mux packet submission returning `MuxFailed` or `InvalidState` immediately terminalizes the session and prevents later encoder completion from masking the failure as success
+- The audio normalizer accepts only unspecified or standard mono/stereo speaker masks and rejects layouts such as Center+LFE instead of miswiring them as left/right
 - CameraLease ownership, partial-acquisition rollback, and owned Streaming recovery from stale leases
 - OSCQuery target resolution, confirmed UDP writes, and the SteamVR Input Action ABI
 - SingleFileFit contain calculation, runtime layout updates, and final native statistics retrieval
