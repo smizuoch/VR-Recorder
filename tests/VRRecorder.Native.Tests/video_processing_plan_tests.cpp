@@ -85,6 +85,32 @@ void RejectsOddOrZeroOutputCanvas()
               plan) == VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void RejectsExplicitDestinationsOutsideTheCanvas()
+{
+    VideoProcessingPlan plan {};
+    const vrrec_video_layout_v1 layout {
+        sizeof(vrrec_video_layout_v1),
+        VRREC_ABI_V1,
+        1'920,
+        1'080,
+        1'920,
+        1'080,
+        1'900,
+        0,
+        100,
+        1'080,
+        VRREC_CANVAS_BACKGROUND_BLACK,
+        VRREC_VIDEO_ROTATION_NONE,
+    };
+
+    CHECK(CreateExplicitVideoProcessingPlan(
+              Source(1'920, 1'080),
+              layout,
+              plan) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(plan.destination_width == 0);
+    CHECK(plan.destination_height == 0);
+}
+
 }
 
 int main()
@@ -93,5 +119,6 @@ int main()
     ContainsPortraitVideoWithoutCropping();
     MarksRgbaInputForRedBlueChannelNormalization();
     RejectsOddOrZeroOutputCanvas();
+    RejectsExplicitDestinationsOutsideTheCanvas();
     return 0;
 }
