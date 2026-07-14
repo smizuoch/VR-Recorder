@@ -88,10 +88,20 @@ if(BUILD_TESTING)
             "-DNATIVE_FACTORY_BINARY_EVIDENCE=${CMAKE_CURRENT_BINARY_DIR}/native-factory-selection-$<CONFIG>.json"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/native_factory_variant_contract.cmake")
+    add_test(NAME vrrecorder_native_production_media_aac_attachment_contract
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DPRODUCTION_MEDIA_AAC_ATTACHMENT_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProductionMediaAacAttachment.cmake"
+            "-DPRODUCTION_MEDIA_AAC_ATTACHMENT_WORK_ROOT=${CMAKE_CURRENT_BINARY_DIR}/production-media-aac-attachment-contract"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/production_media_aac_attachment_contract.cmake")
     set_tests_properties(
         vrrecorder_native_pinned_ffmpeg_contract
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(
         vrrecorder_native_factory_variant_contract
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(
+        vrrecorder_native_production_media_aac_attachment_contract
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()

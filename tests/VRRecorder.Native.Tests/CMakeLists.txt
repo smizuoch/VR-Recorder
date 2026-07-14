@@ -737,13 +737,16 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
                 VERBATIM)
         endif()
 
+        include(
+            "${PROJECT_SOURCE_DIR}/cmake/ProductionMediaAacAttachment.cmake")
+        vrrecorder_resolve_production_media_aac_sources(
+            production_media_aac_sources
+            "${native_source_root}")
         add_executable(
             vrrecorder_native_ffmpeg_aac_audio_pipeline
             ffmpeg_aac_audio_pipeline_tests.cpp
-            "${native_source_root}/src/ffmpeg_aac_audio_pipeline.cpp"
+            ${production_media_aac_sources}
             "${native_source_root}/src/audio_encoder_config.cpp"
-            "${native_source_root}/src/ffmpeg_aac_packet_encoder.cpp"
-            "${native_source_root}/src/ffmpeg_libavcodec_encoder_port.cpp"
             "${native_source_root}/src/ffmpeg_encoder_state_machine.cpp"
             "${native_source_root}/src/muxing_audio_encoder_sink.cpp"
             "${native_source_root}/src/audio_pipeline_session.cpp"
@@ -838,14 +841,26 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
     add_executable(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         ffmpeg_aac_to_fragmented_mp4_integration_tests.cpp
+        ${production_media_aac_sources}
         "${native_source_root}/src/audio_encoder_config.cpp"
-        "${native_source_root}/src/ffmpeg_aac_packet_encoder.cpp"
-        "${native_source_root}/src/ffmpeg_libavcodec_encoder_port.cpp"
         "${native_source_root}/src/ffmpeg_encoder_state_machine.cpp"
-        "${native_source_root}/src/ffmpeg_libavformat_fragmented_mp4_muxer_port.cpp")
+        "${native_source_root}/src/ffmpeg_libavformat_fragmented_mp4_muxer_port.cpp"
+        "${native_source_root}/src/ffmpeg_fragmented_mp4_muxer.cpp"
+        "${native_source_root}/src/media_mux_pipeline.cpp"
+        "${native_source_root}/src/av_sync_monitor.cpp"
+        "${native_source_root}/src/av_sync_media_event_adapter.cpp"
+        "${native_source_root}/src/fragmented_mp4_mux_coordinator.cpp"
+        "${native_source_root}/src/shared_mux_finalization_session.cpp"
+        "${native_source_root}/src/muxing_audio_encoder_sink.cpp"
+        "${native_source_root}/src/audio_pipeline_session.cpp"
+        "${native_source_root}/src/audio_encoding_worker.cpp"
+        "${native_source_root}/src/audio_encoding_pump.cpp")
     target_compile_features(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         PRIVATE cxx_std_20)
+    target_compile_definitions(
+        vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
+        PRIVATE VRRECORDER_NATIVE_TESTING=1)
     target_include_directories(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         PRIVATE
@@ -1172,6 +1187,9 @@ if(TARGET vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration)
         NAME vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         COMMAND
             vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration)
+    set_tests_properties(
+        vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
+        PROPERTIES TIMEOUT 5)
 endif()
 add_test(NAME vrrecorder_native_ffmpeg_fragmented_mp4_muxer
     COMMAND vrrecorder_native_ffmpeg_fragmented_mp4_muxer)

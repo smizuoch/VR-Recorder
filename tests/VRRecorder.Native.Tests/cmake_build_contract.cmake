@@ -23,6 +23,7 @@ require_file("CMakeLists.txt")
 require_file("CMakePresets.json")
 require_file("cmake/PinnedFFmpeg.cmake")
 require_file("cmake/NativeFactoryVariants.cmake")
+require_file("cmake/ProductionMediaAacAttachment.cmake")
 require_file("cmake/WriteNativeFactoryEvidence.cmake")
 require_file(
     "src/VRRecorder.Native/src/native_factory_selection_marker.cpp.in")
@@ -41,6 +42,7 @@ require_file("tests/VRRecorder.Native.Tests/Makefile")
 require_file("tests/VRRecorder.Native.Tests/verify_exports.cmake")
 require_file("tests/cmake/pinned_ffmpeg_contract.cmake")
 require_file("tests/cmake/native_factory_variant_contract.cmake")
+require_file("tests/cmake/production_media_aac_attachment_contract.cmake")
 require_file(".github/workflows/native-windows.yml")
 
 require_text("CMakeLists.txt" "add_subdirectory\\(src/VRRecorder.Native\\)")
@@ -60,6 +62,9 @@ require_text(
 require_text(
     "CMakeLists.txt"
     "add_test\\(NAME vrrecorder_native_factory_variant_contract")
+require_text(
+    "CMakeLists.txt"
+    "add_test\\(NAME vrrecorder_native_production_media_aac_attachment_contract")
 require_text(
     "eng/build-ffmpeg-contract-test-sdk.sh"
     "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c")
