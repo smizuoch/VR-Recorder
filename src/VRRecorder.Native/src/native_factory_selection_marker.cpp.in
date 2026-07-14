@@ -1,0 +1,17 @@
+#include <cstddef>
+
+#if defined(_MSC_VER)
+#define VRRECORDER_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define VRRECORDER_NOINLINE __attribute__((noinline))
+#else
+#define VRRECORDER_NOINLINE
+#endif
+
+extern "C" VRRECORDER_NOINLINE const volatile char *
+vrrecorder_native_factory_selection_marker() noexcept
+{
+    static const volatile char marker[] =
+        "VRRECORDER_FACTORY_SELECTION_V1:@VRRECORDER_FACTORY_SELECTION_INTENT_SHA256@";
+    return marker;
+}

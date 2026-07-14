@@ -22,6 +22,11 @@
 #include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
+#if defined(VRRECORDER_NATIVE_FACTORY_SELECTION_MARKER)
+extern "C" const volatile char *
+vrrecorder_native_factory_selection_marker() noexcept;
+#endif
+
 namespace {
 
 enum class SessionState {
@@ -1386,6 +1391,12 @@ vrrec_status_t ValidateSpoutFrameArguments(
 
 extern "C" VRREC_API std::uint32_t VRREC_CALL vrrec_abi_version(void)
 {
+#if defined(VRRECORDER_NATIVE_FACTORY_SELECTION_MARKER)
+    const auto *marker = vrrecorder_native_factory_selection_marker();
+    if (marker == nullptr || marker[0] != 'V') {
+        return 0;
+    }
+#endif
     return VRREC_ABI_V1;
 }
 

@@ -115,7 +115,7 @@ CMakeは次の4 cache enumを持ち、各値を`UNAVAILABLE`または`PRODUCTION
 
 各familyはexactly one sourceをlinkする。未知値、empty、選択source欠落はconfigure failureにする。media／encoder probeのproduction選択はpinned FFmpeg SDK importを必須とする。
 
-段階的bring-upではfamilyごとのproduction化を許すが、unpackaged hardware-validation payloadは`VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES=ON`を必須とし、4 familyの一つでも`UNAVAILABLE`なら構成を拒否する。configure時のselection intentとrelease証拠を分離し、native targetが成功した後だけactual DLLのfilename、length、SHA-256へ結び付けた`native-factory-selection-<config>.json`を生成する。後段staging gateはbinary hashと選択sourceを検査する。
+段階的bring-upではfamilyごとのproduction化を許すが、unpackaged hardware-validation payloadは`VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES=ON`を必須とし、4 familyの一つでも`UNAVAILABLE`なら構成を拒否する。configure時のselection intent digestをgenerated C++ sourceとしてnative binary内へ埋め込む。build後のwriterはactual binaryからexact markerを読み戻した場合だけ、DLLのfilename、length、SHA-256へ結び付けた`native-factory-selection-<config>.json`を生成する。validな別intentへの差替え、marker欠落、binary hash不一致を拒否し、後段staging gateはbinary hashと選択sourceを検査する。
 
 selection evidenceが証明するのはlink対象のfamily／sourceとbinary bytesの対応までである。`production_*.cpp`が実adapterを構成することや、実環境でpacketを生成することは、注入可能Portを使うfactory composition test、versioned probe result、hardware validationで別に証明する。production sourceが`unavailable_*`へ委譲する実装をselection filenameだけで合格にしない。
 

@@ -256,7 +256,11 @@ endforeach()
 
 set(writer_binary "${work_root}/writer-native.dll")
 set(writer_evidence "${work_root}/writer-evidence.json")
-file(WRITE "${writer_binary}" "native factory evidence fixture\n")
+string(SHA256 writer_intent_sha256 "${intent_json}")
+file(
+    WRITE "${writer_binary}"
+    "native factory evidence fixture\n"
+    "VRRECORDER_FACTORY_SELECTION_V1:${writer_intent_sha256}\n")
 
 function(run_evidence_writer expected_success label writer_intent writer_native)
     execute_process(
@@ -306,6 +310,25 @@ run_evidence_writer(
     "source and variant mismatch"
     "${tampered_intent_path}"
     "${writer_binary}")
+
+set(VRRECORDER_MEDIA_FACTORY_VARIANT PRODUCTION)
+set(VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT PRODUCTION)
+set(VRRECORDER_SPOUT_FACTORY_VARIANT PRODUCTION)
+set(VRRECORDER_STEAMVR_FACTORY_VARIANT PRODUCTION)
+set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES ON)
+set(swapped_intent_path "${work_root}/swapped-selection.intent.json")
+vrrecorder_write_native_factory_selection_intent("${swapped_intent_path}")
+run_evidence_writer(
+    FALSE
+    "valid but unlinked production intent"
+    "${swapped_intent_path}"
+    "${writer_binary}")
+set(VRRECORDER_MEDIA_FACTORY_VARIANT UNAVAILABLE)
+set(VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT UNAVAILABLE)
+set(VRRECORDER_SPOUT_FACTORY_VARIANT UNAVAILABLE)
+set(VRRECORDER_STEAMVR_FACTORY_VARIANT UNAVAILABLE)
+set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES OFF)
+
 run_evidence_writer(
     FALSE
     "missing linked native binary"

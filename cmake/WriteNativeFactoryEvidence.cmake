@@ -82,6 +82,19 @@ file(SHA256 "${NATIVE_BINARY}" native_binary_sha256)
 file(SIZE "${NATIVE_BINARY}" native_binary_length)
 cmake_path(GET NATIVE_BINARY FILENAME native_binary_name)
 string(SHA256 selection_intent_sha256 "${intent_json}")
+set(
+    expected_binary_marker
+    "VRRECORDER_FACTORY_SELECTION_V1:${selection_intent_sha256}")
+file(
+    STRINGS "${NATIVE_BINARY}" binary_markers
+    REGEX "VRRECORDER_FACTORY_SELECTION_V1:[0-9a-f]+")
+list(FILTER binary_markers INCLUDE REGEX "^${expected_binary_marker}$")
+list(LENGTH binary_markers matching_marker_count)
+if(NOT matching_marker_count EQUAL 1)
+    message(
+        FATAL_ERROR
+        "The linked native binary does not contain the exact factory selection intent marker")
+endif()
 
 cmake_path(GET OUTPUT_PATH PARENT_PATH output_directory)
 file(MAKE_DIRECTORY "${output_directory}")

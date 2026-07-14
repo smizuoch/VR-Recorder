@@ -6,6 +6,17 @@ set(
     "${CMAKE_CURRENT_BINARY_DIR}/native-factory-selection.intent.json")
 vrrecorder_write_native_factory_selection_intent(
     "${vrrecorder_native_factory_selection_intent}")
+file(
+    SHA256
+    "${vrrecorder_native_factory_selection_intent}"
+    VRRECORDER_FACTORY_SELECTION_INTENT_SHA256)
+set(
+    vrrecorder_native_factory_selection_marker_source
+    "${CMAKE_CURRENT_BINARY_DIR}/native_factory_selection_marker.cpp")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/native_factory_selection_marker.cpp.in"
+    "${vrrecorder_native_factory_selection_marker_source}"
+    @ONLY)
 
 add_library(vrrecorder_native SHARED
     src/abi.cpp
@@ -40,6 +51,7 @@ add_library(vrrecorder_native SHARED
     src/spout_capture_worker.cpp
     src/audio_timeline_buffer.cpp
     src/video_cfr_scheduler.cpp
+    "${vrrecorder_native_factory_selection_marker_source}"
     ${vrrecorder_native_factory_sources})
 
 target_sources(vrrecorder_native PRIVATE src/video_encoding_pump.cpp)
@@ -75,7 +87,11 @@ endif()
 add_library(VRRecorder::Native ALIAS vrrecorder_native)
 
 target_compile_features(vrrecorder_native PRIVATE cxx_std_20)
-target_compile_definitions(vrrecorder_native PRIVATE VRRECORDER_NATIVE_EXPORTS)
+target_compile_definitions(
+    vrrecorder_native
+    PRIVATE
+        VRRECORDER_NATIVE_EXPORTS
+        VRRECORDER_NATIVE_FACTORY_SELECTION_MARKER=1)
 target_include_directories(
     vrrecorder_native
     PUBLIC

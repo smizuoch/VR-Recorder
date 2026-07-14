@@ -24,6 +24,8 @@ require_file("CMakePresets.json")
 require_file("cmake/PinnedFFmpeg.cmake")
 require_file("cmake/NativeFactoryVariants.cmake")
 require_file("cmake/WriteNativeFactoryEvidence.cmake")
+require_file(
+    "src/VRRecorder.Native/src/native_factory_selection_marker.cpp.in")
 require_file("eng/build-ffmpeg-contract-test-sdk.sh")
 require_file(
     "src/VRRecorder.Native/src/ffmpeg_libavformat_fragmented_mp4_muxer_port.hpp")
@@ -136,6 +138,12 @@ require_text(
 require_text(
     "src/VRRecorder.Native/CMakeLists.txt"
     "add_custom_target\\([^\\)]*vrrecorder_native_factory_evidence")
+require_text(
+    "src/VRRecorder.Native/CMakeLists.txt"
+    "VRRECORDER_NATIVE_FACTORY_SELECTION_MARKER")
+require_text(
+    "src/VRRecorder.Native/src/abi.cpp"
+    "vrrecorder_native_factory_selection_marker")
 require_text(
     "src/VRRecorder.Native/CMakeLists.txt"
     "VRRECORDER_NATIVE_EXPORTS")
