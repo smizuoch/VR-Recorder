@@ -47,7 +47,7 @@
     },
     {
       "name": "native-windows-x64-ffmpeg",
-      "displayName": "Native Windows x64 with pinned FFmpeg adapters",
+      "displayName": "Native Windows x64 with pinned FFmpeg SDK tests",
       "inherits": "native-windows-x64",
       "binaryDir": "${sourceDir}/build/native-windows-x64-ffmpeg",
       "cacheVariables": {

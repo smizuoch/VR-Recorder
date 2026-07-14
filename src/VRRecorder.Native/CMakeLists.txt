@@ -1,3 +1,12 @@
+vrrecorder_select_native_factory_sources(
+    vrrecorder_native_factory_sources
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+set(
+    vrrecorder_native_factory_selection_intent
+    "${CMAKE_CURRENT_BINARY_DIR}/native-factory-selection.intent.json")
+vrrecorder_write_native_factory_selection_intent(
+    "${vrrecorder_native_factory_selection_intent}")
+
 add_library(vrrecorder_native SHARED
     src/abi.cpp
     src/av_sync_monitor.cpp
@@ -30,11 +39,8 @@ add_library(vrrecorder_native SHARED
     src/spout_capture_pump.cpp
     src/spout_capture_worker.cpp
     src/audio_timeline_buffer.cpp
-    src/unavailable_encoder_probe_backend.cpp
-    src/unavailable_media_backend.cpp
-    src/unavailable_spout_source_backend.cpp
-    src/unavailable_steamvr_input_backend.cpp
-    src/video_cfr_scheduler.cpp)
+    src/video_cfr_scheduler.cpp
+    ${vrrecorder_native_factory_sources})
 
 target_sources(vrrecorder_native PRIVATE src/video_encoding_pump.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_encoding_worker.cpp)
@@ -87,6 +93,27 @@ set_target_properties(
         VISIBILITY_INLINES_HIDDEN YES)
 
 vrrecorder_enable_strict_warnings(vrrecorder_native)
+
+set(
+    vrrecorder_native_factory_evidence
+    "${CMAKE_BINARY_DIR}/native-factory-selection-$<CONFIG>.json")
+add_custom_target(
+    vrrecorder_native_factory_evidence ALL
+    COMMAND
+        "${CMAKE_COMMAND}"
+        "-DNATIVE_FACTORY_VARIANTS_MODULE=${PROJECT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake"
+        "-DSELECTION_INTENT=${vrrecorder_native_factory_selection_intent}"
+        "-DNATIVE_BINARY=$<TARGET_FILE:vrrecorder_native>"
+        "-DOUTPUT_PATH=${vrrecorder_native_factory_evidence}"
+        -P
+        "${PROJECT_SOURCE_DIR}/cmake/WriteNativeFactoryEvidence.cmake"
+    BYPRODUCTS "${vrrecorder_native_factory_evidence}"
+    DEPENDS
+        vrrecorder_native
+        "${vrrecorder_native_factory_selection_intent}"
+        "${PROJECT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/WriteNativeFactoryEvidence.cmake"
+    VERBATIM)
 
 if(WIN32)
     target_sources(

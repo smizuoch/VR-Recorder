@@ -29,7 +29,7 @@ find_package(Threads REQUIRED)
 
 option(
     VRRECORDER_ENABLE_FFMPEG_ADAPTERS
-    "Build the Windows production adapters against the pinned FFmpeg SDK"
+    "Import the pinned Windows FFmpeg SDK for adapter tests or production factories"
     OFF)
 set(
     VRRECORDER_FFMPEG_ROOT
@@ -41,6 +41,9 @@ set(
     ""
     CACHE PATH
     "Optional exact FFmpeg 8.1.2 Linux SDK for real adapter tests")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake")
+vrrecorder_declare_native_factory_options()
 
 if(VRRECORDER_ENABLE_FFMPEG_ADAPTERS)
     if(NOT WIN32)
@@ -73,7 +76,22 @@ if(BUILD_TESTING)
             "-DPINNED_FFMPEG_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_ffmpeg_contract.cmake")
+    add_test(NAME vrrecorder_native_factory_variant_contract
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DNATIVE_FACTORY_VARIANTS_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake"
+            "-DNATIVE_FACTORY_EVIDENCE_WRITER=${CMAKE_CURRENT_SOURCE_DIR}/cmake/WriteNativeFactoryEvidence.cmake"
+            "-DNATIVE_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/src/VRRecorder.Native"
+            "-DNATIVE_FACTORY_CONTRACT_WORK_ROOT=${CMAKE_CURRENT_BINARY_DIR}/native-factory-variant-contract"
+            "-DNATIVE_BINARY=$<TARGET_FILE:vrrecorder_native>"
+            "-DNATIVE_FACTORY_SELECTION_INTENT=${CMAKE_CURRENT_BINARY_DIR}/src/VRRecorder.Native/native-factory-selection.intent.json"
+            "-DNATIVE_FACTORY_BINARY_EVIDENCE=${CMAKE_CURRENT_BINARY_DIR}/native-factory-selection-$<CONFIG>.json"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/native_factory_variant_contract.cmake")
     set_tests_properties(
         vrrecorder_native_pinned_ffmpeg_contract
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(
+        vrrecorder_native_factory_variant_contract
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
