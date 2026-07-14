@@ -48,7 +48,7 @@ Store提出にはPackaging Candidateに加えて次をすべて要求する。
 - local test certificateでのsideload install／launch／uninstall検証
 - package install rootからの起動、異なるworking directory、read-only package files、settings／log／録画出力、SteamVR manifest登録を含むpackaged固有の回帰
 - Spout2、WASAPI、OpenVR、VRChat、HMDを使う実機再試験
-- Windows App Certification Kitは任意のlocal preflightとして扱う。実行した場合はreportをparseし、fail／not-runを見過ごさない
+- latest available Windows App Certification Kitをlocal preflightとして実行し、XML reportのfail／not-run／inapplicableをmachine判定する。tool非対応／実行不能時はversion／理由付きwaiverとPartner Center flight証拠を要求する
 - exact uploadに対するPartner Center certification成功とprivate flight検証
 - 最終payload、Legal Bundle、SBOMの再scan
 
@@ -61,7 +61,7 @@ Microsoft Store提出用packageの本番署名はStore側へ委ねる。local si
 3. root／relative entrypoint／inventory membership、version、application revision、EXE、全payload inventory、Legal anchorの各不一致を個別のRedにする。
 4. Partner Center identity欠落を拒否する。
 5. MSIX manifest readerと展開payload照合をRedにする。
-6. sideload lifecycle、packaged固有回帰、任意WACK report parserをRedにする。
+6. sideload lifecycle、packaged固有回帰、WACK XML report parser、tool非対応時の明示waiverをRedにする。
 7. exact uploadとPartner Center certification結果の紐付けをRedにする。
 8. 全gateがGreenになったときだけStore submissionを許可する。
 
@@ -79,4 +79,7 @@ Microsoft Store提出用packageの本番署名はStore側へ委ねる。local si
 - Microsoft, Set up your desktop application for MSIX packaging in Visual Studio: <https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-packaging-dot-net>
 - Microsoft, View product identity details: <https://learn.microsoft.com/en-us/windows/apps/publish/view-app-identity-details>
 - Microsoft, Understanding how packaged desktop apps run on Windows: <https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes>
-- Microsoft, Package an app using Visual Studio（WACKのdeprecated／optional preflight説明を含む）: <https://learn.microsoft.com/en-us/windows/msix/package/packaging-uwp-apps>
+- Microsoft, Package an app using Visual Studio（WACKのdeprecated／optional local check説明を含む）: <https://learn.microsoft.com/en-us/windows/msix/package/packaging-uwp-apps>
+- Microsoft, Windows App Certification Kit（Store提出前のlocal validationを推奨）: <https://learn.microsoft.com/en-us/windows/uwp/debug-test-perf/windows-app-certification-kit>
+- Microsoft, MSIX app certification process（technical complianceにWACKを使用）: <https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-certification-process>
+- Microsoft, Package flights（flight中に緩和されたWACK failureも一般公開前に修正）: <https://learn.microsoft.com/en-us/windows/apps/publish/package-flights>
