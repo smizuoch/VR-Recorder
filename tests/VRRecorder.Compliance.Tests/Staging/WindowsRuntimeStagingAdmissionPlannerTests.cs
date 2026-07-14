@@ -153,6 +153,14 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         AssertIssue(
             "invalid-native-factory-staging-pair",
             await wrongOwner.PlanAsync());
+
+        using var renamedEvidence = Fixture.Create();
+        renamedEvidence.UseEntries(
+            renamedEvidence.NativeEntry,
+            renamedEvidence.EvidenceEntry with { Target = "renamed.json" });
+        AssertIssue(
+            "invalid-native-factory-staging-pair",
+            await renamedEvidence.PlanAsync());
     }
 
     [Fact]
@@ -198,6 +206,75 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         AssertIssue(
             "unapproved-native-artifact-owner",
             await fixture.PlanAsync());
+    }
+
+    [Fact]
+    public async Task ApprovedGraphIsAppliedToEveryThirdPartyAsset()
+    {
+        using var fixture = Fixture.Create();
+        var binding = new TestEntry(
+            "openvr/actions.json",
+            "openvr/actions.json",
+            "openvr-binding",
+            "openvr",
+            "asset");
+        fixture.Write(binding.Source, "{}"u8.ToArray());
+        fixture.UseEntries(
+            fixture.NativeEntry,
+            fixture.EvidenceEntry,
+            binding);
+
+        AssertIssue(
+            "unapproved-runtime-staging-owner",
+            await fixture.PlanAsync());
+    }
+
+    [Fact]
+    public async Task BuildOnlyOwnerCannotStageRuntimeAsset()
+    {
+        using var fixture = Fixture.Create();
+        var binding = new TestEntry(
+            "openvr/actions.json",
+            "openvr/actions.json",
+            "openvr-binding",
+            "openvr",
+            "asset");
+        fixture.Write(binding.Source, "{}"u8.ToArray());
+        fixture.UseEntries(
+            fixture.NativeEntry,
+            fixture.EvidenceEntry,
+            binding);
+        fixture.UseApprovedComponents(
+            Component("openvr", NoticeScope.BuildOnly));
+
+        AssertIssue(
+            "staged-component-scope-mismatch",
+            await fixture.PlanAsync());
+    }
+
+    [Fact]
+    public async Task RuntimeAssetOwnerCanStageItsExactRegisteredAsset()
+    {
+        using var fixture = Fixture.Create();
+        var binding = new TestEntry(
+            "openvr/actions.json",
+            "openvr/actions.json",
+            "openvr-binding",
+            "openvr",
+            "asset");
+        fixture.Write(binding.Source, "{}"u8.ToArray());
+        fixture.UseEntries(
+            fixture.NativeEntry,
+            fixture.EvidenceEntry,
+            binding);
+        fixture.UseApprovedComponents(
+            Component("openvr", NoticeScope.RuntimeAsset));
+
+        var result = await fixture.PlanAsync();
+
+        Assert.True(result.IsAdmitted);
+        Assert.Empty(result.Issues);
+        Assert.NotNull(result.Plan);
     }
 
     [Fact]
@@ -276,6 +353,28 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         .ToHexString(SHA256.HashData(bytes))
         .ToLowerInvariant();
 
+    private static NormalizedComponent Component(
+        string id,
+        NoticeScope scope) => new(
+        id,
+        id,
+        "1.0.0",
+        new LicenseDecision("MIT", "MIT"),
+        "Copyright Example",
+        "runtime",
+        "runtime",
+        Modified: false,
+        "https://example.invalid/source@commit",
+        "MIT license",
+        LegalFiles: [],
+        scope,
+        new LegalApproval(
+            LegalApprovalStatus.Approved,
+            "LEGAL-TEST",
+            "requester",
+            "reviewer"),
+        Packages: []);
+
     private sealed class ThrowingInventoryReader : IStagingInventoryReader
     {
         public Task<StagingInventory> ReadAsync(
@@ -338,7 +437,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         public WindowsRuntimeStagingManifest Manifest { get; private set; }
             = null!;
 
-        public ApprovedReleaseGraph ApprovedGraph { get; }
+        public ApprovedReleaseGraph ApprovedGraph { get; private set; }
 
         public static Fixture Create()
         {
@@ -368,6 +467,12 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
                 """;
             Manifest = WindowsRuntimeStagingManifestReader.Read(
                 Encoding.UTF8.GetBytes(json));
+        }
+
+        public void UseApprovedComponents(params NormalizedComponent[] components)
+        {
+            ApprovedGraph = new ApprovedReleaseGraph(
+                new NormalizedComponentGraph([], components));
         }
 
         public void WriteEvidence(

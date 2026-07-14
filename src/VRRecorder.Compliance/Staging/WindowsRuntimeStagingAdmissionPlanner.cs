@@ -3,6 +3,7 @@ using VRRecorder.Compliance.Generation;
 namespace VRRecorder.Compliance.Staging;
 
 internal sealed class WindowsRuntimeStagingAdmissionPlanner
+    : IWindowsRuntimeStagingAdmissionPlanner
 {
     private const string FirstPartyComponentId = "vr-recorder";
     private const string NativeBinaryFileName = "vrrecorder_native.dll";
@@ -94,6 +95,9 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
         issues.AddRange(ValidateKinds(
             inventory.Files,
             registeredArtifacts));
+        issues.AddRange(ValidateNonNativeOwners(
+            manifest,
+            approvedGraph));
         issues.AddRange(NativeStagingAdmissionValidator.Validate(
             canonicalRepositoryRoot,
             approvedGraph,
@@ -272,7 +276,11 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
                 FirstPartyComponentId,
                 StringComparison.Ordinal) ||
             evidence.DeploymentKind !=
-                WindowsRuntimeDeploymentKind.Evidence)
+                WindowsRuntimeDeploymentKind.Evidence ||
+            !string.Equals(
+                evidence.Target,
+                "native-factory-selection.json",
+                StringComparison.Ordinal))
         {
             issues.Add(new ComplianceIssue(
                 "invalid-native-factory-staging-pair",
@@ -281,6 +289,56 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
         }
 
         return new FactoryPair(native, evidence);
+    }
+
+    private static ComplianceIssue[] ValidateNonNativeOwners(
+        WindowsRuntimeStagingManifest manifest,
+        ApprovedReleaseGraph approvedGraph)
+    {
+        var issues = new List<ComplianceIssue>();
+        foreach (var entry in manifest.Entries.Where(entry =>
+                     !string.Equals(
+                         entry.ComponentId,
+                         FirstPartyComponentId,
+                         StringComparison.Ordinal) &&
+                     entry.DeploymentKind is
+                         WindowsRuntimeDeploymentKind.Asset or
+                         WindowsRuntimeDeploymentKind.Evidence))
+        {
+            var subject = $"{entry.ComponentId}:{entry.Target}";
+            var owners = approvedGraph.Graph.Components
+                .Where(component => component is not null && string.Equals(
+                    component.Id,
+                    entry.ComponentId,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (owners.Length == 0)
+            {
+                issues.Add(new ComplianceIssue(
+                    "unapproved-runtime-staging-owner",
+                    subject));
+                continue;
+            }
+
+            if (owners.Length != 1)
+            {
+                issues.Add(new ComplianceIssue(
+                    "ambiguous-runtime-staging-owner",
+                    subject));
+                continue;
+            }
+
+            if (owners[0].Scope is not (
+                    NoticeScope.RuntimeAsset or
+                    NoticeScope.RuntimeBundled))
+            {
+                issues.Add(new ComplianceIssue(
+                    "staged-component-scope-mismatch",
+                    subject));
+            }
+        }
+
+        return Order(issues);
     }
 
     private static bool HasExactFileName(
