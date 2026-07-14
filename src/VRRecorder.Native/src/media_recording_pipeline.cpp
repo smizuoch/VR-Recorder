@@ -9,7 +9,6 @@ MediaRecordingPipeline::MediaRecordingPipeline(
     std::chrono::milliseconds video_poll_timeout,
     StereoAudioPipelineSessionPort &audio,
     StereoAudioCaptureSessionConfig audio_config,
-    std::size_t audio_encoding_frame_count_48k,
     MediaMuxSessionPort &mux,
     FragmentedMp4StreamConfiguration mux_configuration,
     MediaEventSink &events)
@@ -20,7 +19,7 @@ MediaRecordingPipeline::MediaRecordingPipeline(
       audio_(
           audio_session_,
           std::move(audio_config),
-          audio_encoding_frame_count_48k),
+          mux_configuration.audio.frame_size),
       recording_(
           video_,
           audio_,

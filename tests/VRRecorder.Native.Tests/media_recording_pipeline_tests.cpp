@@ -90,7 +90,6 @@ void ComposesConfiguredPipelinesIntoOneRecordingLifecycle()
         std::chrono::milliseconds(80),
         audio,
         {"desktop-id", "mic-id", 987'654},
-        1'024,
         mux,
         TestMp4Streams(),
         events);

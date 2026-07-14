@@ -606,7 +606,6 @@ void ExerciseFullGraph(bool callback_from_audio)
             "microphone-id",
             0,
         },
-        1'024,
         mux,
         TestMp4Streams(),
         events);

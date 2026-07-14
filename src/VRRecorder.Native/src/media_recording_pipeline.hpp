@@ -2,7 +2,6 @@
 #define VRRECORDER_NATIVE_MEDIA_RECORDING_PIPELINE_HPP
 
 #include <chrono>
-#include <cstddef>
 
 #include "media_stream_pipeline_adapters.hpp"
 
@@ -36,7 +35,6 @@ public:
         std::chrono::milliseconds video_poll_timeout,
         StereoAudioPipelineSessionPort &audio,
         StereoAudioCaptureSessionConfig audio_config,
-        std::size_t audio_encoding_frame_count_48k,
         MediaMuxSessionPort &mux,
         FragmentedMp4StreamConfiguration mux_configuration,
         MediaEventSink &events);
