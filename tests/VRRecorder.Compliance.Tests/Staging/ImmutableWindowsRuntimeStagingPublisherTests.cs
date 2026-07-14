@@ -223,6 +223,31 @@ public sealed class ImmutableWindowsRuntimeStagingPublisherTests
     }
 
     [Fact]
+    public async Task CancellationDuringCopyRemovesTemporaryDirectory()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var source = Path.Combine(directory.Path, "source");
+        var output = Path.Combine(directory.Path, "output");
+        var plan = await CreatePlanAsync(
+            source,
+            ("source.bin", "source.bin", new string('x', 100_000)));
+        using var cancellation = new CancellationTokenSource();
+        var fault = new CallbackFaultInjector((checkpoint, _) =>
+        {
+            if (checkpoint == WindowsRuntimeStagingCheckpoint.AfterCopyChunk)
+            {
+                cancellation.Cancel();
+            }
+        });
+        var publisher = new ImmutableWindowsRuntimeStagingPublisher(fault);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            publisher.PublishAsync(plan, output, cancellation.Token));
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+    }
+
+    [Fact]
     public async Task CommitFailureLeavesExistingPublicationUntouched()
     {
         using var directory = TemporaryDirectory.Create();
@@ -304,6 +329,60 @@ public sealed class ImmutableWindowsRuntimeStagingPublisherTests
     }
 
     [Fact]
+    public async Task ExistingDigestPayloadTamperingIsRejectedWithoutRepair()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var source = Path.Combine(directory.Path, "source");
+        var output = Path.Combine(directory.Path, "output");
+        var plan = await CreatePlanAsync(
+            source,
+            ("source.bin", "source.bin", "content"));
+        var publisher = new ImmutableWindowsRuntimeStagingPublisher();
+        var first = await publisher.PublishAsync(
+            plan,
+            output,
+            CancellationToken.None);
+        var payload = Path.Combine(first.PayloadDirectory, "source.bin");
+        await File.WriteAllTextAsync(payload, "tampered");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            publisher.PublishAsync(
+                plan,
+                output,
+                CancellationToken.None));
+
+        Assert.Equal("tampered", await File.ReadAllTextAsync(payload));
+        Assert.Single(Directory.EnumerateDirectories(output));
+    }
+
+    [Fact]
+    public async Task LinkedOutputParentIsRejectedWithoutWritingThroughIt()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var source = Path.Combine(directory.Path, "source");
+        var actualOutput = Path.Combine(directory.Path, "actual-output");
+        var linkedOutput = Path.Combine(directory.Path, "linked-output");
+        Directory.CreateDirectory(actualOutput);
+        Directory.CreateSymbolicLink(linkedOutput, actualOutput);
+        var plan = await CreatePlanAsync(
+            source,
+            ("source.bin", "source.bin", "content"));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new ImmutableWindowsRuntimeStagingPublisher().PublishAsync(
+                plan,
+                linkedOutput,
+                CancellationToken.None));
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(actualOutput));
+    }
+
+    [Fact]
     public async Task SourceHashMismatchNeverPublishes()
     {
         using var directory = TemporaryDirectory.Create();
@@ -332,6 +411,33 @@ public sealed class ImmutableWindowsRuntimeStagingPublisherTests
                 badPlan,
                 output,
                 CancellationToken.None));
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+    }
+
+    [Fact]
+    public async Task FileSemanticsFailureNeverPublishes()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var source = Path.Combine(directory.Path, "source");
+        var output = Path.Combine(directory.Path, "output");
+        var plan = await CreatePlanAsync(
+            source,
+            ("source.bin", "source.bin", "content"));
+        var verifier = new CallbackFileSemanticsVerifier(path =>
+        {
+            if (path.StartsWith(source, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("synthetic named stream");
+            }
+        });
+        var publisher = new ImmutableWindowsRuntimeStagingPublisher(
+            WindowsRuntimeStagingFaultInjector.None,
+            new CallbackCommitter(Directory.Move),
+            verifier);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            publisher.PublishAsync(plan, output, CancellationToken.None));
 
         Assert.Empty(Directory.EnumerateFileSystemEntries(output));
     }
@@ -444,6 +550,13 @@ public sealed class ImmutableWindowsRuntimeStagingPublisherTests
             string stagingDirectory,
             string publishedDirectory) =>
             callback(stagingDirectory, publishedDirectory);
+    }
+
+    private sealed class CallbackFileSemanticsVerifier(
+        Action<string> callback)
+        : IWindowsRuntimeFileSemanticsVerifier
+    {
+        public void VerifyRegularFile(string path) => callback(path);
     }
 
     private sealed class TemporaryDirectory : IDisposable

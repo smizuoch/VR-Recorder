@@ -62,6 +62,18 @@
       "sourcePaths": [
         "src/VRRecorder.Infrastructure.Media/ShellWindowsAudioEndpointApi.cs"
       ]
+    },
+    {
+      "consumer": "VRRecorder.Compliance",
+      "fileName": "kernel32.dll",
+      "mechanism": "LibraryImport",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "integrity": "WindowsSystem",
+      "componentId": null,
+      "sourcePaths": [
+        "src/VRRecorder.Compliance/Staging/WindowsRuntimeFileSemanticsVerifier.cs"
+      ]
     }
   ]
 }

@@ -5,6 +5,7 @@ using System.Text;
 namespace VRRecorder.Compliance.Staging;
 
 internal sealed class ImmutableWindowsRuntimeStagingPublisher
+    : IWindowsRuntimeStagingPublisher
 {
     private const int BufferSize = 81920;
     private const int MaximumEntryCount = 4096;
@@ -12,29 +13,47 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
     private const string PublicationPrefix = "windows-runtime-";
     private readonly IWindowsRuntimeStagingFaultInjector _faultInjector;
     private readonly IWindowsRuntimeDirectoryCommitter _committer;
+    private readonly IWindowsRuntimeFileSemanticsVerifier _fileSemantics;
     private readonly FileSystemStagingInventoryReader _inventoryReader = new();
 
     public ImmutableWindowsRuntimeStagingPublisher()
         : this(
             WindowsRuntimeStagingFaultInjector.None,
-            DirectoryMoveWindowsRuntimeCommitter.Instance)
+            DirectoryMoveWindowsRuntimeCommitter.Instance,
+            WindowsRuntimeFileSemanticsVerifier.Instance)
     {
     }
 
     internal ImmutableWindowsRuntimeStagingPublisher(
         IWindowsRuntimeStagingFaultInjector faultInjector)
-        : this(faultInjector, DirectoryMoveWindowsRuntimeCommitter.Instance)
+        : this(
+            faultInjector,
+            DirectoryMoveWindowsRuntimeCommitter.Instance,
+            WindowsRuntimeFileSemanticsVerifier.Instance)
     {
     }
 
     internal ImmutableWindowsRuntimeStagingPublisher(
         IWindowsRuntimeStagingFaultInjector faultInjector,
         IWindowsRuntimeDirectoryCommitter committer)
+        : this(
+            faultInjector,
+            committer,
+            WindowsRuntimeFileSemanticsVerifier.Instance)
+    {
+    }
+
+    internal ImmutableWindowsRuntimeStagingPublisher(
+        IWindowsRuntimeStagingFaultInjector faultInjector,
+        IWindowsRuntimeDirectoryCommitter committer,
+        IWindowsRuntimeFileSemanticsVerifier fileSemantics)
     {
         ArgumentNullException.ThrowIfNull(faultInjector);
         ArgumentNullException.ThrowIfNull(committer);
+        ArgumentNullException.ThrowIfNull(fileSemantics);
         _faultInjector = faultInjector;
         _committer = committer;
+        _fileSemantics = fileSemantics;
     }
 
     public async Task<WindowsRuntimeStagingPublication> PublishAsync(
@@ -207,6 +226,7 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
             payloadDirectory,
             file.Target);
         EnsureRegularUnlinkedFile(sourcePath, sourceRoot);
+        _fileSemantics.VerifyRegularFile(sourcePath);
         var sourceInfo = new FileInfo(sourcePath);
         if (sourceInfo.Length != file.Length)
         {
@@ -214,53 +234,60 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        await using var input = new FileStream(
-            sourcePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            BufferSize,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await using var output = new FileStream(
-            destinationPath,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            BufferSize,
-            FileOptions.Asynchronous |
-            FileOptions.SequentialScan |
-            FileOptions.WriteThrough);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[BufferSize];
         long length = 0;
         var chunkNumber = 0;
-        while (true)
+        await using (var input = new FileStream(
+                         sourcePath,
+                         FileMode.Open,
+                         FileAccess.Read,
+                         FileShare.Read,
+                         BufferSize,
+                         FileOptions.Asynchronous |
+                         FileOptions.SequentialScan))
+        await using (var output = new FileStream(
+                         destinationPath,
+                         FileMode.CreateNew,
+                         FileAccess.Write,
+                         FileShare.None,
+                         BufferSize,
+                         FileOptions.Asynchronous |
+                         FileOptions.SequentialScan |
+                         FileOptions.WriteThrough))
         {
-            var read = await input
-                .ReadAsync(buffer, cancellationToken)
-                .ConfigureAwait(false);
-            if (read == 0)
+            while (true)
             {
-                break;
+                var read = await input
+                    .ReadAsync(buffer, cancellationToken)
+                    .ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                await output
+                    .WriteAsync(buffer.AsMemory(0, read), cancellationToken)
+                    .ConfigureAwait(false);
+                hash.AppendData(buffer, 0, read);
+                length += read;
+                chunkNumber++;
+                Checkpoint(
+                    WindowsRuntimeStagingCheckpoint.AfterCopyChunk,
+                    stagingDirectory,
+                    payloadDirectory,
+                    file.Target,
+                    chunkNumber);
             }
 
-            await output
-                .WriteAsync(buffer.AsMemory(0, read), cancellationToken)
-                .ConfigureAwait(false);
-            hash.AppendData(buffer, 0, read);
-            length += read;
-            chunkNumber++;
-            Checkpoint(
-                WindowsRuntimeStagingCheckpoint.AfterCopyChunk,
-                stagingDirectory,
-                payloadDirectory,
-                file.Target,
-                chunkNumber);
+            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            output.Flush(flushToDisk: true);
+            EnsureRegularUnlinkedFile(sourcePath, sourceRoot);
         }
 
-        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
-        output.Flush(flushToDisk: true);
         EnsureRegularUnlinkedFile(sourcePath, sourceRoot);
+        _fileSemantics.VerifyRegularFile(sourcePath);
+        _fileSemantics.VerifyRegularFile(destinationPath);
         var actualHash = hash.GetHashAndReset();
         if (length != file.Length ||
             !CryptographicOperations.FixedTimeEquals(
@@ -318,6 +345,8 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
             throw PublicationMismatch(publicationDirectory);
         }
 
+        _fileSemantics.VerifyRegularFile(propsFile.FullName);
+
         await VerifyPayloadAsync(
                 Path.Combine(publicationDirectory, "payload"),
                 files,
@@ -362,6 +391,13 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
                     "windows-runtime-staged-file-mismatch",
                     expected.Target));
             }
+            else
+            {
+                _fileSemantics.VerifyRegularFile(
+                    WindowsRuntimeRelativePath.Resolve(
+                        payloadDirectory,
+                        expected.Target));
+            }
         }
 
         if (issues.Count != 0)
@@ -374,7 +410,7 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
         }
     }
 
-    private static async Task WriteVerifiedFileAsync(
+    private async Task WriteVerifiedFileAsync(
         string path,
         byte[] content,
         CancellationToken cancellationToken)
@@ -403,6 +439,8 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
             throw new InvalidDataException(
                 "The generated Windows runtime props changed while staging.");
         }
+
+        _fileSemantics.VerifyRegularFile(path);
     }
 
     private void Checkpoint(
