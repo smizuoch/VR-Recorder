@@ -14,7 +14,7 @@ internal sealed record WindowsRuntimeStagingEntry(
     WindowsRuntimeDeploymentKind DeploymentKind,
     string Sha256);
 
-internal enum WindowsRuntimeRole
+public enum WindowsRuntimeRole
 {
     FirstPartyNative,
     FfmpegRuntime,
@@ -28,7 +28,7 @@ internal enum WindowsRuntimeRole
     ApplicationAsset,
 }
 
-internal enum WindowsRuntimeDeploymentKind
+public enum WindowsRuntimeDeploymentKind
 {
     NativeLibrary,
     Executable,
