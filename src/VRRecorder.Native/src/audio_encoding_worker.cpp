@@ -27,7 +27,9 @@ StereoAudioEncodingWorker::StereoAudioEncodingWorker(
 
 StereoAudioEncodingWorker::~StereoAudioEncodingWorker()
 {
-    Abort();
+    if (started_.load() || abort_requested_.load()) {
+        Abort();
+    }
 }
 
 vrrec_status_t StereoAudioEncodingWorker::Start(

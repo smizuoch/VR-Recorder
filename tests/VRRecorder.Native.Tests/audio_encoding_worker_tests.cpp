@@ -617,6 +617,21 @@ void AbortBeforeStartPreventsThreadCreation()
     CHECK(worker.MuxedPacketCount() == 0);
 }
 
+void DestroyingANeverStartedWorkerDoesNotAbortAdjacentPorts()
+{
+    BlockingMixSource source(0);
+    RecordingEncoderSink sink;
+
+    {
+        StereoAudioEncodingWorker worker(source, sink);
+    }
+
+    CHECK(source.abort_calls == 0);
+    CHECK(sink.write_calls == 0);
+    CHECK(sink.finish_calls == 0);
+    CHECK(sink.abort_calls == 0);
+}
+
 }
 
 int main()
@@ -637,5 +652,6 @@ int main()
     AbortBeforeDelayedAudioRunPreventsFirstWindow();
     AbortWinsDuringFailedThreadCreation();
     AbortBeforeStartPreventsThreadCreation();
+    DestroyingANeverStartedWorkerDoesNotAbortAdjacentPorts();
     return 0;
 }
