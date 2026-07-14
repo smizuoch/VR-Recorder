@@ -274,6 +274,29 @@ void FailsClosedWhenCompositionAllocationFails()
     CHECK(submission_snapshot.failed_calls == 0);
 }
 
+void RejectsAnUnknownCompositionFailurePointWithoutSideEffects()
+{
+    OneWindowCapture capture;
+    RecordingSubmission submission;
+
+    auto creation = CreateFfmpegAacAudioPipelineForTesting(
+        capture,
+        submission,
+        static_cast<FfmpegAacAudioPipelineFailurePoint>(255));
+    CHECK(creation.status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(creation.pipeline == nullptr);
+    CHECK(!creation.descriptor.has_value());
+
+    const auto capture_snapshot = capture.Read();
+    CHECK(capture_snapshot.start_calls == 0);
+    CHECK(capture_snapshot.mix_calls == 0);
+    CHECK(capture_snapshot.abort_calls == 0);
+    const auto submission_snapshot = submission.Read();
+    CHECK(submission_snapshot.submit_calls == 0);
+    CHECK(submission_snapshot.finished_calls == 0);
+    CHECK(submission_snapshot.failed_calls == 0);
+}
+
 void FlushesRealAacPacketsWhenTheSessionStops()
 {
     OneWindowCapture capture;
@@ -350,6 +373,7 @@ int main()
 {
     CreatesOwnedPipelineWithoutStartingAdjacentPorts();
     FailsClosedWhenCompositionAllocationFails();
+    RejectsAnUnknownCompositionFailurePointWithoutSideEffects();
     FlushesRealAacPacketsWhenTheSessionStops();
     AbortsAndJoinsBeforeDestroyingAnActiveEncoder();
     return 0;
