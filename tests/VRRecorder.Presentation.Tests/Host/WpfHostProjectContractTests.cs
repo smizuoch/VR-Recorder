@@ -875,6 +875,27 @@ public sealed class WpfHostProjectContractTests
         Assert.Equal("PreserveNewest", ffprobe.Element("CopyToOutputDirectory")?.Value);
         Assert.Equal("PreserveNewest", ffprobe.Element("CopyToPublishDirectory")?.Value);
 
+        var expectedFfmpegRuntimes = new[]
+        {
+            "avcodec-62.dll",
+            "avformat-62.dll",
+            "avutil-60.dll",
+            "swresample-6.dll",
+        };
+        foreach (var fileName in expectedFfmpegRuntimes)
+        {
+            var runtime = Assert.Single(project.Descendants("Content"), element =>
+                element.Attribute("Include")?.Value ==
+                $"$(FfmpegRuntimeDirectory)/{fileName}");
+            Assert.Equal(fileName, runtime.Element("Link")?.Value);
+            Assert.Equal(
+                "PreserveNewest",
+                runtime.Element("CopyToOutputDirectory")?.Value);
+            Assert.Equal(
+                "PreserveNewest",
+                runtime.Element("CopyToPublishDirectory")?.Value);
+        }
+
         var validation = Assert.Single(project.Descendants("Target"), element =>
             element.Attribute("Name")?.Value == "ValidateReleaseMediaRuntime");
         Assert.Equal(
@@ -888,6 +909,12 @@ public sealed class WpfHostProjectContractTests
             condition.Contains("NativeMediaLibraryPath", StringComparison.Ordinal));
         Assert.Contains(errors, condition =>
             condition.Contains("FfprobeExecutablePath", StringComparison.Ordinal));
+        foreach (var fileName in expectedFfmpegRuntimes)
+        {
+            Assert.Contains(errors, condition =>
+                condition.Contains("FfmpegRuntimeDirectory", StringComparison.Ordinal) &&
+                condition.Contains(fileName, StringComparison.Ordinal));
+        }
     }
 
     [Fact]

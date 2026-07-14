@@ -51,6 +51,29 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup Condition="'$(FfmpegRuntimeDirectory)' != ''">
+    <Content Include="$(FfmpegRuntimeDirectory)/avcodec-62.dll">
+      <Link>avcodec-62.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(FfmpegRuntimeDirectory)/avformat-62.dll">
+      <Link>avformat-62.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(FfmpegRuntimeDirectory)/avutil-60.dll">
+      <Link>avutil-60.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(FfmpegRuntimeDirectory)/swresample-6.dll">
+      <Link>swresample-6.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <Target Name="ValidateReleaseLegalBundle"
           BeforeTargets="PrepareForBuild"
           Condition="'$(Configuration)' == 'Release'">
@@ -81,5 +104,13 @@
            Text="Release requires NativeMediaLibraryPath pointing to the approved Windows x64 vrrecorder_native.dll." />
     <Error Condition="'$(FfprobeExecutablePath)' == '' or !Exists('$(FfprobeExecutablePath)')"
            Text="Release requires FfprobeExecutablePath pointing to the approved Windows x64 ffprobe.exe." />
+    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/avcodec-62.dll')"
+           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 avcodec-62.dll." />
+    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/avformat-62.dll')"
+           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 avformat-62.dll." />
+    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/avutil-60.dll')"
+           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 avutil-60.dll." />
+    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/swresample-6.dll')"
+           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 swresample-6.dll." />
   </Target>
 </Project>
