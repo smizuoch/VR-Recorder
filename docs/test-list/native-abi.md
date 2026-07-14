@@ -12,7 +12,8 @@
 - [x] trailer／flush／close完了通知後だけSTOPPEDをpacket count付きで1回発行する
 - [x] FAULTEDをterminal eventにし、abort後のcallbackを抑止する
 - [x] production shared libraryのexportを承認済み17 symbolに限定しlink mapを生成する
-- [x] production placeholder backendがC ABIから明示的にBACKEND_UNAVAILABLEを返す
+- [x] portable `UNAVAILABLE` media variantがC ABIから明示的にBACKEND_UNAVAILABLEを返す
+- [x] media／encoder probe／Spout／SteamVR factoryをfamily別にexactly one選び、未知variant／source欠落／full-production不完全をconfigure時に拒否し、selection intentをactual native binary hashへ結合する
 - [x] SteamVR inputのversioned config/state・create/poll/destroy ABIを固定する
 - [x] managed bridgeがABI v1 callbackをFIRST／STOPPED／FAULTEDへ変換する
 - [x] 選択済みencoderを固定値でmanagedからnativeへ渡し、不正値を拒否し、旧40 byte configはMF softwareへ既定化する
@@ -21,9 +22,11 @@
 - [x] snapshot/frameのUTF-8 packed bufferに必要sizeを返し、容量不足時にデータを消費しない
 - [x] malformed UTF-8、oversize、不正enum／geometry／FPS／timestampをmanagedへ渡す前に拒否する
 - [x] poll実行中のdestroyを安全に合流し、pointer-to-pointer destroyを冪等にする
-- [x] production placeholder Spout backendは明示的にBACKEND_UNAVAILABLEを返す
+- [x] portable `UNAVAILABLE` Spout variantは明示的にBACKEND_UNAVAILABLEを返す
 - [x] encoder packet probeへ出力寸法・fps・adapter・16合成frameを固定ABIで渡す
 - [x] native packet probeをmanaged fallback結果へ変換し、Disposeを実行中probeと合流する
+- [ ] bool-only probe v1を互換維持したまま、actual backend／codec／hardware／adapter LUID／driver／opened format／SPS・PPS・IDR検証を返すsize付きstructured probe v2を追加する
+- [ ] 4つのactual production factory sourceを実装し、production C ABI／composition smokeがplaceholder sourceへ委譲しないことを検証する
 - [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
 - [x] session Start確定まではruntime操作と非terminal eventを拒否してFIRSTだけを保留し、Abort／Fault／backend戻り値を仲裁する。Start中Stopを拒否し、同時Stopの失敗／Fault／Abort結果を全callerへ共有・cacheして失敗後もgateを閉じる
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
@@ -42,7 +45,8 @@
 - [x] Emit one STOPPED event with packet counts only after trailer, flush, and close completion
 - [x] Make FAULTED terminal and suppress callbacks after abort
 - [x] Limit the production shared-library exports to 17 approved symbols and generate a link map
-- [x] Return explicit BACKEND_UNAVAILABLE from production placeholder backends through the C ABI
+- [x] Return explicit BACKEND_UNAVAILABLE from the portable `UNAVAILABLE` media variant through the C ABI
+- [x] Select exactly one media, encoder-probe, Spout, and SteamVR factory source per family; reject unknown variants, missing sources, and incomplete full-production configurations; and bind the selection intent to the actual native-binary hash
 - [x] Freeze the versioned SteamVR input config/state and create/poll/destroy ABI
 - [x] Translate ABI v1 callbacks into managed FIRST, STOPPED, and FAULTED events
 - [x] Carry the selected encoder through stable managed/native values, reject invalid values, and default legacy 40-byte configs to MF software
@@ -51,9 +55,11 @@
 - [x] Return required sizes for packed UTF-8 snapshot/frame buffers without consuming data when capacity is insufficient
 - [x] Reject malformed UTF-8, oversize data, and invalid enum/geometry/FPS/timestamp values before they reach managed code
 - [x] Safely join destroy with an active poll and make pointer-to-pointer destroy idempotent
-- [x] Return explicit BACKEND_UNAVAILABLE from the production placeholder Spout backend
+- [x] Return explicit BACKEND_UNAVAILABLE from the portable `UNAVAILABLE` Spout variant
 - [x] Pass output geometry, frame rate, adapter, and 16 synthetic frames to the encoder packet probe through a fixed ABI
 - [x] Translate native packet probing into managed fallback results and join Dispose with an in-flight probe
+- [ ] Preserve bool-only probe-v1 compatibility while adding a sized structured probe-v2 result for the actual backend/codec, hardware mode, adapter LUID, driver, opened format, and SPS/PPS/IDR validation
+- [ ] Implement all four actual production factory sources and verify with production C-ABI/composition smoke tests that none delegates to an unavailable source
 - [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI
 - [x] Keep runtime operations and nonterminal events gated until session Start commits while deferring only FIRST; arbitrate Abort/Fault/backend results; reject Stop during Start; and share/cache concurrent Stop failure, Fault, or Abort results while keeping the gate closed after failure
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
