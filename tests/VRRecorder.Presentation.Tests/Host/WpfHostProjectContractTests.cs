@@ -855,7 +855,7 @@ public sealed class WpfHostProjectContractTests
     }
 
     [Fact]
-    public void DesktopPublishRequiresAndCopiesApprovedMediaRuntimeInputs()
+    public void ReleaseDesktopPublishImportsOnlyApprovedWindowsRuntimeStaging()
     {
         var project = XDocument.Load(Path.Combine(
             FindRepositoryRoot(),
@@ -863,58 +863,82 @@ public sealed class WpfHostProjectContractTests
             "VRRecorder.App",
             "VRRecorder.App.csproj"));
 
-        var native = Assert.Single(project.Descendants("Content"), element =>
-            element.Attribute("Include")?.Value == "$(NativeMediaLibraryPath)");
-        Assert.Equal("vrrecorder_native.dll", native.Element("Link")?.Value);
-        Assert.Equal("PreserveNewest", native.Element("CopyToOutputDirectory")?.Value);
-        Assert.Equal("PreserveNewest", native.Element("CopyToPublishDirectory")?.Value);
+        var approvedImport = Assert.Single(
+            project.Descendants("Import"),
+            element => element.Attribute("Project")?.Value ==
+                       "$(ApprovedWindowsRuntimeProps)");
+        var importCondition = approvedImport.Attribute("Condition")?.Value ??
+                              string.Empty;
+        Assert.Contains("'$(Configuration)' == 'Release'", importCondition);
+        Assert.Contains("'$(ApprovedWindowsRuntimeProps)' != ''", importCondition);
+        Assert.Contains("IsPathFullyQualified", importCondition);
+        Assert.Contains("Exists('$(ApprovedWindowsRuntimeProps)')", importCondition);
 
-        var ffprobe = Assert.Single(project.Descendants("Content"), element =>
-            element.Attribute("Include")?.Value == "$(FfprobeExecutablePath)");
-        Assert.Equal("ffprobe.exe", ffprobe.Element("Link")?.Value);
-        Assert.Equal("PreserveNewest", ffprobe.Element("CopyToOutputDirectory")?.Value);
-        Assert.Equal("PreserveNewest", ffprobe.Element("CopyToPublishDirectory")?.Value);
-
-        var expectedFfmpegRuntimes = new[]
+        var legacyProperties = new[]
         {
-            "avcodec-62.dll",
-            "avformat-62.dll",
-            "avutil-60.dll",
-            "swresample-6.dll",
+            "NativeMediaLibraryPath",
+            "FfprobeExecutablePath",
+            "FfmpegRuntimeDirectory",
         };
-        foreach (var fileName in expectedFfmpegRuntimes)
+        foreach (var property in legacyProperties)
         {
-            var runtime = Assert.Single(project.Descendants("Content"), element =>
-                element.Attribute("Include")?.Value ==
-                $"$(FfmpegRuntimeDirectory)/{fileName}");
-            Assert.Equal(fileName, runtime.Element("Link")?.Value);
-            Assert.Equal(
-                "PreserveNewest",
-                runtime.Element("CopyToOutputDirectory")?.Value);
-            Assert.Equal(
-                "PreserveNewest",
-                runtime.Element("CopyToPublishDirectory")?.Value);
+            var developmentOnlyInputs = project.Descendants("Content")
+                .Where(element =>
+                    (element.Attribute("Include")?.Value ?? string.Empty)
+                    .Contains($"$({property})", StringComparison.Ordinal))
+                .ToArray();
+            Assert.NotEmpty(developmentOnlyInputs);
+            Assert.All(developmentOnlyInputs, input => Assert.Contains(
+                "'$(Configuration)' != 'Release'",
+                input.Parent?.Attribute("Condition")?.Value ?? string.Empty,
+                StringComparison.Ordinal));
         }
 
         var validation = Assert.Single(project.Descendants("Target"), element =>
-            element.Attribute("Name")?.Value == "ValidateReleaseMediaRuntime");
+            element.Attribute("Name")?.Value ==
+            "ValidateReleaseWindowsRuntimeStaging");
         Assert.Equal(
             "PrepareForBuild",
             validation.Attribute("BeforeTargets")?.Value);
-        Assert.Contains("'$(Configuration)' == 'Release'", validation.Attribute("Condition")?.Value);
-        var errors = validation.Elements("Error")
+        Assert.Equal(
+            "'$(Configuration)' == 'Release'",
+            validation.Attribute("Condition")?.Value);
+        var errorConditions = validation.Elements("Error")
             .Select(error => error.Attribute("Condition")?.Value ?? string.Empty)
             .ToArray();
-        Assert.Contains(errors, condition =>
-            condition.Contains("NativeMediaLibraryPath", StringComparison.Ordinal));
-        Assert.Contains(errors, condition =>
-            condition.Contains("FfprobeExecutablePath", StringComparison.Ordinal));
-        foreach (var fileName in expectedFfmpegRuntimes)
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains("ApprovedWindowsRuntimeProps", StringComparison.Ordinal) &&
+            condition.Contains("== ''", StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains("ApprovedWindowsRuntimeProps", StringComparison.Ordinal) &&
+            condition.Contains("IsPathFullyQualified", StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains("ApprovedWindowsRuntimeProps", StringComparison.Ordinal) &&
+            condition.Contains("Exists", StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "VRRecorderApprovedWindowsRuntimeImported",
+                StringComparison.Ordinal) &&
+            condition.Contains("!= 'true'", StringComparison.Ordinal));
+        foreach (var digestProperty in new[]
+                 {
+                     "VRRecorderApprovedWindowsRuntimeManifestSha256",
+                     "VRRecorderApprovedWindowsRuntimeInventorySha256",
+                 })
         {
-            Assert.Contains(errors, condition =>
-                condition.Contains("FfmpegRuntimeDirectory", StringComparison.Ordinal) &&
-                condition.Contains(fileName, StringComparison.Ordinal));
+            Assert.Contains(errorConditions, condition =>
+                condition.Contains(digestProperty, StringComparison.Ordinal) &&
+                condition.Contains("^[0-9a-f]{64}$", StringComparison.Ordinal));
         }
+
+        foreach (var property in legacyProperties)
+        {
+            Assert.Contains(errorConditions, condition =>
+                condition.Contains($"$({property})", StringComparison.Ordinal));
+        }
+
+        Assert.DoesNotContain(project.Descendants("Target"), element =>
+            element.Attribute("Name")?.Value == "ValidateReleaseMediaRuntime");
     }
 
     [Fact]

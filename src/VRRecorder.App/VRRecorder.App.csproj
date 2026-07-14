@@ -11,6 +11,9 @@
     <RootNamespace>VRRecorder.App</RootNamespace>
   </PropertyGroup>
 
+  <Import Project="$(ApprovedWindowsRuntimeProps)"
+          Condition="'$(Configuration)' == 'Release' and '$(ApprovedWindowsRuntimeProps)' != '' and $([System.IO.Path]::IsPathFullyQualified('$(ApprovedWindowsRuntimeProps)')) and Exists('$(ApprovedWindowsRuntimeProps)')" />
+
   <ItemGroup>
     <ProjectReference Include="../VRRecorder.Application/VRRecorder.Application.csproj" />
     <ProjectReference Include="../VRRecorder.Compliance/VRRecorder.Compliance.csproj" />
@@ -35,7 +38,7 @@
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(NativeMediaLibraryPath)' != '' and Exists('$(NativeMediaLibraryPath)')">
+  <ItemGroup Condition="'$(Configuration)' != 'Release' and '$(NativeMediaLibraryPath)' != '' and Exists('$(NativeMediaLibraryPath)')">
     <Content Include="$(NativeMediaLibraryPath)">
       <Link>vrrecorder_native.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -43,7 +46,7 @@
     </Content>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(FfprobeExecutablePath)' != '' and Exists('$(FfprobeExecutablePath)')">
+  <ItemGroup Condition="'$(Configuration)' != 'Release' and '$(FfprobeExecutablePath)' != '' and Exists('$(FfprobeExecutablePath)')">
     <Content Include="$(FfprobeExecutablePath)">
       <Link>ffprobe.exe</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -51,7 +54,7 @@
     </Content>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(FfmpegRuntimeDirectory)' != ''">
+  <ItemGroup Condition="'$(Configuration)' != 'Release' and '$(FfmpegRuntimeDirectory)' != ''">
     <Content Include="$(FfmpegRuntimeDirectory)/avcodec-62.dll">
       <Link>avcodec-62.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -97,20 +100,26 @@
            Text="The LegalManifestSha256 digest does not match LEGAL-MANIFEST.sha256." />
   </Target>
 
-  <Target Name="ValidateReleaseMediaRuntime"
+  <Target Name="ValidateReleaseWindowsRuntimeStaging"
           BeforeTargets="PrepareForBuild"
           Condition="'$(Configuration)' == 'Release'">
-    <Error Condition="'$(NativeMediaLibraryPath)' == '' or !Exists('$(NativeMediaLibraryPath)')"
-           Text="Release requires NativeMediaLibraryPath pointing to the approved Windows x64 vrrecorder_native.dll." />
-    <Error Condition="'$(FfprobeExecutablePath)' == '' or !Exists('$(FfprobeExecutablePath)')"
-           Text="Release requires FfprobeExecutablePath pointing to the approved Windows x64 ffprobe.exe." />
-    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/avcodec-62.dll')"
-           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 avcodec-62.dll." />
-    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/avformat-62.dll')"
-           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 avformat-62.dll." />
-    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/avutil-60.dll')"
-           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 avutil-60.dll." />
-    <Error Condition="'$(FfmpegRuntimeDirectory)' == '' or !Exists('$(FfmpegRuntimeDirectory)/swresample-6.dll')"
-           Text="Release requires FfmpegRuntimeDirectory containing the approved FFmpeg 8.1.2 swresample-6.dll." />
+    <Error Condition="'$(NativeMediaLibraryPath)' != ''"
+           Text="Release rejects NativeMediaLibraryPath; use the validated ApprovedWindowsRuntimeProps output." />
+    <Error Condition="'$(FfprobeExecutablePath)' != ''"
+           Text="Release rejects FfprobeExecutablePath; use the validated ApprovedWindowsRuntimeProps output." />
+    <Error Condition="'$(FfmpegRuntimeDirectory)' != ''"
+           Text="Release rejects FfmpegRuntimeDirectory; use the validated ApprovedWindowsRuntimeProps output." />
+    <Error Condition="'$(ApprovedWindowsRuntimeProps)' == ''"
+           Text="Release requires ApprovedWindowsRuntimeProps from the validated Windows runtime stager." />
+    <Error Condition="'$(ApprovedWindowsRuntimeProps)' != '' and !$([System.IO.Path]::IsPathFullyQualified('$(ApprovedWindowsRuntimeProps)'))"
+           Text="ApprovedWindowsRuntimeProps must be an absolute path." />
+    <Error Condition="'$(ApprovedWindowsRuntimeProps)' != '' and $([System.IO.Path]::IsPathFullyQualified('$(ApprovedWindowsRuntimeProps)')) and !Exists('$(ApprovedWindowsRuntimeProps)')"
+           Text="ApprovedWindowsRuntimeProps does not exist." />
+    <Error Condition="'$(VRRecorderApprovedWindowsRuntimeImported)' != 'true'"
+           Text="ApprovedWindowsRuntimeProps is missing the validated runtime import marker." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(VRRecorderApprovedWindowsRuntimeManifestSha256)', '^[0-9a-f]{64}$'))"
+           Text="ApprovedWindowsRuntimeProps must provide a canonical runtime manifest SHA-256." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(VRRecorderApprovedWindowsRuntimeInventorySha256)', '^[0-9a-f]{64}$'))"
+           Text="ApprovedWindowsRuntimeProps must provide a canonical runtime inventory SHA-256." />
   </Target>
 </Project>
