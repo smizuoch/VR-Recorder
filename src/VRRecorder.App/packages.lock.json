@@ -35,6 +35,7 @@
       "vrrecorder.infrastructure.steamvr": {
         "type": "Project",
         "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )",
           "VRRecorder.DesignSystem": "[1.0.0, )"
         }
       },
