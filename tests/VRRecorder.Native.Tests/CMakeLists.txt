@@ -224,6 +224,9 @@ target_include_directories(
     PRIVATE
         "${native_source_root}/include"
         "${native_source_root}/src")
+target_compile_definitions(
+    vrrecorder_native_pre_header_coordinator
+    PRIVATE VRRECORDER_NATIVE_TESTING=1)
 set_target_properties(
     vrrecorder_native_pre_header_coordinator
     PROPERTIES CXX_EXTENSIONS OFF)

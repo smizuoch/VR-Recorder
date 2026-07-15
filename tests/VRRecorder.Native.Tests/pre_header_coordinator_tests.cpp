@@ -1,10 +1,13 @@
 #include "pre_header_coordinator.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <future>
 #include <iostream>
 #include <span>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -61,10 +64,18 @@ public:
     }
 
     Mp4MuxResult SubmitBatch(
-        MediaStreamKind,
-        std::span<const EncodedMediaPacket>) noexcept override
+        MediaStreamKind producer,
+        std::span<const EncodedMediaPacket> packets) noexcept override
     {
         ++submit_calls;
+        for (const auto &packet : packets) {
+            CHECK(packet.stream == producer);
+            try {
+                submitted_packets.push_back(packet);
+            } catch (...) {
+                return Mp4MuxResult::MuxFailed;
+            }
+        }
         return Mp4MuxResult::Written;
     }
 
@@ -89,11 +100,40 @@ public:
 
     vrrec_status_t start_status = VRREC_STATUS_OK;
     FragmentedMp4StreamConfiguration last_configuration {};
+    std::vector<EncodedMediaPacket> submitted_packets;
     std::size_t start_calls = 0;
     std::size_t submit_calls = 0;
     std::size_t request_abort_calls = 0;
     std::size_t abort_calls = 0;
 };
+
+EncodedMediaPacket Packet(
+    MediaStreamKind stream,
+    std::int64_t dts_microseconds,
+    std::byte payload)
+{
+    return {
+        stream,
+        dts_microseconds,
+        dts_microseconds,
+        10'000,
+        stream == MediaStreamKind::Video,
+        {payload},
+    };
+}
+
+void WaitForQueuedPackets(
+    const PreHeaderCoordinator &coordinator,
+    std::size_t expected)
+{
+    const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::seconds(2);
+    while (coordinator.QueuedPacketCountForTesting() != expected &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    CHECK(coordinator.QueuedPacketCountForTesting() == expected);
+}
 
 void DoesNotStartTheHeaderBeforeDescriptorReadiness()
 {
@@ -123,7 +163,96 @@ void DoesNotStartTheHeaderBeforeDescriptorReadiness()
           VideoDescriptor().codec_extradata);
     CHECK(downstream.last_configuration.audio.bitrate_bits_per_second ==
           192'000);
-    CHECK(coordinator.State() == PreHeaderState::DrainingPreHeader);
+    CHECK(coordinator.State() == PreHeaderState::Running);
+}
+
+void QueuesOwnedPacketsAndDrainsThemInDeterministicDtsOrder()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(1'000'000) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+
+    std::vector audio {Packet(MediaStreamKind::Audio, 100, std::byte {0xA1})};
+    std::vector late_video {
+        Packet(MediaStreamKind::Video, 100, std::byte {0xB1})};
+    std::vector early_video {
+        Packet(MediaStreamKind::Video, 50, std::byte {0xB0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    auto late_video_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Video, late_video);
+    });
+    auto early_video_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Video, early_video);
+    });
+    WaitForQueuedPackets(coordinator, 3);
+    CHECK(downstream.submit_calls == 0);
+    audio.front().payload.front() = std::byte {0xEE};
+    late_video.front().payload.front() = std::byte {0xEE};
+    early_video.front().payload.front() = std::byte {0xEE};
+
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              VideoDescriptor()) == VRREC_STATUS_OK);
+    CHECK(audio_result.get() == Mp4MuxResult::Written);
+    CHECK(late_video_result.get() == Mp4MuxResult::Written);
+    CHECK(early_video_result.get() == Mp4MuxResult::Written);
+    CHECK(downstream.start_calls == 1);
+    CHECK(downstream.submit_calls == 3);
+    CHECK(downstream.submitted_packets.size() == 3);
+    CHECK(downstream.submitted_packets[0].stream == MediaStreamKind::Video);
+    CHECK(downstream.submitted_packets[0].dts_microseconds == 50);
+    CHECK(downstream.submitted_packets[0].payload.front() ==
+          std::byte {0xB0});
+    CHECK(downstream.submitted_packets[1].stream == MediaStreamKind::Video);
+    CHECK(downstream.submitted_packets[1].dts_microseconds == 100);
+    CHECK(downstream.submitted_packets[2].stream == MediaStreamKind::Audio);
+    CHECK(downstream.submitted_packets[2].dts_microseconds == 100);
+    CHECK(downstream.submitted_packets[2].payload.front() ==
+          std::byte {0xA1});
+    CHECK(coordinator.State() == PreHeaderState::Running);
+}
+
+void AbortWakesAQueuedSubmissionWithoutWritingIt()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector packets {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    auto result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, packets);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+
+    coordinator.Abort();
+
+    CHECK(result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(coordinator.QueuedPacketCountForTesting() == 0);
+    CHECK(coordinator.State() == PreHeaderState::Aborted);
 }
 
 void StartsExactlyOnceRegardlessOfReadinessOrder()
@@ -251,6 +380,8 @@ void AbortBeforeReadinessPreventsHeaderStart()
 int main()
 {
     DoesNotStartTheHeaderBeforeDescriptorReadiness();
+    QueuesOwnedPacketsAndDrainsThemInDeterministicDtsOrder();
+    AbortWakesAQueuedSubmissionWithoutWritingIt();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();
