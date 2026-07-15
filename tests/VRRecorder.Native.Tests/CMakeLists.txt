@@ -1423,6 +1423,24 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_d3d11_video_frame_processor)
 
 add_executable(
+    vrrecorder_native_d3d11_nv12_frame_mapper
+    d3d11_nv12_frame_mapper_tests.cpp
+    "${native_source_root}/src/d3d11_nv12_frame_mapper.cpp")
+target_compile_features(
+    vrrecorder_native_d3d11_nv12_frame_mapper PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_d3d11_nv12_frame_mapper
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_d3d11_nv12_frame_mapper
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_d3d11_nv12_frame_mapper)
+
+add_executable(
     vrrecorder_native_keyed_mutex_video_surface
     keyed_mutex_video_surface_tests.cpp
     "${native_source_root}/src/keyed_mutex_video_surface.cpp")
@@ -1445,8 +1463,10 @@ if(WIN32)
         vrrecorder_native_windows_d3d11_video_processor_integration
         windows_d3d11_video_processor_integration_tests.cpp
         "${native_source_root}/src/d3d11_video_frame_processor.cpp"
+        "${native_source_root}/src/d3d11_nv12_frame_mapper.cpp"
         "${native_source_root}/src/keyed_mutex_video_surface.cpp"
         "${native_source_root}/src/windows_d3d11_video_processor_port.cpp"
+        "${native_source_root}/src/windows_d3d11_nv12_readback_port.cpp"
         "${native_source_root}/src/windows_d3d11_keyed_mutex_surface.cpp"
         "${native_source_root}/src/video_processing_plan.cpp")
     target_compile_features(
@@ -1756,6 +1776,8 @@ add_test(NAME vrrecorder_native_video_processing_encoder_sink
     COMMAND vrrecorder_native_video_processing_encoder_sink)
 add_test(NAME vrrecorder_native_d3d11_video_frame_processor
     COMMAND vrrecorder_native_d3d11_video_frame_processor)
+add_test(NAME vrrecorder_native_d3d11_nv12_frame_mapper
+    COMMAND vrrecorder_native_d3d11_nv12_frame_mapper)
 add_test(NAME vrrecorder_native_keyed_mutex_video_surface
     COMMAND vrrecorder_native_keyed_mutex_video_surface)
 if(TARGET vrrecorder_native_windows_d3d11_video_processor_integration)

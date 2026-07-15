@@ -1,6 +1,8 @@
 #include "d3d11_video_frame_processor.hpp"
+#include "d3d11_nv12_frame_mapper.hpp"
 #include "windows_d3d11_video_processor_port.hpp"
 #include "windows_d3d11_keyed_mutex_surface.hpp"
+#include "windows_d3d11_nv12_readback_port.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -383,6 +385,36 @@ void ConvertsOddBgraToOwnedNv12AndPadsBeforeFit()
         readback.height;
     CHECK(readback.bytes[uv_offset] != 0);
     CHECK(readback.bytes[uv_offset + 1] != 0);
+
+    auto readback_port = CreateWindowsD3d11Nv12ReadbackPort(
+        hardware.adapter_luid,
+        create_status);
+    CHECK(create_status == VRREC_STATUS_OK);
+    CHECK(readback_port != nullptr);
+    D3d11SystemMemoryNv12FrameMapper mapper(*readback_port);
+    ScheduledVideoFrame scheduled {};
+    scheduled.surface = output;
+    auto mapped = mapper.Map(scheduled);
+    CHECK(mapped.status == VRREC_STATUS_OK);
+    CHECK(mapped.mapping != nullptr);
+    const auto view = mapped.mapping->View();
+    CHECK(view.width == output_descriptor.width);
+    CHECK(view.height == output_descriptor.height);
+    CHECK(view.y_stride_bytes == readback.row_pitch);
+    CHECK(view.uv_stride_bytes == readback.row_pitch);
+    CHECK(std::to_integer<std::uint8_t>(view.y_plane[20U *
+              view.y_stride_bytes]) == readback.bytes[20U *
+              readback.row_pitch]);
+    CHECK(std::to_integer<std::uint8_t>(view.uv_plane[0]) ==
+          readback.bytes[uv_offset]);
+
+    mapped.mapping.reset();
+    mapped = mapper.Map(scheduled);
+    CHECK(mapped.status == VRREC_STATUS_OK);
+    CHECK(mapped.mapping != nullptr);
+    mapped.mapping.reset();
+    mapper.Abort();
+    CHECK(mapper.Map(scheduled).status == VRREC_STATUS_INVALID_STATE);
 }
 
 std::uint8_t Nv12Y(
