@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "encoded_media_packet_submission_port.hpp"
+#include "h264_descriptor_packet_submission_port.hpp"
 #include "media_recording_session.hpp"
 
 namespace vrrecorder::native {
@@ -41,7 +42,9 @@ inline constexpr PreHeaderQueueLimits DefaultPreHeaderQueueLimits {
     5'000'000,
 };
 
-class PreHeaderCoordinator final : public EncodedMediaPacketSubmissionPort {
+class PreHeaderCoordinator final
+    : public EncodedMediaPacketSubmissionPort,
+      public H264DescriptorPacketSubmissionPort {
 public:
     PreHeaderCoordinator(
         MediaMuxSessionPort &mux_session,
@@ -62,6 +65,10 @@ public:
         const H264StreamDescriptor &descriptor) noexcept;
     Mp4MuxResult SubmitBatch(
         MediaStreamKind producer,
+        std::span<const EncodedMediaPacket> packets) noexcept override;
+    Mp4MuxResult SubmitVideoDescriptorBatch(
+        const void *encoder_identity,
+        const H264StreamDescriptor &descriptor,
         std::span<const EncodedMediaPacket> packets) noexcept override;
     vrrec_status_t EncoderFinished(
         MediaStreamKind stream) noexcept override;
@@ -102,6 +109,13 @@ private:
 
     vrrec_status_t TryStartHeaderLocked(
         std::unique_lock<std::mutex> &lock) noexcept;
+    vrrec_status_t QueueBatchLocked(
+        MediaStreamKind producer,
+        std::span<const EncodedMediaPacket> packets,
+        std::size_t byte_count,
+        std::int64_t minimum_dts,
+        std::int64_t maximum_dts,
+        std::shared_ptr<SubmissionTicket> &ticket) noexcept;
     vrrec_status_t DrainQueuedPackets() noexcept;
     vrrec_status_t FailLocked(vrrec_status_t status) noexcept;
     void FailQueuedSubmissionsLocked(Mp4MuxResult result) noexcept;

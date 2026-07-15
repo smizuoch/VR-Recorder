@@ -291,54 +291,78 @@ Mp4MuxResult PreHeaderCoordinator::SubmitBatch(
         return Mp4MuxResult::InvalidState;
     }
 
-    auto &usage = producer == MediaStreamKind::Video
-        ? video_queue_usage_
-        : audio_queue_usage_;
-    if (!FitsQueueLimits(
-            queue_limits_,
-            measurements,
-            usage.packet_count,
-            usage.byte_count,
-            usage.has_dts,
-            usage.minimum_dts,
-            usage.maximum_dts)) {
-        FailLocked(VRREC_STATUS_BUFFER_TOO_SMALL);
+    std::shared_ptr<SubmissionTicket> ticket;
+    if (QueueBatchLocked(
+            producer,
+            packets,
+            measurements.byte_count,
+            measurements.minimum_dts,
+            measurements.maximum_dts,
+            ticket) != VRREC_STATUS_OK) {
         return Mp4MuxResult::MuxFailed;
+    }
+
+    ticket->changed.wait(lock, [&] {
+        return ticket->completed;
+    });
+    return ticket->result;
+}
+
+Mp4MuxResult PreHeaderCoordinator::SubmitVideoDescriptorBatch(
+    const void *encoder_identity,
+    const H264StreamDescriptor &descriptor,
+    std::span<const EncodedMediaPacket> packets) noexcept
+{
+    BatchMeasurements measurements;
+    const auto batch_valid = MeasureBatch(
+        MediaStreamKind::Video,
+        packets,
+        measurements);
+    std::unique_lock lock(mutex_);
+    if (abort_requested_.load() || state_ == PreHeaderState::Aborted) {
+        return Mp4MuxResult::MuxFailed;
+    }
+    if (state_ != PreHeaderState::Priming) {
+        return Mp4MuxResult::InvalidState;
+    }
+    if (!batch_valid || encoder_identity == nullptr ||
+        encoder_identity != expected_video_encoder_identity_ ||
+        !IsVideoDescriptorValid(descriptor)) {
+        FailLocked(VRREC_STATUS_INVALID_ARGUMENT);
+        return Mp4MuxResult::InvalidPacket;
+    }
+    if (video_descriptor_.has_value()) {
+        FailLocked(VRREC_STATUS_INVALID_STATE);
+        return Mp4MuxResult::InvalidState;
     }
 
     std::shared_ptr<SubmissionTicket> ticket;
-    QueuedBatch batch;
-    try {
-        ticket = std::make_shared<SubmissionTicket>();
-        ticket->producer = producer;
-        ticket->packet_count = measurements.packet_count;
-        ticket->byte_count = measurements.byte_count;
-        ticket->minimum_dts = measurements.minimum_dts;
-        ticket->maximum_dts = measurements.maximum_dts;
-        batch = {
-            producer,
-            std::vector<EncodedMediaPacket>(packets.begin(), packets.end()),
-            ticket,
-            next_submission_sequence_,
-        };
-        queued_batches_.push_back(std::move(batch));
-        outstanding_tickets_.push_back(ticket);
-    } catch (...) {
-        FailLocked(VRREC_STATUS_OUT_OF_MEMORY);
+    if (QueueBatchLocked(
+            MediaStreamKind::Video,
+            packets,
+            measurements.byte_count,
+            measurements.minimum_dts,
+            measurements.maximum_dts,
+            ticket) != VRREC_STATUS_OK) {
         return Mp4MuxResult::MuxFailed;
     }
-    ++next_submission_sequence_;
-    queued_packet_count_ += measurements.packet_count;
-    usage.packet_count += measurements.packet_count;
-    usage.byte_count += measurements.byte_count;
-    usage.minimum_dts = usage.has_dts
-        ? std::min(usage.minimum_dts, measurements.minimum_dts)
-        : measurements.minimum_dts;
-    usage.maximum_dts = usage.has_dts
-        ? std::max(usage.maximum_dts, measurements.maximum_dts)
-        : measurements.maximum_dts;
-    usage.has_dts = true;
+    try {
+        video_descriptor_ = descriptor;
+    } catch (const std::bad_alloc &) {
+        FailLocked(VRREC_STATUS_OUT_OF_MEMORY);
+        return Mp4MuxResult::MuxFailed;
+    } catch (...) {
+        FailLocked(VRREC_STATUS_INTERNAL_ERROR);
+        return Mp4MuxResult::MuxFailed;
+    }
 
+    const auto start_status = TryStartHeaderLocked(lock);
+    if (start_status != VRREC_STATUS_OK) {
+        return Mp4MuxResult::MuxFailed;
+    }
+    if (!lock.owns_lock()) {
+        lock.lock();
+    }
     ticket->changed.wait(lock, [&] {
         return ticket->completed;
     });
@@ -446,6 +470,69 @@ std::uint64_t PreHeaderCoordinator::AdmissionCutSequenceForTesting()
     return pre_header_admission_cut_sequence_;
 }
 #endif
+
+vrrec_status_t PreHeaderCoordinator::QueueBatchLocked(
+    MediaStreamKind producer,
+    std::span<const EncodedMediaPacket> packets,
+    std::size_t byte_count,
+    std::int64_t minimum_dts,
+    std::int64_t maximum_dts,
+    std::shared_ptr<SubmissionTicket> &ticket) noexcept
+{
+    const BatchMeasurements measurements {
+        packets.size(),
+        byte_count,
+        minimum_dts,
+        maximum_dts,
+    };
+    auto &usage = producer == MediaStreamKind::Video
+        ? video_queue_usage_
+        : audio_queue_usage_;
+    if (!FitsQueueLimits(
+            queue_limits_,
+            measurements,
+            usage.packet_count,
+            usage.byte_count,
+            usage.has_dts,
+            usage.minimum_dts,
+            usage.maximum_dts)) {
+        return FailLocked(VRREC_STATUS_BUFFER_TOO_SMALL);
+    }
+
+    QueuedBatch batch;
+    try {
+        ticket = std::make_shared<SubmissionTicket>();
+        ticket->producer = producer;
+        ticket->packet_count = packets.size();
+        ticket->byte_count = byte_count;
+        ticket->minimum_dts = minimum_dts;
+        ticket->maximum_dts = maximum_dts;
+        batch = {
+            producer,
+            std::vector<EncodedMediaPacket>(packets.begin(), packets.end()),
+            ticket,
+            next_submission_sequence_,
+        };
+        queued_batches_.push_back(std::move(batch));
+        outstanding_tickets_.push_back(ticket);
+    } catch (const std::bad_alloc &) {
+        return FailLocked(VRREC_STATUS_OUT_OF_MEMORY);
+    } catch (...) {
+        return FailLocked(VRREC_STATUS_INTERNAL_ERROR);
+    }
+    ++next_submission_sequence_;
+    queued_packet_count_ += packets.size();
+    usage.packet_count += packets.size();
+    usage.byte_count += byte_count;
+    usage.minimum_dts = usage.has_dts
+        ? std::min(usage.minimum_dts, minimum_dts)
+        : minimum_dts;
+    usage.maximum_dts = usage.has_dts
+        ? std::max(usage.maximum_dts, maximum_dts)
+        : maximum_dts;
+    usage.has_dts = true;
+    return VRREC_STATUS_OK;
+}
 
 vrrec_status_t PreHeaderCoordinator::TryStartHeaderLocked(
     std::unique_lock<std::mutex> &lock) noexcept

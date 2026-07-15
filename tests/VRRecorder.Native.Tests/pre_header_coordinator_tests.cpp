@@ -696,6 +696,46 @@ void RejectsPacketsFromACompletedProducer()
     CHECK(coordinator.State() == PreHeaderState::Failed);
 }
 
+void PublishesTheDescriptorWithoutLosingItsFirstVideoBatch()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector audio {
+        Packet(MediaStreamKind::Audio, -10, std::byte {0xA0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+    const std::vector first_video {
+        Packet(MediaStreamKind::Video, 0, std::byte {0xB0})};
+
+    CHECK(coordinator.SubmitVideoDescriptorBatch(
+              &encoder_identity,
+              VideoDescriptor(),
+              first_video) == Mp4MuxResult::Written);
+
+    CHECK(audio_result.get() == Mp4MuxResult::Written);
+    CHECK(downstream.start_calls == 1);
+    CHECK(downstream.submit_calls == 2);
+    CHECK(downstream.submitted_packets.size() == 2);
+    CHECK(downstream.submitted_packets[0].stream == MediaStreamKind::Audio);
+    CHECK(downstream.submitted_packets[0].dts_microseconds == -10);
+    CHECK(downstream.submitted_packets[1].stream == MediaStreamKind::Video);
+    CHECK(downstream.submitted_packets[1].dts_microseconds == 0);
+    CHECK(coordinator.State() == PreHeaderState::Running);
+}
+
 void StartsExactlyOnceRegardlessOfReadinessOrder()
 {
     RecordingDownstream downstream;
@@ -830,6 +870,7 @@ int main()
     DuplicateProducerCompletionBeforeItsPeerIsTerminal();
     BothProducerCompletionsEnterTerminalFinishing();
     RejectsPacketsFromACompletedProducer();
+    PublishesTheDescriptorWithoutLosingItsFirstVideoBatch();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();
