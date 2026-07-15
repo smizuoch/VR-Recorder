@@ -35,6 +35,10 @@ option(
     VRRECORDER_ENABLE_SPOUT2_ADAPTER
     "Import the pinned Spout2 SDK for the production receiver"
     OFF)
+option(
+    VRRECORDER_ENABLE_OPENVR_ADAPTER
+    "Import the pinned OpenVR SDK for the production SteamVR backend"
+    OFF)
 set(
     VRRECORDER_FFMPEG_ROOT
     ""
@@ -55,6 +59,11 @@ set(
     ""
     CACHE PATH
     "Absolute path to the exact Spout2 2.007.017 Windows x64 static SDK")
+set(
+    VRRECORDER_OPENVR_ROOT
+    ""
+    CACHE PATH
+    "Absolute path to the exact OpenVR 2.15.6 Windows x64 SDK")
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake")
 vrrecorder_declare_native_factory_options()
@@ -87,6 +96,16 @@ if(VRRECORDER_ENABLE_SPOUT2_ADAPTER)
     endif()
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedSpout2.cmake")
     vrrecorder_import_pinned_spout2_sdk("${VRRECORDER_SPOUT2_ROOT}")
+endif()
+
+if(VRRECORDER_ENABLE_OPENVR_ADAPTER)
+    if(NOT WIN32 OR NOT MSVC)
+        message(
+            FATAL_ERROR
+            "The production OpenVR SDK contract requires Windows MSVC")
+    endif()
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedOpenVR.cmake")
+    vrrecorder_import_pinned_openvr_sdk("${VRRECORDER_OPENVR_ROOT}")
 endif()
 
 if(BUILD_TESTING AND NOT VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT STREQUAL "")
@@ -123,6 +142,12 @@ if(BUILD_TESTING)
             "-DPINNED_SPOUT2_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedSpout2.cmake"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_spout2_contract.cmake")
+    add_test(NAME vrrecorder_native_pinned_openvr_contract
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DPINNED_OPENVR_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedOpenVR.cmake"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_openvr_contract.cmake")
     add_test(NAME vrrecorder_native_factory_variant_contract
         COMMAND
             "${CMAKE_COMMAND}"
@@ -153,6 +178,7 @@ if(BUILD_TESTING)
         vrrecorder_native_pinned_ffmpeg_contract
         vrrecorder_native_windows_ffmpeg_oracle_contract
         vrrecorder_native_pinned_spout2_contract
+        vrrecorder_native_pinned_openvr_contract
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(
         vrrecorder_native_factory_variant_contract

@@ -105,6 +105,7 @@ file(
     "set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES OFF)\n"
     "set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS OFF)\n"
     "set(VRRECORDER_ENABLE_SPOUT2_ADAPTER OFF)\n"
+    "set(VRRECORDER_ENABLE_OPENVR_ADAPTER OFF)\n"
     "vrrecorder_select_native_factory_sources(sources \"\${SOURCE_ROOT}\")\n")
 
 run_selection(TRUE "portable selection" UNAVAILABLE)
@@ -123,6 +124,7 @@ file(
     "set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES ON)\n"
     "set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS ON)\n"
     "set(VRRECORDER_ENABLE_SPOUT2_ADAPTER ON)\n"
+    "set(VRRECORDER_ENABLE_OPENVR_ADAPTER ON)\n"
     "vrrecorder_select_native_factory_sources(sources \"\${SOURCE_ROOT}\")\n"
     "list(LENGTH sources source_count)\n"
     "if(NOT source_count EQUAL 4)\n"
@@ -153,6 +155,7 @@ file(
     "set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES ON)\n"
     "set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS ON)\n"
     "set(VRRECORDER_ENABLE_SPOUT2_ADAPTER ON)\n"
+    "set(VRRECORDER_ENABLE_OPENVR_ADAPTER ON)\n"
     "vrrecorder_select_native_factory_sources(sources \"\${SOURCE_ROOT}\")\n")
 run_selection(FALSE "incomplete full production selection" PRODUCTION)
 
@@ -167,6 +170,7 @@ file(
     "set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES OFF)\n"
     "set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS OFF)\n"
     "set(VRRECORDER_ENABLE_SPOUT2_ADAPTER OFF)\n"
+    "set(VRRECORDER_ENABLE_OPENVR_ADAPTER OFF)\n"
     "vrrecorder_select_native_factory_sources(sources \"\${SOURCE_ROOT}\")\n")
 run_selection(FALSE "production media without pinned FFmpeg" PRODUCTION)
 
@@ -181,8 +185,24 @@ file(
     "set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES OFF)\n"
     "set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS OFF)\n"
     "set(VRRECORDER_ENABLE_SPOUT2_ADAPTER OFF)\n"
+    "set(VRRECORDER_ENABLE_OPENVR_ADAPTER OFF)\n"
     "vrrecorder_select_native_factory_sources(sources \"\${SOURCE_ROOT}\")\n")
 run_selection(FALSE "production Spout without pinned Spout2" UNAVAILABLE)
+
+file(
+    WRITE "${runner}"
+    "cmake_minimum_required(VERSION 3.24)\n"
+    "include(\"\${MODULE}\")\n"
+    "set(VRRECORDER_MEDIA_FACTORY_VARIANT \"UNAVAILABLE\")\n"
+    "set(VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT \"UNAVAILABLE\")\n"
+    "set(VRRECORDER_SPOUT_FACTORY_VARIANT \"UNAVAILABLE\")\n"
+    "set(VRRECORDER_STEAMVR_FACTORY_VARIANT \"PRODUCTION\")\n"
+    "set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES OFF)\n"
+    "set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS OFF)\n"
+    "set(VRRECORDER_ENABLE_SPOUT2_ADAPTER OFF)\n"
+    "set(VRRECORDER_ENABLE_OPENVR_ADAPTER OFF)\n"
+    "vrrecorder_select_native_factory_sources(sources \"\${SOURCE_ROOT}\")\n")
+run_selection(FALSE "production SteamVR without pinned OpenVR" UNAVAILABLE)
 
 set(VRRECORDER_MEDIA_FACTORY_VARIANT UNAVAILABLE)
 set(VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT UNAVAILABLE)
@@ -191,6 +211,7 @@ set(VRRECORDER_STEAMVR_FACTORY_VARIANT UNAVAILABLE)
 set(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES OFF)
 set(VRRECORDER_ENABLE_FFMPEG_ADAPTERS OFF)
 set(VRRECORDER_ENABLE_SPOUT2_ADAPTER OFF)
+set(VRRECORDER_ENABLE_OPENVR_ADAPTER OFF)
 vrrecorder_select_native_factory_sources(
     selected_sources "${NATIVE_SOURCE_ROOT}")
 set(expected_sources

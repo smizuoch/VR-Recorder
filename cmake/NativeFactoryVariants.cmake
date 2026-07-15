@@ -100,6 +100,13 @@ function(vrrecorder_select_native_factory_sources output source_root)
             "The production Spout factory requires the pinned Spout2 SDK")
     endif()
 
+    if(VRRECORDER_STEAMVR_FACTORY_VARIANT STREQUAL "PRODUCTION" AND
+       NOT VRRECORDER_ENABLE_OPENVR_ADAPTER)
+        message(
+            FATAL_ERROR
+            "The production SteamVR factory requires the pinned OpenVR SDK")
+    endif()
+
     set(unique_sources ${selected_sources})
     list(REMOVE_DUPLICATES unique_sources)
     list(LENGTH selected_sources selected_count)
