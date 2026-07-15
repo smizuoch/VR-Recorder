@@ -291,6 +291,7 @@ struct AacDecodeOracleSummary final {
     std::int64_t first_pts_microseconds = 0;
     std::int64_t first_dts_microseconds = 0;
     std::uint64_t decoded_frame_count = 0;
+    std::uint64_t presented_decoded_frame_count = 0;
 };
 
 std::string ShellQuote(const std::filesystem::path &path)
@@ -358,6 +359,8 @@ AacDecodeOracleSummary RunAacDecodeOracle(
             summary.first_dts_microseconds = std::stoll(value);
         } else if (key == "decoded_frame_count") {
             summary.decoded_frame_count = std::stoull(value);
+        } else if (key == "presented_decoded_frame_count") {
+            summary.presented_decoded_frame_count = std::stoull(value);
         } else {
             CHECK(false);
         }
@@ -647,8 +650,7 @@ void WritesThreeSecondsOfRealAacPacketsIntoFragmentedMp4()
     CHECK(oracle.packet_count == encoded_packet_count);
     CHECK(oracle.first_pts_microseconds == first_packet_pts_microseconds);
     CHECK(oracle.first_dts_microseconds == first_packet_dts_microseconds);
-    CHECK(oracle.decoded_frame_count >= InputFrameCount);
-    CHECK(oracle.decoded_frame_count - InputFrameCount < 1'024);
+    CHECK(oracle.presented_decoded_frame_count == InputFrameCount);
 }
 
 void FlushesTheOwnedAacPipelineThroughTheRealMuxGraph()

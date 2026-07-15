@@ -105,6 +105,96 @@ std::uint32_t ReadAacBitrateMetadata(const char *path)
     return esds_maximum;
 }
 
+
+std::uint64_t ReadAudioPresentedSampleCount(const char *path)
+{
+    const auto bytes = ReadAllBytes(path);
+    std::uint64_t audio_duration = 0;
+    for (std::size_t offset = 0;
+         offset + 8U <= bytes.size();
+         ++offset) {
+        if (bytes[offset] != static_cast<unsigned char>('t') ||
+            bytes[offset + 1U] != static_cast<unsigned char>('r') ||
+            bytes[offset + 2U] != static_cast<unsigned char>('u') ||
+            bytes[offset + 3U] != static_cast<unsigned char>('n')) {
+            continue;
+        }
+        if (offset < 4U || bytes.size() - offset < 12U) {
+            Fail("truncated trun box");
+        }
+        const auto box_start = offset - 4U;
+        const auto box_size = ReadBigEndian32(bytes, box_start);
+        if (box_size < 20U || box_size > bytes.size() - box_start) {
+            Fail("invalid trun box size");
+        }
+        const auto flags = ReadBigEndian32(bytes, offset + 4U) & 0x00ffffffU;
+        const auto sample_count = ReadBigEndian32(bytes, offset + 8U);
+        std::size_t cursor = offset + 12U;
+        if ((flags & 0x000001U) != 0U) {
+            cursor += 4U;
+        }
+        if ((flags & 0x000004U) != 0U) {
+            cursor += 4U;
+        }
+        if ((flags & 0x000100U) == 0U) {
+            continue;
+        }
+        std::uint64_t duration_sum = 0;
+        for (std::uint32_t index = 0; index < sample_count; ++index) {
+            if (cursor > box_start + box_size || box_start + box_size - cursor < 4U) {
+                Fail("truncated trun sample duration");
+            }
+            duration_sum += ReadBigEndian32(bytes, cursor);
+            cursor += 4U;
+            if ((flags & 0x000200U) != 0U) {
+                cursor += 4U;
+            }
+            if ((flags & 0x000400U) != 0U) {
+                cursor += 4U;
+            }
+            if ((flags & 0x000800U) != 0U) {
+                cursor += 4U;
+            }
+        }
+        if (duration_sum > audio_duration) {
+            audio_duration = duration_sum;
+        }
+    }
+    if (audio_duration == 0U) {
+        Fail("missing audio trun sample durations");
+    }
+
+    std::uint64_t edit_media_time = 0;
+    const auto elst = FindAscii(bytes, "elst");
+    if (elst != std::numeric_limits<std::size_t>::max()) {
+        if (elst < 4U || bytes.size() - elst < 24U) {
+            Fail("truncated elst box");
+        }
+        const auto version = bytes[elst + 4U];
+        const auto entry_count = ReadBigEndian32(bytes, elst + 8U);
+        if (entry_count != 1U) {
+            Fail("unexpected audio edit list entry count");
+        }
+        if (version == 0U) {
+            const auto raw_media_time = ReadBigEndian32(bytes, elst + 16U);
+            edit_media_time = static_cast<std::uint64_t>(raw_media_time);
+        } else if (version == 1U) {
+            if (bytes.size() - elst < 32U) {
+                Fail("truncated version-1 elst box");
+            }
+            edit_media_time =
+                (static_cast<std::uint64_t>(ReadBigEndian32(bytes, elst + 20U)) << 32U) |
+                ReadBigEndian32(bytes, elst + 24U);
+        } else {
+            Fail("unsupported elst version");
+        }
+    }
+    if (edit_media_time > audio_duration) {
+        Fail("audio edit list exceeds sample duration");
+    }
+    return audio_duration - edit_media_time;
+}
+
 void Check(int result, const char *operation)
 {
     if (result < 0) {
@@ -208,7 +298,9 @@ int main(int argc, char **argv)
                     break;
                 }
                 Check(receive_result, "receive frame");
-                decoded_frame_count += static_cast<std::uint64_t>(frame->nb_samples);
+                const auto decoded_samples =
+                    static_cast<std::uint64_t>(frame->nb_samples);
+                decoded_frame_count += decoded_samples;
                 av_frame_unref(frame);
             }
         }
@@ -225,7 +317,8 @@ int main(int argc, char **argv)
             continue;
         }
         Check(receive_result, "receive drain frame");
-        decoded_frame_count += static_cast<std::uint64_t>(frame->nb_samples);
+        const auto decoded_samples = static_cast<std::uint64_t>(frame->nb_samples);
+        decoded_frame_count += decoded_samples;
         av_frame_unref(frame);
     }
 
@@ -243,6 +336,8 @@ int main(int argc, char **argv)
     std::cout << "first_pts_microseconds=" << first_pts_us << '\n';
     std::cout << "first_dts_microseconds=" << first_dts_us << '\n';
     std::cout << "decoded_frame_count=" << decoded_frame_count << '\n';
+    std::cout << "presented_decoded_frame_count="
+              << ReadAudioPresentedSampleCount(argv[1]) << '\n';
 
     av_frame_free(&frame);
     av_packet_free(&packet);
