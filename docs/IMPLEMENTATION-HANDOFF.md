@@ -701,10 +701,11 @@ cmake --build build/native-linux-debug -j2
 ctest --test-dir build/native-linux-debug --output-on-failure
 ```
 
-real FFmpeg contract SDKが`/tmp/vrrecorder-ffmpeg-contract-v2`にある場合:
+real FFmpeg contract SDKが`/tmp/vrrecorder-ffmpeg-contract-v2`、別process demux/decode oracle SDKが`/tmp/vrrecorder-ffmpeg-oracle-v1`にある場合:
 
 ```bash
 VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT=/tmp/vrrecorder-ffmpeg-contract-v2 \
+VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT=/tmp/vrrecorder-ffmpeg-oracle-v1 \
   cmake --preset native-linux-debug-ffmpeg
 cmake --build --preset native-linux-debug-ffmpeg
 ctest --preset native-linux-debug-ffmpeg
@@ -715,6 +716,7 @@ ctest --preset native-linux-debug-ffmpeg
 ```bash
 cmake -S . -B build/native-linux-debug-ffmpeg-mux-sanitize \
   -DVRRECORDER_FFMPEG_CONTRACT_TEST_ROOT=/tmp/vrrecorder-ffmpeg-contract-v2 \
+  -DVRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT=/tmp/vrrecorder-ffmpeg-oracle-v1 \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
   -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'

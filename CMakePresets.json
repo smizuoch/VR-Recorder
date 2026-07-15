@@ -42,7 +42,8 @@
       "inherits": "native-linux-debug",
       "binaryDir": "${sourceDir}/build/native-linux-debug-ffmpeg",
       "cacheVariables": {
-        "VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT": "$env{VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT}"
+        "VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT": "$env{VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT}",
+        "VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT": "$env{VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT}"
       }
     },
     {

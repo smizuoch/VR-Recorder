@@ -14,12 +14,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <cstdio>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <mutex>
 #include <span>
 #include <string>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -274,6 +276,102 @@ bool HasElstMediaTime(
     return false;
 }
 
+
+#ifndef VRRECORDER_AAC_DECODE_ORACLE_EXECUTABLE
+#define VRRECORDER_AAC_DECODE_ORACLE_EXECUTABLE ""
+#endif
+
+struct AacDecodeOracleSummary final {
+    std::string codec_name;
+    std::string profile;
+    std::uint64_t sample_rate = 0;
+    std::uint64_t channel_count = 0;
+    std::uint64_t packet_count = 0;
+    std::uint64_t bitrate_metadata_bits_per_second = 0;
+    std::int64_t first_pts_microseconds = 0;
+    std::int64_t first_dts_microseconds = 0;
+    std::uint64_t decoded_frame_count = 0;
+};
+
+std::string ShellQuote(const std::filesystem::path &path)
+{
+    std::string text = path.string();
+    std::string quoted;
+    quoted.reserve(text.size() + 2U);
+    quoted.push_back('\'');
+    for (const char value : text) {
+        if (value == '\'') {
+            quoted += "'\\''";
+        } else {
+            quoted.push_back(value);
+        }
+    }
+    quoted.push_back('\'');
+    return quoted;
+}
+
+AacDecodeOracleSummary RunAacDecodeOracle(
+    const std::filesystem::path &media_path)
+{
+    const std::filesystem::path oracle_path {
+        VRRECORDER_AAC_DECODE_ORACLE_EXECUTABLE};
+    CHECK(!oracle_path.empty());
+    CHECK(std::filesystem::exists(oracle_path));
+    CHECK(std::filesystem::is_regular_file(oracle_path));
+
+    const auto command = ShellQuote(oracle_path) + " " + ShellQuote(media_path);
+    std::array<char, 4096> buffer {};
+    std::string output;
+    FILE *pipe = popen(command.c_str(), "r");
+    CHECK(pipe != nullptr);
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
+        output += buffer.data();
+    }
+    const int status = pclose(pipe);
+    CHECK(status == 0);
+
+    AacDecodeOracleSummary summary;
+    std::istringstream lines(output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        const auto separator = line.find('=');
+        CHECK(separator != std::string::npos);
+        const auto key = line.substr(0, separator);
+        const auto value = line.substr(separator + 1U);
+        CHECK(!key.empty());
+        CHECK(!value.empty());
+        if (key == "codec_name") {
+            summary.codec_name = value;
+        } else if (key == "profile") {
+            summary.profile = value;
+        } else if (key == "sample_rate") {
+            summary.sample_rate = std::stoull(value);
+        } else if (key == "channel_count") {
+            summary.channel_count = std::stoull(value);
+        } else if (key == "packet_count") {
+            summary.packet_count = std::stoull(value);
+        } else if (key == "bitrate_metadata_bits_per_second") {
+            summary.bitrate_metadata_bits_per_second = std::stoull(value);
+        } else if (key == "first_pts_microseconds") {
+            summary.first_pts_microseconds = std::stoll(value);
+        } else if (key == "first_dts_microseconds") {
+            summary.first_dts_microseconds = std::stoll(value);
+        } else if (key == "decoded_frame_count") {
+            summary.decoded_frame_count = std::stoull(value);
+        } else {
+            CHECK(false);
+        }
+    }
+    CHECK(summary.codec_name == "aac");
+    CHECK(summary.profile == "LC");
+    CHECK(summary.sample_rate == 48'000);
+    CHECK(summary.channel_count == 2);
+    CHECK(summary.packet_count > 0);
+    CHECK(summary.bitrate_metadata_bits_per_second ==
+        AacTargetBitrateBitsPerSecond);
+    return summary;
+}
+
 std::vector<float> StereoFrames(
     std::uint64_t start_frame,
     std::size_t frame_count)
@@ -494,12 +592,20 @@ void WritesThreeSecondsOfRealAacPacketsIntoFragmentedMp4()
     CHECK(mux.WriteHeader(streams) == VRREC_STATUS_OK);
 
     std::vector<std::byte> encoded_payload;
+    std::size_t encoded_packet_count = 0;
+    std::int64_t first_packet_pts_microseconds = 0;
+    std::int64_t first_packet_dts_microseconds = 0;
     std::int64_t final_packet_end_microseconds = 0;
     const auto write_batch = [&](PacketAudioEncoderWrite batch) {
         CHECK(batch.status == VRREC_STATUS_OK);
         for (const auto &packet : batch.packets) {
             CHECK(packet.stream == MediaStreamKind::Audio);
             CHECK(packet.side_data.empty());
+            if (encoded_packet_count == 0) {
+                first_packet_pts_microseconds = packet.pts_microseconds;
+                first_packet_dts_microseconds = packet.dts_microseconds;
+            }
+            ++encoded_packet_count;
             CHECK(mux.WritePacket(packet) == VRREC_STATUS_OK);
             encoded_payload.insert(
                 encoded_payload.end(),
@@ -536,6 +642,13 @@ void WritesThreeSecondsOfRealAacPacketsIntoFragmentedMp4()
     CHECK(boxes.mdat_payload == encoded_payload);
     CHECK(HasAacEsdsBitRates(bytes, AacTargetBitrateBitsPerSecond));
     CHECK(HasAacBtrtBitRates(bytes, AacTargetBitrateBitsPerSecond));
+
+    const auto oracle = RunAacDecodeOracle(output.Path());
+    CHECK(oracle.packet_count == encoded_packet_count);
+    CHECK(oracle.first_pts_microseconds == first_packet_pts_microseconds);
+    CHECK(oracle.first_dts_microseconds == first_packet_dts_microseconds);
+    CHECK(oracle.decoded_frame_count >= InputFrameCount);
+    CHECK(oracle.decoded_frame_count - InputFrameCount < 1'024);
 }
 
 void FlushesTheOwnedAacPipelineThroughTheRealMuxGraph()

@@ -41,6 +41,11 @@ set(
     ""
     CACHE PATH
     "Optional exact FFmpeg 8.1.2 Linux SDK for real adapter tests")
+set(
+    VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT
+    ""
+    CACHE PATH
+    "Optional exact FFmpeg 8.1.2 Linux demux/decode SDK for out-of-process test oracles")
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake")
 vrrecorder_declare_native_factory_options()
@@ -64,6 +69,12 @@ if(BUILD_TESTING AND NOT VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT STREQUAL "")
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake")
     vrrecorder_import_ffmpeg_contract_test_sdk(
         "${VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT}")
+endif()
+
+if(BUILD_TESTING AND NOT VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT STREQUAL "")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake")
+    vrrecorder_import_ffmpeg_contract_oracle_sdk(
+        "${VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT}")
 endif()
 
 add_subdirectory(src/VRRecorder.Native)

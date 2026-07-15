@@ -835,9 +835,33 @@ if(NOT ffmpeg_libavformat_test_dependency STREQUAL "")
     endif()
 endif()
 
+
+if(TARGET FFmpegContractOracle::avformat AND
+        TARGET FFmpegContractOracle::avcodec AND
+        TARGET FFmpegContractOracle::avutil)
+    add_executable(
+        vrrecorder_native_ffmpeg_aac_decode_oracle
+        ffmpeg_aac_decode_oracle.cpp)
+    target_compile_features(
+        vrrecorder_native_ffmpeg_aac_decode_oracle PRIVATE cxx_std_20)
+    target_link_libraries(
+        vrrecorder_native_ffmpeg_aac_decode_oracle
+        PRIVATE FFmpegContractOracle::avformat)
+    set_target_properties(
+        vrrecorder_native_ffmpeg_aac_decode_oracle
+        PROPERTIES CXX_EXTENSIONS OFF)
+    vrrecorder_enable_strict_warnings(
+        vrrecorder_native_ffmpeg_aac_decode_oracle)
+endif()
+
 if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
         NOT ffmpeg_swresample_test_dependency STREQUAL "" AND
         NOT ffmpeg_libavformat_test_dependency STREQUAL "")
+    if(NOT TARGET vrrecorder_native_ffmpeg_aac_decode_oracle)
+        message(
+            FATAL_ERROR
+            "vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration requires VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT")
+    endif()
     add_executable(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         ffmpeg_aac_to_fragmented_mp4_integration_tests.cpp
@@ -861,6 +885,13 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
     target_compile_definitions(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         PRIVATE VRRECORDER_NATIVE_TESTING=1)
+    target_compile_definitions(
+        vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
+        PRIVATE
+            VRRECORDER_AAC_DECODE_ORACLE_EXECUTABLE="$<TARGET_FILE:vrrecorder_native_ffmpeg_aac_decode_oracle>")
+    add_dependencies(
+        vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
+        vrrecorder_native_ffmpeg_aac_decode_oracle)
     target_include_directories(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         PRIVATE

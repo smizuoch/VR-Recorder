@@ -371,3 +371,67 @@ function(vrrecorder_import_ffmpeg_contract_test_sdk root)
             INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
             INTERFACE_LINK_LIBRARIES FFmpegContractTest::avutil)
 endfunction()
+
+function(vrrecorder_import_ffmpeg_contract_oracle_sdk root)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(
+            FATAL_ERROR
+            "The unpackaged FFmpeg contract oracle SDK is Linux-only")
+    endif()
+    if(root STREQUAL "" OR NOT IS_ABSOLUTE "${root}")
+        message(
+            FATAL_ERROR
+            "VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT must be an absolute path")
+    endif()
+
+    cmake_path(NORMAL_PATH root OUTPUT_VARIABLE normalized_root)
+    _vrrecorder_ffmpeg_validate_exact_headers("${normalized_root}/include")
+    set(
+        avformat_library
+        "${normalized_root}/lib/libavformat.so.62.12.102")
+    set(
+        avcodec_library
+        "${normalized_root}/lib/libavcodec.so.62.28.102")
+    set(
+        avutil_library
+        "${normalized_root}/lib/libavutil.so.60.26.102")
+    _vrrecorder_ffmpeg_require_file(
+        "${avformat_library}" "contract-oracle libavformat")
+    _vrrecorder_ffmpeg_require_file(
+        "${avcodec_library}" "contract-oracle libavcodec")
+    _vrrecorder_ffmpeg_require_file(
+        "${avutil_library}" "contract-oracle libavutil")
+    _vrrecorder_ffmpeg_require_file(
+        "${normalized_root}/share/vrrecorder/contract-oracle-build.txt"
+        "contract-oracle build marker")
+
+    foreach(component IN ITEMS avformat avcodec avutil)
+        if(TARGET "FFmpegContractOracle::${component}")
+            message(
+                FATAL_ERROR
+                "FFmpeg contract oracle target already exists: ${component}")
+        endif()
+    endforeach()
+
+    add_library(FFmpegContractOracle::avutil SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractOracle::avutil
+        PROPERTIES
+            IMPORTED_LOCATION "${avutil_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include")
+    add_library(FFmpegContractOracle::avcodec SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractOracle::avcodec
+        PROPERTIES
+            IMPORTED_LOCATION "${avcodec_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
+            INTERFACE_LINK_LIBRARIES FFmpegContractOracle::avutil)
+    add_library(FFmpegContractOracle::avformat SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        FFmpegContractOracle::avformat
+        PROPERTIES
+            IMPORTED_LOCATION "${avformat_library}"
+            INTERFACE_INCLUDE_DIRECTORIES "${normalized_root}/include"
+            INTERFACE_LINK_LIBRARIES
+                "FFmpegContractOracle::avcodec;FFmpegContractOracle::avutil")
+endfunction()

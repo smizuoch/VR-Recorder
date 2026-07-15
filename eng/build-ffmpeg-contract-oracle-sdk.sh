@@ -6,7 +6,7 @@ readonly source_sha256="464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74
 readonly source_url="https://ffmpeg.org/releases/ffmpeg-${ffmpeg_version}.tar.xz"
 
 default_cache_root="${XDG_CACHE_HOME:-${HOME}/.cache}/vr-recorder"
-sdk_root="${1:-${default_cache_root}/ffmpeg-${ffmpeg_version}-contract-test}"
+sdk_root="${1:-${default_cache_root}/ffmpeg-${ffmpeg_version}-contract-oracle}"
 if (( $# > 1 )); then
     printf 'Usage: %s [absolute-sdk-output-path]\n' "$0" >&2
     exit 2
@@ -23,10 +23,10 @@ fi
 work_root="${sdk_root}.work"
 archive_path="${work_root}/ffmpeg-${ffmpeg_version}.tar.xz"
 source_root="${work_root}/source"
-marker_path="${sdk_root}/share/vrrecorder/contract-test-build.txt"
-ownership_path="${sdk_root}/share/vrrecorder/contract-test-sdk-owned.txt"
-work_ownership_path="${work_root}/contract-test-work-owned.txt"
-readonly ownership_token="vr-recorder FFmpeg contract-test workspace v1"
+marker_path="${sdk_root}/share/vrrecorder/contract-oracle-build.txt"
+ownership_path="${sdk_root}/share/vrrecorder/contract-oracle-sdk-owned.txt"
+work_ownership_path="${work_root}/contract-oracle-work-owned.txt"
+readonly ownership_token="vr-recorder FFmpeg contract-oracle workspace v1"
 configure_arguments=(
     "--prefix=${sdk_root}"
     --enable-shared
@@ -49,9 +49,8 @@ configure_arguments=(
     --enable-avcodec
     --enable-avformat
     --enable-avutil
-    --enable-swresample
-    --enable-encoder=aac
-    --enable-muxer=mp4
+    --enable-decoder=aac
+    --enable-demuxer=mov
     --enable-protocol=file
 )
 configure_sha256="$({
@@ -71,8 +70,7 @@ if [[ "${sdk_owned}" == true ]] &&
    [[ "$(<"${marker_path}")" == "${expected_marker}" ]] &&
    [[ -f "${sdk_root}/lib/libavformat.so.62.12.102" ]] &&
    [[ -f "${sdk_root}/lib/libavcodec.so.62.28.102" ]] &&
-   [[ -f "${sdk_root}/lib/libavutil.so.60.26.102" ]] &&
-   [[ -f "${sdk_root}/lib/libswresample.so.6.3.102" ]]; then
+   [[ -f "${sdk_root}/lib/libavutil.so.60.26.102" ]]; then
     printf '%s\n' "${sdk_root}"
     exit 0
 fi
