@@ -5,6 +5,7 @@
 #include <cstring>
 #include <memory>
 #include <new>
+#include <string>
 #include <utility>
 
 #include "ffmpeg_h264_media_foundation_configuration.hpp"
@@ -27,6 +28,30 @@ vrrec_status_t ErrorStatus(int error) noexcept
     return error == AVERROR(ENOMEM)
         ? VRREC_STATUS_OUT_OF_MEMORY
         : VRREC_STATUS_BACKEND_UNAVAILABLE;
+}
+
+vrrec_status_t ReadFfmpegBuildIdentity(std::string &identity) noexcept
+{
+    const auto *release = av_version_info();
+    const auto *configuration = avcodec_configuration();
+    if (release == nullptr || release[0] == '\0' ||
+        configuration == nullptr || configuration[0] == '\0') {
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+    try {
+        std::string readback("ffmpeg|");
+        readback.append(release);
+        readback.append("|avcodec-");
+        readback.append(std::to_string(avcodec_version()));
+        readback.push_back('|');
+        readback.append(configuration);
+        identity.swap(readback);
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
 }
 
 bool IsOpenedContextValid(
@@ -135,16 +160,16 @@ CreateFfmpegH264SoftwareCodecSession(
     const H264VideoEncoderConfig &config) noexcept
 {
     if (!IsH264VideoEncoderConfigValid(config)) {
-        return {VRREC_STATUS_INVALID_ARGUMENT, nullptr, nullptr};
+        return {VRREC_STATUS_INVALID_ARGUMENT, nullptr, nullptr, {}};
     }
     const AVCodec *codec = avcodec_find_encoder_by_name(
         FfmpegH264MediaFoundationEncoderName.data());
     if (codec == nullptr) {
-        return {VRREC_STATUS_BACKEND_UNAVAILABLE, nullptr, nullptr};
+        return {VRREC_STATUS_BACKEND_UNAVAILABLE, nullptr, nullptr, {}};
     }
     AVCodecContext *context = avcodec_alloc_context3(codec);
     if (context == nullptr) {
-        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr};
+        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr, {}};
     }
     AVDictionary *options = nullptr;
     auto status = ConfigureFfmpegH264MediaFoundationContext(
@@ -163,13 +188,20 @@ CreateFfmpegH264SoftwareCodecSession(
     av_dict_free(&options);
     if (status != VRREC_STATUS_OK) {
         avcodec_free_context(&context);
-        return {status, nullptr, nullptr};
+        return {status, nullptr, nullptr, {}};
+    }
+
+    std::string ffmpeg_build_identity;
+    status = ReadFfmpegBuildIdentity(ffmpeg_build_identity);
+    if (status != VRREC_STATUS_OK) {
+        avcodec_free_context(&context);
+        return {status, nullptr, nullptr, {}};
     }
 
     AVFrame *frame = av_frame_alloc();
     if (frame == nullptr) {
         avcodec_free_context(&context);
-        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr};
+        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr, {}};
     }
     frame->format = AV_PIX_FMT_NV12;
     frame->width = static_cast<int>(config.width);
@@ -178,20 +210,71 @@ CreateFfmpegH264SoftwareCodecSession(
     if (buffer_result < 0) {
         av_frame_free(&frame);
         avcodec_free_context(&context);
-        return {ErrorStatus(buffer_result), nullptr, nullptr};
+        return {ErrorStatus(buffer_result), nullptr, nullptr, {}};
     }
     auto port = LibavcodecEncoderPort::Create(context);
     if (port.status != VRREC_STATUS_OK || port.port == nullptr) {
         av_frame_free(&frame);
-        return {port.status, nullptr, nullptr};
+        return {
+            port.status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : port.status,
+            nullptr,
+            nullptr,
+            {},
+        };
     }
     std::unique_ptr<FfmpegH264CodecSession> session(
         new (std::nothrow) LibavcodecH264CodecSession(std::move(port.port)));
     if (session == nullptr) {
         av_frame_free(&frame);
-        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr};
+        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr, {}};
     }
-    return {VRREC_STATUS_OK, std::move(session), frame};
+    H264VideoEncoderConfig opened_config {
+        static_cast<std::uint32_t>(context->width),
+        static_cast<std::uint32_t>(context->height),
+        static_cast<std::uint32_t>(context->framerate.num),
+        static_cast<std::uint32_t>(context->gop_size),
+        static_cast<std::uint64_t>(context->bit_rate),
+        static_cast<std::uint64_t>(context->rc_max_rate),
+        VRREC_SOURCE_PIXEL_FORMAT_NV12,
+        context->profile == AV_PROFILE_H264_HIGH
+            ? H264Profile::High
+            : H264Profile::Main,
+        VideoRateControl::QualityVbr,
+        static_cast<std::uint32_t>(context->max_b_frames),
+    };
+    FfmpegH264SoftwareOpenedIdentity opened_identity;
+    try {
+        opened_identity = {
+            codec->name,
+            false,
+            VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12,
+            opened_config,
+            std::move(ffmpeg_build_identity),
+        };
+    } catch (const std::bad_alloc &) {
+        session->Abort();
+        av_frame_free(&frame);
+        return {VRREC_STATUS_OUT_OF_MEMORY, nullptr, nullptr, {}};
+    } catch (...) {
+        session->Abort();
+        av_frame_free(&frame);
+        return {VRREC_STATUS_INTERNAL_ERROR, nullptr, nullptr, {}};
+    }
+    return {
+        VRREC_STATUS_OK,
+        std::move(session),
+        frame,
+        std::move(opened_identity),
+    };
+}
+
+FfmpegH264SoftwareCodecSessionCreateResult
+LibavcodecH264SoftwareCodecSessionFactory::Create(
+    const H264VideoEncoderConfig &config) noexcept
+{
+    return CreateFfmpegH264SoftwareCodecSession(config);
 }
 
 }

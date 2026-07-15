@@ -324,10 +324,12 @@ void AdapterRejectsHardwareIdentityAndOutOfOrderFrames()
         AllocateFrame());
     CHECK(invalid.status == VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(invalid.session == nullptr);
+    CHECK(codec.abort_count == 1);
 
+    CodecState ordered_codec;
     auto created = CreateFfmpegSystemMemoryEncoderProbeSession(
         Opened(),
-        std::make_unique<FakeCodecSession>(codec),
+        std::make_unique<FakeCodecSession>(ordered_codec),
         AllocateFrame());
     CHECK(created.status == VRREC_STATUS_OK);
     CHECK(created.session != nullptr);
@@ -342,7 +344,7 @@ void AdapterRejectsHardwareIdentityAndOutOfOrderFrames()
           VRREC_STATUS_INVALID_ARGUMENT);
     created.session->Abort();
     created.session->Abort();
-    CHECK(codec.abort_count == 1);
+    CHECK(ordered_codec.abort_count == 1);
 }
 
 }

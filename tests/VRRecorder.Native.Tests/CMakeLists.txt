@@ -905,6 +905,31 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
         vrrecorder_native_ffmpeg_system_memory_encoder_probe_session)
 
     add_executable(
+        vrrecorder_native_software_encoder_probe_session_factory
+        software_encoder_probe_session_factory_tests.cpp
+        "${native_source_root}/src/software_encoder_probe_session_factory.cpp"
+        "${native_source_root}/src/ffmpeg_system_memory_encoder_probe_session.cpp"
+        "${native_source_root}/src/encoder_probe_synthetic_nv12.cpp"
+        "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp"
+        "${native_source_root}/src/video_encoder_config.cpp")
+    target_compile_features(
+        vrrecorder_native_software_encoder_probe_session_factory
+        PRIVATE cxx_std_20)
+    target_include_directories(
+        vrrecorder_native_software_encoder_probe_session_factory
+        PRIVATE
+            "${native_source_root}/include"
+            "${native_source_root}/src")
+    target_link_libraries(
+        vrrecorder_native_software_encoder_probe_session_factory
+        PRIVATE ${ffmpeg_libavcodec_test_dependency} Threads::Threads)
+    set_target_properties(
+        vrrecorder_native_software_encoder_probe_session_factory
+        PROPERTIES CXX_EXTENSIONS OFF)
+    vrrecorder_enable_strict_warnings(
+        vrrecorder_native_software_encoder_probe_session_factory)
+
+    add_executable(
         vrrecorder_native_ffmpeg_h264_nv12_frame
         ffmpeg_h264_nv12_frame_tests.cpp
         "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp")
@@ -1594,6 +1619,11 @@ if(TARGET vrrecorder_native_ffmpeg_system_memory_encoder_probe_session)
     add_test(
         NAME vrrecorder_native_ffmpeg_system_memory_encoder_probe_session
         COMMAND vrrecorder_native_ffmpeg_system_memory_encoder_probe_session)
+endif()
+if(TARGET vrrecorder_native_software_encoder_probe_session_factory)
+    add_test(
+        NAME vrrecorder_native_software_encoder_probe_session_factory
+        COMMAND vrrecorder_native_software_encoder_probe_session_factory)
 endif()
 if(TARGET vrrecorder_native_ffmpeg_aac_packet_encoder)
     add_test(NAME vrrecorder_native_ffmpeg_aac_packet_encoder

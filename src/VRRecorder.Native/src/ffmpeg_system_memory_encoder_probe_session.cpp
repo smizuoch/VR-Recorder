@@ -178,6 +178,9 @@ CreateFfmpegSystemMemoryEncoderProbeSession(
     if (!IsSoftwareIdentityValid(opened_identity) ||
         codec_session == nullptr ||
         !IsFrameStorageValid(opened_identity, owned_frame)) {
+        if (codec_session != nullptr) {
+            codec_session->Abort();
+        }
         av_frame_free(&owned_frame);
         return {VRREC_STATUS_INVALID_ARGUMENT, nullptr};
     }
@@ -188,6 +191,7 @@ CreateFfmpegSystemMemoryEncoderProbeSession(
             std::move(codec_session),
             owned_frame));
     if (session == nullptr) {
+        codec_session->Abort();
         av_frame_free(&owned_frame);
         return {VRREC_STATUS_OUT_OF_MEMORY, nullptr};
     }
