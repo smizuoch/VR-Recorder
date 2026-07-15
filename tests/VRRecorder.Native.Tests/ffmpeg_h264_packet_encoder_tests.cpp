@@ -1,4 +1,5 @@
 #include "ffmpeg_h264_packet_encoder.hpp"
+#include "ffmpeg_h264_system_memory_packet_encoder_adapter.hpp"
 #include "h264_test_vectors.hpp"
 #include "muxing_video_encoder_sink.hpp"
 
@@ -8,6 +9,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <span>
 #include <utility>
 #include <vector>
@@ -139,6 +141,62 @@ public:
     std::uint8_t observed_y = 0;
 };
 
+class OwnedSystemMemoryMapping final
+    : public SystemMemoryNv12FrameMapping {
+public:
+    explicit OwnedSystemMemoryMapping(std::size_t &destruction_count)
+        : y(32U * 16U, std::byte {0x31}),
+          uv(32U * 8U, std::byte {0x80}),
+          destruction_count_(destruction_count)
+    {
+    }
+
+    ~OwnedSystemMemoryMapping() override
+    {
+        ++destruction_count_;
+    }
+
+    SystemMemoryNv12FrameView View() const noexcept override
+    {
+        return {32, 16, 32, 32, y, uv, -1};
+    }
+
+    std::vector<std::byte> y;
+    std::vector<std::byte> uv;
+
+private:
+    std::size_t &destruction_count_;
+};
+
+class FakeSystemMemoryMapper final : public SystemMemoryNv12FrameMapper {
+public:
+    SystemMemoryNv12FrameMapResult Map(
+        const ScheduledVideoFrame &frame) noexcept override
+    {
+        ++map_calls;
+        observed_tick = frame.output_tick;
+        auto mapping = std::unique_ptr<SystemMemoryNv12FrameMapping>(
+            new (std::nothrow) OwnedSystemMemoryMapping(
+                mapping_destruction_count));
+        return {
+            mapping != nullptr
+                ? VRREC_STATUS_OK
+                : VRREC_STATUS_OUT_OF_MEMORY,
+            std::move(mapping),
+        };
+    }
+
+    void Abort() noexcept override
+    {
+        ++abort_calls;
+    }
+
+    std::size_t map_calls = 0;
+    std::size_t mapping_destruction_count = 0;
+    std::size_t abort_calls = 0;
+    std::uint64_t observed_tick = 0;
+};
+
 SystemMemoryNv12FrameView FrameView(
     std::vector<std::byte> &y,
     std::vector<std::byte> &uv,
@@ -258,6 +316,48 @@ void AdaptsLateDescriptorMetadataForTheMuxingVideoSink()
     CHECK(adapted.descriptor == creation.encoder->Descriptor());
 }
 
+void MapsScheduledFramesIntoTheSystemMemoryH264Encoder()
+{
+    const auto sps = Sps();
+    const auto pps = MakePps({});
+    const std::vector<std::byte> idr {std::byte {0x65}, std::byte {0x88}};
+    auto session = std::make_unique<FakeCodecSession>();
+    auto *observed = session.get();
+    session->encode_batch = {
+        VRREC_STATUS_OK,
+        {RawPacket(AnnexB({sps, pps, idr}), true, 100'000)},
+    };
+    auto creation = FfmpegH264PacketEncoder::CreateForTesting(
+        ExactConfig(),
+        std::move(session),
+        AllocateFrame());
+    FakeSystemMemoryMapper mapper;
+    FfmpegH264SystemMemoryPacketEncoderAdapter adapter(
+        *creation.encoder,
+        mapper,
+        30);
+    ScheduledVideoFrame scheduled {};
+    scheduled.output_tick = 3;
+
+    const auto write = adapter.Encode(scheduled);
+
+    CHECK(write.status == VRREC_STATUS_OK);
+    CHECK(write.packets.size() == 1);
+    CHECK(write.descriptor_became_ready);
+    CHECK(write.encoder_identity == creation.encoder.get());
+    CHECK(write.descriptor == creation.encoder->Descriptor());
+    CHECK(mapper.map_calls == 1);
+    CHECK(mapper.observed_tick == 3);
+    CHECK(mapper.mapping_destruction_count == 1);
+    CHECK(observed->observed_pts == 100'000);
+    CHECK(observed->observed_y == 0x31);
+
+    adapter.Abort();
+    adapter.Abort();
+    CHECK(mapper.abort_calls == 1);
+    CHECK(observed->abort_calls == 1);
+}
+
 void PreservesZeroPacketBatchesAndNormalizesFinishPackets()
 {
     const auto sps = Sps();
@@ -323,6 +423,7 @@ int main()
     UsesOpenTimeExtradataAndEncodesOwnedNv12();
     DerivesLateExtradataFromTheFirstRealPacket();
     AdaptsLateDescriptorMetadataForTheMuxingVideoSink();
+    MapsScheduledFramesIntoTheSystemMemoryH264Encoder();
     PreservesZeroPacketBatchesAndNormalizesFinishPackets();
     FailureAbortsTheSessionAndMakesTheEncoderTerminal();
     ProductionFactoryFailsClosedWhenH264MfIsUnavailable();

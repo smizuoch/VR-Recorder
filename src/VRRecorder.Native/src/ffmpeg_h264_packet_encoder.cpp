@@ -1,12 +1,15 @@
 #include "ffmpeg_h264_packet_encoder.hpp"
 
+#include <chrono>
 #include <cerrno>
 #include <cstring>
+#include <limits>
 #include <mutex>
 #include <new>
 #include <utility>
 
 #include "ffmpeg_h264_media_foundation_configuration.hpp"
+#include "ffmpeg_h264_system_memory_packet_encoder_adapter.hpp"
 #include "ffmpeg_libavcodec_encoder_port.hpp"
 #include "muxing_video_encoder_sink.hpp"
 
@@ -415,6 +418,93 @@ PacketVideoEncoderWrite MakeMuxingVideoEncoderWrite(
         publish_descriptor ? &encoder : nullptr,
         publish_descriptor ? descriptor : nullptr,
     };
+}
+
+FfmpegH264SystemMemoryPacketEncoderAdapter::
+FfmpegH264SystemMemoryPacketEncoderAdapter(
+    FfmpegH264PacketEncoder &encoder,
+    SystemMemoryNv12FrameMapper &mapper,
+    std::uint32_t frames_per_second) noexcept
+    : encoder_(encoder),
+      mapper_(mapper),
+      frames_per_second_(frames_per_second)
+{
+}
+
+PacketVideoEncoderWrite
+FfmpegH264SystemMemoryPacketEncoderAdapter::Encode(
+    const ScheduledVideoFrame &frame) noexcept
+{
+    if (aborted_.load() || finished_.load() ||
+        frames_per_second_ == 0 ||
+        frame.output_tick >
+            std::numeric_limits<std::uint64_t>::max() / 1'000'000U) {
+        return {VRREC_STATUS_INVALID_STATE, 0, {}};
+    }
+    const auto timestamp =
+        frame.output_tick * 1'000'000U / frames_per_second_;
+    if (timestamp > static_cast<std::uint64_t>(
+            std::numeric_limits<std::int64_t>::max())) {
+        return {VRREC_STATUS_INVALID_ARGUMENT, 0, {}};
+    }
+
+    auto mapped = mapper_.Map(frame);
+    if (aborted_.load()) {
+        return {VRREC_STATUS_INVALID_STATE, 0, {}};
+    }
+    if (mapped.status != VRREC_STATUS_OK || mapped.mapping == nullptr) {
+        return {
+            mapped.status != VRREC_STATUS_OK
+                ? mapped.status
+                : VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            {},
+        };
+    }
+    auto view = mapped.mapping->View();
+    view.pts = static_cast<std::int64_t>(timestamp);
+
+    const auto started = std::chrono::steady_clock::now();
+    auto encoded = encoder_.EncodeNv12(view);
+    const auto completed = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<
+        std::chrono::microseconds>(completed - started).count();
+    const auto latency = elapsed > 0
+        ? static_cast<std::uint64_t>(elapsed)
+        : 0U;
+    return MakeMuxingVideoEncoderWrite(
+        encoder_,
+        std::move(encoded),
+        latency);
+}
+
+PacketVideoEncoderWrite
+FfmpegH264SystemMemoryPacketEncoderAdapter::Finish() noexcept
+{
+    if (aborted_.load() || finished_.exchange(true)) {
+        return {VRREC_STATUS_INVALID_STATE, 0, {}};
+    }
+    const auto started = std::chrono::steady_clock::now();
+    auto encoded = encoder_.Finish();
+    const auto completed = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<
+        std::chrono::microseconds>(completed - started).count();
+    const auto latency = elapsed > 0
+        ? static_cast<std::uint64_t>(elapsed)
+        : 0U;
+    return MakeMuxingVideoEncoderWrite(
+        encoder_,
+        std::move(encoded),
+        latency);
+}
+
+void FfmpegH264SystemMemoryPacketEncoderAdapter::Abort() noexcept
+{
+    if (aborted_.exchange(true)) {
+        return;
+    }
+    mapper_.Abort();
+    encoder_.Abort();
 }
 
 }
