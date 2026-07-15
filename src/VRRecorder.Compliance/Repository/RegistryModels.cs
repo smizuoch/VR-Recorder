@@ -23,6 +23,7 @@ internal sealed record RegistryComponent(
     bool Modified,
     RegistryApproval Approval,
     RegistryPackage[] Packages,
+    RegistryFfmpegLegalCandidate? FfmpegLegalCandidate = null,
     RegistryNativeArtifact[]? NativeArtifacts = null);
 
 internal sealed record RegistryRepository(string Url, string? Commit);
@@ -44,6 +45,30 @@ internal sealed record RegistryNativeArtifact(
     string SourceArchivePath,
     string SourceArchiveSha256,
     string BuildRecipePath);
+
+internal sealed record RegistryFfmpegLegalCandidate(
+    int SchemaVersion,
+    string SourceArchiveFileName,
+    long SourceArchiveLength,
+    string SourceArchiveSha256,
+    string SourceDownloadUrl,
+    string SourcePatchPath,
+    long SourcePatchLength,
+    string SourcePatchSha256,
+    string SourcePatchUpstreamCommit,
+    string SourcePatchUpstreamUrl,
+    string BuildRecipePath,
+    long BuildRecipeLength,
+    string BuildRecipeSha256,
+    string SourceOfferPath,
+    long SourceOfferLength,
+    string SourceOfferSha256,
+    RegistryCandidateArtifact[] Artifacts);
+
+internal sealed record RegistryCandidateArtifact(
+    string FileName,
+    long Length,
+    string Sha256);
 
 internal sealed record RegistryPackageRegistration(
     RegistryComponent Component,

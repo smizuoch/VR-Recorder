@@ -1,0 +1,43 @@
+VR-Recorder — FFmpeg Corresponding Source Candidate
+===================================================
+
+Candidate status: pending independent legal review; not approved for release
+Component: FFmpeg libraries
+FFmpeg version/tag: 8.1.2 / n8.1.2
+FFmpeg source commit: 38b88335f99e76ed89ff3c93f877fdefce736c13
+License expression: LGPL-2.1-or-later
+Linkage: Dynamic libraries
+Modified by distributor: yes; one upstream patch is applied
+
+Official corresponding source archive:
+  https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+Release Legal Bundle path:
+  SOURCES/ffmpeg-8.1.2.tar.xz
+Length: 11710924
+SHA-256: 464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c
+
+Applied patch:
+  eng/patches/ffmpeg-8.1.2/0001-configure-redo-enabling-cbs-in-lavf.patch
+Length: 3980
+SHA-256: c8aca5fee1f02dbd1a1623de0333013e0c41fb691adf0ede3d4479ee32ac41c0
+Upstream commit: cec19d7ddf725896dfbf79a4c308550d83eab5ec
+Upstream review: https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039
+
+Build recipe:
+  eng/ffmpeg-windows-production-build-recipe.md
+Length: 1976
+SHA-256: 3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01
+
+Candidate Windows x64 runtime artifacts:
+  avcodec-62.dll 636928 e399de2feeb8ec0d92eecb3b124205ddc3b5e27c880537cf19a8d2c85d2c6ef2
+  avformat-62.dll 620544 73b2ae5addd81234f89e266f6dd827e9122862e6de3d4380cb57e948f3936efc
+  avutil-60.dll 984576 c4d6e753ded06793ec484f54798608eb98f8aa4819bd029e68a328b41f25ede7
+  swresample-6.dll 201728 0e39d92a9aec1b1f07bac1bd0586c23c8b761777bf4676fff5795d22df5a6de3
+
+License text:
+  legal-template/LICENSES/LGPL-2.1-or-later/LICENSE.txt
+
+The final Legal Bundle must include the exact source archive, patch, build
+recipe, configure evidence, license text, and a release compliance contact.
+This candidate does not become approved unless a real approval ticket,
+requester, and independent reviewer are recorded by the release process.

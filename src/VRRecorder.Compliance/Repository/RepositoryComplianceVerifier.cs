@@ -54,6 +54,9 @@ public static class RepositoryComplianceVerifier
 
         VerifyPackageHashes(lockedPackages, registeredPackages, issues);
         VerifyLegalFiles(root, registry.Components, issues);
+        issues.AddRange(FfmpegLegalCandidateVerifier.Verify(
+            root,
+            registry.Components));
         issues.AddRange(RepositoryNativeRuntimeLoadVerifier.Verify(root));
         issues.AddRange(RepositoryNativeLinkVerifier.Verify(root));
 

@@ -3,6 +3,69 @@
   "registryVersion": 1,
   "components": [
     {
+      "id": "ffmpeg",
+      "displayName": "FFmpeg libraries",
+      "version": "8.1.2",
+      "purl": "pkg:generic/ffmpeg@8.1.2",
+      "scope": "runtime-bundled",
+      "licenseDeclared": "LGPL-2.1-or-later",
+      "licenseConcluded": "LGPL-2.1-or-later",
+      "copyrightNotice": "Copyright (c) FFmpeg project contributors. Exact notices remain in the corresponding source archive.",
+      "licenseFilePath": "legal-template/LICENSES/LGPL-2.1-or-later/LICENSE.txt",
+      "licenseFileSha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "repository": {
+        "url": "https://git.ffmpeg.org/ffmpeg.git",
+        "commit": "38b88335f99e76ed89ff3c93f877fdefce736c13"
+      },
+      "modified": true,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [],
+      "ffmpegLegalCandidate": {
+        "schemaVersion": 1,
+        "sourceArchiveFileName": "ffmpeg-8.1.2.tar.xz",
+        "sourceArchiveLength": 11710924,
+        "sourceArchiveSha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+        "sourceDownloadUrl": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+        "sourcePatchPath": "eng/patches/ffmpeg-8.1.2/0001-configure-redo-enabling-cbs-in-lavf.patch",
+        "sourcePatchLength": 3980,
+        "sourcePatchSha256": "c8aca5fee1f02dbd1a1623de0333013e0c41fb691adf0ede3d4479ee32ac41c0",
+        "sourcePatchUpstreamCommit": "cec19d7ddf725896dfbf79a4c308550d83eab5ec",
+        "sourcePatchUpstreamUrl": "https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039",
+        "buildRecipePath": "eng/ffmpeg-windows-production-build-recipe.md",
+        "buildRecipeLength": 1976,
+        "buildRecipeSha256": "3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01",
+        "sourceOfferPath": "third-party/source-offers/FFmpeg-SOURCE-INFO.candidate.txt",
+        "sourceOfferLength": 1892,
+        "sourceOfferSha256": "2d543e1687b1423e1afe8b26b4e14789f346cfb508086a2f0ac2445d0840602e",
+        "artifacts": [
+          {
+            "fileName": "avcodec-62.dll",
+            "length": 636928,
+            "sha256": "e399de2feeb8ec0d92eecb3b124205ddc3b5e27c880537cf19a8d2c85d2c6ef2"
+          },
+          {
+            "fileName": "avformat-62.dll",
+            "length": 620544,
+            "sha256": "73b2ae5addd81234f89e266f6dd827e9122862e6de3d4380cb57e948f3936efc"
+          },
+          {
+            "fileName": "avutil-60.dll",
+            "length": 984576,
+            "sha256": "c4d6e753ded06793ec484f54798608eb98f8aa4819bd029e68a328b41f25ede7"
+          },
+          {
+            "fileName": "swresample-6.dll",
+            "length": 201728,
+            "sha256": "0e39d92a9aec1b1f07bac1bd0586c23c8b761777bf4676fff5795d22df5a6de3"
+          }
+        ]
+      }
+    },
+    {
       "id": "coverlet",
       "displayName": "Coverlet collector",
       "version": "6.0.4",

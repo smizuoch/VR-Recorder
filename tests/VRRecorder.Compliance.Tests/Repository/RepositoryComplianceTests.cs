@@ -7,6 +7,77 @@ namespace VRRecorder.Compliance.Tests.Repository;
 public sealed class RepositoryComplianceTests
 {
     [Fact]
+    public void FfmpegLegalCandidateBindsActualSourceRecipeAndArtifacts()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = FfmpegLegalCandidateVerifier.Verify(repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public void FfmpegLegalCandidateRejectsTamperAndPrematureAdmission()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vrrecorder-ffmpeg-legal-candidate-{Guid.NewGuid():N}");
+        try
+        {
+            foreach (var relativePath in new[]
+                     {
+                         "third-party/registry.yml",
+                         "third-party/source-offers/FFmpeg-SOURCE-INFO.candidate.txt",
+                         "eng/ffmpeg-windows-production-build-recipe.md",
+                         "eng/patches/ffmpeg-8.1.2/0001-configure-redo-enabling-cbs-in-lavf.patch"
+                     })
+            {
+                var destination = Path.Combine(root, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(Path.Combine(repositoryRoot, relativePath), destination);
+            }
+
+            Assert.Empty(FfmpegLegalCandidateVerifier.Verify(root));
+
+            var offerPath = Path.Combine(
+                root,
+                "third-party/source-offers/FFmpeg-SOURCE-INFO.candidate.txt");
+            File.AppendAllText(offerPath, "tampered");
+            var issues = FfmpegLegalCandidateVerifier.Verify(root);
+            Assert.Contains(issues, issue =>
+                issue.Code == "ffmpeg-candidate-file-mismatch" &&
+                issue.Subject == "ffmpeg:source-offer");
+
+            File.Copy(
+                Path.Combine(
+                    repositoryRoot,
+                    "third-party/source-offers/FFmpeg-SOURCE-INFO.candidate.txt"),
+                offerPath,
+                overwrite: true);
+            var registryPath = Path.Combine(root, "third-party/registry.yml");
+            var registry = File.ReadAllText(registryPath);
+            File.WriteAllText(
+                registryPath,
+                registry.Replace(
+                    "\"status\": \"pending-independent-review\"",
+                    "\"status\": \"approved\"",
+                    StringComparison.Ordinal));
+            issues = FfmpegLegalCandidateVerifier.Verify(root);
+            Assert.Contains(issues, issue =>
+                issue.Code == "premature-ffmpeg-legal-admission" &&
+                issue.Subject == "ffmpeg");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void LockedNuGetPackagesHavePinnedCandidateLegalMetadata()
     {
         var repositoryRoot = FindRepositoryRoot();
