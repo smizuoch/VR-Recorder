@@ -4,6 +4,7 @@
 
 - [x] 公開headerをC17とC++20の両方でcompileする
 - [x] CMake／CTestのWindows x64 build graphとMSVC CI契約を固定する
+- [x] 非管理者のLLVM／MinGW UCRT cross toolchainでWindows native DLLと全portable test executableをbuildし、MSVC用`.lib`名とMinGW用library名、WASAPIの`ksuser`依存をtoolchain別に解決する（MSVC ABI gateの代替にはしない）
 - [x] production FFmpeg SDKを公式8.1.2のsource identity、完全library version、shared DLL／import library、LGPL-only configure evidenceへ固定し、不足・version違い・GPL混入をconfigure時に拒否する
 - [x] 同じ公式8.1.2 sourceから隔離したLinux contract-test SDKを再現生成し、system FFmpegへfallbackせず実libavcodec Portを厳格compile／実行する
 - [x] ABI v1のx64 struct sizeと固定幅fieldを検証する
@@ -37,6 +38,7 @@
 
 - [x] Compile the public header as both C17 and C++20
 - [x] Freeze the CMake/CTest Windows x64 build graph and MSVC CI contract
+- [x] Build the Windows native DLL and every portable test executable with a non-admin LLVM/MinGW UCRT cross-toolchain, resolving MSVC `.lib` names, MinGW library names, and the WASAPI `ksuser` dependency per toolchain without treating this as a substitute for the MSVC ABI gate
 - [x] Pin the production FFmpeg SDK to the official 8.1.2 source identity, exact library versions, shared DLL/import-library set, and LGPL-only configure evidence, rejecting missing files, version drift, and GPL enablement at configure time
 - [x] Reproducibly build an isolated Linux contract-test SDK from the same official 8.1.2 source and strictly compile/run the real libavcodec port without falling back to system FFmpeg
 - [x] Verify ABI v1 x64 struct sizes and fixed-width fields

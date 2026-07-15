@@ -389,11 +389,23 @@ if(WIN32)
         PRIVATE
             NOMINMAX
             WIN32_LEAN_AND_MEAN)
+    if(MSVC)
+        target_link_libraries(
+            vrrecorder_native_audio_capture_source_factory
+            PRIVATE
+                Ole32.lib
+                Uuid.lib)
+    else()
+        target_link_libraries(
+            vrrecorder_native_audio_capture_source_factory
+            PRIVATE
+                ole32
+                uuid)
+    endif()
     target_link_libraries(
         vrrecorder_native_audio_capture_source_factory
         PRIVATE
-            Ole32.lib
-            Uuid.lib)
+            ksuser)
 else()
     target_sources(
         vrrecorder_native_audio_capture_source_factory
@@ -429,11 +441,23 @@ if(WIN32)
         PRIVATE
             NOMINMAX
             WIN32_LEAN_AND_MEAN)
+    if(MSVC)
+        target_link_libraries(
+            vrrecorder_native_audio_capture_platform_support
+            PRIVATE
+                Ole32.lib
+                Uuid.lib)
+    else()
+        target_link_libraries(
+            vrrecorder_native_audio_capture_platform_support
+            PRIVATE
+                ole32
+                uuid)
+    endif()
     target_link_libraries(
         vrrecorder_native_audio_capture_platform_support
         PRIVATE
-            Ole32.lib
-            Uuid.lib)
+            ksuser)
 else()
     target_sources(
         vrrecorder_native_audio_capture_platform_support
