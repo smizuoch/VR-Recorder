@@ -8,7 +8,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -171,7 +173,7 @@ public:
         if (order_ != nullptr) {
             order_->push_back(1);
         }
-        return VideoSurfaceAcquireResult::Acquired;
+        return acquire_result;
     }
 
     vrrec_status_t ReleaseFromRead() noexcept override
@@ -183,6 +185,8 @@ public:
     }
 
     vrrec_status_t release_status = VRREC_STATUS_OK;
+    VideoSurfaceAcquireResult acquire_result =
+        VideoSurfaceAcquireResult::Acquired;
 
 private:
     std::vector<int> *order_;
@@ -691,6 +695,43 @@ void WorkerReleaseFailureRejectsPreparedFrameBeforeEncoding()
     CHECK(worker.Statistics().muxed_packet_count == 0);
 }
 
+void WorkerPreservesTerminalSurfaceAcquisitionIdentity()
+{
+    for (const auto &[acquire, expected, message] : {
+             std::tuple {
+                 VideoSurfaceAcquireResult::Abandoned,
+                 VideoEncodingWorkerResult::SurfaceAbandoned,
+                 "video surface synchronization was abandoned"},
+             std::tuple {
+                 VideoSurfaceAcquireResult::DeviceRemoved,
+                 VideoEncodingWorkerResult::SurfaceDeviceRemoved,
+                 "video device was removed"},
+             std::tuple {
+                 VideoSurfaceAcquireResult::DeviceReset,
+                 VideoEncodingWorkerResult::SurfaceDeviceReset,
+                 "video device was reset"},
+         }) {
+        VideoCfrScheduler scheduler;
+        const auto surface = std::make_shared<WorkerSurface>();
+        surface->acquire_result = acquire;
+        CHECK(scheduler.Push({26, 2'600'000, surface}) ==
+              VRREC_STATUS_OK);
+        ScriptedCfrClock clock;
+        clock.ready_tick_count = 1;
+        ScriptedVideoSink sink;
+        RecordingMediaEvents events;
+        VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+        CHECK(worker.Start() == VRREC_STATUS_OK);
+        CHECK(worker.Join() == expected);
+        CHECK(sink.write_calls == 0);
+        CHECK(sink.abort_calls == 1);
+        CHECK(events.fault_calls == 1);
+        CHECK(events.fault_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+        CHECK(std::string(events.fault_message) == message);
+    }
+}
+
 void AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding()
 {
     VideoCfrScheduler scheduler;
@@ -894,6 +935,7 @@ int main()
     AbortDoesNotCommitASuccessfulInFlightVideoWrite();
     UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
     WorkerReleaseFailureRejectsPreparedFrameBeforeEncoding();
+    WorkerPreservesTerminalSurfaceAcquisitionIdentity();
     AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding();
     OutOfMemoryThreadCreationIsTerminalFailure();
     InternalThreadCreationFailureIsTerminalFailure();

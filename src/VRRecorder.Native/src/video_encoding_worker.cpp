@@ -262,6 +262,27 @@ void VideoEncodingWorker::Run() noexcept
                 read.encoder_status,
                 "video packet muxing failed while recording",
                 true);
+        } else if (encoding_result ==
+                   VideoEncodingResult::SurfaceAbandoned) {
+            Fail(
+                VideoEncodingWorkerResult::SurfaceAbandoned,
+                VRREC_STATUS_BACKEND_UNAVAILABLE,
+                "video surface synchronization was abandoned",
+                true);
+        } else if (encoding_result ==
+                   VideoEncodingResult::SurfaceDeviceRemoved) {
+            Fail(
+                VideoEncodingWorkerResult::SurfaceDeviceRemoved,
+                VRREC_STATUS_BACKEND_UNAVAILABLE,
+                "video device was removed",
+                true);
+        } else if (encoding_result ==
+                   VideoEncodingResult::SurfaceDeviceReset) {
+            Fail(
+                VideoEncodingWorkerResult::SurfaceDeviceReset,
+                VRREC_STATUS_BACKEND_UNAVAILABLE,
+                "video device was reset",
+                true);
         } else if (encoding_result == VideoEncodingResult::SurfaceFailed) {
             Fail(
                 VideoEncodingWorkerResult::Failed,

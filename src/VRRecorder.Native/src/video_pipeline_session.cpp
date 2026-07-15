@@ -322,6 +322,9 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
     const auto encoding_result = encoding_.Join();
     if (encoding_result == VideoEncodingWorkerResult::EncoderFailed ||
         encoding_result == VideoEncodingWorkerResult::ClockFailed ||
+        encoding_result == VideoEncodingWorkerResult::SurfaceAbandoned ||
+        encoding_result == VideoEncodingWorkerResult::SurfaceDeviceRemoved ||
+        encoding_result == VideoEncodingWorkerResult::SurfaceDeviceReset ||
         encoding_result == VideoEncodingWorkerResult::Failed ||
         encoding_result == VideoEncodingWorkerResult::InvalidState ||
         (encoding_result == VideoEncodingWorkerResult::Stopped &&
@@ -393,6 +396,16 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
     }
     if (encoding_result == VideoEncodingWorkerResult::EncoderFailed) {
         return VideoPipelineResult::EncoderFailed;
+    }
+    if (encoding_result == VideoEncodingWorkerResult::SurfaceAbandoned) {
+        return VideoPipelineResult::SurfaceAbandoned;
+    }
+    if (encoding_result ==
+        VideoEncodingWorkerResult::SurfaceDeviceRemoved) {
+        return VideoPipelineResult::SurfaceDeviceRemoved;
+    }
+    if (encoding_result == VideoEncodingWorkerResult::SurfaceDeviceReset) {
+        return VideoPipelineResult::SurfaceDeviceReset;
     }
     if (encoding_result == VideoEncodingWorkerResult::InvalidState) {
         return VideoPipelineResult::InvalidState;

@@ -20,7 +20,8 @@ enum class VideoSurfaceAcquireResult {
     Acquired,
     Timeout,
     Abandoned,
-    DeviceLost,
+    DeviceRemoved,
+    DeviceReset,
     Failed,
 };
 

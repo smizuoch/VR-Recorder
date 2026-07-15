@@ -708,6 +708,31 @@ void EncoderFailureAbortsCapture()
     CHECK(encoding.join_calls == 1);
 }
 
+void PreservesVideoDeviceRemovedAndResetResults()
+{
+    for (const auto &[encoding_result, pipeline_result] : {
+             std::pair {
+                 VideoEncodingWorkerResult::SurfaceDeviceRemoved,
+                 VideoPipelineResult::SurfaceDeviceRemoved},
+             std::pair {
+                 VideoEncodingWorkerResult::SurfaceDeviceReset,
+                 VideoPipelineResult::SurfaceDeviceReset},
+         }) {
+        CallOrder order;
+        FakeCaptureWorker capture(order);
+        FakeEncodingWorker encoding(order);
+        encoding.join_result = encoding_result;
+        RecordingEvents events;
+        VideoPipelineSession session(capture, encoding, events);
+
+        CHECK(session.Start(std::chrono::milliseconds(100)) ==
+              VRREC_STATUS_OK);
+        CHECK(session.Join() == pipeline_result);
+        CHECK(capture.abort_calls == 1);
+        CHECK(capture.join_calls == 1);
+    }
+}
+
 void AbortDoesNotReturnUntilBothWorkersAreJoined()
 {
     CallOrder order;
@@ -1310,6 +1335,7 @@ int main(int argc, char **argv)
     SenderLossAbortsEncodingAndRaisesMediaFault();
     AdapterChangeAbortsEncodingWithADistinctPipelineResult();
     EncoderFailureAbortsCapture();
+    PreservesVideoDeviceRemovedAndResetResults();
     AbortDoesNotReturnUntilBothWorkersAreJoined();
     StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked();
     AbortDuringCaptureStartRollsBackWithoutStartingEncoding();

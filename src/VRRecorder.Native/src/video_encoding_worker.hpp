@@ -32,6 +32,9 @@ enum class VideoEncodingWorkerResult {
     Aborted,
     EncoderFailed,
     ClockFailed,
+    SurfaceAbandoned,
+    SurfaceDeviceRemoved,
+    SurfaceDeviceReset,
     InvalidState,
     Failed,
 };

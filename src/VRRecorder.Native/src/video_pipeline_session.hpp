@@ -18,6 +18,9 @@ enum class VideoPipelineResult {
     AdapterChanged,
     CaptureFailed,
     EncoderFailed,
+    SurfaceAbandoned,
+    SurfaceDeviceRemoved,
+    SurfaceDeviceReset,
     InvalidState,
     Failed,
 };

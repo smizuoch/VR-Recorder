@@ -59,9 +59,13 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
             read = {};
             return VideoEncodingResult::SurfaceAbandoned;
         }
-        if (acquire == VideoSurfaceAcquireResult::DeviceLost) {
+        if (acquire == VideoSurfaceAcquireResult::DeviceRemoved) {
             read = {};
-            return VideoEncodingResult::SurfaceDeviceLost;
+            return VideoEncodingResult::SurfaceDeviceRemoved;
+        }
+        if (acquire == VideoSurfaceAcquireResult::DeviceReset) {
+            read = {};
+            return VideoEncodingResult::SurfaceDeviceReset;
         }
         if (acquire != VideoSurfaceAcquireResult::Acquired) {
             read = {};

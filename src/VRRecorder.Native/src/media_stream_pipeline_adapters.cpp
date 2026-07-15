@@ -12,6 +12,9 @@ vrrec_status_t MapVideoResult(VideoPipelineResult result) noexcept
         return VRREC_STATUS_OK;
     case VideoPipelineResult::SenderLost:
     case VideoPipelineResult::AdapterChanged:
+    case VideoPipelineResult::SurfaceAbandoned:
+    case VideoPipelineResult::SurfaceDeviceRemoved:
+    case VideoPipelineResult::SurfaceDeviceReset:
         return VRREC_STATUS_BACKEND_UNAVAILABLE;
     case VideoPipelineResult::Aborted:
     case VideoPipelineResult::InvalidState:

@@ -283,15 +283,18 @@ void ReleasesTheSurfaceWhenTheEncoderFails()
     CHECK(surface->release_calls == 1);
 }
 
-void DistinguishesAbandonedAndDeviceLostSurfaceAcquisition()
+void DistinguishesAbandonedRemovedAndResetSurfaceAcquisition()
 {
     for (const auto &[acquire, expected] : {
              std::pair {
                  VideoSurfaceAcquireResult::Abandoned,
                  VideoEncodingResult::SurfaceAbandoned},
              std::pair {
-                 VideoSurfaceAcquireResult::DeviceLost,
-                 VideoEncodingResult::SurfaceDeviceLost},
+                 VideoSurfaceAcquireResult::DeviceRemoved,
+                 VideoEncodingResult::SurfaceDeviceRemoved},
+             std::pair {
+                 VideoSurfaceAcquireResult::DeviceReset,
+                 VideoEncodingResult::SurfaceDeviceReset},
          }) {
         VideoCfrScheduler scheduler;
         ScriptedVideoEncoderSink sink;
@@ -412,7 +415,7 @@ int main()
     AcquiresAndReleasesTheSharedSurfaceAroundEncoderWrite();
     KeepsSurfaceTimeoutSeparateAndDoesNotCallTheEncoder();
     ReleasesTheSurfaceWhenTheEncoderFails();
-    DistinguishesAbandonedAndDeviceLostSurfaceAcquisition();
+    DistinguishesAbandonedRemovedAndResetSurfaceAcquisition();
     ReleaseFailureAbortsWithoutCommittingSuccessfulWriteStatistics();
     ReleasesTheSourceBeforeEncodingThePreparedOwnedSurface();
     ReleaseFailureRejectsThePreparedFrameBeforeEncoding();
