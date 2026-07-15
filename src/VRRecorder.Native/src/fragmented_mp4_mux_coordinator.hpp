@@ -47,6 +47,8 @@ struct H264StreamDescriptor final {
     H264Profile profile;
     H264PacketFormat packet_format;
     std::vector<std::byte> codec_extradata;
+
+    bool operator==(const H264StreamDescriptor &) const = default;
 };
 
 struct AacStreamDescriptor final {
@@ -60,6 +62,8 @@ struct AacStreamDescriptor final {
     AacPacketFormat packet_format;
     std::vector<std::byte> codec_extradata;
     std::uint32_t bitrate_bits_per_second;
+
+    bool operator==(const AacStreamDescriptor &) const = default;
 };
 
 inline std::int64_t AacPrimingLowerBoundMicroseconds(
@@ -95,6 +99,9 @@ struct FragmentedMp4StreamConfiguration final {
     H264StreamDescriptor video;
     AacStreamDescriptor audio;
     FragmentedMp4FragmentPolicy fragment_policy;
+
+    bool operator==(
+        const FragmentedMp4StreamConfiguration &) const = default;
 };
 
 enum class EncodedPacketSideDataKind {

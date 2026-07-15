@@ -431,6 +431,12 @@ void PreHeaderCoordinator::EncoderFailed(MediaStreamKind stream) noexcept
     AbortDownstreamLocked();
 }
 
+void PreHeaderCoordinator::RequestAbort() noexcept
+{
+    abort_requested_.store(true);
+    RequestAbortDownstream();
+}
+
 void PreHeaderCoordinator::Abort() noexcept
 {
     abort_requested_.store(true);
@@ -447,6 +453,12 @@ void PreHeaderCoordinator::Abort() noexcept
     state_ = PreHeaderState::Aborted;
     FailQueuedSubmissionsLocked(Mp4MuxResult::MuxFailed);
     AbortDownstreamLocked();
+}
+
+std::int64_t PreHeaderCoordinator::AudioVideoOffsetMicroseconds()
+    const noexcept
+{
+    return mux_session_.AudioVideoOffsetMicroseconds();
 }
 
 PreHeaderState PreHeaderCoordinator::State() const noexcept
@@ -806,12 +818,19 @@ void PreHeaderCoordinator::RecomputeQueueUsageLocked() noexcept
 
 void PreHeaderCoordinator::AbortDownstreamLocked() noexcept
 {
+    RequestAbortDownstream();
     if (downstream_aborted_) {
         return;
     }
     downstream_aborted_ = true;
-    mux_session_.RequestAbort();
     mux_session_.Abort();
+}
+
+void PreHeaderCoordinator::RequestAbortDownstream() noexcept
+{
+    if (!downstream_abort_requested_.exchange(true)) {
+        mux_session_.RequestAbort();
+    }
 }
 
 }

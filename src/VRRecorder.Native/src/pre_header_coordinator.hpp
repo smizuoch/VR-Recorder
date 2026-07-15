@@ -73,7 +73,9 @@ public:
     vrrec_status_t EncoderFinished(
         MediaStreamKind stream) noexcept override;
     void EncoderFailed(MediaStreamKind stream) noexcept override;
+    void RequestAbort() noexcept;
     void Abort() noexcept;
+    std::int64_t AudioVideoOffsetMicroseconds() const noexcept;
     PreHeaderState State() const noexcept;
 #if defined(VRRECORDER_NATIVE_TESTING)
     std::size_t QueuedPacketCountForTesting() const noexcept;
@@ -123,6 +125,7 @@ private:
         const std::shared_ptr<SubmissionTicket> &ticket,
         Mp4MuxResult result) noexcept;
     void RecomputeQueueUsageLocked() noexcept;
+    void RequestAbortDownstream() noexcept;
     void AbortDownstreamLocked() noexcept;
 
     MediaMuxSessionPort &mux_session_;
@@ -150,6 +153,7 @@ private:
     bool downstream_aborted_ = false;
     PreHeaderState state_ = PreHeaderState::Created;
     std::atomic_bool abort_requested_ = false;
+    std::atomic_bool downstream_abort_requested_ = false;
 };
 
 }

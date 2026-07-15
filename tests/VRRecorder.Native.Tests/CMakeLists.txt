@@ -256,6 +256,27 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_pre_header_muxing_composition)
 
 add_executable(
+    vrrecorder_native_pre_header_media_mux_session
+    pre_header_media_mux_session_tests.cpp
+    "${native_source_root}/src/pre_header_media_mux_session.cpp"
+    "${native_source_root}/src/pre_header_coordinator.cpp")
+target_compile_features(
+    vrrecorder_native_pre_header_media_mux_session PRIVATE cxx_std_20)
+target_compile_definitions(
+    vrrecorder_native_pre_header_media_mux_session
+    PRIVATE VRRECORDER_NATIVE_TESTING=1)
+target_include_directories(
+    vrrecorder_native_pre_header_media_mux_session
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_pre_header_media_mux_session
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_pre_header_media_mux_session)
+
+add_executable(
     vrrecorder_native_full_media_graph_abort
     full_media_graph_abort_tests.cpp
     "${native_source_root}/src/pipeline_media_backend.cpp"
@@ -1641,6 +1662,8 @@ add_test(NAME vrrecorder_native_pre_header_coordinator
     COMMAND vrrecorder_native_pre_header_coordinator)
 add_test(NAME vrrecorder_native_pre_header_muxing_composition
     COMMAND vrrecorder_native_pre_header_muxing_composition)
+add_test(NAME vrrecorder_native_pre_header_media_mux_session
+    COMMAND vrrecorder_native_pre_header_media_mux_session)
 set_tests_properties(
     vrrecorder_native_pipeline_media_backend
     PROPERTIES TIMEOUT 5)
