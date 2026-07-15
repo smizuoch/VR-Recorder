@@ -212,8 +212,7 @@ endforeach()
 file(SHA256 "${NATIVE_BINARY}" expected_binary_sha256)
 file(SIZE "${NATIVE_BINARY}" expected_binary_length)
 cmake_path(GET NATIVE_BINARY FILENAME expected_binary_name)
-file(READ "${NATIVE_FACTORY_SELECTION_INTENT}" linked_intent_json)
-string(SHA256 expected_intent_sha256 "${linked_intent_json}")
+file(SHA256 "${NATIVE_FACTORY_SELECTION_INTENT}" expected_intent_sha256)
 file(READ "${NATIVE_FACTORY_BINARY_EVIDENCE}" binary_evidence_json)
 foreach(property IN ITEMS schemaVersion evidenceKind)
     string(
@@ -296,6 +295,21 @@ if(NOT writer_json_error STREQUAL "NOTFOUND" OR
    NOT writer_observed_sha256 STREQUAL writer_binary_sha256)
     message(FATAL_ERROR "writer evidence is not bound to the input binary")
 endif()
+
+set(crlf_intent "${work_root}/crlf-selection.intent.json")
+set(crlf_binary "${work_root}/crlf-native.dll")
+string(REPLACE "\n" "\r\n" crlf_intent_json "${intent_json}")
+file(WRITE "${crlf_intent}" "${crlf_intent_json}")
+file(SHA256 "${crlf_intent}" crlf_intent_sha256)
+file(
+    WRITE "${crlf_binary}"
+    "native factory evidence CRLF fixture\n"
+    "VRRECORDER_FACTORY_SELECTION_V1:${crlf_intent_sha256}\n")
+run_evidence_writer(
+    TRUE
+    "CRLF intent is bound by exact file bytes"
+    "${crlf_intent}"
+    "${crlf_binary}")
 
 string(
     REPLACE

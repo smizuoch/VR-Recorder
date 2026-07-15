@@ -81,7 +81,7 @@ endif()
 file(SHA256 "${NATIVE_BINARY}" native_binary_sha256)
 file(SIZE "${NATIVE_BINARY}" native_binary_length)
 cmake_path(GET NATIVE_BINARY FILENAME native_binary_name)
-string(SHA256 selection_intent_sha256 "${intent_json}")
+file(SHA256 "${SELECTION_INTENT}" selection_intent_sha256)
 set(
     expected_binary_marker
     "VRRECORDER_FACTORY_SELECTION_V1:${selection_intent_sha256}")
