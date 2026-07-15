@@ -845,6 +845,7 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
         vrrecorder_native_ffmpeg_h264_packet_encoder
         ffmpeg_h264_packet_encoder_tests.cpp
         "${native_source_root}/src/ffmpeg_h264_packet_encoder.cpp"
+        "${native_source_root}/src/ffmpeg_h264_software_codec_session.cpp"
         "${native_source_root}/src/ffmpeg_h264_media_foundation_configuration.cpp"
         "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp"
         "${native_source_root}/src/ffmpeg_libavcodec_encoder_port.cpp"

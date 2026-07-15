@@ -1,4 +1,5 @@
 #include "ffmpeg_h264_packet_encoder.hpp"
+#include "ffmpeg_h264_software_codec_session.hpp"
 #include "ffmpeg_h264_system_memory_packet_encoder_adapter.hpp"
 #include "h264_test_vectors.hpp"
 #include "muxing_video_encoder_sink.hpp"
@@ -416,6 +417,23 @@ void ProductionFactoryFailsClosedWhenH264MfIsUnavailable()
 #endif
 }
 
+void SoftwareCodecSessionFactoryRejectsInvalidConfigurationAndFailsClosed()
+{
+    auto invalid = ExactConfig();
+    invalid.width = 0;
+    auto rejected = CreateFfmpegH264SoftwareCodecSession(invalid);
+    CHECK(rejected.status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(rejected.session == nullptr);
+    CHECK(rejected.owned_frame == nullptr);
+
+#if !defined(_WIN32)
+    auto unavailable = CreateFfmpegH264SoftwareCodecSession(ExactConfig());
+    CHECK(unavailable.status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(unavailable.session == nullptr);
+    CHECK(unavailable.owned_frame == nullptr);
+#endif
+}
+
 }
 
 int main()
@@ -427,5 +445,6 @@ int main()
     PreservesZeroPacketBatchesAndNormalizesFinishPackets();
     FailureAbortsTheSessionAndMakesTheEncoderTerminal();
     ProductionFactoryFailsClosedWhenH264MfIsUnavailable();
+    SoftwareCodecSessionFactoryRejectsInvalidConfigurationAndFailsClosed();
     return 0;
 }
