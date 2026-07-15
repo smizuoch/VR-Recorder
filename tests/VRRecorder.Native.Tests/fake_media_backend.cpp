@@ -648,6 +648,7 @@ struct FakeEncoderProbeState {
     bool entered = false;
     bool release = false;
     std::uint32_t call_count = 0;
+    EncoderProbeEvidence evidence;
     testing::ObservedEncoderProbeConfig observed {
         0,
         0,
@@ -692,6 +693,37 @@ public:
         }
 
         packet_produced = fake_encoder_probe.packet_produced;
+        return fake_encoder_probe.status;
+    }
+
+    vrrec_status_t ProbeV2(
+        const vrrec_encoder_probe_config_v1 &config,
+        EncoderProbeEvidence &evidence) override
+    {
+        std::unique_lock lock(fake_encoder_probe.mutex);
+        ++fake_encoder_probe.call_count;
+        fake_encoder_probe.observed =
+            testing::ObservedEncoderProbeConfig {
+                config.encoder_kind,
+                config.synthetic_frame_count,
+                config.adapter_luid,
+                config.width,
+                config.height,
+                config.fps_numerator,
+                config.fps_denominator,
+                config.gpu_identity_utf8,
+            };
+        fake_encoder_probe.entered = true;
+        fake_encoder_probe.condition.notify_all();
+        if (fake_encoder_probe.block_next) {
+            fake_encoder_probe.condition.wait(lock, [] {
+                return fake_encoder_probe.release;
+            });
+            fake_encoder_probe.block_next = false;
+            fake_encoder_probe.release = false;
+        }
+
+        evidence = fake_encoder_probe.evidence;
         return fake_encoder_probe.status;
     }
 };
@@ -1031,6 +1063,7 @@ void ResetEncoderProbe()
     fake_encoder_probe.entered = false;
     fake_encoder_probe.release = false;
     fake_encoder_probe.call_count = 0;
+    fake_encoder_probe.evidence = {};
     fake_encoder_probe.observed = ObservedEncoderProbeConfig {
         0,
         0,
@@ -1050,6 +1083,27 @@ void SetEncoderProbeResult(
     const std::lock_guard lock(fake_encoder_probe.mutex);
     fake_encoder_probe.status = status;
     fake_encoder_probe.packet_produced = packet_produced;
+}
+
+void SetEncoderProbeEvidence(TestEncoderProbeEvidence evidence)
+{
+    const std::lock_guard lock(fake_encoder_probe.mutex);
+    fake_encoder_probe.evidence = EncoderProbeEvidence {
+        evidence.actual_encoder_kind,
+        evidence.hardware_accelerated,
+        evidence.adapter_luid,
+        evidence.opened_input_format,
+        evidence.width,
+        evidence.height,
+        evidence.fps_numerator,
+        evidence.fps_denominator,
+        evidence.validation_flags,
+        std::move(evidence.codec_name),
+        std::move(evidence.driver_identity),
+        std::move(evidence.ffmpeg_build_identity),
+        std::move(evidence.profile),
+        std::move(evidence.device_identity),
+    };
 }
 
 std::uint32_t EncoderProbeCallCount()

@@ -38,6 +38,9 @@ _Static_assert(
 _Static_assert(
     sizeof(vrrec_encoder_probe_config_v1) == 56,
     "encoder probe config ABI drift");
+_Static_assert(
+    sizeof(vrrec_encoder_probe_result_v2) == 96,
+    "encoder probe result v2 ABI drift");
 #endif
 
 _Static_assert(
@@ -49,6 +52,15 @@ _Static_assert(
 _Static_assert(
     VRREC_SOURCE_PIXEL_FORMAT_NV12 == 3,
     "NV12 ABI value drift");
+_Static_assert(
+    VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12 == 1,
+    "system-memory encoder input ABI drift");
+_Static_assert(
+    VRREC_ENCODER_INPUT_D3D11_NV12 == 2,
+    "D3D11 encoder input ABI drift");
+_Static_assert(
+    VRREC_ENCODER_INPUT_QSV_NV12 == 3,
+    "QSV encoder input ABI drift");
 _Static_assert(VRREC_GPU_VENDOR_UNKNOWN == 0, "unknown GPU ABI drift");
 _Static_assert(VRREC_GPU_VENDOR_NVIDIA == 1, "NVIDIA ABI drift");
 _Static_assert(VRREC_GPU_VENDOR_AMD == 2, "AMD ABI drift");

@@ -150,10 +150,10 @@ export-check:
 	test -s $(NATIVE_ROOT)/build/vrrecorder_native.map
 
 cmake-contract-sync:
-	test "$$(wc -l < expected_exports.txt)" -eq 17
-	grep -Fq "if(NOT export_count EQUAL 17)" cmake_build_contract.cmake
-	grep -Fq "if(NOT export_count EQUAL 17)" verify_exports.cmake
-	grep -Fq "Verified exactly 17 native exports" verify_exports.cmake
+	test "$$(wc -l < expected_exports.txt)" -eq 18
+	grep -Fq "list(LENGTH expected_exports expected_export_count)" cmake_build_contract.cmake
+	grep -Fq "list(LENGTH expected_exports expected_export_count)" verify_exports.cmake
+	grep -Fq 'Verified exactly $${expected_export_count} native exports' verify_exports.cmake
 
 test: clean all export-check cmake-contract-sync
 	$(BUILD_DIR)/abi_contract_tests

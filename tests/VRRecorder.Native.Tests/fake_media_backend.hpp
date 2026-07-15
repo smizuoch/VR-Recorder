@@ -48,6 +48,23 @@ struct ObservedEncoderProbeConfig {
     std::string gpu_identity;
 };
 
+struct TestEncoderProbeEvidence {
+    std::uint32_t actual_encoder_kind;
+    bool hardware_accelerated;
+    std::uint64_t adapter_luid;
+    std::uint32_t opened_input_format;
+    std::uint32_t width;
+    std::uint32_t height;
+    std::uint32_t fps_numerator;
+    std::uint32_t fps_denominator;
+    std::uint32_t validation_flags;
+    std::string codec_name;
+    std::string driver_identity;
+    std::string ffmpeg_build_identity;
+    std::string profile;
+    std::string device_identity;
+};
+
 void CommitMuxedVideoPacket();
 void BlockNextMediaStart(std::int32_t status);
 bool WaitUntilMediaStartEntered(std::chrono::milliseconds timeout);
@@ -136,6 +153,7 @@ std::uint32_t ActiveSpoutSourceCount();
 std::uint32_t SpoutSourceDestroyCount();
 void ResetEncoderProbe();
 void SetEncoderProbeResult(std::int32_t status, bool packet_produced);
+void SetEncoderProbeEvidence(TestEncoderProbeEvidence evidence);
 std::uint32_t EncoderProbeCallCount();
 ObservedEncoderProbeConfig EncoderProbeConfig();
 void BlockNextEncoderProbe();

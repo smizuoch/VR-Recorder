@@ -12,6 +12,7 @@
 - [x] 全encoder probe requestを安定化したSpout senderと同じadapter LUIDへ固定する
 - [x] 出力寸法・fps・同一adapterをnative ABIへ渡し16合成frameを実encodeする
 - [x] 初期化だけでなくpacket生成時だけnative probeを成功としてmanagedへ返す
+- [x] native probe v2はcodec名・hardware mode・adapter・D3D11/QSV/system-memory入力形式をrequested kindの固定対応と照合し、parse可能AU、SPS、PPS、IDR、display寸法、profile、fps、B-frame 0、decode、hardware same-adapterの全証拠が揃わなければ結果を公開しない
 
 ## English
 
@@ -25,3 +26,4 @@ Following Basic Design v0.3 §§10.3, 11.2, 18.4, and 24, probe success requires
 - [x] Pin every encoder probe request to the same adapter LUID as the stabilized Spout sender
 - [x] Pass output geometry, frame rate, and the same adapter through the native ABI and encode 16 synthetic frames
 - [x] Report native probe success to managed code only when an encoded packet is produced
+- [x] Match probe-v2 codec name, hardware mode, adapter, and D3D11/QSV/system-memory input format to the requested kind, publishing no result unless the evidence proves a parseable AU, SPS, PPS, IDR, display dimensions, profile, frame rate, zero B-frames, decode, and hardware same-adapter ownership

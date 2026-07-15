@@ -33,6 +33,7 @@ typedef uint32_t vrrec_source_pixel_format_t;
 typedef uint32_t vrrec_audio_routing_t;
 typedef uint32_t vrrec_quality_preset_t;
 typedef uint32_t vrrec_gpu_vendor_t;
+typedef uint32_t vrrec_encoder_input_format_t;
 
 #define VRREC_STATUS_OK INT32_C(0)
 #define VRREC_STATUS_INVALID_ARGUMENT INT32_C(1)
@@ -61,6 +62,24 @@ typedef uint32_t vrrec_gpu_vendor_t;
 #define VRREC_ENCODER_AMF UINT32_C(2)
 #define VRREC_ENCODER_QSV UINT32_C(3)
 #define VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE UINT32_C(4)
+
+#define VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12 UINT32_C(1)
+#define VRREC_ENCODER_INPUT_D3D11_NV12 UINT32_C(2)
+#define VRREC_ENCODER_INPUT_QSV_NV12 UINT32_C(3)
+
+#define VRREC_ENCODER_PROBE_VALIDATION_NONEMPTY_PACKET UINT32_C(0x0001)
+#define VRREC_ENCODER_PROBE_VALIDATION_PARSEABLE_ACCESS_UNIT UINT32_C(0x0002)
+#define VRREC_ENCODER_PROBE_VALIDATION_SPS UINT32_C(0x0004)
+#define VRREC_ENCODER_PROBE_VALIDATION_PPS UINT32_C(0x0008)
+#define VRREC_ENCODER_PROBE_VALIDATION_IDR UINT32_C(0x0010)
+#define VRREC_ENCODER_PROBE_VALIDATION_DISPLAY_DIMENSIONS UINT32_C(0x0020)
+#define VRREC_ENCODER_PROBE_VALIDATION_PROFILE UINT32_C(0x0040)
+#define VRREC_ENCODER_PROBE_VALIDATION_FRAME_RATE UINT32_C(0x0080)
+#define VRREC_ENCODER_PROBE_VALIDATION_ZERO_B_FRAMES UINT32_C(0x0100)
+#define VRREC_ENCODER_PROBE_VALIDATION_DECODED UINT32_C(0x0200)
+#define VRREC_ENCODER_PROBE_VALIDATION_SAME_ADAPTER UINT32_C(0x0400)
+
+#define VRREC_ENCODER_PROBE_MAX_UTF8_BUFFER_SIZE UINT32_C(32768)
 
 #define VRREC_CANVAS_BACKGROUND_BLACK UINT32_C(1)
 
@@ -260,11 +279,43 @@ typedef struct vrrec_encoder_probe_config_v1 {
     uint64_t reserved;
 } vrrec_encoder_probe_config_v1;
 
+typedef struct vrrec_encoder_probe_result_v2 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    vrrec_encoder_kind_t actual_encoder_kind;
+    uint32_t hardware_accelerated;
+    uint64_t adapter_luid;
+    vrrec_encoder_input_format_t opened_input_format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t fps_numerator;
+    uint32_t fps_denominator;
+    uint32_t validation_flags;
+    uint32_t codec_name_offset;
+    uint32_t codec_name_size;
+    uint32_t driver_identity_offset;
+    uint32_t driver_identity_size;
+    uint32_t ffmpeg_build_identity_offset;
+    uint32_t ffmpeg_build_identity_size;
+    uint32_t profile_offset;
+    uint32_t profile_size;
+    uint32_t device_identity_offset;
+    uint32_t device_identity_size;
+    uint64_t reserved;
+} vrrec_encoder_probe_result_v2;
+
 VRREC_API uint32_t VRREC_CALL vrrec_abi_version(void);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_encoder_probe_v1(
     const vrrec_encoder_probe_config_v1 *config,
     uint8_t *out_packet_produced);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_encoder_probe_v2(
+    const vrrec_encoder_probe_config_v1 *config,
+    vrrec_encoder_probe_result_v2 *out_result,
+    char *utf8_buffer,
+    uint32_t utf8_capacity,
+    uint32_t *out_required_utf8_size);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_session_create_v1(
     const vrrec_session_config_v1 *config,

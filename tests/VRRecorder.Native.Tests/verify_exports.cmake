@@ -75,8 +75,13 @@ if(NOT actual_exports STREQUAL expected_exports)
 endif()
 
 list(LENGTH actual_exports export_count)
-if(NOT export_count EQUAL 17)
-    message(FATAL_ERROR "Expected exactly 17 production exports, found ${export_count}")
+list(LENGTH expected_exports expected_export_count)
+if(NOT export_count EQUAL expected_export_count)
+    message(
+        FATAL_ERROR
+        "Expected exactly ${expected_export_count} production exports, found ${export_count}")
 endif()
 
-message(STATUS "Verified exactly 17 native exports in ${LIBRARY_FILE}")
+message(
+    STATUS
+    "Verified exactly ${expected_export_count} native exports in ${LIBRARY_FILE}")

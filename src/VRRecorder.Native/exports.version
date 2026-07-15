@@ -2,6 +2,7 @@
     global:
         vrrec_abi_version;
         vrrec_encoder_probe_v1;
+        vrrec_encoder_probe_v2;
         vrrec_session_abort_v1;
         vrrec_session_create_v1;
         vrrec_session_destroy_v1;

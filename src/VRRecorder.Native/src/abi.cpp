@@ -3,6 +3,7 @@
 #if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
 #include <chrono>
 #endif
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
@@ -1314,6 +1315,185 @@ vrrec_status_t ValidateEncoderProbeArguments(
     return VRREC_STATUS_OK;
 }
 
+constexpr std::uint32_t RequiredEncoderPacketValidationFlags =
+    VRREC_ENCODER_PROBE_VALIDATION_NONEMPTY_PACKET |
+    VRREC_ENCODER_PROBE_VALIDATION_PARSEABLE_ACCESS_UNIT |
+    VRREC_ENCODER_PROBE_VALIDATION_SPS |
+    VRREC_ENCODER_PROBE_VALIDATION_PPS |
+    VRREC_ENCODER_PROBE_VALIDATION_IDR |
+    VRREC_ENCODER_PROBE_VALIDATION_DISPLAY_DIMENSIONS |
+    VRREC_ENCODER_PROBE_VALIDATION_PROFILE |
+    VRREC_ENCODER_PROBE_VALIDATION_FRAME_RATE |
+    VRREC_ENCODER_PROBE_VALIDATION_ZERO_B_FRAMES |
+    VRREC_ENCODER_PROBE_VALIDATION_DECODED;
+
+struct ExpectedEncoderProbeIdentity final {
+    std::string_view codec_name;
+    bool hardware_accelerated;
+    vrrec_encoder_input_format_t opened_input_format;
+};
+
+std::optional<ExpectedEncoderProbeIdentity>
+ExpectedEncoderProbe(
+    vrrec_encoder_kind_t encoder_kind) noexcept
+{
+    switch (encoder_kind) {
+    case VRREC_ENCODER_NVENC:
+        return ExpectedEncoderProbeIdentity {
+            "h264_nvenc",
+            true,
+            VRREC_ENCODER_INPUT_D3D11_NV12,
+        };
+    case VRREC_ENCODER_AMF:
+        return ExpectedEncoderProbeIdentity {
+            "h264_amf",
+            true,
+            VRREC_ENCODER_INPUT_D3D11_NV12,
+        };
+    case VRREC_ENCODER_QSV:
+        return ExpectedEncoderProbeIdentity {
+            "h264_qsv",
+            true,
+            VRREC_ENCODER_INPUT_QSV_NV12,
+        };
+    case VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE:
+        return ExpectedEncoderProbeIdentity {
+            "h264_mf",
+            false,
+            VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12,
+        };
+    default:
+        return std::nullopt;
+    }
+}
+
+bool IsOwnedUtf8Text(const std::string &value) noexcept
+{
+    std::string_view validated;
+    return TryValidateUtf8Text(
+               value.c_str(),
+               VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE,
+               validated) &&
+        validated.size() == value.size();
+}
+
+bool ValidateEncoderProbeEvidence(
+    const vrrec_encoder_probe_config_v1 &config,
+    const vrrecorder::native::EncoderProbeEvidence &evidence,
+    std::uint32_t &required_utf8_size) noexcept
+{
+    required_utf8_size = 0;
+    const auto expected = ExpectedEncoderProbe(config.encoder_kind);
+    if (!expected ||
+        evidence.actual_encoder_kind != config.encoder_kind ||
+        evidence.codec_name != expected->codec_name ||
+        evidence.hardware_accelerated != expected->hardware_accelerated ||
+        evidence.adapter_luid != config.adapter_luid ||
+        evidence.opened_input_format != expected->opened_input_format ||
+        evidence.width != config.width ||
+        evidence.height != config.height ||
+        evidence.fps_numerator != config.fps_numerator ||
+        evidence.fps_denominator != config.fps_denominator) {
+        return false;
+    }
+
+    const auto required_flags = RequiredEncoderPacketValidationFlags |
+        (evidence.hardware_accelerated
+             ? VRREC_ENCODER_PROBE_VALIDATION_SAME_ADAPTER
+             : 0U);
+    if (evidence.validation_flags != required_flags ||
+        !IsOwnedUtf8Text(evidence.codec_name) ||
+        !IsOwnedUtf8Text(evidence.driver_identity) ||
+        !IsOwnedUtf8Text(evidence.ffmpeg_build_identity) ||
+        !IsOwnedUtf8Text(evidence.profile) ||
+        !IsOwnedUtf8Text(evidence.device_identity)) {
+        return false;
+    }
+
+    const auto total_size = evidence.codec_name.size() +
+        evidence.driver_identity.size() +
+        evidence.ffmpeg_build_identity.size() +
+        evidence.profile.size() + evidence.device_identity.size();
+    if (total_size > VRREC_ENCODER_PROBE_MAX_UTF8_BUFFER_SIZE) {
+        return false;
+    }
+    required_utf8_size = static_cast<std::uint32_t>(total_size);
+    return true;
+}
+
+void ClearEncoderProbeResult(
+    vrrec_encoder_probe_result_v2 &result) noexcept
+{
+    const auto struct_size = result.struct_size;
+    const auto abi_version = result.abi_version;
+    result = {};
+    result.struct_size = struct_size;
+    result.abi_version = abi_version;
+}
+
+void PopulateEncoderProbeResult(
+    const vrrecorder::native::EncoderProbeEvidence &evidence,
+    vrrec_encoder_probe_result_v2 &result) noexcept
+{
+    result.actual_encoder_kind = evidence.actual_encoder_kind;
+    result.hardware_accelerated = evidence.hardware_accelerated ? 1U : 0U;
+    result.adapter_luid = evidence.adapter_luid;
+    result.opened_input_format = evidence.opened_input_format;
+    result.width = evidence.width;
+    result.height = evidence.height;
+    result.fps_numerator = evidence.fps_numerator;
+    result.fps_denominator = evidence.fps_denominator;
+    result.validation_flags = evidence.validation_flags;
+
+    std::uint32_t offset = 0;
+    const auto add_text = [&offset](
+                              const std::string &text,
+                              std::uint32_t &output_offset,
+                              std::uint32_t &output_size) {
+        output_offset = offset;
+        output_size = static_cast<std::uint32_t>(text.size());
+        offset += output_size;
+    };
+    add_text(
+        evidence.codec_name,
+        result.codec_name_offset,
+        result.codec_name_size);
+    add_text(
+        evidence.driver_identity,
+        result.driver_identity_offset,
+        result.driver_identity_size);
+    add_text(
+        evidence.ffmpeg_build_identity,
+        result.ffmpeg_build_identity_offset,
+        result.ffmpeg_build_identity_size);
+    add_text(
+        evidence.profile,
+        result.profile_offset,
+        result.profile_size);
+    add_text(
+        evidence.device_identity,
+        result.device_identity_offset,
+        result.device_identity_size);
+}
+
+void CopyEncoderProbeText(
+    const vrrecorder::native::EncoderProbeEvidence &evidence,
+    char *utf8_buffer) noexcept
+{
+    auto *destination = utf8_buffer;
+    const auto append = [&destination](const std::string &text) {
+        destination = std::copy(
+            text.begin(),
+            text.end(),
+            destination);
+    };
+    append(evidence.codec_name);
+    append(evidence.driver_identity);
+    append(evidence.ffmpeg_build_identity);
+    append(evidence.profile);
+    append(evidence.device_identity);
+}
+
 vrrec_status_t ValidateSpoutCreateArguments(
     const vrrec_spout_source_config_v1 *config,
     vrrec_spout_source_t **out_source) noexcept
@@ -1431,6 +1611,83 @@ extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_encoder_probe_v1(
     } catch (const std::bad_alloc &) {
         return VRREC_STATUS_OUT_OF_MEMORY;
     } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL vrrec_encoder_probe_v2(
+    const vrrec_encoder_probe_config_v1 *config,
+    vrrec_encoder_probe_result_v2 *out_result,
+    char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    std::uint32_t *out_required_utf8_size)
+{
+    if (out_required_utf8_size == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    *out_required_utf8_size = 0;
+    if (out_result == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (out_result->struct_size <
+        sizeof(vrrec_encoder_probe_result_v2)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (out_result->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    ClearEncoderProbeResult(*out_result);
+
+    if ((utf8_capacity != 0 && utf8_buffer == nullptr) ||
+        utf8_capacity > VRREC_ENCODER_PROBE_MAX_UTF8_BUFFER_SIZE) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    std::uint8_t ignored_packet_produced = 0;
+    const auto validation = ValidateEncoderProbeArguments(
+        config,
+        &ignored_packet_produced);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+
+    try {
+        auto creation_status = VRREC_STATUS_INTERNAL_ERROR;
+        auto backend = vrrecorder::native::CreateEncoderProbeBackend(
+            creation_status);
+        if (backend == nullptr) {
+            return creation_status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : creation_status;
+        }
+
+        vrrecorder::native::EncoderProbeEvidence evidence;
+        const auto status = backend->ProbeV2(*config, evidence);
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+
+        std::uint32_t required_utf8_size = 0;
+        if (!ValidateEncoderProbeEvidence(
+                *config,
+                evidence,
+                required_utf8_size)) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        PopulateEncoderProbeResult(evidence, *out_result);
+        *out_required_utf8_size = required_utf8_size;
+        if (utf8_capacity < required_utf8_size) {
+            return VRREC_STATUS_BUFFER_TOO_SMALL;
+        }
+
+        CopyEncoderProbeText(evidence, utf8_buffer);
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        ClearEncoderProbeResult(*out_result);
+        *out_required_utf8_size = 0;
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        ClearEncoderProbeResult(*out_result);
+        *out_required_utf8_size = 0;
         return VRREC_STATUS_INTERNAL_ERROR;
     }
 }

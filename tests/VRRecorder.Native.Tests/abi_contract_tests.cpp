@@ -1,3 +1,4 @@
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -7,6 +8,7 @@
 #include <iostream>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -39,6 +41,10 @@ static_assert(sizeof(vrrec_spout_source_config_v1) == 16);
 static_assert(sizeof(vrrec_spout_sender_snapshot_v1) == 24);
 static_assert(sizeof(vrrec_spout_frame_v1) == 80);
 static_assert(sizeof(vrrec_encoder_probe_config_v1) == 56);
+static_assert(sizeof(vrrec_encoder_probe_result_v2) == 96);
+static_assert(VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12 == 1);
+static_assert(VRREC_ENCODER_INPUT_D3D11_NV12 == 2);
+static_assert(VRREC_ENCODER_INPUT_QSV_NV12 == 3);
 
 namespace {
 
@@ -2721,6 +2727,311 @@ bool RejectsInvalidEncoderProbeAbiInputs()
     return true;
 }
 
+constexpr std::uint32_t RequiredPacketValidationFlags =
+    VRREC_ENCODER_PROBE_VALIDATION_NONEMPTY_PACKET |
+    VRREC_ENCODER_PROBE_VALIDATION_PARSEABLE_ACCESS_UNIT |
+    VRREC_ENCODER_PROBE_VALIDATION_SPS |
+    VRREC_ENCODER_PROBE_VALIDATION_PPS |
+    VRREC_ENCODER_PROBE_VALIDATION_IDR |
+    VRREC_ENCODER_PROBE_VALIDATION_DISPLAY_DIMENSIONS |
+    VRREC_ENCODER_PROBE_VALIDATION_PROFILE |
+    VRREC_ENCODER_PROBE_VALIDATION_FRAME_RATE |
+    VRREC_ENCODER_PROBE_VALIDATION_ZERO_B_FRAMES |
+    VRREC_ENCODER_PROBE_VALIDATION_DECODED;
+
+vrrecorder::native::testing::TestEncoderProbeEvidence
+ValidNvencProbeEvidence(const vrrec_encoder_probe_config_v1 &config)
+{
+    return {
+        VRREC_ENCODER_NVENC,
+        true,
+        config.adapter_luid,
+        VRREC_ENCODER_INPUT_D3D11_NV12,
+        config.width,
+        config.height,
+        config.fps_numerator,
+        config.fps_denominator,
+        RequiredPacketValidationFlags |
+            VRREC_ENCODER_PROBE_VALIDATION_SAME_ADAPTER,
+        "h264_nvenc",
+        "nvidia|32.0.16.1062",
+        "ffmpeg|8.1.2|contract-id",
+        "high",
+        "pci\\ven_10de&dev_2c05",
+    };
+}
+
+std::string_view ProbeText(
+    const std::vector<char> &buffer,
+    std::uint32_t offset,
+    std::uint32_t size)
+{
+    if (offset > buffer.size() || size > buffer.size() - offset) {
+        return {};
+    }
+    return {buffer.data() + offset, size};
+}
+
+vrrec_encoder_probe_result_v2 EmptyEncoderProbeResult(
+    std::uint32_t abi_version = VRREC_ABI_V1)
+{
+    vrrec_encoder_probe_result_v2 result {};
+    result.struct_size = sizeof(result);
+    result.abi_version = abi_version;
+    return result;
+}
+
+bool ReturnsStructuredEncoderEvidenceThroughSizedUtf8Buffer()
+{
+    using vrrecorder::native::testing::EncoderProbeCallCount;
+    using vrrecorder::native::testing::ResetEncoderProbe;
+    using vrrecorder::native::testing::SetEncoderProbeEvidence;
+    using vrrecorder::native::testing::SetEncoderProbeResult;
+
+    ResetEncoderProbe();
+    const auto config = ValidEncoderProbeConfig();
+    const auto evidence = ValidNvencProbeEvidence(config);
+    SetEncoderProbeResult(VRREC_STATUS_OK, true);
+    SetEncoderProbeEvidence(evidence);
+
+    auto result = EmptyEncoderProbeResult();
+    std::uint32_t required_size = UINT32_MAX;
+    CHECK(vrrec_encoder_probe_v2(
+              &config,
+              &result,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    const auto expected_size = evidence.codec_name.size() +
+        evidence.driver_identity.size() +
+        evidence.ffmpeg_build_identity.size() +
+        evidence.profile.size() + evidence.device_identity.size();
+    CHECK(required_size == expected_size);
+    CHECK(result.actual_encoder_kind == VRREC_ENCODER_NVENC);
+    CHECK(result.hardware_accelerated == 1);
+    CHECK(result.adapter_luid == config.adapter_luid);
+    CHECK(result.opened_input_format == VRREC_ENCODER_INPUT_D3D11_NV12);
+    CHECK(result.width == config.width);
+    CHECK(result.height == config.height);
+    CHECK(result.fps_numerator == config.fps_numerator);
+    CHECK(result.fps_denominator == 1);
+    CHECK(result.validation_flags == evidence.validation_flags);
+
+    std::vector<char> buffer(required_size);
+    result = EmptyEncoderProbeResult();
+    CHECK(vrrec_encoder_probe_v2(
+              &config,
+              &result,
+              buffer.data(),
+              static_cast<std::uint32_t>(buffer.size()),
+              &required_size) == VRREC_STATUS_OK);
+    CHECK(ProbeText(
+              buffer,
+              result.codec_name_offset,
+              result.codec_name_size) == evidence.codec_name);
+    CHECK(ProbeText(
+              buffer,
+              result.driver_identity_offset,
+              result.driver_identity_size) == evidence.driver_identity);
+    CHECK(ProbeText(
+              buffer,
+              result.ffmpeg_build_identity_offset,
+              result.ffmpeg_build_identity_size) ==
+          evidence.ffmpeg_build_identity);
+    CHECK(ProbeText(
+              buffer,
+              result.profile_offset,
+              result.profile_size) == evidence.profile);
+    CHECK(ProbeText(
+              buffer,
+              result.device_identity_offset,
+              result.device_identity_size) == evidence.device_identity);
+    CHECK(result.reserved == 0);
+    CHECK(EncoderProbeCallCount() == 2);
+
+    std::uint8_t packet_produced = 0;
+    CHECK(vrrec_encoder_probe_v1(&config, &packet_produced) ==
+          VRREC_STATUS_OK);
+    CHECK(packet_produced == 1);
+    return true;
+}
+
+bool AcceptsEveryFixedEncoderProbeIdentity()
+{
+    using vrrecorder::native::testing::ResetEncoderProbe;
+    using vrrecorder::native::testing::SetEncoderProbeEvidence;
+    using vrrecorder::native::testing::SetEncoderProbeResult;
+
+    struct ExpectedIdentity final {
+        vrrec_encoder_kind_t encoder_kind;
+        std::string_view codec_name;
+        bool hardware_accelerated;
+        vrrec_encoder_input_format_t input_format;
+    };
+    const std::array identities {
+        ExpectedIdentity {
+            VRREC_ENCODER_NVENC,
+            "h264_nvenc",
+            true,
+            VRREC_ENCODER_INPUT_D3D11_NV12,
+        },
+        ExpectedIdentity {
+            VRREC_ENCODER_AMF,
+            "h264_amf",
+            true,
+            VRREC_ENCODER_INPUT_D3D11_NV12,
+        },
+        ExpectedIdentity {
+            VRREC_ENCODER_QSV,
+            "h264_qsv",
+            true,
+            VRREC_ENCODER_INPUT_QSV_NV12,
+        },
+        ExpectedIdentity {
+            VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE,
+            "h264_mf",
+            false,
+            VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12,
+        },
+    };
+
+    for (const auto &identity : identities) {
+        ResetEncoderProbe();
+        auto config = ValidEncoderProbeConfig();
+        config.encoder_kind = identity.encoder_kind;
+        auto evidence = ValidNvencProbeEvidence(config);
+        evidence.actual_encoder_kind = identity.encoder_kind;
+        evidence.codec_name = identity.codec_name;
+        evidence.hardware_accelerated = identity.hardware_accelerated;
+        evidence.opened_input_format = identity.input_format;
+        evidence.validation_flags = RequiredPacketValidationFlags |
+            (identity.hardware_accelerated
+                 ? VRREC_ENCODER_PROBE_VALIDATION_SAME_ADAPTER
+                 : 0U);
+        SetEncoderProbeResult(VRREC_STATUS_OK, true);
+        SetEncoderProbeEvidence(std::move(evidence));
+
+        auto result = EmptyEncoderProbeResult();
+        std::uint32_t required_size = 0;
+        CHECK(vrrec_encoder_probe_v2(
+                  &config,
+                  &result,
+                  nullptr,
+                  0,
+                  &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+        CHECK(required_size != 0);
+        CHECK(result.actual_encoder_kind == identity.encoder_kind);
+        CHECK(result.hardware_accelerated ==
+              (identity.hardware_accelerated ? 1U : 0U));
+        CHECK(result.opened_input_format == identity.input_format);
+    }
+    return true;
+}
+
+bool RejectsUnverifiedOrMismatchedStructuredEncoderEvidence()
+{
+    using vrrecorder::native::testing::ResetEncoderProbe;
+    using vrrecorder::native::testing::SetEncoderProbeEvidence;
+    using vrrecorder::native::testing::SetEncoderProbeResult;
+
+    ResetEncoderProbe();
+    const auto config = ValidEncoderProbeConfig();
+    SetEncoderProbeResult(VRREC_STATUS_OK, true);
+    const auto rejects = [&](auto mutate) {
+        auto evidence = ValidNvencProbeEvidence(config);
+        mutate(evidence);
+        SetEncoderProbeEvidence(std::move(evidence));
+        auto result = EmptyEncoderProbeResult();
+        std::uint32_t required_size = UINT32_MAX;
+        const auto status = vrrec_encoder_probe_v2(
+            &config,
+            &result,
+            nullptr,
+            0,
+            &required_size);
+        return status == VRREC_STATUS_INTERNAL_ERROR &&
+            required_size == 0 && result.actual_encoder_kind == 0 &&
+            result.codec_name_size == 0;
+    };
+
+    CHECK(rejects([](auto &value) {
+        value.actual_encoder_kind = VRREC_ENCODER_AMF;
+    }));
+    CHECK(rejects([](auto &value) {
+        value.codec_name = "h264_mf";
+    }));
+    CHECK(rejects([](auto &value) {
+        value.hardware_accelerated = false;
+    }));
+    CHECK(rejects([](auto &value) {
+        ++value.adapter_luid;
+    }));
+    CHECK(rejects([](auto &value) {
+        value.opened_input_format = VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12;
+    }));
+    CHECK(rejects([](auto &value) {
+        value.validation_flags &=
+            ~VRREC_ENCODER_PROBE_VALIDATION_DECODED;
+    }));
+    CHECK(rejects([](auto &value) {
+        value.validation_flags &=
+            ~VRREC_ENCODER_PROBE_VALIDATION_SAME_ADAPTER;
+    }));
+    CHECK(rejects([](auto &value) {
+        value.driver_identity = " ";
+    }));
+
+    auto evidence = ValidNvencProbeEvidence(config);
+    SetEncoderProbeEvidence(std::move(evidence));
+    SetEncoderProbeResult(VRREC_STATUS_BACKEND_UNAVAILABLE, true);
+    auto result = EmptyEncoderProbeResult();
+    std::uint32_t required_size = UINT32_MAX;
+    CHECK(vrrec_encoder_probe_v2(
+              &config,
+              &result,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(required_size == 0);
+    CHECK(result.actual_encoder_kind == 0);
+    return true;
+}
+
+bool RejectsInvalidStructuredEncoderProbeAbiInputs()
+{
+    using vrrecorder::native::testing::EncoderProbeCallCount;
+    using vrrecorder::native::testing::ResetEncoderProbe;
+
+    ResetEncoderProbe();
+    auto config = ValidEncoderProbeConfig();
+    auto result = EmptyEncoderProbeResult();
+    std::uint32_t required_size = UINT32_MAX;
+    CHECK(vrrec_encoder_probe_v2(
+              nullptr, &result, nullptr, 0, &required_size) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(required_size == 0);
+    CHECK(vrrec_encoder_probe_v2(
+              &config, nullptr, nullptr, 0, &required_size) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_encoder_probe_v2(
+              &config, &result, nullptr, 0, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    result.struct_size = sizeof(result) - 1;
+    CHECK(vrrec_encoder_probe_v2(
+              &config, &result, nullptr, 0, &required_size) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    result = EmptyEncoderProbeResult(VRREC_ABI_V1 + 1);
+    CHECK(vrrec_encoder_probe_v2(
+              &config, &result, nullptr, 0, &required_size) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    result = EmptyEncoderProbeResult();
+    CHECK(vrrec_encoder_probe_v2(
+              &config, &result, nullptr, 1, &required_size) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(EncoderProbeCallCount() == 0);
+    return true;
+}
+
 }
 
 int main(int argc, char **argv)
@@ -2825,7 +3136,11 @@ int main(int argc, char **argv)
         !RejectsMalformedOrOversizeSpoutBackendData() ||
         !DestroyWaitsForActiveSpoutPollAndIsIdempotent() ||
         !ProbesSixteenFramesAndReportsOnlyProducedPacket() ||
-        !RejectsInvalidEncoderProbeAbiInputs()) {
+        !RejectsInvalidEncoderProbeAbiInputs() ||
+        !ReturnsStructuredEncoderEvidenceThroughSizedUtf8Buffer() ||
+        !AcceptsEveryFixedEncoderProbeIdentity() ||
+        !RejectsUnverifiedOrMismatchedStructuredEncoderEvidence() ||
+        !RejectsInvalidStructuredEncoderProbeAbiInputs()) {
         return 1;
     }
 

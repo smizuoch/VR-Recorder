@@ -164,6 +164,22 @@ int main(void)
               &packet_produced) == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(packet_produced == 0);
 
+    vrrec_encoder_probe_result_v2 encoder_probe_result = {0};
+    encoder_probe_result.struct_size =
+        sizeof(vrrec_encoder_probe_result_v2);
+    encoder_probe_result.abi_version = VRREC_ABI_V1;
+    uint32_t required_probe_utf8_size = UINT32_MAX;
+    CHECK(vrrec_encoder_probe_v2(
+              &encoder_probe,
+              &encoder_probe_result,
+              NULL,
+              0,
+              &required_probe_utf8_size) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(required_probe_utf8_size == 0);
+    CHECK(encoder_probe_result.actual_encoder_kind == 0);
+    CHECK(encoder_probe_result.validation_flags == 0);
+
     puts("native C header/runtime smoke tests passed");
     return 0;
 }
