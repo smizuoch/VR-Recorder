@@ -11,6 +11,7 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
     private const int MaximumEntryCount = 4096;
     private const string PropsFileName = "ApprovedWindowsRuntime.props";
     private const string PublicationPrefix = "windows-runtime-";
+    private const string TemporaryPublicationPrefix = ".wrs-";
     private readonly IWindowsRuntimeStagingFaultInjector _faultInjector;
     private readonly IWindowsRuntimeDirectoryCommitter _committer;
     private readonly IWindowsRuntimeFileSemanticsVerifier _fileSemantics;
@@ -122,7 +123,7 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
 
         var stagingDirectory = Path.Combine(
             outputRoot,
-            $".{PublicationPrefix}{inventorySha256}.staging-{Guid.NewGuid():N}");
+            TemporaryPublicationPrefix + Guid.NewGuid().ToString("N"));
         RefuseFileOrLink(stagingDirectory);
         Directory.CreateDirectory(stagingDirectory);
         var payloadDirectory = Path.Combine(stagingDirectory, "payload");

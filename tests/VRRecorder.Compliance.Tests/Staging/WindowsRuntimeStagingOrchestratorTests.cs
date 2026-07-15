@@ -81,8 +81,8 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
             fixture.Request,
             CancellationToken.None);
 
-        Assert.True(result.IsStaged);
         Assert.Empty(result.Issues);
+        Assert.True(result.IsStaged);
         var publication = Assert.IsType<WindowsRuntimeStagingPublication>(
             result.Publication);
         Assert.True(File.Exists(publication.ApprovedPropsPath));
@@ -107,8 +107,8 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
             fixture.Request,
             CancellationToken.None);
 
-        Assert.True(result.IsStaged);
         Assert.Empty(result.Issues);
+        Assert.True(result.IsStaged);
         var publication = Assert.IsType<WindowsRuntimeStagingPublication>(
             result.Publication);
         Assert.True(File.Exists(Path.Combine(
