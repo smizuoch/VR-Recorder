@@ -1716,6 +1716,23 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_openvr_process_runtime)
 
 add_executable(
+    vrrecorder_native_openvr_overlay_lifecycle
+    openvr_overlay_lifecycle_tests.cpp
+    "${native_source_root}/src/openvr_overlay_lifecycle.cpp")
+target_compile_features(
+    vrrecorder_native_openvr_overlay_lifecycle PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_openvr_overlay_lifecycle
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_openvr_overlay_lifecycle
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_openvr_overlay_lifecycle)
+
+add_executable(
     vrrecorder_native_spout_capture_worker
     spout_capture_worker_tests.cpp
     "${native_source_root}/src/spout_capture_worker.cpp")
@@ -1954,6 +1971,8 @@ add_test(NAME vrrecorder_native_openvr_steamvr_input_backend_core
     COMMAND vrrecorder_native_openvr_steamvr_input_backend_core)
 add_test(NAME vrrecorder_native_openvr_process_runtime
     COMMAND vrrecorder_native_openvr_process_runtime)
+add_test(NAME vrrecorder_native_openvr_overlay_lifecycle
+    COMMAND vrrecorder_native_openvr_overlay_lifecycle)
 add_test(NAME vrrecorder_native_spout_capture_worker
     COMMAND vrrecorder_native_spout_capture_worker)
 add_test(NAME vrrecorder_native_video_pipeline_session
