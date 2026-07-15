@@ -693,6 +693,26 @@ endif()
 
 if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
     add_executable(
+        vrrecorder_native_ffmpeg_h264_nv12_frame
+        ffmpeg_h264_nv12_frame_tests.cpp
+        "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp")
+    target_compile_features(
+        vrrecorder_native_ffmpeg_h264_nv12_frame PRIVATE cxx_std_20)
+    target_include_directories(
+        vrrecorder_native_ffmpeg_h264_nv12_frame
+        PRIVATE
+            "${native_source_root}/include"
+            "${native_source_root}/src")
+    target_link_libraries(
+        vrrecorder_native_ffmpeg_h264_nv12_frame
+        PRIVATE ${ffmpeg_libavcodec_test_dependency})
+    set_target_properties(
+        vrrecorder_native_ffmpeg_h264_nv12_frame
+        PROPERTIES CXX_EXTENSIONS OFF)
+    vrrecorder_enable_strict_warnings(
+        vrrecorder_native_ffmpeg_h264_nv12_frame)
+
+    add_executable(
         vrrecorder_native_ffmpeg_h264_media_foundation_configuration
         ffmpeg_h264_media_foundation_configuration_tests.cpp
         "${native_source_root}/src/video_encoder_config.cpp"
@@ -1262,6 +1282,11 @@ if(TARGET vrrecorder_native_ffmpeg_h264_media_foundation_configuration)
         NAME vrrecorder_native_ffmpeg_h264_media_foundation_configuration
         COMMAND
             vrrecorder_native_ffmpeg_h264_media_foundation_configuration)
+endif()
+if(TARGET vrrecorder_native_ffmpeg_h264_nv12_frame)
+    add_test(
+        NAME vrrecorder_native_ffmpeg_h264_nv12_frame
+        COMMAND vrrecorder_native_ffmpeg_h264_nv12_frame)
 endif()
 if(TARGET vrrecorder_native_ffmpeg_aac_packet_encoder)
     add_test(NAME vrrecorder_native_ffmpeg_aac_packet_encoder
