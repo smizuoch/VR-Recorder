@@ -62,6 +62,47 @@ add_library(vrrecorder_native SHARED
     "${vrrecorder_native_factory_selection_marker_source}"
     ${vrrecorder_native_factory_sources})
 
+if(VRRECORDER_MEDIA_FACTORY_VARIANT STREQUAL "PRODUCTION")
+    if(NOT WIN32 OR NOT MSVC OR
+       NOT VRRECORDER_ENABLE_FFMPEG_ADAPTERS OR
+       NOT VRRECORDER_SPOUT_FACTORY_VARIANT STREQUAL "PRODUCTION" OR
+       NOT TARGET FFmpeg::avcodec OR
+       NOT TARGET FFmpeg::avformat OR
+       NOT TARGET FFmpeg::avutil OR
+       NOT TARGET FFmpeg::swresample)
+        message(
+            FATAL_ERROR
+            "The production media backend requires Windows MSVC, the pinned FFmpeg SDK, and the production Spout backend")
+    endif()
+    include("${PROJECT_SOURCE_DIR}/cmake/ProductionMediaAacAttachment.cmake")
+    include("${PROJECT_SOURCE_DIR}/cmake/ProductionMediaH264Attachment.cmake")
+    vrrecorder_resolve_production_media_aac_attachment(
+        vrrecorder_production_media_aac_sources
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    vrrecorder_resolve_production_media_h264_attachment(
+        vrrecorder_production_media_h264_sources
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(
+        vrrecorder_production_media_sources
+        ${vrrecorder_production_media_aac_sources}
+        ${vrrecorder_production_media_h264_sources}
+        src/ffmpeg_h264_software_codec_session.cpp
+        src/ffmpeg_libavformat_fragmented_mp4_muxer_port.cpp)
+    list(REMOVE_DUPLICATES vrrecorder_production_media_sources)
+    target_sources(
+        vrrecorder_native
+        PRIVATE ${vrrecorder_production_media_sources})
+    if(WIN32)
+        target_link_libraries(
+            vrrecorder_native
+            PRIVATE
+                FFmpeg::avcodec
+                FFmpeg::avformat
+                FFmpeg::avutil
+                FFmpeg::swresample)
+    endif()
+endif()
+
 target_sources(vrrecorder_native PRIVATE src/video_encoding_pump.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_encoding_worker.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_pipeline_session.cpp)

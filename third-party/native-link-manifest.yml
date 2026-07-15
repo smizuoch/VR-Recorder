@@ -82,6 +82,46 @@
       "componentId": "spout2",
       "artifactFileName": "SpoutDX_static.lib",
       "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "FFmpeg::avcodec",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "ThirdParty",
+      "componentId": "ffmpeg",
+      "artifactFileName": "avcodec-62.dll",
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "FFmpeg::avformat",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "ThirdParty",
+      "componentId": "ffmpeg",
+      "artifactFileName": "avformat-62.dll",
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "FFmpeg::avutil",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "ThirdParty",
+      "componentId": "ffmpeg",
+      "artifactFileName": "avutil-60.dll",
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "FFmpeg::swresample",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "ThirdParty",
+      "componentId": "ffmpeg",
+      "artifactFileName": "swresample-6.dll",
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
     }
   ]
 }

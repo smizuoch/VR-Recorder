@@ -66,6 +66,7 @@
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] production media factoryは実資源を開く前にfull ABI、Windows絶対pending path、30～120の整数FPS、MF software encoder、同一の非zero Spout／encoder adapter、bounded geometry、layout／routing／gain／source formatを検証し、初期layoutをexactに導出する
 - [x] audio pipelineへ渡すsession epochはbackend構築時でなくStart直前にclockから取得し、endpoint／encoding windowを保持したままdesktop／microphoneへ同じQPC 100 ns値を渡す。clock失敗ではcaptureを開始しない
+- [x] Windows production media ownerが固定Spout2 receiver→CFR scheduler／clock→adaptive D3D11 NV12 processor／readback→software `h264_mf`、WASAPI desktop／microphone→AAC-LC、pre-header→fragmented MP4を既存sessionへ配線する。High open不能時だけMainへ再openし、initial layout、Start／stop／Abort／statisticsの全寿命を単一ownerで保持する
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
 - [x] 初回H.264 configでB-frameを明示的に0へ固定する
 - [x] AbortがFinishより先ならtrailerを開始せず、trailer完了時の再確認でAbortを観測した場合はfile flushを開始しない。既に開始したtrailer／flushはrollbackしない
@@ -164,6 +165,7 @@
 - [x] Bind the Windows D3D11 processor lazily to the first source texture's device, reuse its Port on the same device, and safely rebind to another device on the same adapter; publish no late output when Abort races bind/convert, and compile/link the real-texture two-device integration EXE under MSVC and LLVM-MinGW
 - [x] Before opening production media resources, validate the full ABI, absolute Windows pending path, integral 30–120 FPS, MF software encoder, matching nonzero Spout/encoder adapters, bounded geometry, layout/routing/gains/source format, and derive the exact initial layout
 - [x] Obtain the audio session epoch from a clock immediately before pipeline Start rather than at backend construction, preserve endpoints and the encoding window while passing one QPC 100 ns value to desktop and microphone, and do not start capture when the clock fails
+- [x] Have one Windows production media owner wire the pinned Spout2 receiver through CFR scheduling/clock, adaptive D3D11 NV12 processing/readback, and software `h264_mf`, plus WASAPI desktop/microphone through AAC-LC, into pre-header fragmented MP4 sessions; reopen as Main only when High cannot open and retain initial-layout, Start/stop/Abort/statistics lifetimes under that owner
 - [x] Split owned-output preparation from encoding in the processing sink and preserve that two-phase type through the worker; after a successful Acquire, release the source exactly once after processing and call the encoder/mux boundary only after Release succeeds
 - [x] Make the Spout receiver boundary authoritative for nonzero surface generations: drop older generations without replacing the newest CFR frame, reject resource mutation within one generation, accept same-adapter replacements only with a newer generation, propagate adapter changes distinctly, and reject processor output from a different generation before encoding
 - [x] Isolate D3D11 conversion behind an injectable Port, validating the source plan and owned NV12 output adapter/generation; distinguish device removed, device reset, and OOM, terminalize failures, release rejected or Abort-racing outputs, and abort the Port exactly once
