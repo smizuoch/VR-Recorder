@@ -151,6 +151,7 @@ public sealed class JsonFileFirstRunSetupStore
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
         {
             Indented = true,
+            NewLine = "\n",
         }))
         {
             writer.WriteStartObject();

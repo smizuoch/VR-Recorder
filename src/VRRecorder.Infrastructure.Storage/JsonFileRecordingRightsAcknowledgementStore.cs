@@ -13,6 +13,7 @@ public sealed class JsonFileRecordingRightsAcknowledgementStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
+        NewLine = "\n",
     };
     private readonly string _path;
     private readonly IWallClock _clock;
