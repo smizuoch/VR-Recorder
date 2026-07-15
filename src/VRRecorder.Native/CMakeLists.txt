@@ -71,6 +71,24 @@ target_sources(vrrecorder_native PRIVATE src/encoder_probe_evidence_builder.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_pipeline.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_synthetic_nv12.cpp)
 
+if(VRRECORDER_SPOUT_FACTORY_VARIANT STREQUAL "PRODUCTION")
+    if(NOT WIN32 OR NOT MSVC OR NOT VRRECORDER_ENABLE_SPOUT2_ADAPTER OR
+       NOT TARGET Spout2::SpoutDX_static)
+        message(
+            FATAL_ERROR
+            "The production Spout2 backend requires the pinned Windows MSVC static SDK")
+    endif()
+    target_sources(
+        vrrecorder_native
+        PRIVATE
+            src/spout2_source_backend_core.cpp
+            src/windows_d3d11_owned_video_surface.cpp
+            src/windows_spout2_receiver_port.cpp)
+    target_link_libraries(
+        vrrecorder_native
+        PRIVATE Spout2::SpoutDX_static)
+endif()
+
 if(WIN32)
     target_sources(
         vrrecorder_native

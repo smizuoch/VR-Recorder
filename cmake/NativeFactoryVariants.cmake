@@ -93,6 +93,13 @@ function(vrrecorder_select_native_factory_sources output source_root)
             "Production media or encoder-probe factories require the pinned FFmpeg SDK")
     endif()
 
+    if(VRRECORDER_SPOUT_FACTORY_VARIANT STREQUAL "PRODUCTION" AND
+       NOT VRRECORDER_ENABLE_SPOUT2_ADAPTER)
+        message(
+            FATAL_ERROR
+            "The production Spout factory requires the pinned Spout2 SDK")
+    endif()
+
     set(unique_sources ${selected_sources})
     list(REMOVE_DUPLICATES unique_sources)
     list(LENGTH selected_sources selected_count)
