@@ -47,8 +47,9 @@ public:
         return VideoSurfaceAcquireResult::Acquired;
     }
 
-    void ReleaseFromRead() noexcept override
+    vrrec_status_t ReleaseFromRead() noexcept override
     {
+        return VRREC_STATUS_OK;
     }
 
     void *native_handle = reinterpret_cast<void *>(1);

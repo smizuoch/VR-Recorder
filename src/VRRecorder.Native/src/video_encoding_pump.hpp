@@ -38,6 +38,8 @@ enum class VideoEncodingResult {
     Submitted,
     NoFrame,
     SurfaceTimeout,
+    SurfaceAbandoned,
+    SurfaceDeviceLost,
     SurfaceFailed,
     ProcessorFailed,
     MuxFailed,

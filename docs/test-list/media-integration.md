@@ -53,6 +53,7 @@
 - [x] 実`FfmpegH264PacketEncoderWrite`をvideo sink writeへ変換し、late-ready時だけ実packetを生成したencoder自身のidentityと同ownerのdescriptor pointerを付与する。open-time descriptorの通常writeにはready metadataを再発行しない
 - [x] descriptor前のproducer Finish、header Start中Abort、pre-header drain中Abortを決定的に競合させ、遅延header成功／in-flight write成功をcommitせず、全待機ticketを失敗へ起床してdownstreamをexactly once Abortする
 - [x] 処理済み`ScheduledVideoFrame`をowned system-memory NV12 mappingから実H.264 encoderへ渡すadapterを追加し、CFR tickを設定FPSのmicrosecond PTSへoverflow-safeに変換する。encode復帰後mappingを解放し、late descriptor metadataを維持してAbort時はmapper→encoderをexactly once停止する
+- [x] video surface acquireでTimeout／Abandoned／DeviceLost／一般failureを型分離し、`ReleaseFromRead`をstatus返却にする。Release failureではsinkをterminal Abortし、成功packet数、first-packet、latency統計をcommitしない（Release前encodeの解消は次のprocessing境界テストで行う）
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -142,6 +143,7 @@
 - [x] Adapt real `FfmpegH264PacketEncoderWrite` values for the video sink, attaching the actual packet-producing encoder identity and its owned descriptor pointer only on late readiness, without re-emitting ready metadata on ordinary writes after open-time descriptor discovery
 - [x] Deterministically race producer Finish before descriptor readiness, Abort during header Start, and Abort during pre-header drain; commit neither a late header success nor an in-flight write, wake every queued ticket as failed, and abort downstream exactly once
 - [x] Adapt processed `ScheduledVideoFrame` values from owned system-memory NV12 mappings into the real H.264 encoder, converting CFR ticks to microsecond PTS at the configured FPS with overflow checks; release mappings after encode, preserve late-descriptor metadata, and abort mapper then encoder exactly once
+- [x] Distinguish Timeout, Abandoned, DeviceLost, and generic video-surface acquisition failures and return status from `ReleaseFromRead`; on release failure terminally abort the sink and commit no successful packet count, first-packet signal, or latency statistics (moving encode after release remains the next processing-boundary slice)
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video

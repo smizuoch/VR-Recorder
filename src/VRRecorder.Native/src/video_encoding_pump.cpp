@@ -44,6 +44,14 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
             read = {};
             return VideoEncodingResult::SurfaceTimeout;
         }
+        if (acquire == VideoSurfaceAcquireResult::Abandoned) {
+            read = {};
+            return VideoEncodingResult::SurfaceAbandoned;
+        }
+        if (acquire == VideoSurfaceAcquireResult::DeviceLost) {
+            read = {};
+            return VideoEncodingResult::SurfaceDeviceLost;
+        }
         if (acquire != VideoSurfaceAcquireResult::Acquired) {
             read = {};
             return VideoEncodingResult::SurfaceFailed;
@@ -52,7 +60,18 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
 
     const auto write = sink_.Write(scheduled);
     if (scheduled.surface) {
-        scheduled.surface->ReleaseFromRead();
+        const auto release_status = scheduled.surface->ReleaseFromRead();
+        if (release_status != VRREC_STATUS_OK) {
+            sink_.Abort();
+            read = {
+                scheduled,
+                0,
+                0,
+                release_status,
+                false,
+            };
+            return VideoEncodingResult::SurfaceFailed;
+        }
     }
     read = {
         scheduled,

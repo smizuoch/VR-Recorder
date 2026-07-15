@@ -18,6 +18,8 @@ struct VideoSurfaceDescriptor final {
 enum class VideoSurfaceAcquireResult {
     Acquired,
     Timeout,
+    Abandoned,
+    DeviceLost,
     Failed,
 };
 
@@ -29,7 +31,7 @@ public:
     virtual void *NativeHandle() const noexcept = 0;
     virtual VideoSurfaceAcquireResult AcquireForRead(
         std::chrono::milliseconds timeout) noexcept = 0;
-    virtual void ReleaseFromRead() noexcept = 0;
+    virtual vrrec_status_t ReleaseFromRead() noexcept = 0;
 };
 
 }

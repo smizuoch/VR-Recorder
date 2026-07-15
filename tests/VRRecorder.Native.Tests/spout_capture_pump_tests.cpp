@@ -48,8 +48,9 @@ public:
         return VideoSurfaceAcquireResult::Acquired;
     }
 
-    void ReleaseFromRead() noexcept override
+    vrrec_status_t ReleaseFromRead() noexcept override
     {
+        return VRREC_STATUS_OK;
     }
 
 private:
@@ -83,8 +84,9 @@ public:
         return VideoSurfaceAcquireResult::Acquired;
     }
 
-    void ReleaseFromRead() noexcept override
+    vrrec_status_t ReleaseFromRead() noexcept override
     {
+        return VRREC_STATUS_OK;
     }
 
     void WaitForDescriptor() const

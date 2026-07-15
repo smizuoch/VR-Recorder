@@ -46,13 +46,15 @@ public:
         return acquire_result;
     }
 
-    void ReleaseFromRead() noexcept override
+    vrrec_status_t ReleaseFromRead() noexcept override
     {
         ++release_calls;
+        return release_status;
     }
 
     VideoSurfaceAcquireResult acquire_result =
         VideoSurfaceAcquireResult::Acquired;
+    vrrec_status_t release_status = VRREC_STATUS_OK;
     std::chrono::milliseconds last_timeout {0};
     std::size_t acquire_calls = 0;
     std::size_t release_calls = 0;
@@ -227,6 +229,55 @@ void ReleasesTheSurfaceWhenTheEncoderFails()
     CHECK(surface->release_calls == 1);
 }
 
+void DistinguishesAbandonedAndDeviceLostSurfaceAcquisition()
+{
+    for (const auto &[acquire, expected] : {
+             std::pair {
+                 VideoSurfaceAcquireResult::Abandoned,
+                 VideoEncodingResult::SurfaceAbandoned},
+             std::pair {
+                 VideoSurfaceAcquireResult::DeviceLost,
+                 VideoEncodingResult::SurfaceDeviceLost},
+         }) {
+        VideoCfrScheduler scheduler;
+        ScriptedVideoEncoderSink sink;
+        VideoEncodingPump pump(scheduler, sink);
+        const auto surface = std::make_shared<ScriptedVideoSurface>();
+        surface->acquire_result = acquire;
+        CHECK(scheduler.Push({70, 7'000'000, surface}) ==
+              VRREC_STATUS_OK);
+        VideoEncodingRead read {};
+
+        CHECK(pump.PumpTick(0, read) == expected);
+        CHECK(surface->acquire_calls == 1);
+        CHECK(surface->release_calls == 0);
+        CHECK(sink.frames.empty());
+    }
+}
+
+void ReleaseFailureAbortsWithoutCommittingSuccessfulWriteStatistics()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedVideoEncoderSink sink;
+    sink.writes.push_back({VRREC_STATUS_OK, 1, 200});
+    VideoEncodingPump pump(scheduler, sink);
+    const auto surface = std::make_shared<ScriptedVideoSurface>();
+    surface->release_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(scheduler.Push({80, 8'000'000, surface}) == VRREC_STATUS_OK);
+    VideoEncodingRead read {};
+
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::SurfaceFailed);
+
+    CHECK(surface->release_calls == 1);
+    CHECK(sink.frames.size() == 1);
+    CHECK(sink.abort_calls == 1);
+    CHECK(!read.first_packet_muxed);
+    CHECK(read.muxed_packet_count == 0);
+    CHECK(read.encode_latency_microseconds == 0);
+    CHECK(read.encoder_status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(pump.Statistics().muxed_packet_count == 0);
+}
+
 }
 
 int main()
@@ -238,5 +289,7 @@ int main()
     AcquiresAndReleasesTheSharedSurfaceAroundEncoderWrite();
     KeepsSurfaceTimeoutSeparateAndDoesNotCallTheEncoder();
     ReleasesTheSurfaceWhenTheEncoderFails();
+    DistinguishesAbandonedAndDeviceLostSurfaceAcquisition();
+    ReleaseFailureAbortsWithoutCommittingSuccessfulWriteStatistics();
     return 0;
 }
