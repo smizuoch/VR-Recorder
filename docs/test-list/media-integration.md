@@ -32,6 +32,7 @@
 - [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する
 - [x] 公式FFmpeg 8.1.2の実libavformat PortでAVCC／AAC metadata、exact 192 kbpsの`esds`／`btrt`、実timestamp rescale、fragment option、負AAC priming edit list、packet消費、trailer／flush／close、`/dev/full`、pending非公開を検証し、未変換のAnnex B／SkipSamplesをfail-closed拒否する
 - [x] H.264／AAC descriptorがmicrosecond time base、codec形式、profile／layout、AAC frame size／initial padding／exact 192 kbps、owned extradataを持ち、invalid descriptorをheader前に拒否する
+- [x] portable Annex B SPS／PPS／IDRからavcCとlength-prefixed AUを生成し、missing／conflicting parameter set、unsupported NAL、profile／寸法不一致をfail-closed拒否する
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
