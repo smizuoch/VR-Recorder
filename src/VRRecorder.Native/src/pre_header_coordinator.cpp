@@ -249,13 +249,20 @@ Mp4MuxResult PreHeaderCoordinator::SubmitBatch(
     std::span<const EncodedMediaPacket> packets) noexcept
 {
     BatchMeasurements measurements;
-    if (!MeasureBatch(producer, packets, measurements)) {
-        return Mp4MuxResult::InvalidPacket;
-    }
+    const auto batch_valid = MeasureBatch(producer, packets, measurements);
 
     std::unique_lock lock(mutex_);
     if (abort_requested_.load() || state_ == PreHeaderState::Aborted) {
         return Mp4MuxResult::MuxFailed;
+    }
+    if (!batch_valid) {
+        if (state_ == PreHeaderState::Priming ||
+            state_ == PreHeaderState::HeaderStarting ||
+            state_ == PreHeaderState::DrainingPreHeader ||
+            state_ == PreHeaderState::Running) {
+            FailLocked(VRREC_STATUS_INVALID_ARGUMENT);
+        }
+        return Mp4MuxResult::InvalidPacket;
     }
     if (state_ == PreHeaderState::Running) {
         lock.unlock();

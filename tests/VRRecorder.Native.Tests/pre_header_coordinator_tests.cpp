@@ -321,6 +321,50 @@ void EnforcesEveryPerStreamQueueLimitBeforeMutatingTheBatch()
         {Packet(MediaStreamKind::Audio, 1, std::byte {0xA1})});
 }
 
+void InvalidPreHeaderBatchTerminallyWakesExistingTickets()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector valid {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    auto valid_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, valid);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+    auto invalid = Packet(MediaStreamKind::Audio, 1, std::byte {0xA1});
+    invalid.payload.clear();
+
+    const auto invalid_result = coordinator.SubmitBatch(
+        MediaStreamKind::Audio,
+        std::span<const EncodedMediaPacket>(&invalid, 1));
+    const auto state_after_invalid = coordinator.State();
+    const auto request_abort_calls_after_invalid =
+        downstream.request_abort_calls;
+    const auto abort_calls_after_invalid = downstream.abort_calls;
+    if (state_after_invalid != PreHeaderState::Failed) {
+        coordinator.Abort();
+    }
+
+    CHECK(invalid_result == Mp4MuxResult::InvalidPacket);
+    CHECK(state_after_invalid == PreHeaderState::Failed);
+    CHECK(valid_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(request_abort_calls_after_invalid == 1);
+    CHECK(abort_calls_after_invalid == 1);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+}
+
 void StartsExactlyOnceRegardlessOfReadinessOrder()
 {
     RecordingDownstream downstream;
@@ -449,6 +493,7 @@ int main()
     QueuesOwnedPacketsAndDrainsThemInDeterministicDtsOrder();
     AbortWakesAQueuedSubmissionWithoutWritingIt();
     EnforcesEveryPerStreamQueueLimitBeforeMutatingTheBatch();
+    InvalidPreHeaderBatchTerminallyWakesExistingTickets();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();
