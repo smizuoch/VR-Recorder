@@ -369,6 +369,25 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(vrrecorder_native_audio_capture_normalizer)
 
 add_executable(
+    vrrecorder_native_wasapi_audio_capture_source_core
+    wasapi_audio_capture_source_core_tests.cpp
+    "${native_source_root}/src/wasapi_audio_capture_source_core.cpp"
+    "${native_source_root}/src/audio_capture_normalizer.cpp")
+target_compile_features(
+    vrrecorder_native_wasapi_audio_capture_source_core PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_wasapi_audio_capture_source_core
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_wasapi_audio_capture_source_core
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_wasapi_audio_capture_source_core)
+
+add_executable(
     vrrecorder_native_audio_capture_source_factory
     audio_capture_source_factory_tests.cpp)
 target_compile_features(
@@ -1598,6 +1617,8 @@ add_test(NAME vrrecorder_native_audio_capture_pump
     COMMAND vrrecorder_native_audio_capture_pump)
 add_test(NAME vrrecorder_native_audio_capture_normalizer
     COMMAND vrrecorder_native_audio_capture_normalizer)
+add_test(NAME vrrecorder_native_wasapi_audio_capture_source_core
+    COMMAND vrrecorder_native_wasapi_audio_capture_source_core)
 add_test(NAME vrrecorder_native_audio_capture_source_factory
     COMMAND vrrecorder_native_audio_capture_source_factory)
 add_test(NAME vrrecorder_native_audio_capture_platform_support
