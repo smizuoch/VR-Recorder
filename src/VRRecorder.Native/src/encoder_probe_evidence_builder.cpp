@@ -12,8 +12,6 @@
 namespace vrrecorder::native {
 namespace {
 
-constexpr std::uint32_t RequiredSyntheticFrameCount = 16;
-
 bool HasRequiredOpenedIdentity(
     const vrrec_encoder_probe_config_v1 &config,
     const EncoderProbeOpenedIdentity &opened,
@@ -67,7 +65,8 @@ vrrec_status_t BuildVerifiedEncoderProbeEvidence(
         H264VideoEncoderConfig encoder_config;
         if (config.struct_size < sizeof(vrrec_encoder_probe_config_v1) ||
             config.abi_version != VRREC_ABI_V1 ||
-            config.synthetic_frame_count != RequiredSyntheticFrameCount ||
+            config.synthetic_frame_count !=
+                EncoderProbeSyntheticFrameCount ||
             config.adapter_luid == 0 || config.fps_denominator != 1 ||
             config.gpu_identity_utf8 == nullptr ||
             config.gpu_identity_utf8[0] == '\0' || config.reserved != 0 ||

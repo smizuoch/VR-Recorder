@@ -1,12 +1,15 @@
 #ifndef VRRECORDER_NATIVE_ENCODER_PROBE_IDENTITY_HPP
 #define VRRECORDER_NATIVE_ENCODER_PROBE_IDENTITY_HPP
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
 #include "vrrecorder_native.h"
 
 namespace vrrecorder::native {
+
+inline constexpr std::uint32_t EncoderProbeSyntheticFrameCount = 16;
 
 struct ExpectedEncoderProbeIdentity final {
     std::string_view codec_name;

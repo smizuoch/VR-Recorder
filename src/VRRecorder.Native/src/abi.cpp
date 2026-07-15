@@ -1014,7 +1014,6 @@ constexpr std::size_t SessionConfigLegacyMediaSize =
 constexpr std::size_t SessionConfigSourceFormatSize =
     sizeof(vrrec_session_config_v1);
 constexpr double MaximumEstimatedSourceFps = 1000.0;
-constexpr std::uint32_t EncoderProbeSyntheticFrameCount = 16;
 
 vrrec_session_config_v1 NormalizeSessionConfig(
     const vrrec_session_config_v1 &config) noexcept
@@ -1294,7 +1293,7 @@ vrrec_status_t ValidateEncoderProbeArguments(
     std::string_view gpu_identity;
     if (!IsEncoderKindSupported(config->encoder_kind) ||
         config->synthetic_frame_count !=
-            EncoderProbeSyntheticFrameCount ||
+            vrrecorder::native::EncoderProbeSyntheticFrameCount ||
         config->adapter_luid == 0 ||
         config->width == 0 ||
         config->width > static_cast<std::uint32_t>(INT32_MAX) ||

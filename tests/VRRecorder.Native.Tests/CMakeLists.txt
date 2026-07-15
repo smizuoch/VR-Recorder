@@ -729,6 +729,29 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_encoder_probe_evidence_builder)
 
 add_executable(
+    vrrecorder_native_encoder_probe_pipeline
+    encoder_probe_pipeline_tests.cpp
+    "${native_source_root}/src/encoder_probe_pipeline.cpp"
+    "${native_source_root}/src/encoder_probe_evidence_builder.cpp"
+    "${native_source_root}/src/h264_packet_normalizer.cpp"
+    "${native_source_root}/src/h264_bitstream_converter.cpp"
+    "${native_source_root}/src/h264_sps_parser.cpp"
+    "${native_source_root}/src/video_encoder_config.cpp")
+target_compile_features(
+    vrrecorder_native_encoder_probe_pipeline PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_encoder_probe_pipeline
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+set_target_properties(
+    vrrecorder_native_encoder_probe_pipeline
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_encoder_probe_pipeline)
+
+add_executable(
     vrrecorder_native_video_encoder_config
     video_encoder_config_tests.cpp
     "${native_source_root}/src/video_encoder_config.cpp")
@@ -1489,6 +1512,8 @@ add_test(NAME vrrecorder_native_h264_packet_normalizer
     COMMAND vrrecorder_native_h264_packet_normalizer)
 add_test(NAME vrrecorder_native_encoder_probe_evidence_builder
     COMMAND vrrecorder_native_encoder_probe_evidence_builder)
+add_test(NAME vrrecorder_native_encoder_probe_pipeline
+    COMMAND vrrecorder_native_encoder_probe_pipeline)
 add_test(NAME vrrecorder_native_video_encoder_config
     COMMAND vrrecorder_native_video_encoder_config)
 add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator
