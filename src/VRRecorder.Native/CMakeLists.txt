@@ -69,6 +69,7 @@ target_sources(vrrecorder_native PRIVATE src/keyed_mutex_video_surface.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_encoder_config.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_evidence_builder.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_pipeline.cpp)
+target_sources(vrrecorder_native PRIVATE src/encoder_probe_synthetic_nv12.cpp)
 
 if(WIN32)
     target_sources(

@@ -752,6 +752,23 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_encoder_probe_pipeline)
 
 add_executable(
+    vrrecorder_native_encoder_probe_synthetic_nv12
+    encoder_probe_synthetic_nv12_tests.cpp
+    "${native_source_root}/src/encoder_probe_synthetic_nv12.cpp")
+target_compile_features(
+    vrrecorder_native_encoder_probe_synthetic_nv12 PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_encoder_probe_synthetic_nv12
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_encoder_probe_synthetic_nv12
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_encoder_probe_synthetic_nv12)
+
+add_executable(
     vrrecorder_native_video_encoder_config
     video_encoder_config_tests.cpp
     "${native_source_root}/src/video_encoder_config.cpp")
@@ -1514,6 +1531,8 @@ add_test(NAME vrrecorder_native_encoder_probe_evidence_builder
     COMMAND vrrecorder_native_encoder_probe_evidence_builder)
 add_test(NAME vrrecorder_native_encoder_probe_pipeline
     COMMAND vrrecorder_native_encoder_probe_pipeline)
+add_test(NAME vrrecorder_native_encoder_probe_synthetic_nv12
+    COMMAND vrrecorder_native_encoder_probe_synthetic_nv12)
 add_test(NAME vrrecorder_native_video_encoder_config
     COMMAND vrrecorder_native_video_encoder_config)
 add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator

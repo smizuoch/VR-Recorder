@@ -30,6 +30,7 @@
 - [x] structured probe証跡をopened-context readback、source／processor／encoder LUID、16 synthetic frame由来の全Annex B packet、同じ正規化packetを入力したdecode結果からだけ構築し、identity／format／profile／fps／B-frame／packet／decode不一致ではcaller証跡を変更せず拒否する
 - [x] 単一encoder probe sessionへ16 synthetic frameをcanonical CFR timestampでexactly once投入し、0／複数packetとFinish drainを順序保持して同じdecode証拠へ集約し、Create／Encode／Finish失敗をexactly-once Abortして未検証証跡を公開しない
 - [x] bool-only probe v1とstructured probe v2を同じverified pipeline backendへ接続し、v1も16-frame packet／decode検証完了後だけtrueを返す
+- [x] 16-frame probe用のdeterministic limited-range NV12 patternをowned planeとして生成し、frame indexだけをcodec time-base PTSへ使い、microsecond scheduleとの混同と不正寸法／indexによるcaller plane置換を防ぐ
 - [ ] 4つのactual production factory sourceを実装し、production C ABI／composition smokeがplaceholder sourceへ委譲しないことを検証する
 - [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
 - [x] session Start確定まではruntime操作と非terminal eventを拒否してFIRSTだけを保留し、Abort／Fault／backend戻り値を仲裁する。Start中Stopを拒否し、同時Stopの失敗／Fault／Abort結果を全callerへ共有・cacheして失敗後もgateを閉じる
@@ -67,6 +68,7 @@
 - [x] Build structured-probe evidence only from opened-context readback, source/processor/encoder LUIDs, every Annex-B packet produced from 16 synthetic frames, and decode results from those same normalized packets; reject identity/format/profile/frame-rate/B-frame/packet/decode mismatches without mutating caller evidence
 - [x] Submit exactly 16 synthetic frames with canonical CFR timestamps to one encoder-probe session, preserve ordering across zero/multiple-packet encode batches and Finish drain, aggregate them into the same decode proof, and exactly-once Abort Create/Encode/Finish failures without publishing unverified evidence
 - [x] Route bool-only probe v1 and structured probe v2 through the same verified-pipeline backend so v1 becomes true only after the 16-frame packet/decode proof completes
+- [x] Generate deterministic limited-range NV12 patterns for all 16 probe frames as owned planes, use only the frame index as the codec-time-base PTS, and reject invalid dimensions/indices without replacing caller planes or confusing codec ticks with the microsecond schedule
 - [ ] Implement all four actual production factory sources and verify with production C-ABI/composition smoke tests that none delegates to an unavailable source
 - [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI
 - [x] Keep runtime operations and nonterminal events gated until session Start commits while deferring only FIRST; arbitrate Abort/Fault/backend results; reject Stop during Start; and share/cache concurrent Stop failure, Fault, or Abort results while keeping the gate closed after failure
