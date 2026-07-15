@@ -1,11 +1,13 @@
 #include "pre_header_coordinator.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <future>
 #include <iostream>
+#include <mutex>
 #include <span>
 #include <thread>
 #include <vector>
@@ -105,6 +107,109 @@ public:
     std::size_t submit_calls = 0;
     std::size_t request_abort_calls = 0;
     std::size_t abort_calls = 0;
+};
+
+class BlockingFirstSubmissionDownstream final
+    : public MediaMuxSessionPort,
+      public EncodedMediaPacketSubmissionPort {
+public:
+    vrrec_status_t Start(
+        const FragmentedMp4StreamConfiguration &) noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        ++start_calls_;
+        return VRREC_STATUS_OK;
+    }
+
+    Mp4MuxResult SubmitBatch(
+        MediaStreamKind producer,
+        std::span<const EncodedMediaPacket> packets) noexcept override
+    {
+        std::unique_lock lock(mutex_);
+        ++submit_calls_;
+        try {
+            for (const auto &packet : packets) {
+                if (packet.stream != producer) {
+                    return Mp4MuxResult::InvalidPacket;
+                }
+                submitted_packets_.push_back(packet);
+            }
+        } catch (...) {
+            return Mp4MuxResult::MuxFailed;
+        }
+        if (submit_calls_ == 1) {
+            first_submit_entered_ = true;
+            changed_.notify_all();
+            changed_.wait(lock, [&] {
+                return release_first_submit_ || aborted_;
+            });
+        }
+        return aborted_ ? Mp4MuxResult::MuxFailed : Mp4MuxResult::Written;
+    }
+
+    vrrec_status_t EncoderFinished(MediaStreamKind) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
+    void EncoderFailed(MediaStreamKind) noexcept override
+    {
+    }
+
+    void RequestAbort() noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        ++request_abort_calls_;
+        aborted_ = true;
+        changed_.notify_all();
+    }
+
+    void Abort() noexcept override
+    {
+        const std::lock_guard lock(mutex_);
+        ++abort_calls_;
+        aborted_ = true;
+        changed_.notify_all();
+    }
+
+    void WaitForFirstSubmission()
+    {
+        std::unique_lock lock(mutex_);
+        CHECK(changed_.wait_for(lock, std::chrono::seconds(2), [&] {
+            return first_submit_entered_;
+        }));
+    }
+
+    void ReleaseFirstSubmission() noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        release_first_submit_ = true;
+        changed_.notify_all();
+    }
+
+    std::vector<EncodedMediaPacket> SubmittedPackets() const
+    {
+        const std::lock_guard lock(mutex_);
+        return submitted_packets_;
+    }
+
+    std::size_t SubmitCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return submit_calls_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::vector<EncodedMediaPacket> submitted_packets_;
+    std::size_t start_calls_ = 0;
+    std::size_t submit_calls_ = 0;
+    std::size_t request_abort_calls_ = 0;
+    std::size_t abort_calls_ = 0;
+    bool first_submit_entered_ = false;
+    bool release_first_submit_ = false;
+    bool aborted_ = false;
 };
 
 EncodedMediaPacket Packet(
@@ -365,6 +470,70 @@ void InvalidPreHeaderBatchTerminallyWakesExistingTickets()
     CHECK(downstream.submit_calls == 0);
 }
 
+void KeepsPacketsAfterTheHeaderAdmissionCutInTheLiveBacklog()
+{
+    BlockingFirstSubmissionDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector pre_header_audio {
+        Packet(MediaStreamKind::Audio, 100, std::byte {0xA0})};
+    const std::vector pre_header_video {
+        Packet(MediaStreamKind::Video, 200, std::byte {0xB0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(
+            MediaStreamKind::Audio,
+            pre_header_audio);
+    });
+    auto video_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(
+            MediaStreamKind::Video,
+            pre_header_video);
+    });
+    WaitForQueuedPackets(coordinator, 2);
+
+    auto descriptor_result = std::async(std::launch::async, [&] {
+        return coordinator.PublishVideoDescriptor(
+            &encoder_identity,
+            VideoDescriptor());
+    });
+    downstream.WaitForFirstSubmission();
+    CHECK(coordinator.AdmissionCutSequenceForTesting() == 2);
+    const std::vector live_audio {
+        Packet(MediaStreamKind::Audio, 150, std::byte {0xA1}),
+        Packet(MediaStreamKind::Audio, 160, std::byte {0xA2}),
+    };
+    auto live_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, live_audio);
+    });
+    WaitForQueuedPackets(coordinator, 4);
+    CHECK(coordinator.AdmissionCutSequenceForTesting() == 2);
+
+    downstream.ReleaseFirstSubmission();
+
+    CHECK(descriptor_result.get() == VRREC_STATUS_OK);
+    CHECK(audio_result.get() == Mp4MuxResult::Written);
+    CHECK(video_result.get() == Mp4MuxResult::Written);
+    CHECK(live_result.get() == Mp4MuxResult::Written);
+    CHECK(downstream.SubmitCalls() == 3);
+    const auto submitted = downstream.SubmittedPackets();
+    CHECK(submitted.size() == 4);
+    CHECK(submitted[0].dts_microseconds == 100);
+    CHECK(submitted[1].dts_microseconds == 200);
+    CHECK(submitted[2].dts_microseconds == 150);
+    CHECK(submitted[3].dts_microseconds == 160);
+    CHECK(coordinator.State() == PreHeaderState::Running);
+}
+
 void StartsExactlyOnceRegardlessOfReadinessOrder()
 {
     RecordingDownstream downstream;
@@ -494,6 +663,7 @@ int main()
     AbortWakesAQueuedSubmissionWithoutWritingIt();
     EnforcesEveryPerStreamQueueLimitBeforeMutatingTheBatch();
     InvalidPreHeaderBatchTerminallyWakesExistingTickets();
+    KeepsPacketsAfterTheHeaderAdmissionCutInTheLiveBacklog();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();

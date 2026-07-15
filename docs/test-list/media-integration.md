@@ -44,6 +44,7 @@
 - [x] header前のA/V batchをcaller bufferから分離したowned packetとして保持し、実mux drain完了まで`Written`を返さない。pre-header packetをDTS順、同一DTSはvideo→audioの固定順でexactly once submitし、Abortでは未書込みticketを`MuxFailed`で起床する
 - [x] pre-header queueをaudio／video別のpacket数、payload＋side-data bytes、DTS spanで制限し、batch全体をoverflow-safeにpreflightする。いずれかの上限超過では部分追加せず、既存ticketを失敗させてheader／submit 0件のままterminal Abortする
 - [x] activeなpre-header／running submissionでstream不一致、empty payload、unknown timestamp、不正timingを検出したら原因を`InvalidPacket`で返しつつterminal failureへ遷移し、先行待機ticketを起床してretryを拒否する
+- [x] header成功直後にmutex下でadmission sequenceを一度だけcutし、cut未満のA/VだけをDTS mixed drainする。drain中のcut以降packetはlive backlogへ保持し、pre-header完了後に元batch境界を保って送ってから一度だけRunningへ遷移する
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -124,6 +125,7 @@
 - [x] Retain pre-header A/V batches as owned packets detached from caller buffers and return `Written` only after their actual mux drain; submit them exactly once in DTS order with a fixed video-before-audio tie-break, and wake unwritten tickets as `MuxFailed` on Abort
 - [x] Bound pre-header queues independently for audio and video by packet count, payload-plus-side-data bytes, and DTS span, preflighting the entire batch with overflow-safe arithmetic; exceeding any limit adds no partial batch, fails existing tickets, and terminally aborts with zero header/submission calls
 - [x] On an active pre-header or running submission, report a producer mismatch, empty payload, unknown timestamp, or invalid timing as `InvalidPacket` while transitioning terminally, waking earlier queued tickets, and rejecting retries
+- [x] Cut the admission sequence exactly once under the mutex immediately after header success and DTS-mix only pre-cut A/V; retain packets arriving during the drain in a live backlog, preserve their original batch boundary after the pre-header drain, and transition to Running once
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video

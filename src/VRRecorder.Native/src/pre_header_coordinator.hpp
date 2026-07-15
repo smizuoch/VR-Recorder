@@ -70,6 +70,7 @@ public:
     PreHeaderState State() const noexcept;
 #if defined(VRRECORDER_NATIVE_TESTING)
     std::size_t QueuedPacketCountForTesting() const noexcept;
+    std::uint64_t AdmissionCutSequenceForTesting() const noexcept;
 #endif
 
 private:
@@ -123,6 +124,7 @@ private:
     std::int64_t capture_epoch_ = 0;
     std::size_t queued_packet_count_ = 0;
     std::uint64_t next_submission_sequence_ = 0;
+    std::uint64_t pre_header_admission_cut_sequence_ = 0;
     QueueUsage video_queue_usage_;
     QueueUsage audio_queue_usage_;
     bool video_started_ = false;

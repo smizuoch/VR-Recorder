@@ -403,6 +403,13 @@ std::size_t PreHeaderCoordinator::QueuedPacketCountForTesting()
     std::lock_guard lock(mutex_);
     return queued_packet_count_;
 }
+
+std::uint64_t PreHeaderCoordinator::AdmissionCutSequenceForTesting()
+    const noexcept
+{
+    std::lock_guard lock(mutex_);
+    return pre_header_admission_cut_sequence_;
+}
 #endif
 
 vrrec_status_t PreHeaderCoordinator::TryStartHeaderLocked(
@@ -441,6 +448,7 @@ vrrec_status_t PreHeaderCoordinator::TryStartHeaderLocked(
         return FailLocked(status);
     }
 
+    pre_header_admission_cut_sequence_ = next_submission_sequence_;
     state_ = PreHeaderState::DrainingPreHeader;
     lock.unlock();
     return DrainQueuedPackets();
@@ -460,11 +468,38 @@ vrrec_status_t PreHeaderCoordinator::DrainQueuedPackets() noexcept
             if (state_ != PreHeaderState::DrainingPreHeader) {
                 return VRREC_STATUS_INVALID_STATE;
             }
-            if (queued_batches_.empty()) {
-                state_ = PreHeaderState::Running;
-                return VRREC_STATUS_OK;
+            if (pre_header_batch) {
+                std::size_t pre_header_count = 0;
+                while (pre_header_count < queued_batches_.size() &&
+                       queued_batches_[pre_header_count].sequence <
+                           pre_header_admission_cut_sequence_) {
+                    ++pre_header_count;
+                }
+                if (pre_header_count == 0) {
+                    pre_header_batch = false;
+                    continue;
+                }
+                try {
+                    batches.reserve(pre_header_count);
+                    for (std::size_t index = 0;
+                         index < pre_header_count; ++index) {
+                        batches.push_back(
+                            std::move(queued_batches_[index]));
+                    }
+                } catch (...) {
+                    return FailLocked(VRREC_STATUS_OUT_OF_MEMORY);
+                }
+                queued_batches_.erase(
+                    queued_batches_.begin(),
+                    queued_batches_.begin() +
+                        static_cast<std::ptrdiff_t>(pre_header_count));
+            } else {
+                if (queued_batches_.empty()) {
+                    state_ = PreHeaderState::Running;
+                    return VRREC_STATUS_OK;
+                }
+                batches.swap(queued_batches_);
             }
-            batches.swap(queued_batches_);
         }
 
         if (pre_header_batch) {
