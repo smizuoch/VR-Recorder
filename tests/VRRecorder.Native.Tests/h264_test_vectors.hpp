@@ -63,6 +63,7 @@ struct SpsSettings final {
     std::uint32_t chroma_format_idc = 1;
     std::uint32_t bit_depth_luma_minus8 = 0;
     std::uint32_t bit_depth_chroma_minus8 = 0;
+    std::uint32_t sequence_parameter_set_id = 0;
     std::uint32_t pic_width_in_mbs_minus1 = 0;
     std::uint32_t pic_height_in_map_units_minus1 = 0;
     bool frame_mbs_only = true;
@@ -73,10 +74,32 @@ struct SpsSettings final {
     std::uint32_t crop_bottom = 0;
 };
 
+struct PpsSettings final {
+    std::uint32_t picture_parameter_set_id = 0;
+    std::uint32_t sequence_parameter_set_id = 0;
+};
+
 inline bool HasExtendedProfileSyntax(std::uint8_t profile_idc)
 {
     return profile_idc == 100 || profile_idc == 110 || profile_idc == 122 ||
            profile_idc == 244;
+}
+
+inline std::vector<std::byte> EscapeRbsp(
+    std::uint8_t nal_header,
+    const std::vector<std::uint8_t> &rbsp)
+{
+    std::vector<std::byte> result {static_cast<std::byte>(nal_header)};
+    std::uint32_t zero_count = 0;
+    for (const auto value : rbsp) {
+        if (zero_count >= 2 && value <= 3) {
+            result.push_back(std::byte {3});
+            zero_count = 0;
+        }
+        result.push_back(static_cast<std::byte>(value));
+        zero_count = value == 0 ? zero_count + 1U : 0U;
+    }
+    return result;
 }
 
 inline std::vector<std::byte> MakeSps(const SpsSettings &settings)
@@ -85,7 +108,7 @@ inline std::vector<std::byte> MakeSps(const SpsSettings &settings)
     writer.Bits(settings.profile_idc, 8);
     writer.Bits(settings.compatibility, 8);
     writer.Bits(settings.level_idc, 8);
-    writer.UnsignedExpGolomb(0); // seq_parameter_set_id
+    writer.UnsignedExpGolomb(settings.sequence_parameter_set_id);
 
     if (HasExtendedProfileSyntax(settings.profile_idc)) {
         writer.UnsignedExpGolomb(settings.chroma_format_idc);
@@ -119,18 +142,15 @@ inline std::vector<std::byte> MakeSps(const SpsSettings &settings)
     }
     writer.Bit(0); // vui_parameters_present_flag
 
-    const auto rbsp = writer.FinishRbsp();
-    std::vector<std::byte> result {std::byte {0x67}};
-    std::uint32_t zero_count = 0;
-    for (const auto value : rbsp) {
-        if (zero_count >= 2 && value <= 3) {
-            result.push_back(std::byte {3});
-            zero_count = 0;
-        }
-        result.push_back(static_cast<std::byte>(value));
-        zero_count = value == 0 ? zero_count + 1U : 0U;
-    }
-    return result;
+    return EscapeRbsp(0x67, writer.FinishRbsp());
+}
+
+inline std::vector<std::byte> MakePps(const PpsSettings &settings)
+{
+    BitWriter writer;
+    writer.UnsignedExpGolomb(settings.picture_parameter_set_id);
+    writer.UnsignedExpGolomb(settings.sequence_parameter_set_id);
+    return EscapeRbsp(0x68, writer.FinishRbsp());
 }
 
 }

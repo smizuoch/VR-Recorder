@@ -21,11 +21,14 @@ namespace {
 
 using namespace vrrecorder::native;
 using test::MakeSps;
+using test::MakePps;
+using test::PpsSettings;
 using test::SpsSettings;
 
 void ParsesCroppedHighProfileDisplayGeometry()
 {
     SpsSettings settings;
+    settings.sequence_parameter_set_id = 3;
     settings.pic_width_in_mbs_minus1 = 119;
     settings.pic_height_in_map_units_minus1 = 67;
     settings.crop = true;
@@ -34,6 +37,7 @@ void ParsesCroppedHighProfileDisplayGeometry()
     H264SpsInfo result {};
     CHECK(ParseH264Sps(MakeSps(settings), result) == VRREC_STATUS_OK);
     CHECK(result.profile_idc == 100);
+    CHECK(result.sequence_parameter_set_id == 3);
     CHECK(result.profile_compatibility == 0);
     CHECK(result.level_idc == 40);
     CHECK(result.chroma_format_idc == 1);
@@ -42,6 +46,18 @@ void ParsesCroppedHighProfileDisplayGeometry()
     CHECK(result.width == 1'920);
     CHECK(result.height == 1'080);
     CHECK(result.frame_mbs_only);
+}
+
+void ParsesPictureParameterSetIdentifiers()
+{
+    PpsSettings settings;
+    settings.picture_parameter_set_id = 7;
+    settings.sequence_parameter_set_id = 3;
+
+    H264PpsInfo result {};
+    CHECK(ParseH264Pps(MakePps(settings), result) == VRREC_STATUS_OK);
+    CHECK(result.picture_parameter_set_id == 7);
+    CHECK(result.sequence_parameter_set_id == 3);
 }
 
 void ParsesMainProfileWithoutExtendedSyntax()
@@ -121,13 +137,34 @@ void RejectsMalformedOrImpossibleSps()
           VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void RejectsMalformedOrOutOfRangePpsIdentifiers()
+{
+    H264PpsInfo result {};
+    CHECK(ParseH264Pps({}, result) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ParseH264Pps(
+              std::vector<std::byte> {std::byte {0x67}, std::byte {0x80}},
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    PpsSettings picture_id_too_large;
+    picture_id_too_large.picture_parameter_set_id = 256;
+    CHECK(ParseH264Pps(MakePps(picture_id_too_large), result) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    PpsSettings sequence_id_too_large;
+    sequence_id_too_large.sequence_parameter_set_id = 32;
+    CHECK(ParseH264Pps(MakePps(sequence_id_too_large), result) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+}
+
 }
 
 int main()
 {
     ParsesCroppedHighProfileDisplayGeometry();
+    ParsesPictureParameterSetIdentifiers();
     ParsesMainProfileWithoutExtendedSyntax();
     ParsesEncoderSpsWithEmulationPreventionBytesAndVui();
     RejectsMalformedOrImpossibleSps();
+    RejectsMalformedOrOutOfRangePpsIdentifiers();
     return 0;
 }

@@ -409,6 +409,7 @@ bool ParseSpsRbsp(std::span<const std::byte> rbsp, H264SpsInfo &result)
             parsed.height)) {
         return false;
     }
+    parsed.sequence_parameter_set_id = sequence_parameter_set_id;
     parsed.profile_idc = static_cast<std::uint8_t>(profile_idc);
     parsed.profile_compatibility = static_cast<std::uint8_t>(compatibility);
     parsed.level_idc = static_cast<std::uint8_t>(level_idc);
@@ -448,6 +449,42 @@ vrrec_status_t ParseH264Sps(
         return VRREC_STATUS_OUT_OF_MEMORY;
     } catch (...) {
         result = {};
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+vrrec_status_t ParseH264Pps(
+    std::span<const std::byte> pps_nal,
+    H264PpsInfo &result) noexcept
+{
+    result = {};
+    if (pps_nal.size() < 2U) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto nal_header = std::to_integer<std::uint8_t>(pps_nal.front());
+    if ((nal_header & 0x80U) != 0 || (nal_header & 0x1fU) != 8U) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        std::vector<std::byte> rbsp;
+        if (!RemoveEmulationPreventionBytes(pps_nal.subspan(1), rbsp)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        BitReader reader(rbsp);
+        H264PpsInfo parsed {};
+        if (!reader.ReadUnsignedExpGolomb(parsed.picture_parameter_set_id) ||
+            parsed.picture_parameter_set_id > 255U ||
+            !reader.ReadUnsignedExpGolomb(parsed.sequence_parameter_set_id) ||
+            parsed.sequence_parameter_set_id > 31U ||
+            !reader.HasRemainingBits()) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        result = parsed;
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }
 }
