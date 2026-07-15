@@ -98,10 +98,45 @@ if(VRRECORDER_MEDIA_FACTORY_VARIANT STREQUAL "PRODUCTION")
         target_link_libraries(
             vrrecorder_native
             PRIVATE
-                FFmpeg::avcodec
                 FFmpeg::avformat
-                FFmpeg::avutil
                 FFmpeg::swresample)
+    endif()
+endif()
+
+if(VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT STREQUAL "PRODUCTION")
+    if(NOT WIN32 OR NOT MSVC OR
+       NOT VRRECORDER_ENABLE_FFMPEG_ADAPTERS OR
+       NOT TARGET FFmpeg::avcodec OR
+       NOT TARGET FFmpeg::avutil)
+        message(
+            FATAL_ERROR
+            "The production encoder probe backend requires Windows MSVC and the pinned FFmpeg SDK")
+    endif()
+    include("${PROJECT_SOURCE_DIR}/cmake/ProductionMediaH264Attachment.cmake")
+    vrrecorder_resolve_production_media_h264_sources(
+        vrrecorder_production_encoder_h264_sources
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    vrrecorder_require_production_media_h264_import_targets()
+    set(
+        vrrecorder_production_encoder_probe_sources
+        ${vrrecorder_production_encoder_h264_sources}
+        src/ffmpeg_h264_software_codec_session.cpp
+        src/ffmpeg_system_memory_encoder_probe_session.cpp
+        src/software_encoder_probe_session_factory.cpp)
+    list(REMOVE_DUPLICATES vrrecorder_production_encoder_probe_sources)
+    target_sources(
+        vrrecorder_native
+        PRIVATE ${vrrecorder_production_encoder_probe_sources})
+endif()
+
+if(WIN32)
+    if(VRRECORDER_MEDIA_FACTORY_VARIANT STREQUAL "PRODUCTION" OR
+       VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT STREQUAL "PRODUCTION")
+        target_link_libraries(
+            vrrecorder_native
+            PRIVATE
+                FFmpeg::avcodec
+                FFmpeg::avutil)
     endif()
 endif()
 
@@ -177,7 +212,6 @@ if(WIN32)
             d3d11
             dxgi
             ksuser
-            mf
             mfplat
             mfuuid
             wmcodecdspuuid)

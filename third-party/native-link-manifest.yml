@@ -75,15 +75,6 @@
     },
     {
       "consumerTarget": "vrrecorder_native",
-      "inputIdentity": "mf",
-      "inputKind": "ToolchainTarget",
-      "platform": "windows-x64",
-      "origin": "WindowsSystem",
-      "componentId": null,
-      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
-    },
-    {
-      "consumerTarget": "vrrecorder_native",
       "inputIdentity": "mfplat",
       "inputKind": "ToolchainTarget",
       "platform": "windows-x64",
