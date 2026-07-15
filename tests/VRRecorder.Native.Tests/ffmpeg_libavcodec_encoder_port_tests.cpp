@@ -110,6 +110,32 @@ void AcceptsOnlyThePinnedRuntimeVersion()
     CHECK(creation.port != nullptr);
 }
 
+void CopiesOpenedContextExtradataWithoutExposingItsLifetime()
+{
+    auto *context = OpenAacContext();
+    CHECK(context->extradata != nullptr);
+    CHECK(context->extradata_size > 0);
+    const std::vector<std::byte> expected(
+        reinterpret_cast<const std::byte *>(context->extradata),
+        reinterpret_cast<const std::byte *>(context->extradata) +
+            context->extradata_size);
+    auto creation = LibavcodecEncoderPort::Create(context);
+    CHECK(creation.status == VRREC_STATUS_OK);
+
+    std::vector<std::byte> copied;
+    CHECK(creation.port->CopyCodecExtradata(copied) == VRREC_STATUS_OK);
+    CHECK(copied == expected);
+    copied[0] ^= std::byte {0xff};
+    CHECK(creation.port->CopyCodecExtradata(copied) == VRREC_STATUS_OK);
+    CHECK(copied == expected);
+
+    creation.port->Abort();
+    copied = {std::byte {0x55}};
+    CHECK(creation.port->CopyCodecExtradata(copied) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(copied == std::vector<std::byte> {std::byte {0x55}});
+}
+
 void RejectsEveryMismatchedRuntimeIdentity()
 {
     const auto reject = [](
@@ -423,6 +449,7 @@ int main()
     av_log_set_level(AV_LOG_QUIET);
     RejectsMissingOrUnopenedEncoderContext();
     AcceptsOnlyThePinnedRuntimeVersion();
+    CopiesOpenedContextExtradataWithoutExposingItsLifetime();
     RejectsEveryMismatchedRuntimeIdentity();
     MapsLibavAllocationFailures();
     RetainsFramesAcrossBackpressureAndExposesBorrowedPackets();

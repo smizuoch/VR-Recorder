@@ -1,7 +1,9 @@
 #ifndef VRRECORDER_NATIVE_FFMPEG_LIBAVCODEC_ENCODER_PORT_HPP
 #define VRRECORDER_NATIVE_FFMPEG_LIBAVCODEC_ENCODER_PORT_HPP
 
+#include <cstddef>
 #include <memory>
+#include <vector>
 
 #include "ffmpeg_encoder_state_machine.hpp"
 
@@ -37,6 +39,9 @@ public:
     // Takes a reference to the frame. The caller may immediately unref or free
     // its AVFrame after this call succeeds.
     vrrec_status_t PrepareFrame(const AVFrame &frame) noexcept;
+
+    vrrec_status_t CopyCodecExtradata(
+        std::vector<std::byte> &extradata) const noexcept;
 
     FfmpegCodecIoResult SendPreparedFrame() noexcept override;
     FfmpegCodecIoResult SendDrain() noexcept override;

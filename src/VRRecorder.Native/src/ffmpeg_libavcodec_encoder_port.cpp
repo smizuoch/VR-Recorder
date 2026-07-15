@@ -220,6 +220,37 @@ vrrec_status_t LibavcodecEncoderPort::PrepareFrame(
     return VRREC_STATUS_OK;
 }
 
+vrrec_status_t LibavcodecEncoderPort::CopyCodecExtradata(
+    std::vector<std::byte> &extradata) const noexcept
+{
+    if (impl_ == nullptr || impl_->context == nullptr ||
+        (impl_->state != Impl::State::Active &&
+            impl_->state != Impl::State::Draining &&
+            impl_->state != Impl::State::Finished)) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+
+    const auto size = impl_->context->extradata_size;
+    const auto *data = impl_->context->extradata;
+    if (size < 0 || (size > 0 && data == nullptr)) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+
+    try {
+        std::vector<std::byte> copied;
+        if (size > 0) {
+            const auto *first = reinterpret_cast<const std::byte *>(data);
+            copied.assign(first, first + static_cast<std::size_t>(size));
+        }
+        extradata.swap(copied);
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
 FfmpegCodecIoResult LibavcodecEncoderPort::SendPreparedFrame() noexcept
 {
     if (impl_ == nullptr || impl_->state != Impl::State::Active ||
