@@ -27,6 +27,51 @@
       "origin": "WindowsSystem",
       "componentId": null,
       "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "ole32",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "componentId": null,
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "uuid",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "componentId": null,
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "d3d11",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "componentId": null,
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "dxgi",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "componentId": null,
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "ksuser",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "WindowsSystem",
+      "componentId": null,
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
     }
   ]
 }
