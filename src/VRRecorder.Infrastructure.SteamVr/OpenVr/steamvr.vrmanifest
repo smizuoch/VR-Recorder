@@ -1,0 +1,22 @@
+{
+  "source": "vrrecorder",
+  "applications": [
+    {
+      "app_key": "com.vrrecorder.desktop",
+      "launch_type": "binary",
+      "binary_path_windows": "../VRRecorder.App.exe",
+      "action_manifest_path": "actions.json",
+      "is_dashboard_overlay": false,
+      "strings": {
+        "en_us": {
+          "name": "VR Recorder",
+          "description": "Record VR sessions safely."
+        },
+        "ja_jp": {
+          "name": "VR Recorder",
+          "description": "VRセッションを安全に録画します。"
+        }
+      }
+    }
+  ]
+}
