@@ -43,10 +43,21 @@ require_file("tests/VRRecorder.Native.Tests/verify_exports.cmake")
 require_file("tests/cmake/pinned_ffmpeg_contract.cmake")
 require_file("tests/cmake/native_factory_variant_contract.cmake")
 require_file("tests/cmake/production_media_aac_attachment_contract.cmake")
+require_file("tests/cmake/pinned_spout2_contract.cmake")
+require_file("cmake/PinnedSpout2.cmake")
 require_file(".github/workflows/native-windows.yml")
 
 require_text("CMakeLists.txt" "add_subdirectory\\(src/VRRecorder.Native\\)")
 require_text("CMakeLists.txt" "add_subdirectory\\(tests/VRRecorder.Native.Tests\\)")
+require_text(
+    "CMakeLists.txt"
+    "option\\([^\\)]*VRRECORDER_ENABLE_SPOUT2_ADAPTER")
+require_text(
+    "CMakeLists.txt"
+    "vrrecorder_import_pinned_spout2_sdk")
+require_text(
+    "CMakeLists.txt"
+    "add_test\\(NAME vrrecorder_native_pinned_spout2_contract")
 require_text(
     "CMakeLists.txt"
     "option\\([^\\)]*VRRECORDER_ENABLE_FFMPEG_ADAPTERS")

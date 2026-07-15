@@ -31,6 +31,10 @@ option(
     VRRECORDER_ENABLE_FFMPEG_ADAPTERS
     "Import the pinned Windows FFmpeg SDK for adapter tests or production factories"
     OFF)
+option(
+    VRRECORDER_ENABLE_SPOUT2_ADAPTER
+    "Import the pinned Spout2 SDK for the production receiver"
+    OFF)
 set(
     VRRECORDER_FFMPEG_ROOT
     ""
@@ -46,6 +50,11 @@ set(
     ""
     CACHE PATH
     "Optional exact FFmpeg 8.1.2 Linux or Windows demux/decode SDK for out-of-process test oracles")
+set(
+    VRRECORDER_SPOUT2_ROOT
+    ""
+    CACHE PATH
+    "Absolute path to the exact Spout2 2.007.017 Windows x64 static SDK")
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake")
 vrrecorder_declare_native_factory_options()
@@ -63,6 +72,21 @@ if(VRRECORDER_ENABLE_FFMPEG_ADAPTERS)
     endif()
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake")
     vrrecorder_import_pinned_ffmpeg_sdk("${VRRECORDER_FFMPEG_ROOT}")
+endif()
+
+if(VRRECORDER_ENABLE_SPOUT2_ADAPTER)
+    if(NOT WIN32)
+        message(
+            FATAL_ERROR
+            "The production Spout2 adapter is supported only on Windows x64")
+    endif()
+    if(NOT MSVC)
+        message(
+            FATAL_ERROR
+            "The production Spout2 SDK contract requires the MSVC toolchain")
+    endif()
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedSpout2.cmake")
+    vrrecorder_import_pinned_spout2_sdk("${VRRECORDER_SPOUT2_ROOT}")
 endif()
 
 if(BUILD_TESTING AND NOT VRRECORDER_FFMPEG_CONTRACT_TEST_ROOT STREQUAL "")
@@ -93,6 +117,12 @@ if(BUILD_TESTING)
             "-DPINNED_FFMPEG_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/windows_ffmpeg_oracle_contract.cmake")
+    add_test(NAME vrrecorder_native_pinned_spout2_contract
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DPINNED_SPOUT2_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedSpout2.cmake"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_spout2_contract.cmake")
     add_test(NAME vrrecorder_native_factory_variant_contract
         COMMAND
             "${CMAKE_COMMAND}"
@@ -122,6 +152,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         vrrecorder_native_pinned_ffmpeg_contract
         vrrecorder_native_windows_ffmpeg_oracle_contract
+        vrrecorder_native_pinned_spout2_contract
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(
         vrrecorder_native_factory_variant_contract
