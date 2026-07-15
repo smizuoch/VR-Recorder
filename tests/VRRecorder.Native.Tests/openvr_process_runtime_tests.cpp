@@ -25,6 +25,7 @@ using namespace vrrecorder::native;
 struct RawState final {
     std::vector<std::string> calls;
     std::size_t initialize_calls = 0;
+    std::size_t application_manifest_calls = 0;
     std::size_t manifest_calls = 0;
     std::size_t shutdown_calls = 0;
 };
@@ -41,6 +42,17 @@ public:
         state_->calls.emplace_back("initialize");
         ++state_->initialize_calls;
         return initialize_status;
+    }
+
+    vrrec_status_t AddApplicationManifest(
+        std::string_view path,
+        bool temporary) noexcept override
+    {
+        state_->calls.emplace_back(
+            "application:" + std::string(path) +
+            (temporary ? ":temporary" : ":persistent"));
+        ++state_->application_manifest_calls;
+        return application_manifest_status;
     }
 
     vrrec_status_t SetActionManifestPath(
@@ -91,6 +103,7 @@ public:
     }
 
     vrrec_status_t initialize_status = VRREC_STATUS_OK;
+    vrrec_status_t application_manifest_status = VRREC_STATUS_OK;
     vrrec_status_t manifest_status = VRREC_STATUS_OK;
 
 private:
@@ -129,12 +142,19 @@ void SharesInitializationManifestAndFinalShutdown()
     auto second = Client(runtime);
 
     CHECK(first->Initialize() == VRREC_STATUS_OK);
+    CHECK(first->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
     CHECK(first->SetActionManifestPath("C:/app/OpenVr/actions.json") ==
           VRREC_STATUS_OK);
     CHECK(second->Initialize() == VRREC_STATUS_OK);
+    CHECK(second->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
     CHECK(second->SetActionManifestPath("C:/app/OpenVr/actions.json") ==
           VRREC_STATUS_OK);
     CHECK(state->initialize_calls == 1);
+    CHECK(state->application_manifest_calls == 1);
     CHECK(state->manifest_calls == 1);
 
     std::uint64_t set = 0;
@@ -168,16 +188,48 @@ void RejectsManifestDriftWithoutCallingTheRawApiAgain()
     auto first = Client(runtime);
     auto second = Client(runtime);
     CHECK(first->Initialize() == VRREC_STATUS_OK);
+    CHECK(first->AddApplicationManifest(
+              "C:/one/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
     CHECK(first->SetActionManifestPath("C:/one/actions.json") ==
           VRREC_STATUS_OK);
     CHECK(second->Initialize() == VRREC_STATUS_OK);
+    CHECK(second->AddApplicationManifest(
+              "C:/two/steamvr.vrmanifest",
+              true) == VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(second->SetActionManifestPath("C:/two/actions.json") ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(state->application_manifest_calls == 1);
     CHECK(state->manifest_calls == 1);
     CHECK(state->shutdown_calls == 0);
     second.reset();
     first.reset();
     CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
+void RegistersAgainOnlyAfterACompleteRuntimeGeneration()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto first = Client(runtime);
+    CHECK(first->Initialize() == VRREC_STATUS_OK);
+    CHECK(first->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    first.reset();
+
+    auto second = Client(runtime);
+    CHECK(second->Initialize() == VRREC_STATUS_OK);
+    CHECK(second->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    second.reset();
+
+    CHECK(state->initialize_calls == 2);
+    CHECK(state->application_manifest_calls == 2);
+    CHECK(state->shutdown_calls == 2);
     (void)raw;
 }
 
@@ -207,6 +259,7 @@ int main()
 {
     SharesInitializationManifestAndFinalShutdown();
     RejectsManifestDriftWithoutCallingTheRawApiAgain();
+    RegistersAgainOnlyAfterACompleteRuntimeGeneration();
     FailsClosedBeforeAcquiringAReference();
     return 0;
 }

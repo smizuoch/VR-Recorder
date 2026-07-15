@@ -169,6 +169,17 @@ public sealed class NativeSteamVrInputRuntimeTests
             File.WriteAllText(
                 System.IO.Path.Combine(openVrPath, "actions.json"),
                 "{}");
+            File.Copy(
+                System.IO.Path.Combine(
+                    FindRepositoryRoot(),
+                    "src",
+                    "VRRecorder.Infrastructure.SteamVr",
+                    "OpenVr",
+                    "steamvr.vrmanifest"),
+                System.IO.Path.Combine(openVrPath, "steamvr.vrmanifest"));
+            File.WriteAllBytes(
+                System.IO.Path.Combine(path, "VRRecorder.App.exe"),
+                [0x4d, 0x5a]);
             return new TemporaryInstall(path);
         }
 

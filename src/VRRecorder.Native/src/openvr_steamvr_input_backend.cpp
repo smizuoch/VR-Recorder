@@ -24,6 +24,18 @@ vrrec_status_t MapInputError(vr::EVRInputError error) noexcept
     return VRREC_STATUS_INTERNAL_ERROR;
 }
 
+vrrec_status_t MapApplicationError(vr::EVRApplicationError error) noexcept
+{
+    if (error == vr::VRApplicationError_None) {
+        return VRREC_STATUS_OK;
+    }
+    if (error == vr::VRApplicationError_IPCFailed ||
+        error == vr::VRApplicationError_SteamVRIsExiting) {
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+    return VRREC_STATUS_INTERNAL_ERROR;
+}
+
 class WindowsOpenVrApi final : public OpenVrInputPort {
 public:
     ~WindowsOpenVrApi() override
@@ -44,12 +56,33 @@ public:
         }
 
         initialized_ = true;
+        applications_ = vr::VRApplications();
         input_ = vr::VRInput();
-        if (input_ == nullptr) {
+        if (applications_ == nullptr || input_ == nullptr) {
             Shutdown();
             return VRREC_STATUS_INTERNAL_ERROR;
         }
         return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept override
+    {
+        if (!initialized_ || applications_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        try {
+            const std::string path(absolute_path);
+            return MapApplicationError(
+                applications_->AddApplicationManifest(
+                    path.c_str(),
+                    temporary));
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
     }
 
     vrrec_status_t SetActionManifestPath(
@@ -165,11 +198,13 @@ public:
             return;
         }
         input_ = nullptr;
+        applications_ = nullptr;
         initialized_ = false;
         vr::VR_Shutdown();
     }
 
 private:
+    vr::IVRApplications *applications_ = nullptr;
     vr::IVRInput *input_ = nullptr;
     bool initialized_ = false;
 };

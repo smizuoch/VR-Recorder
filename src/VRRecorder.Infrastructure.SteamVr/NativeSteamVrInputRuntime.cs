@@ -43,7 +43,8 @@ public sealed class NativeSteamVrInputRuntime : ISteamVrInputRuntime
         }
 
         _libraryPath = Path.GetFullPath(libraryPath);
-        _manifestPath = OpenVrActionManifestPath.Resolve(installRoot);
+        _manifestPath = OpenVrApplicationManifest.ResolveAndValidate(
+            installRoot).ActionManifestPath;
         _pollInterval = pollInterval;
     }
 

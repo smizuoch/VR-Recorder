@@ -40,6 +40,16 @@ public:
         return initialize_status;
     }
 
+    vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept override
+    {
+        state_->calls.emplace_back(
+            "application:" + std::string(absolute_path) +
+            (temporary ? ":temporary" : ":persistent"));
+        return application_manifest_status;
+    }
+
     vrrec_status_t SetActionManifestPath(
         std::string_view absolute_path) noexcept override
     {
@@ -88,6 +98,7 @@ public:
     }
 
     vrrec_status_t initialize_status = VRREC_STATUS_OK;
+    vrrec_status_t application_manifest_status = VRREC_STATUS_OK;
     vrrec_status_t manifest_status = VRREC_STATUS_OK;
     vrrec_status_t action_set_status = VRREC_STATUS_OK;
     vrrec_status_t action_status = VRREC_STATUS_OK;
@@ -134,6 +145,7 @@ void InitializesInRequiredOrderAndCanonicalizesDigitalState()
     CHECK(backend != nullptr);
     CHECK((state->calls == std::vector<std::string> {
         "initialize",
+        "application:/install/OpenVr/steamvr.vrmanifest:temporary",
         "manifest:/install/OpenVr/actions.json",
         "set:/actions/main",
         "action:/actions/main/in/toggle_recording",
@@ -152,8 +164,8 @@ void InitializesInRequiredOrderAndCanonicalizesDigitalState()
     CHECK(output.state == 1);
     CHECK(output.changed == 0);
     CHECK(output.reserved == 0);
-    CHECK(state->calls[4] == "update:101");
-    CHECK(state->calls[5] == "digital:202");
+    CHECK(state->calls[5] == "update:101");
+    CHECK(state->calls[6] == "digital:202");
 
     borrowed->digital_data = {false, false, true};
     CHECK(backend->Poll(output) == VRREC_STATUS_OK);
@@ -168,12 +180,14 @@ void InitializesInRequiredOrderAndCanonicalizesDigitalState()
 
 void FailsClosedAtEachInitializationBoundary()
 {
-    for (std::size_t failure = 0; failure != 3; ++failure) {
+    for (std::size_t failure = 0; failure != 4; ++failure) {
         auto state = std::make_shared<FakePortState>();
         auto port = std::make_unique<FakePort>(state);
         if (failure == 0) {
             port->initialize_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
         } else if (failure == 1) {
+            port->application_manifest_status = VRREC_STATUS_INTERNAL_ERROR;
+        } else if (failure == 2) {
             port->manifest_status = VRREC_STATUS_INTERNAL_ERROR;
         } else {
             port->action_set_status = VRREC_STATUS_INTERNAL_ERROR;
@@ -211,6 +225,17 @@ void RejectsZeroHandlesAndInvalidCompositionInputs()
 
     auto invalid = Config();
     invalid.digital_action_path_utf8 = nullptr;
+    state = std::make_shared<FakePortState>();
+    backend = CreateOpenVrSteamVrInputBackend(
+        invalid,
+        std::make_unique<FakePort>(state),
+        status);
+    CHECK(backend == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(state->calls.empty());
+
+    invalid = Config();
+    invalid.action_manifest_path_utf8 = "/install/OpenVr/not-actions.json";
     state = std::make_shared<FakePortState>();
     backend = CreateOpenVrSteamVrInputBackend(
         invalid,

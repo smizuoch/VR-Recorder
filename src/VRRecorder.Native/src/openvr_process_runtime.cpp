@@ -67,6 +67,39 @@ public:
         return status;
     }
 
+    vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept
+    {
+        std::string owned_path;
+        try {
+            owned_path.assign(absolute_path);
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+
+        const std::lock_guard lock(mutex_);
+        if (references_ == 0) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (!application_manifest_path_.empty()) {
+            return application_manifest_path_ == owned_path &&
+                   application_manifest_temporary_ == temporary
+                ? VRREC_STATUS_OK
+                : VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        const auto status = api_->AddApplicationManifest(
+            owned_path,
+            temporary);
+        if (status == VRREC_STATUS_OK) {
+            application_manifest_path_ = std::move(owned_path);
+            application_manifest_temporary_ = temporary;
+        }
+        return status;
+    }
+
     vrrec_status_t GetActionSetHandle(
         std::string_view action_set_path,
         std::uint64_t &handle) noexcept
@@ -115,6 +148,8 @@ public:
         --references_;
         if (references_ == 0) {
             api_->Shutdown();
+            application_manifest_path_.clear();
+            application_manifest_temporary_ = false;
             manifest_path_.clear();
         }
     }
@@ -123,6 +158,8 @@ private:
     std::unique_ptr<OpenVrInputPort> api_;
     std::mutex mutex_;
     std::size_t references_ = 0;
+    std::string application_manifest_path_;
+    bool application_manifest_temporary_ = false;
     std::string manifest_path_;
 };
 
@@ -158,6 +195,15 @@ public:
     {
         return initialized_
             ? runtime_->SetActionManifestPath(absolute_path)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept override
+    {
+        return initialized_
+            ? runtime_->AddApplicationManifest(absolute_path, temporary)
             : VRREC_STATUS_INVALID_STATE;
     }
 

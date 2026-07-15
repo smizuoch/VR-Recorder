@@ -20,7 +20,7 @@
 - persistent登録は作らず、uninstall時の`RemoveApplicationManifest`に依存しない。upgrade後は新versionのprocessが新しいpackage locationだけをtemporary登録する。
 - MSIXでもworking directoryではなく、起動中packageのinstall locationから同じ絶対pathを解決する。
 
-このADRの時点ではmanifest assetとmanaged validation contractまでを実装対象とする。`IVRApplications` adapterとprocess-wide exactly-once登録は次のTDD単位で実装し、native call evidenceとfailure propagationを別に検証する。
+manifest assetとmanaged validation contractに加え、native production adapterは検証済みaction manifestと同じdirectoryのapplication manifestを`IVRApplications`へtemporary登録する。process-wide ownerは同じruntime generation内の登録を1回に集約し、登録失敗時はaction manifest／handle初期化へ進まない。全client解放後の次generationでは再登録する。portable failure testとpinned OpenVR 2.15.6を使うWindows Release linkを実装証拠とし、実SteamVRでの登録／再起動／upgradeはHILとして別に残す。
 
 ## TDD sequence
 

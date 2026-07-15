@@ -19,6 +19,9 @@ public:
     virtual ~OpenVrInputPort() = default;
 
     virtual vrrec_status_t Initialize() noexcept = 0;
+    virtual vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept = 0;
     virtual vrrec_status_t SetActionManifestPath(
         std::string_view absolute_path) noexcept = 0;
     virtual vrrec_status_t GetActionSetHandle(

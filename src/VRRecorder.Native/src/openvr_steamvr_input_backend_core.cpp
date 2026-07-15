@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <new>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -20,6 +21,27 @@ void Reset(vrrec_steamvr_digital_state_v1 &state) noexcept
     state.state = 0;
     state.changed = 0;
     state.reserved = 0;
+}
+
+vrrec_status_t ResolveApplicationManifestPath(
+    std::string_view action_manifest_path,
+    std::string &application_manifest_path) noexcept
+{
+    const auto separator = action_manifest_path.find_last_of("/\\");
+    if (separator == std::string_view::npos ||
+        action_manifest_path.substr(separator + 1) != "actions.json") {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        application_manifest_path.assign(
+            action_manifest_path.substr(0, separator + 1));
+        application_manifest_path.append("steamvr.vrmanifest");
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
 }
 
 class OpenVrSteamVrInputBackend final : public SteamVrInputBackend {
@@ -80,8 +102,24 @@ std::unique_ptr<SteamVrInputBackend> CreateOpenVrSteamVrInputBackend(
         return nullptr;
     }
 
+    std::string application_manifest_path;
+    status = ResolveApplicationManifestPath(
+        config.action_manifest_path_utf8,
+        application_manifest_path);
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
+
     status = port->Initialize();
     if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
+
+    status = port->AddApplicationManifest(
+        application_manifest_path,
+        true);
+    if (status != VRREC_STATUS_OK) {
+        port->Shutdown();
         return nullptr;
     }
 
