@@ -64,6 +64,7 @@
 - [x] Windows D3D11 processorを最初のsource textureのdeviceへ遅延bindし、同一deviceではPortを再利用しながら同一adapter上の別deviceへ安全に再bindする。bind／convert中Abortでは遅延outputを公開せず、実textureを使う2-device統合EXEをMSVC／LLVM-MinGWでcompile／linkする
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
+- [x] production media factoryは実資源を開く前にfull ABI、Windows絶対pending path、30～120の整数FPS、MF software encoder、同一の非zero Spout／encoder adapter、bounded geometry、layout／routing／gain／source formatを検証し、初期layoutをexactに導出する
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
 - [x] 初回H.264 configでB-frameを明示的に0へ固定する
 - [x] AbortがFinishより先ならtrailerを開始せず、trailer完了時の再確認でAbortを観測した場合はfile flushを開始しない。既に開始したtrailer／flushはrollbackしない
@@ -160,6 +161,7 @@
 - [x] Contain keyed-mutex ownership in one surface owner and make only timeouts retryable; send neither duplicate Acquire nor Release to the Port, terminalize abandoned, device-removed, device-reset, and release failures, and release exactly once when destroyed while held
 - [x] Validate texture dimensions, format, the shared-keyed flag, and adapter LUID in the Windows `IDXGIKeyedMutex` Port, then pass a real `0→1→2→0` key transition and contended timeout through a shared handle opened by a second D3D11 device on the same adapter using a .NET 10.0.301 oracle; cross-build the native integration EXE and retain it for the signed/MSVC gate because local Smart App Control rejects unsigned launches
 - [x] Bind the Windows D3D11 processor lazily to the first source texture's device, reuse its Port on the same device, and safely rebind to another device on the same adapter; publish no late output when Abort races bind/convert, and compile/link the real-texture two-device integration EXE under MSVC and LLVM-MinGW
+- [x] Before opening production media resources, validate the full ABI, absolute Windows pending path, integral 30–120 FPS, MF software encoder, matching nonzero Spout/encoder adapters, bounded geometry, layout/routing/gains/source format, and derive the exact initial layout
 - [x] Split owned-output preparation from encoding in the processing sink and preserve that two-phase type through the worker; after a successful Acquire, release the source exactly once after processing and call the encoder/mux boundary only after Release succeeds
 - [x] Make the Spout receiver boundary authoritative for nonzero surface generations: drop older generations without replacing the newest CFR frame, reject resource mutation within one generation, accept same-adapter replacements only with a newer generation, propagate adapter changes distinctly, and reject processor output from a different generation before encoding
 - [x] Isolate D3D11 conversion behind an injectable Port, validating the source plan and owned NV12 output adapter/generation; distinguish device removed, device reset, and OOM, terminalize failures, release rejected or Abort-racing outputs, and abort the Port exactly once

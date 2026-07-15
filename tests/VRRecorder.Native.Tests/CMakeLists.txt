@@ -214,6 +214,23 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_pipeline_media_backend)
 
 add_executable(
+    vrrecorder_native_production_media_configuration
+    production_media_configuration_tests.cpp
+    "${native_source_root}/src/production_media_configuration.cpp")
+target_compile_features(
+    vrrecorder_native_production_media_configuration PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_production_media_configuration
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_production_media_configuration
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_production_media_configuration)
+
+add_executable(
     vrrecorder_native_pre_header_coordinator
     pre_header_coordinator_tests.cpp
     "${native_source_root}/src/pre_header_coordinator.cpp")
@@ -1658,6 +1675,8 @@ add_test(NAME vrrecorder_native_media_recording_pipeline
     COMMAND vrrecorder_native_media_recording_pipeline)
 add_test(NAME vrrecorder_native_pipeline_media_backend
     COMMAND vrrecorder_native_pipeline_media_backend)
+add_test(NAME vrrecorder_native_production_media_configuration
+    COMMAND vrrecorder_native_production_media_configuration)
 add_test(NAME vrrecorder_native_pre_header_coordinator
     COMMAND vrrecorder_native_pre_header_coordinator)
 add_test(NAME vrrecorder_native_pre_header_muxing_composition
