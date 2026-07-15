@@ -123,17 +123,26 @@ class BlockingFirstSubmissionDownstream final
 public:
     explicit BlockingFirstSubmissionDownstream(
         bool block_first_submission = true,
-        bool block_encoder_finish = false) noexcept
+        bool block_encoder_finish = false,
+        bool block_header_start = false) noexcept
         : block_first_submission_(block_first_submission),
-          block_encoder_finish_(block_encoder_finish)
+          block_encoder_finish_(block_encoder_finish),
+          block_header_start_(block_header_start)
     {
     }
 
     vrrec_status_t Start(
         const FragmentedMp4StreamConfiguration &) noexcept override
     {
-        const std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         ++start_calls_;
+        header_start_entered_ = true;
+        changed_.notify_all();
+        if (block_header_start_) {
+            changed_.wait(lock, [&] {
+                return release_header_start_ || aborted_;
+            });
+        }
         return VRREC_STATUS_OK;
     }
 
@@ -204,6 +213,14 @@ public:
         }));
     }
 
+    void WaitForHeaderStart()
+    {
+        std::unique_lock lock(mutex_);
+        CHECK(changed_.wait_for(lock, std::chrono::seconds(2), [&] {
+            return header_start_entered_;
+        }));
+    }
+
     void ReleaseFirstSubmission() noexcept
     {
         const std::lock_guard lock(mutex_);
@@ -231,6 +248,24 @@ public:
         return submit_calls_;
     }
 
+    std::size_t StartCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return start_calls_;
+    }
+
+    std::size_t RequestAbortCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return request_abort_calls_;
+    }
+
+    std::size_t AbortCalls() const noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return abort_calls_;
+    }
+
 private:
     mutable std::mutex mutex_;
     std::condition_variable changed_;
@@ -243,9 +278,12 @@ private:
     bool release_first_submit_ = false;
     bool encoder_finish_entered_ = false;
     bool release_encoder_finish_ = false;
+    bool header_start_entered_ = false;
+    bool release_header_start_ = false;
     bool aborted_ = false;
     bool block_first_submission_;
     bool block_encoder_finish_;
+    bool block_header_start_;
 };
 
 EncodedMediaPacket Packet(
@@ -736,6 +774,123 @@ void PublishesTheDescriptorWithoutLosingItsFirstVideoBatch()
     CHECK(coordinator.State() == PreHeaderState::Running);
 }
 
+void FinishBeforeDescriptorReadinessFailsAllQueuedPackets()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector audio {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+
+    CHECK(coordinator.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_INVALID_STATE);
+
+    CHECK(audio_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+}
+
+void AbortWinsAHeaderStartThatReturnsSuccessLate()
+{
+    BlockingFirstSubmissionDownstream downstream(false, false, true);
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector audio {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+    auto descriptor_result = std::async(std::launch::async, [&] {
+        return coordinator.PublishVideoDescriptor(
+            &encoder_identity,
+            VideoDescriptor());
+    });
+    downstream.WaitForHeaderStart();
+
+    coordinator.Abort();
+
+    CHECK(descriptor_result.get() == VRREC_STATUS_INVALID_STATE);
+    CHECK(audio_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(downstream.StartCalls() == 1);
+    CHECK(downstream.SubmitCalls() == 0);
+    CHECK(downstream.RequestAbortCalls() == 1);
+    CHECK(downstream.AbortCalls() == 1);
+    CHECK(coordinator.State() == PreHeaderState::Aborted);
+}
+
+void AbortWinsAnInFlightPreHeaderDrain()
+{
+    BlockingFirstSubmissionDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector audio {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    const std::vector video {
+        Packet(MediaStreamKind::Video, 10, std::byte {0xB0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    auto video_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Video, video);
+    });
+    WaitForQueuedPackets(coordinator, 2);
+    auto descriptor_result = std::async(std::launch::async, [&] {
+        return coordinator.PublishVideoDescriptor(
+            &encoder_identity,
+            VideoDescriptor());
+    });
+    downstream.WaitForFirstSubmission();
+
+    coordinator.Abort();
+
+    CHECK(descriptor_result.get() == VRREC_STATUS_INVALID_STATE);
+    CHECK(audio_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(video_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(downstream.StartCalls() == 1);
+    CHECK(downstream.SubmitCalls() == 1);
+    CHECK(downstream.RequestAbortCalls() == 1);
+    CHECK(downstream.AbortCalls() == 1);
+    CHECK(coordinator.State() == PreHeaderState::Aborted);
+}
+
 void StartsExactlyOnceRegardlessOfReadinessOrder()
 {
     RecordingDownstream downstream;
@@ -871,6 +1026,9 @@ int main()
     BothProducerCompletionsEnterTerminalFinishing();
     RejectsPacketsFromACompletedProducer();
     PublishesTheDescriptorWithoutLosingItsFirstVideoBatch();
+    FinishBeforeDescriptorReadinessFailsAllQueuedPackets();
+    AbortWinsAHeaderStartThatReturnsSuccessLate();
+    AbortWinsAnInFlightPreHeaderDrain();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();
