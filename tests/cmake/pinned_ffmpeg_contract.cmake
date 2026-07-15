@@ -82,18 +82,68 @@ foreach(runtime IN ITEMS
     file(WRITE "${sdk_root}/bin/${runtime}" "fake runtime DLL\n")
 endforeach()
 
+set(source_archive_relative_path
+    "share/vrrecorder/sources/ffmpeg-8.1.2.tar.xz")
+set(build_recipe_relative_path
+    "share/vrrecorder/build-recipes/ffmpeg-windows-x64.md")
+get_filename_component(
+    source_archive_parent
+    "${sdk_root}/${source_archive_relative_path}"
+    DIRECTORY)
+get_filename_component(
+    build_recipe_parent
+    "${sdk_root}/${build_recipe_relative_path}"
+    DIRECTORY)
+file(MAKE_DIRECTORY "${source_archive_parent}" "${build_recipe_parent}")
+file(
+    WRITE "${sdk_root}/${source_archive_relative_path}"
+    "fake pinned source archive\n")
+file(
+    WRITE "${sdk_root}/${build_recipe_relative_path}"
+    "# Exact Windows FFmpeg build recipe\n")
+
+file(SIZE "${sdk_root}/${source_archive_relative_path}" source_archive_length)
+file(SIZE "${sdk_root}/${build_recipe_relative_path}" build_recipe_length)
+file(
+    SHA256
+    "${sdk_root}/${build_recipe_relative_path}"
+    build_recipe_sha256)
+
+set(artifact_paths
+    "bin/avcodec-62.dll"
+    "bin/avformat-62.dll"
+    "bin/avutil-60.dll"
+    "bin/swresample-6.dll"
+    "lib/avcodec.lib"
+    "lib/avformat.lib"
+    "lib/avutil.lib"
+    "lib/swresample.lib")
+set(artifact_evidence "")
+foreach(path IN LISTS artifact_paths)
+    file(SIZE "${sdk_root}/${path}" artifact_length)
+    file(SHA256 "${sdk_root}/${path}" artifact_sha256)
+    string(
+        APPEND artifact_evidence
+        "    {\"path\": \"${path}\", \"length\": ${artifact_length}, \"sha256\": \"${artifact_sha256}\"},\n")
+endforeach()
+string(REGEX REPLACE ",\n$" "\n" artifact_evidence "${artifact_evidence}")
+
 set(evidence_path
     "${sdk_root}/share/vrrecorder/ffmpeg-build-evidence.json")
 file(
     WRITE "${evidence_path}"
     "{\n"
-    "  \"schemaVersion\": 1,\n"
+    "  \"schemaVersion\": 2,\n"
     "  \"version\": \"8.1.2\",\n"
     "  \"tag\": \"n8.1.2\",\n"
     "  \"sourceCommit\": \"38b88335f99e76ed89ff3c93f877fdefce736c13\",\n"
+    "  \"sourceArchivePath\": \"${source_archive_relative_path}\",\n"
+    "  \"sourceArchiveLength\": ${source_archive_length},\n"
     "  \"sourceArchiveSha256\": \"464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c\",\n"
     "  \"platform\": \"windows-x64\",\n"
     "  \"toolchain\": \"msvc\",\n"
+    "  \"msvcCompilerVersion\": \"19.44.35228\",\n"
+    "  \"windowsSdkVersion\": \"10.0.26100.0\",\n"
     "  \"linkage\": \"shared\",\n"
     "  \"license\": \"LGPL version 2.1 or later\",\n"
     "  \"gpl\": false,\n"
@@ -138,7 +188,13 @@ file(
     "  \"enabledBitstreamFilters\": [\"aac_adtstoasc\", \"vp9_superframe\"],\n"
     "  \"enabledProtocols\": [\"file\"],\n"
     "  \"enabledExternalLibraries\": [\"mediafoundation\"],\n"
-    "  \"enabledHardwareAccelerationLibraries\": [\"d3d11va\"]\n"
+    "  \"enabledHardwareAccelerationLibraries\": [\"d3d11va\"],\n"
+    "  \"buildRecipePath\": \"${build_recipe_relative_path}\",\n"
+    "  \"buildRecipeLength\": ${build_recipe_length},\n"
+    "  \"buildRecipeSha256\": \"${build_recipe_sha256}\",\n"
+    "  \"artifacts\": [\n"
+    "${artifact_evidence}"
+    "  ]\n"
     "}\n")
 file(READ "${evidence_path}" valid_evidence)
 
@@ -168,6 +224,49 @@ function(run_validation expected_success label)
 endfunction()
 
 run_validation(TRUE "exact pinned SDK")
+
+string(
+    REPLACE
+        "\"msvcCompilerVersion\": \"19.44.35228\""
+        "\"msvcCompilerVersion\": \"19.43.34810\""
+    wrong_msvc_evidence "${valid_evidence}")
+file(WRITE "${evidence_path}" "${wrong_msvc_evidence}")
+run_validation(FALSE "wrong MSVC compiler version")
+file(WRITE "${evidence_path}" "${valid_evidence}")
+
+string(
+    REPLACE
+        "\"windowsSdkVersion\": \"10.0.26100.0\""
+        "\"windowsSdkVersion\": \"10.0.22621.0\""
+    wrong_sdk_evidence "${valid_evidence}")
+file(WRITE "${evidence_path}" "${wrong_sdk_evidence}")
+run_validation(FALSE "wrong Windows SDK version")
+file(WRITE "${evidence_path}" "${valid_evidence}")
+
+string(
+    REPLACE
+        "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    wrong_source_evidence "${valid_evidence}")
+file(WRITE "${evidence_path}" "${wrong_source_evidence}")
+run_validation(FALSE "wrong source archive SHA-256")
+file(WRITE "${evidence_path}" "${valid_evidence}")
+
+file(APPEND "${sdk_root}/bin/avcodec-62.dll" "tampered\n")
+run_validation(FALSE "runtime DLL hash mismatch")
+file(WRITE "${sdk_root}/bin/avcodec-62.dll" "fake runtime DLL\n")
+
+file(REMOVE "${sdk_root}/${source_archive_relative_path}")
+run_validation(FALSE "missing source archive")
+file(
+    WRITE "${sdk_root}/${source_archive_relative_path}"
+    "fake pinned source archive\n")
+
+file(APPEND "${sdk_root}/${build_recipe_relative_path}" "tampered\n")
+run_validation(FALSE "build recipe hash mismatch")
+file(
+    WRITE "${sdk_root}/${build_recipe_relative_path}"
+    "# Exact Windows FFmpeg build recipe\n")
 
 file(REMOVE "${sdk_root}/bin/avcodec-62.dll")
 run_validation(FALSE "missing runtime DLL")

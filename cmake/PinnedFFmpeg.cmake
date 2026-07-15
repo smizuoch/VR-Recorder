@@ -8,6 +8,24 @@ set(
 set(
     VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256
     "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c")
+set(VRRECORDER_FFMPEG_MSVC_COMPILER_VERSION "19.44.35228")
+set(VRRECORDER_FFMPEG_WINDOWS_SDK_VERSION "10.0.26100.0")
+set(
+    VRRECORDER_FFMPEG_SOURCE_ARCHIVE_RELATIVE_PATH
+    "share/vrrecorder/sources/ffmpeg-8.1.2.tar.xz")
+set(
+    VRRECORDER_FFMPEG_BUILD_RECIPE_RELATIVE_PATH
+    "share/vrrecorder/build-recipes/ffmpeg-windows-x64.md")
+set(
+    _vrrecorder_ffmpeg_artifact_paths
+    "bin/avcodec-62.dll"
+    "bin/avformat-62.dll"
+    "bin/avutil-60.dll"
+    "bin/swresample-6.dll"
+    "lib/avcodec.lib"
+    "lib/avformat.lib"
+    "lib/avutil.lib"
+    "lib/swresample.lib")
 
 set(
     _vrrecorder_ffmpeg_configure_arguments
@@ -93,6 +111,71 @@ function(_vrrecorder_ffmpeg_require_exact_array json property)
             FATAL_ERROR
             "Pinned FFmpeg evidence array ${property} does not match the exact contract")
     endif()
+endfunction()
+
+function(
+        _vrrecorder_ffmpeg_require_file_length
+        root json path_property length_property expected_path description)
+    _vrrecorder_ffmpeg_require_json_value(
+        "${json}" "${path_property}" "${expected_path}")
+    set(path "${root}/${expected_path}")
+    _vrrecorder_ffmpeg_require_file("${path}" "${description}")
+    file(SIZE "${path}" actual_length)
+    _vrrecorder_ffmpeg_require_json_value(
+        "${json}" "${length_property}" "${actual_length}")
+endfunction()
+
+function(
+        _vrrecorder_ffmpeg_require_file_identity
+        root json path_property length_property sha_property
+        expected_path description)
+    _vrrecorder_ffmpeg_require_file_length(
+        "${root}"
+        "${json}"
+        "${path_property}"
+        "${length_property}"
+        "${expected_path}"
+        "${description}")
+    set(path "${root}/${expected_path}")
+    file(SHA256 "${path}" actual_sha256)
+    _vrrecorder_ffmpeg_require_json_value(
+        "${json}" "${sha_property}" "${actual_sha256}")
+endfunction()
+
+function(_vrrecorder_ffmpeg_validate_artifact_identities root evidence)
+    string(
+        JSON artifact_count
+        ERROR_VARIABLE json_error
+        LENGTH "${evidence}" artifacts)
+    if(NOT json_error STREQUAL "NOTFOUND")
+        message(FATAL_ERROR "Pinned FFmpeg artifact evidence is missing")
+    endif()
+    list(LENGTH _vrrecorder_ffmpeg_artifact_paths expected_count)
+    if(NOT artifact_count EQUAL expected_count)
+        message(
+            FATAL_ERROR
+            "Pinned FFmpeg artifact evidence must contain the exact artifact set")
+    endif()
+
+    math(EXPR last_index "${expected_count} - 1")
+    foreach(index RANGE 0 ${last_index})
+        list(GET _vrrecorder_ffmpeg_artifact_paths ${index} expected_path)
+        string(
+            JSON artifact
+            ERROR_VARIABLE json_error
+            GET "${evidence}" artifacts ${index})
+        if(NOT json_error STREQUAL "NOTFOUND")
+            message(FATAL_ERROR "Pinned FFmpeg artifact evidence is invalid")
+        endif()
+        _vrrecorder_ffmpeg_require_file_identity(
+            "${root}"
+            "${artifact}"
+            path
+            length
+            sha256
+            "${expected_path}"
+            "artifact ${expected_path}")
+    endforeach()
 endfunction()
 
 function(_vrrecorder_ffmpeg_require_version header macro expected)
@@ -188,7 +271,7 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
 
     _vrrecorder_ffmpeg_require_file("${evidence_path}" "build evidence")
     file(READ "${evidence_path}" evidence)
-    _vrrecorder_ffmpeg_require_json_value("${evidence}" schemaVersion "1")
+    _vrrecorder_ffmpeg_require_json_value("${evidence}" schemaVersion "2")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" version "${VRRECORDER_FFMPEG_VERSION}")
     _vrrecorder_ffmpeg_require_json_value(
@@ -199,9 +282,24 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         "${evidence}"
         sourceArchiveSha256
         "${VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256}")
+    _vrrecorder_ffmpeg_require_file_length(
+        "${normalized_root}"
+        "${evidence}"
+        sourceArchivePath
+        sourceArchiveLength
+        "${VRRECORDER_FFMPEG_SOURCE_ARCHIVE_RELATIVE_PATH}"
+        "source archive")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" platform "windows-x64")
     _vrrecorder_ffmpeg_require_json_value("${evidence}" toolchain "msvc")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        msvcCompilerVersion
+        "${VRRECORDER_FFMPEG_MSVC_COMPILER_VERSION}")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        windowsSdkVersion
+        "${VRRECORDER_FFMPEG_WINDOWS_SDK_VERSION}")
     _vrrecorder_ffmpeg_require_json_value("${evidence}" linkage "shared")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" license "LGPL version 2.1 or later")
@@ -257,6 +355,16 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
     _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledHardwareAccelerationLibraries
         d3d11va)
+    _vrrecorder_ffmpeg_require_file_identity(
+        "${normalized_root}"
+        "${evidence}"
+        buildRecipePath
+        buildRecipeLength
+        buildRecipeSha256
+        "${VRRECORDER_FFMPEG_BUILD_RECIPE_RELATIVE_PATH}"
+        "build recipe")
+    _vrrecorder_ffmpeg_validate_artifact_identities(
+        "${normalized_root}" "${evidence}")
 endfunction()
 
 function(vrrecorder_import_pinned_ffmpeg_sdk root)
