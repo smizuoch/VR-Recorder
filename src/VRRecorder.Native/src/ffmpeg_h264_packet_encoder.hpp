@@ -2,6 +2,7 @@
 #define VRRECORDER_NATIVE_FFMPEG_H264_PACKET_ENCODER_HPP
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -12,6 +13,8 @@
 struct AVFrame;
 
 namespace vrrecorder::native {
+
+struct PacketVideoEncoderWrite;
 
 class FfmpegH264CodecSession {
 public:
@@ -70,6 +73,11 @@ struct FfmpegH264PacketEncoderCreateResult final {
     vrrec_status_t status = VRREC_STATUS_INTERNAL_ERROR;
     std::unique_ptr<FfmpegH264PacketEncoder> encoder;
 };
+
+PacketVideoEncoderWrite MakeMuxingVideoEncoderWrite(
+    const FfmpegH264PacketEncoder &encoder,
+    FfmpegH264PacketEncoderWrite write,
+    std::uint64_t encode_latency_microseconds) noexcept;
 
 }
 

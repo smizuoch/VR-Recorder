@@ -1,5 +1,6 @@
 #include "ffmpeg_h264_packet_encoder.hpp"
 #include "h264_test_vectors.hpp"
+#include "muxing_video_encoder_sink.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -178,6 +179,26 @@ void UsesOpenTimeExtradataAndEncodesOwnedNv12()
     CHECK(observed->encode_calls == 1);
     CHECK(observed->observed_pts == 7);
     CHECK(observed->observed_y == 0x23);
+
+    auto next_session = std::make_unique<FakeCodecSession>();
+    next_session->extradata = AnnexB({sps, pps});
+    next_session->encode_batch = {
+        VRREC_STATUS_OK,
+        {RawPacket(AnnexB({idr}), true)},
+    };
+    auto next_creation = FfmpegH264PacketEncoder::CreateForTesting(
+        ExactConfig(),
+        std::move(next_session),
+        AllocateFrame());
+    auto open_time_write = next_creation.encoder->EncodeNv12(
+        FrameView(y, uv, 8));
+    const auto adapted = MakeMuxingVideoEncoderWrite(
+        *next_creation.encoder,
+        std::move(open_time_write),
+        25);
+    CHECK(!adapted.descriptor_became_ready);
+    CHECK(adapted.encoder_identity == nullptr);
+    CHECK(adapted.descriptor == nullptr);
 }
 
 void DerivesLateExtradataFromTheFirstRealPacket()
@@ -204,6 +225,37 @@ void DerivesLateExtradataFromTheFirstRealPacket()
     CHECK(write.descriptor_became_ready);
     CHECK(write.packets.size() == 1);
     CHECK(creation.encoder->Descriptor() != nullptr);
+}
+
+void AdaptsLateDescriptorMetadataForTheMuxingVideoSink()
+{
+    const auto sps = Sps();
+    const auto pps = MakePps({});
+    const std::vector<std::byte> idr {std::byte {0x65}, std::byte {0x88}};
+    auto session = std::make_unique<FakeCodecSession>();
+    session->encode_batch = {
+        VRREC_STATUS_OK,
+        {RawPacket(AnnexB({sps, pps, idr}), true)},
+    };
+    auto creation = FfmpegH264PacketEncoder::CreateForTesting(
+        ExactConfig(),
+        std::move(session),
+        AllocateFrame());
+    std::vector<std::byte> y(32U * 16U);
+    std::vector<std::byte> uv(32U * 8U);
+    auto encoded = creation.encoder->EncodeNv12(FrameView(y, uv, 0));
+
+    const auto adapted = MakeMuxingVideoEncoderWrite(
+        *creation.encoder,
+        std::move(encoded),
+        175);
+
+    CHECK(adapted.status == VRREC_STATUS_OK);
+    CHECK(adapted.encode_latency_microseconds == 175);
+    CHECK(adapted.packets.size() == 1);
+    CHECK(adapted.descriptor_became_ready);
+    CHECK(adapted.encoder_identity == creation.encoder.get());
+    CHECK(adapted.descriptor == creation.encoder->Descriptor());
 }
 
 void PreservesZeroPacketBatchesAndNormalizesFinishPackets()
@@ -270,6 +322,7 @@ int main()
 {
     UsesOpenTimeExtradataAndEncodesOwnedNv12();
     DerivesLateExtradataFromTheFirstRealPacket();
+    AdaptsLateDescriptorMetadataForTheMuxingVideoSink();
     PreservesZeroPacketBatchesAndNormalizesFinishPackets();
     FailureAbortsTheSessionAndMakesTheEncoderTerminal();
     ProductionFactoryFailsClosedWhenH264MfIsUnavailable();

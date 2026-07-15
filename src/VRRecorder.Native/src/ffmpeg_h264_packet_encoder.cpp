@@ -8,6 +8,7 @@
 
 #include "ffmpeg_h264_media_foundation_configuration.hpp"
 #include "ffmpeg_libavcodec_encoder_port.hpp"
+#include "muxing_video_encoder_sink.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -390,6 +391,30 @@ const H264StreamDescriptor *FfmpegH264PacketEncoder::Descriptor() const noexcept
     }
     const std::lock_guard lock(impl_->mutex);
     return impl_->normalizer.Descriptor();
+}
+
+PacketVideoEncoderWrite MakeMuxingVideoEncoderWrite(
+    const FfmpegH264PacketEncoder &encoder,
+    FfmpegH264PacketEncoderWrite write,
+    std::uint64_t encode_latency_microseconds) noexcept
+{
+    const auto *descriptor = write.descriptor_became_ready
+        ? encoder.Descriptor()
+        : nullptr;
+    if (write.status == VRREC_STATUS_OK &&
+        write.descriptor_became_ready && descriptor == nullptr) {
+        write.status = VRREC_STATUS_INTERNAL_ERROR;
+    }
+    const auto publish_descriptor = write.status == VRREC_STATUS_OK &&
+        write.descriptor_became_ready && descriptor != nullptr;
+    return {
+        write.status,
+        encode_latency_microseconds,
+        std::move(write.packets),
+        publish_descriptor,
+        publish_descriptor ? &encoder : nullptr,
+        publish_descriptor ? descriptor : nullptr,
+    };
 }
 
 }
