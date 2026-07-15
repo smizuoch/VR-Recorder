@@ -177,6 +177,25 @@ if(VRRECORDER_SPOUT_FACTORY_VARIANT STREQUAL "PRODUCTION")
     endif()
 endif()
 
+if(VRRECORDER_STEAMVR_FACTORY_VARIANT STREQUAL "PRODUCTION")
+    if(NOT WIN32 OR NOT MSVC OR NOT VRRECORDER_ENABLE_OPENVR_ADAPTER OR
+       NOT TARGET OpenVR::openvr_api)
+        message(
+            FATAL_ERROR
+            "The production SteamVR backend requires the pinned Windows MSVC OpenVR SDK")
+    endif()
+    if(WIN32)
+        target_sources(
+            vrrecorder_native
+            PRIVATE
+                src/openvr_process_runtime.cpp
+                src/openvr_steamvr_input_backend_core.cpp)
+        target_link_libraries(
+            vrrecorder_native
+            PRIVATE OpenVR::openvr_api)
+    endif()
+endif()
+
 if(WIN32)
     target_sources(
         vrrecorder_native

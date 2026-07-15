@@ -112,6 +112,16 @@
     },
     {
       "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "OpenVR::openvr_api",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "ThirdParty",
+      "componentId": "openvr",
+      "artifactFileName": "openvr_api.dll",
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
       "inputIdentity": "FFmpeg::avcodec",
       "inputKind": "ToolchainTarget",
       "platform": "windows-x64",

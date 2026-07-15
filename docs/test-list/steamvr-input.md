@@ -9,7 +9,7 @@
 - [x] install rootから存在するabsolute action manifest pathを解決する
 - [x] WPF publish payloadへaction manifestとbindingsを同梱する
 - [x] native ABIのdigital stateをmanaged async streamへ変換しcancellationでdestroyする
-- [ ] OpenVR `SetActionManifestPath`へinstall directory内のabsolute pathを登録する
+- [x] OpenVR `SetActionManifestPath`へinstall directory内のabsolute pathを登録する
 - [ ] 実SteamVR runtimeでbinding読込みとcontroller再割当を検証する
 - [x] desktop click／keyboard／wrist rayと同じapplication dispatcherを実行する
 
@@ -22,6 +22,6 @@
 - [x] Resolve an existing absolute action-manifest path from the install root
 - [x] Include the action manifest and bindings in the WPF publish payload
 - [x] Convert native digital state into a managed async stream and destroy it on cancellation
-- [ ] Register an install-directory absolute path through OpenVR `SetActionManifestPath`
+- [x] Register an install-directory absolute path through OpenVR `SetActionManifestPath`
 - [ ] Verify binding load and controller rebinding with a real SteamVR runtime
 - [x] Execute the same application dispatcher used by desktop click, keyboard, and wrist ray
