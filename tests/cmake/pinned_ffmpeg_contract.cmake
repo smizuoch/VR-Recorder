@@ -84,25 +84,60 @@ endforeach()
 
 set(source_archive_relative_path
     "share/vrrecorder/sources/ffmpeg-8.1.2.tar.xz")
+set(source_patch_relative_path
+    "share/vrrecorder/patches/ffmpeg-8.1.2/0001-configure-redo-enabling-cbs-in-lavf.patch")
 set(build_recipe_relative_path
     "share/vrrecorder/build-recipes/ffmpeg-windows-x64.md")
+get_filename_component(module_directory "${PINNED_FFMPEG_MODULE}" DIRECTORY)
+get_filename_component(repository_root "${module_directory}" DIRECTORY)
+set(canonical_patch_path
+    "${repository_root}/eng/patches/ffmpeg-8.1.2/0001-configure-redo-enabling-cbs-in-lavf.patch")
+set(canonical_recipe_path
+    "${repository_root}/eng/ffmpeg-windows-production-build-recipe.md")
+if(NOT EXISTS "${canonical_patch_path}" OR IS_DIRECTORY "${canonical_patch_path}")
+    message(FATAL_ERROR "Canonical FFmpeg source patch is missing")
+endif()
+if(NOT EXISTS "${canonical_recipe_path}" OR IS_DIRECTORY "${canonical_recipe_path}")
+    message(FATAL_ERROR "Canonical FFmpeg build recipe is missing")
+endif()
 get_filename_component(
     source_archive_parent
     "${sdk_root}/${source_archive_relative_path}"
     DIRECTORY)
 get_filename_component(
+    source_patch_parent
+    "${sdk_root}/${source_patch_relative_path}"
+    DIRECTORY)
+get_filename_component(
     build_recipe_parent
     "${sdk_root}/${build_recipe_relative_path}"
     DIRECTORY)
-file(MAKE_DIRECTORY "${source_archive_parent}" "${build_recipe_parent}")
+file(MAKE_DIRECTORY
+    "${source_archive_parent}"
+    "${source_patch_parent}"
+    "${build_recipe_parent}")
 file(
     WRITE "${sdk_root}/${source_archive_relative_path}"
     "fake pinned source archive\n")
-file(
-    WRITE "${sdk_root}/${build_recipe_relative_path}"
-    "# Exact Windows FFmpeg build recipe\n")
+configure_file(
+    "${canonical_recipe_path}"
+    "${sdk_root}/${build_recipe_relative_path}"
+    COPYONLY)
+configure_file(
+    "${canonical_patch_path}"
+    "${sdk_root}/${source_patch_relative_path}"
+    COPYONLY)
 
 file(SIZE "${sdk_root}/${source_archive_relative_path}" source_archive_length)
+file(
+    SHA256
+    "${sdk_root}/${source_archive_relative_path}"
+    source_archive_sha256)
+file(SIZE "${sdk_root}/${source_patch_relative_path}" source_patch_length)
+file(
+    SHA256
+    "${sdk_root}/${source_patch_relative_path}"
+    source_patch_sha256)
 file(SIZE "${sdk_root}/${build_recipe_relative_path}" build_recipe_length)
 file(
     SHA256
@@ -133,13 +168,18 @@ set(evidence_path
 file(
     WRITE "${evidence_path}"
     "{\n"
-    "  \"schemaVersion\": 2,\n"
+    "  \"schemaVersion\": 3,\n"
     "  \"version\": \"8.1.2\",\n"
     "  \"tag\": \"n8.1.2\",\n"
     "  \"sourceCommit\": \"38b88335f99e76ed89ff3c93f877fdefce736c13\",\n"
     "  \"sourceArchivePath\": \"${source_archive_relative_path}\",\n"
     "  \"sourceArchiveLength\": ${source_archive_length},\n"
-    "  \"sourceArchiveSha256\": \"464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c\",\n"
+    "  \"sourceArchiveSha256\": \"${source_archive_sha256}\",\n"
+    "  \"sourcePatchPath\": \"${source_patch_relative_path}\",\n"
+    "  \"sourcePatchLength\": ${source_patch_length},\n"
+    "  \"sourcePatchSha256\": \"${source_patch_sha256}\",\n"
+    "  \"sourcePatchUpstreamCommit\": \"cec19d7ddf725896dfbf79a4c308550d83eab5ec\",\n"
+    "  \"sourcePatchUpstreamUrl\": \"https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039\",\n"
     "  \"platform\": \"windows-x64\",\n"
     "  \"toolchain\": \"msvc\",\n"
     "  \"msvcCompilerVersion\": \"19.44.35228\",\n"
@@ -151,6 +191,8 @@ file(
     "  \"configureArguments\": [\n"
     "    \"--prefix=${sdk_root}\",\n"
     "    \"--toolchain=msvc\",\n"
+    "    \"--enable-cross-compile\",\n"
+    "    \"--host-cc=cl.exe\",\n"
     "    \"--arch=x86_64\",\n"
     "    \"--target-os=win32\",\n"
     "    \"--enable-shared\",\n"
@@ -202,6 +244,13 @@ file(
     WRITE "${runner_path}"
     "cmake_minimum_required(VERSION 3.24)\n"
     "include(\"${PINNED_FFMPEG_MODULE}\")\n"
+    "if(NOT VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256 STREQUAL \"464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c\")\n"
+    "  message(FATAL_ERROR \"Pinned source archive SHA-256 drifted\")\n"
+    "endif()\n"
+    "if(NOT VRRECORDER_FFMPEG_BUILD_RECIPE_SHA256 STREQUAL \"3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01\")\n"
+    "  message(FATAL_ERROR \"Pinned build recipe SHA-256 drifted\")\n"
+    "endif()\n"
+    "set(VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256 \"${source_archive_sha256}\")\n"
     "vrrecorder_validate_pinned_ffmpeg_sdk(\"\${SDK_ROOT}\")\n")
 
 function(run_validation expected_success label)
@@ -245,11 +294,20 @@ file(WRITE "${evidence_path}" "${valid_evidence}")
 
 string(
     REPLACE
-        "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+        "${source_archive_sha256}"
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     wrong_source_evidence "${valid_evidence}")
 file(WRITE "${evidence_path}" "${wrong_source_evidence}")
 run_validation(FALSE "wrong source archive SHA-256")
+file(WRITE "${evidence_path}" "${valid_evidence}")
+
+string(
+    REPLACE
+        "cec19d7ddf725896dfbf79a4c308550d83eab5ec"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    wrong_patch_commit_evidence "${valid_evidence}")
+file(WRITE "${evidence_path}" "${wrong_patch_commit_evidence}")
+run_validation(FALSE "wrong source patch upstream commit")
 file(WRITE "${evidence_path}" "${valid_evidence}")
 
 file(APPEND "${sdk_root}/bin/avcodec-62.dll" "tampered\n")
@@ -262,11 +320,34 @@ file(
     WRITE "${sdk_root}/${source_archive_relative_path}"
     "fake pinned source archive\n")
 
+file(
+    WRITE "${sdk_root}/${source_archive_relative_path}"
+    "Fake pinned source archive\n")
+run_validation(FALSE "same-length source archive tamper")
+file(
+    WRITE "${sdk_root}/${source_archive_relative_path}"
+    "fake pinned source archive\n")
+
+file(APPEND "${sdk_root}/${source_patch_relative_path}" "tampered\n")
+run_validation(FALSE "source patch hash mismatch")
+configure_file(
+    "${canonical_patch_path}"
+    "${sdk_root}/${source_patch_relative_path}"
+    COPYONLY)
+
+file(REMOVE "${sdk_root}/${source_patch_relative_path}")
+run_validation(FALSE "missing source patch")
+configure_file(
+    "${canonical_patch_path}"
+    "${sdk_root}/${source_patch_relative_path}"
+    COPYONLY)
+
 file(APPEND "${sdk_root}/${build_recipe_relative_path}" "tampered\n")
 run_validation(FALSE "build recipe hash mismatch")
-file(
-    WRITE "${sdk_root}/${build_recipe_relative_path}"
-    "# Exact Windows FFmpeg build recipe\n")
+configure_file(
+    "${canonical_recipe_path}"
+    "${sdk_root}/${build_recipe_relative_path}"
+    COPYONLY)
 
 file(REMOVE "${sdk_root}/bin/avcodec-62.dll")
 run_validation(FALSE "missing runtime DLL")
@@ -310,6 +391,7 @@ file(
     "cmake_minimum_required(VERSION 3.24)\n"
     "project(PinnedFFmpegImport LANGUAGES NONE)\n"
     "include(\"${PINNED_FFMPEG_MODULE}\")\n"
+    "set(VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256 \"${source_archive_sha256}\")\n"
     "vrrecorder_import_pinned_ffmpeg_sdk(\"\${SDK_ROOT}\")\n"
     "foreach(component IN ITEMS avcodec avformat avutil swresample)\n"
     "  if(NOT TARGET \"FFmpeg::\${component}\")\n"

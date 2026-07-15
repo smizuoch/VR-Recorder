@@ -14,8 +14,23 @@ set(
     VRRECORDER_FFMPEG_SOURCE_ARCHIVE_RELATIVE_PATH
     "share/vrrecorder/sources/ffmpeg-8.1.2.tar.xz")
 set(
+    VRRECORDER_FFMPEG_SOURCE_PATCH_RELATIVE_PATH
+    "share/vrrecorder/patches/ffmpeg-8.1.2/0001-configure-redo-enabling-cbs-in-lavf.patch")
+set(
+    VRRECORDER_FFMPEG_SOURCE_PATCH_SHA256
+    "c8aca5fee1f02dbd1a1623de0333013e0c41fb691adf0ede3d4479ee32ac41c0")
+set(
+    VRRECORDER_FFMPEG_SOURCE_PATCH_UPSTREAM_COMMIT
+    "cec19d7ddf725896dfbf79a4c308550d83eab5ec")
+set(
+    VRRECORDER_FFMPEG_SOURCE_PATCH_UPSTREAM_URL
+    "https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039")
+set(
     VRRECORDER_FFMPEG_BUILD_RECIPE_RELATIVE_PATH
     "share/vrrecorder/build-recipes/ffmpeg-windows-x64.md")
+set(
+    VRRECORDER_FFMPEG_BUILD_RECIPE_SHA256
+    "3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01")
 set(
     _vrrecorder_ffmpeg_artifact_paths
     "bin/avcodec-62.dll"
@@ -31,6 +46,8 @@ set(
     _vrrecorder_ffmpeg_configure_arguments
     "--prefix=<SDK_ROOT>"
     "--toolchain=msvc"
+    "--enable-cross-compile"
+    "--host-cc=cl.exe"
     "--arch=x86_64"
     "--target-os=win32"
     "--enable-shared"
@@ -271,24 +288,45 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
 
     _vrrecorder_ffmpeg_require_file("${evidence_path}" "build evidence")
     file(READ "${evidence_path}" evidence)
-    _vrrecorder_ffmpeg_require_json_value("${evidence}" schemaVersion "2")
+    _vrrecorder_ffmpeg_require_json_value("${evidence}" schemaVersion "3")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" version "${VRRECORDER_FFMPEG_VERSION}")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" tag "${VRRECORDER_FFMPEG_TAG}")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" sourceCommit "${VRRECORDER_FFMPEG_SOURCE_COMMIT}")
-    _vrrecorder_ffmpeg_require_json_value(
-        "${evidence}"
-        sourceArchiveSha256
-        "${VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256}")
-    _vrrecorder_ffmpeg_require_file_length(
+    _vrrecorder_ffmpeg_require_file_identity(
         "${normalized_root}"
         "${evidence}"
         sourceArchivePath
         sourceArchiveLength
+        sourceArchiveSha256
         "${VRRECORDER_FFMPEG_SOURCE_ARCHIVE_RELATIVE_PATH}"
         "source archive")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        sourceArchiveSha256
+        "${VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256}")
+    _vrrecorder_ffmpeg_require_file_identity(
+        "${normalized_root}"
+        "${evidence}"
+        sourcePatchPath
+        sourcePatchLength
+        sourcePatchSha256
+        "${VRRECORDER_FFMPEG_SOURCE_PATCH_RELATIVE_PATH}"
+        "source patch")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        sourcePatchSha256
+        "${VRRECORDER_FFMPEG_SOURCE_PATCH_SHA256}")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        sourcePatchUpstreamCommit
+        "${VRRECORDER_FFMPEG_SOURCE_PATCH_UPSTREAM_COMMIT}")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        sourcePatchUpstreamUrl
+        "${VRRECORDER_FFMPEG_SOURCE_PATCH_UPSTREAM_URL}")
     _vrrecorder_ffmpeg_require_json_value(
         "${evidence}" platform "windows-x64")
     _vrrecorder_ffmpeg_require_json_value("${evidence}" toolchain "msvc")
@@ -363,6 +401,10 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         buildRecipeSha256
         "${VRRECORDER_FFMPEG_BUILD_RECIPE_RELATIVE_PATH}"
         "build recipe")
+    _vrrecorder_ffmpeg_require_json_value(
+        "${evidence}"
+        buildRecipeSha256
+        "${VRRECORDER_FFMPEG_BUILD_RECIPE_SHA256}")
     _vrrecorder_ffmpeg_validate_artifact_identities(
         "${normalized_root}" "${evidence}")
 endfunction()

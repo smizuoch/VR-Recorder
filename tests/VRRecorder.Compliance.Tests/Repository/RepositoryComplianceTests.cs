@@ -65,11 +65,93 @@ public sealed class RepositoryComplianceTests
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- eng/build-ffmpeg-contract-test-sdk.sh"));
         Assert.Equal(2, workflowLines.Count(line =>
+            line == "- eng/build-ffmpeg-windows-production-sdk.ps1"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- eng/ffmpeg-windows-production-build-recipe.md"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- eng/patches/ffmpeg-8.1.2/**"));
+        Assert.Equal(2, workflowLines.Count(line =>
             line == "- src/VRRecorder.Native/**"));
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- tests/cmake/**"));
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- tests/VRRecorder.Native.Tests/**"));
+    }
+
+    [Fact]
+    public void WindowsFfmpegBuilderPinsTheExactProductionSdkContract()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var builderPath = Path.Combine(
+            repositoryRoot,
+            "eng",
+            "build-ffmpeg-windows-production-sdk.ps1");
+        var recipePath = Path.Combine(
+            repositoryRoot,
+            "eng",
+            "ffmpeg-windows-production-build-recipe.md");
+        var patchPath = Path.Combine(
+            repositoryRoot,
+            "eng",
+            "patches",
+            "ffmpeg-8.1.2",
+            "0001-configure-redo-enabling-cbs-in-lavf.patch");
+
+        Assert.True(File.Exists(builderPath));
+        Assert.True(File.Exists(recipePath));
+        Assert.True(File.Exists(patchPath));
+        var builder = File.ReadAllText(builderPath);
+        var recipe = File.ReadAllText(recipePath);
+        var patch = File.ReadAllText(patchPath);
+        var combined = builder + "\n" + recipe + "\n" + patch;
+
+        Assert.Contains("ffmpeg-8.1.2.tar.xz", combined);
+        Assert.Contains(
+            "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+            combined);
+        Assert.Contains("19.44.35228", combined);
+        Assert.Contains("10.0.26100.0", combined);
+        Assert.Contains(
+            "cec19d7ddf725896dfbf79a4c308550d83eab5ec",
+            combined);
+        Assert.Contains(
+            "https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039",
+            combined);
+        Assert.Contains(
+            "0001-configure-redo-enabling-cbs-in-lavf.patch",
+            builder);
+        Assert.Contains(
+            "3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01",
+            builder);
+        Assert.Contains("cbs_apv_lavf", patch);
+        Assert.Contains("cbs_av1_lavf", patch);
+        Assert.Contains("CONFIG_CBS_LAVF", patch);
+        Assert.Contains("$installedImportLibrary", builder);
+        Assert.Contains("$contractImportLibrary", builder);
+        foreach (var argument in new[]
+                 {
+                     "--toolchain=msvc",
+                     "--enable-cross-compile",
+                     "--host-cc=cl.exe",
+                     "--arch=x86_64",
+                     "--target-os=win32",
+                     "--enable-shared",
+                     "--disable-static",
+                     "--disable-programs",
+                     "--disable-autodetect",
+                     "--disable-everything",
+                     "--enable-encoder=aac",
+                     "--enable-encoder=h264_mf",
+                     "--enable-muxer=mp4",
+                     "--enable-protocol=file"
+                 })
+        {
+            Assert.Contains(argument, combined);
+        }
+        Assert.DoesNotContain("--enable-gpl", combined);
+        Assert.DoesNotContain("--enable-nonfree", combined);
+        Assert.DoesNotContain("--enable-version3", combined);
+        Assert.DoesNotContain("--enable-lib", combined);
     }
 
     [Fact]

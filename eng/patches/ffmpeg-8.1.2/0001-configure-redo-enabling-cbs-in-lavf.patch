@@ -1,0 +1,100 @@
+From cec19d7ddf725896dfbf79a4c308550d83eab5ec Mon Sep 17 00:00:00 2001
+From: Andreas Rheinhardt <andreas.rheinhardt@outlook.com>
+Date: Thu, 7 May 2026 13:25:29 +0200
+Subject: [PATCH] configure: Redo enabling cbs in lavf
+
+Upstream: https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039
+
+Right now, the cbs_type_table (the table of all CodedBitstreamTypes
+supported by CBS) is empty unless cbs_apv and cbs_av1 is enabled.
+The latter are only enabled in configure if they are needed in lavc.
+This means that the mov muxers (the only users of cbs-in-lavf)
+don't work as they should depending upon the availability of
+e.g. the av1_metadata BSF. The table being empty is also illegal C
+and according to PR #23038 MSVC warns about this (as does GCC
+with -pedantic) and it may even lead to an internal compiler error.
+This could be fixed by simply adding a mov_muxer->cbs_av1,cbs_apv
+dependency in configure, yet this would have the downside that
+it would force cbs_av1 and cbs_apv to be built for lavc, too,
+even though it may not be needed there. So add new configure
+variables cbs_{apv,av1}_lavf and cbs_lavf to track this correctly.
+
+Reported-by: xiaozhuai <sunlight.lee@outlook.com>
+Signed-off-by: Andreas Rheinhardt <andreas.rheinhardt@outlook.com>
+---
+ configure            | 7 ++++++-
+ libavformat/Makefile | 5 ++++-
+ libavformat/cbs.h    | 4 ++++
+ 3 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/configure b/configure
+index 83af86c..292e0c2 100755
+--- a/configure
++++ b/configure
+@@ -2695,11 +2695,14 @@ CONFIG_EXTRA="
+     cabac
+     cbs
+     cbs_apv
++    cbs_apv_lavf
+     cbs_av1
++    cbs_av1_lavf
+     cbs_h264
+     cbs_h265
+     cbs_h266
+     cbs_jpeg
++    cbs_lavf
+     cbs_lcevc
+     cbs_mpeg2
+     cbs_vp8
+@@ -3016,5 +3019,7 @@
+ # subsystems
++cbs_apv_lavf_select="cbs_lavf"
+ cbs_apv_select="cbs"
++cbs_av1_lavf_select="cbs_lavf"
+ cbs_av1_select="cbs"
+ cbs_h264_select="cbs"
+ cbs_h265_select="cbs"
+@@ -3907,6 +3912,6 @@ mov_demuxer_select="iso_media riffdec"
+ mov_demuxer_select="iso_media riffdec"
+ mov_demuxer_suggest="iamfdec zlib"
+-mov_muxer_select="iso_media iso_writer riffenc rtpenc_chain vp9_superframe_bsf aac_adtstoasc_bsf ac3_parser"
++mov_muxer_select="cbs_apv_lavf cbs_av1_lavf iso_media iso_writer riffenc rtpenc_chain vp9_superframe_bsf aac_adtstoasc_bsf ac3_parser"
+ mov_muxer_suggest="iamfenc"
+ mp3_demuxer_select="mpegaudio_parser"
+ mp3_muxer_select="mpegaudioheader"
+diff --git a/libavformat/Makefile b/libavformat/Makefile
+index 78ab3df..760a939 100644
+--- a/libavformat/Makefile
++++ b/libavformat/Makefile
+@@ -42,4 +42,7 @@
+ # subsystems
++OBJS-$(CONFIG_CBS_LAVF)                  += cbs.o
++OBJS-$(CONFIG_CBS_APV_LAVF)              += cbs_apv.o
++OBJS-$(CONFIG_CBS_AV1_LAVF)              += cbs_av1.o
+ OBJS-$(CONFIG_ISO_MEDIA)                 += isom.o
+ OBJS-$(CONFIG_ISO_WRITER)                += avc.o hevc.o vvc.o
+ OBJS-$(CONFIG_IAMFDEC)                   += iamf_reader.o iamf_parse.o iamf.o
+@@ -389,7 +392,7 @@ OBJS-$(CONFIG_MOV_DEMUXER)               += mov.o mov_chan.o mov_esds.o \
+ OBJS-$(CONFIG_MOV_MUXER)                 += movenc.o \
+                                             movenchint.o mov_chan.o rtp.o \
+                                             movenccenc.o movenc_ttml.o rawutils.o \
+-                                            apv.o dovi_isom.o evc.o cbs.o cbs_av1.o cbs_apv.o
++                                            apv.o dovi_isom.o evc.o
+ OBJS-$(CONFIG_MP2_MUXER)                 += rawenc.o
+ OBJS-$(CONFIG_MP3_DEMUXER)               += mp3dec.o replaygain.o
+ OBJS-$(CONFIG_MP3_MUXER)                 += mp3enc.o rawenc.o id3v2enc.o
+diff --git a/libavformat/cbs.h b/libavformat/cbs.h
+index dffd0e9..e4c0f33 100644
+--- a/libavformat/cbs.h
++++ b/libavformat/cbs.h
+@@ -22,6 +22,10 @@
++#include "config.h"
++
+ #define CBS_PREFIX lavf_cbs
+ #define CBS_WRITE 0
+ #define CBS_TRACE 0
++#define CBS_APV CONFIG_CBS_APV_LAVF
++#define CBS_AV1 CONFIG_CBS_AV1_LAVF
+ #define CBS_H264 0
+ #define CBS_H265 0
+ #define CBS_H266 0
