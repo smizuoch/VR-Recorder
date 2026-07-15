@@ -1192,6 +1192,25 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_video_processing_encoder_sink)
 
 add_executable(
+    vrrecorder_native_d3d11_video_frame_processor
+    d3d11_video_frame_processor_tests.cpp
+    "${native_source_root}/src/d3d11_video_frame_processor.cpp"
+    "${native_source_root}/src/video_processing_plan.cpp")
+target_compile_features(
+    vrrecorder_native_d3d11_video_frame_processor PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_d3d11_video_frame_processor
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_d3d11_video_frame_processor
+    PROPERTIES
+        CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_d3d11_video_frame_processor)
+
+add_executable(
     vrrecorder_native_video_encoding_pump
     video_encoding_pump_tests.cpp
     "${native_source_root}/src/video_encoding_pump.cpp"
@@ -1430,6 +1449,8 @@ add_test(NAME vrrecorder_native_muxing_audio_encoder_sink
     COMMAND vrrecorder_native_muxing_audio_encoder_sink)
 add_test(NAME vrrecorder_native_video_processing_encoder_sink
     COMMAND vrrecorder_native_video_processing_encoder_sink)
+add_test(NAME vrrecorder_native_d3d11_video_frame_processor
+    COMMAND vrrecorder_native_d3d11_video_frame_processor)
 add_test(NAME vrrecorder_native_video_encoding_pump
     COMMAND vrrecorder_native_video_encoding_pump)
 add_test(NAME vrrecorder_native_video_encoding_worker
