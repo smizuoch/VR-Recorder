@@ -8,6 +8,7 @@
 - [x] production FFmpeg SDKを公式8.1.2のsource identity、完全library version、shared DLL／import library、LGPL-only configure evidenceへ固定し、不足・version違い・GPL混入をconfigure時に拒否する
 - [x] Windows production FFmpeg evidence schema v3をMSVC 19.44.35228／Windows SDK 10.0.26100.0、source archiveの実SHA-256、固定upstream backport patch／build recipe、exact 4 DLL＋4 import libraryの実length／SHA-256へ結合し、Smart App Controlを無効化せず再現buildしてtoolchain drift、missing、same-length tamperをconfigure時に拒否する
 - [x] 同じ公式8.1.2 sourceから隔離したLinux contract-test SDKを再現生成し、system FFmpegへfallbackせず実libavcodec Portを厳格compile／実行する
+- [x] 同じ公式8.1.2 sourceから隔離したWindows test-only oracle SDKをMSVCで再現生成し、AAC／H.264 decoder、MOV demuxer、file protocol、ffprobeだけを許可してencoder／muxerとproduction DLLの混入をhash付き契約で拒否する
 - [x] ABI v1のx64 struct sizeと固定幅fieldを検証する
 - [x] null／undersized／unsupported ABI入力をhandle生成前に拒否する
 - [x] backendのmux成功通知後だけFIRST_VIDEO_PACKET_MUXEDを1回発行する
@@ -48,6 +49,7 @@
 - [x] Pin the production FFmpeg SDK to the official 8.1.2 source identity, exact library versions, shared DLL/import-library set, and LGPL-only configure evidence, rejecting missing files, version drift, and GPL enablement at configure time
 - [x] Bind Windows production FFmpeg evidence schema v3 to MSVC 19.44.35228/Windows SDK 10.0.26100.0, the source archive's actual SHA-256, the pinned upstream backport patch/build recipe, and actual lengths/SHA-256 values for the exact four DLLs plus four import libraries; reproduce the build without disabling Smart App Control and reject toolchain drift, missing files, and same-length tampering at configure time
 - [x] Reproducibly build an isolated Linux contract-test SDK from the same official 8.1.2 source and strictly compile/run the real libavcodec port without falling back to system FFmpeg
+- [x] Reproducibly build an isolated Windows test-only oracle SDK from the same official 8.1.2 source with MSVC, permit only the AAC/H.264 decoders, MOV demuxer, file protocol, and ffprobe, and reject encoders, muxers, or production-DLL contamination through a hash-bound contract
 - [x] Verify ABI v1 x64 struct sizes and fixed-width fields
 - [x] Reject null, undersized, and unsupported-ABI inputs before allocating a handle
 - [x] Emit one FIRST_VIDEO_PACKET_MUXED event only after the backend reports a successful mux write

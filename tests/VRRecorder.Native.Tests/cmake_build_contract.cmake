@@ -183,6 +183,23 @@ require_text(
     "tests/VRRecorder.Native.Tests/CMakeLists.txt"
     "NAME vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port")
 require_text(
+    "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+    "vrrecorder_native_ffmpeg_aac_decode_oracle_runtime")
+require_text(
+    "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+    "RUNTIME_OUTPUT_DIRECTORY[^\n]*ffmpeg_aac_decode_oracle_runtime")
+foreach(component IN ITEMS avformat avcodec avutil)
+    require_text(
+        "tests/VRRecorder.Native.Tests/CMakeLists.txt"
+        "TARGET_FILE:FFmpegContractOracle::${component}")
+endforeach()
+require_text(
+    "tests/VRRecorder.Native.Tests/ffmpeg_aac_to_fragmented_mp4_integration_tests.cpp"
+    "_popen")
+require_text(
+    "tests/VRRecorder.Native.Tests/ffmpeg_aac_to_fragmented_mp4_integration_tests.cpp"
+    "_pclose")
+require_text(
     "cmake/PinnedFFmpeg.cmake"
     "FFmpegContractTest::avformat")
 require_text(

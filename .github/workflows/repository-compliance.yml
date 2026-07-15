@@ -16,6 +16,8 @@ on:
       - eng/build-ffmpeg-contract-oracle-sdk.sh
       - eng/build-ffmpeg-windows-production-sdk.ps1
       - eng/ffmpeg-windows-production-build-recipe.md
+      - eng/build-ffmpeg-windows-oracle-sdk.ps1
+      - eng/ffmpeg-windows-oracle-build-recipe.md
       - eng/patches/ffmpeg-8.1.2/**
       - src/VRRecorder.Native/**
       - tests/cmake/**
@@ -40,6 +42,8 @@ on:
       - eng/build-ffmpeg-contract-oracle-sdk.sh
       - eng/build-ffmpeg-windows-production-sdk.ps1
       - eng/ffmpeg-windows-production-build-recipe.md
+      - eng/build-ffmpeg-windows-oracle-sdk.ps1
+      - eng/ffmpeg-windows-oracle-build-recipe.md
       - eng/patches/ffmpeg-8.1.2/**
       - src/VRRecorder.Native/**
       - tests/cmake/**

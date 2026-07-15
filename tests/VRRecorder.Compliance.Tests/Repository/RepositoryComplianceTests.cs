@@ -69,6 +69,10 @@ public sealed class RepositoryComplianceTests
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- eng/ffmpeg-windows-production-build-recipe.md"));
         Assert.Equal(2, workflowLines.Count(line =>
+            line == "- eng/build-ffmpeg-windows-oracle-sdk.ps1"));
+        Assert.Equal(2, workflowLines.Count(line =>
+            line == "- eng/ffmpeg-windows-oracle-build-recipe.md"));
+        Assert.Equal(2, workflowLines.Count(line =>
             line == "- eng/patches/ffmpeg-8.1.2/**"));
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- src/VRRecorder.Native/**"));
@@ -152,6 +156,55 @@ public sealed class RepositoryComplianceTests
         Assert.DoesNotContain("--enable-nonfree", combined);
         Assert.DoesNotContain("--enable-version3", combined);
         Assert.DoesNotContain("--enable-lib", combined);
+    }
+
+    [Fact]
+    public void WindowsFfmpegOracleBuilderPinsAnIsolatedDecodeContract()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var builderPath = Path.Combine(
+            repositoryRoot,
+            "eng",
+            "build-ffmpeg-windows-oracle-sdk.ps1");
+        var recipePath = Path.Combine(
+            repositoryRoot,
+            "eng",
+            "ffmpeg-windows-oracle-build-recipe.md");
+
+        Assert.True(File.Exists(builderPath));
+        Assert.True(File.Exists(recipePath));
+        var combined = File.ReadAllText(builderPath) + "\n" +
+                       File.ReadAllText(recipePath);
+
+        Assert.Contains("ffmpeg-8.1.2.tar.xz", combined);
+        Assert.Contains(
+            "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+            combined);
+        Assert.Contains("19.44.35228", combined);
+        Assert.Contains("10.0.26100.0", combined);
+        foreach (var argument in new[]
+                 {
+                     "--toolchain=msvc",
+                     "--enable-cross-compile",
+                     "--host-cc=cl.exe",
+                     "--disable-autodetect",
+                     "--disable-everything",
+                     "--enable-decoder=aac",
+                     "--enable-decoder=h264",
+                     "--enable-demuxer=mov",
+                     "--enable-protocol=file",
+                     "--enable-ffprobe"
+                 })
+        {
+            Assert.Contains(argument, combined);
+        }
+        Assert.Contains("ffprobe.exe", combined);
+        Assert.Contains("contract-oracle", combined);
+        Assert.DoesNotContain("--enable-gpl", combined);
+        Assert.DoesNotContain("--enable-nonfree", combined);
+        Assert.DoesNotContain("--enable-version3", combined);
+        Assert.DoesNotContain("--enable-lib", combined);
+        Assert.DoesNotContain("h264_mf", combined);
     }
 
     [Fact]

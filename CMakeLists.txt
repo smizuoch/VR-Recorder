@@ -45,7 +45,7 @@ set(
     VRRECORDER_FFMPEG_CONTRACT_ORACLE_ROOT
     ""
     CACHE PATH
-    "Optional exact FFmpeg 8.1.2 Linux demux/decode SDK for out-of-process test oracles")
+    "Optional exact FFmpeg 8.1.2 Linux or Windows demux/decode SDK for out-of-process test oracles")
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/NativeFactoryVariants.cmake")
 vrrecorder_declare_native_factory_options()
@@ -87,6 +87,12 @@ if(BUILD_TESTING)
             "-DPINNED_FFMPEG_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/pinned_ffmpeg_contract.cmake")
+    add_test(NAME vrrecorder_native_windows_ffmpeg_oracle_contract
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DPINNED_FFMPEG_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PinnedFFmpeg.cmake"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/windows_ffmpeg_oracle_contract.cmake")
     add_test(NAME vrrecorder_native_factory_variant_contract
         COMMAND
             "${CMAKE_COMMAND}"
@@ -115,6 +121,7 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/production_media_h264_attachment_contract.cmake")
     set_tests_properties(
         vrrecorder_native_pinned_ffmpeg_contract
+        vrrecorder_native_windows_ffmpeg_oracle_contract
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(
         vrrecorder_native_factory_variant_contract

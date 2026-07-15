@@ -1166,6 +1166,24 @@ if(TARGET FFmpegContractOracle::avformat AND
         PROPERTIES CXX_EXTENSIONS OFF)
     vrrecorder_enable_strict_warnings(
         vrrecorder_native_ffmpeg_aac_decode_oracle)
+    if(WIN32)
+        set(
+            vrrecorder_native_ffmpeg_aac_decode_oracle_runtime
+            "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-aac-decode-oracle")
+        set_target_properties(
+            vrrecorder_native_ffmpeg_aac_decode_oracle
+            PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${vrrecorder_native_ffmpeg_aac_decode_oracle_runtime}")
+        add_custom_command(
+            TARGET vrrecorder_native_ffmpeg_aac_decode_oracle
+            POST_BUILD
+            COMMAND
+                "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:FFmpegContractOracle::avformat>"
+                "$<TARGET_FILE:FFmpegContractOracle::avcodec>"
+                "$<TARGET_FILE:FFmpegContractOracle::avutil>"
+                "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_aac_decode_oracle>"
+            VERBATIM)
+    endif()
 endif()
 
 if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND

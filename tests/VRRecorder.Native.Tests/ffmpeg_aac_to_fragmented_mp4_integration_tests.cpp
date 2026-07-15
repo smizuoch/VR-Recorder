@@ -297,6 +297,10 @@ struct AacDecodeOracleSummary final {
 std::string ShellQuote(const std::filesystem::path &path)
 {
     std::string text = path.string();
+#if defined(_WIN32)
+    CHECK(text.find('"') == std::string::npos);
+    return '"' + text + '"';
+#else
     std::string quoted;
     quoted.reserve(text.size() + 2U);
     quoted.push_back('\'');
@@ -309,6 +313,25 @@ std::string ShellQuote(const std::filesystem::path &path)
     }
     quoted.push_back('\'');
     return quoted;
+#endif
+}
+
+FILE *OpenProcessPipe(const std::string &command)
+{
+#if defined(_WIN32)
+    return _popen(command.c_str(), "r");
+#else
+    return popen(command.c_str(), "r");
+#endif
+}
+
+int CloseProcessPipe(FILE *pipe)
+{
+#if defined(_WIN32)
+    return _pclose(pipe);
+#else
+    return pclose(pipe);
+#endif
 }
 
 AacDecodeOracleSummary RunAacDecodeOracle(
@@ -323,12 +346,12 @@ AacDecodeOracleSummary RunAacDecodeOracle(
     const auto command = ShellQuote(oracle_path) + " " + ShellQuote(media_path);
     std::array<char, 4096> buffer {};
     std::string output;
-    FILE *pipe = popen(command.c_str(), "r");
+    FILE *pipe = OpenProcessPipe(command);
     CHECK(pipe != nullptr);
     while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
         output += buffer.data();
     }
-    const int status = pclose(pipe);
+    const int status = CloseProcessPipe(pipe);
     CHECK(status == 0);
 
     AacDecodeOracleSummary summary;
