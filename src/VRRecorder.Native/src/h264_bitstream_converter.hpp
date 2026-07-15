@@ -27,6 +27,14 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
     H264Profile expected_profile,
     H264AnnexBConversionResult &result) noexcept;
 
+vrrec_status_t ConvertH264AnnexBToAvcc(
+    std::span<const std::byte> annex_b_access_unit,
+    std::uint32_t expected_width,
+    std::uint32_t expected_height,
+    H264Profile expected_profile,
+    bool parameter_sets_already_known,
+    H264AnnexBConversionResult &result) noexcept;
+
 }
 
 #endif

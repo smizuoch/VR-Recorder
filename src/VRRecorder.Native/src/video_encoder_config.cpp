@@ -5,6 +5,35 @@
 
 namespace vrrecorder::native {
 
+bool IsH264VideoEncoderConfigValid(
+    const H264VideoEncoderConfig &config) noexcept
+{
+    constexpr std::uint32_t maximum_dimension = 16'384;
+    constexpr std::uint32_t minimum_frames_per_second = 30;
+    constexpr std::uint32_t maximum_frames_per_second = 120;
+    constexpr std::uint64_t minimum_bitrate = 8'000'000;
+    constexpr std::uint64_t maximum_bitrate = 80'000'000;
+
+    const auto profile_is_supported =
+        config.profile == H264Profile::Main ||
+        config.profile == H264Profile::High;
+    return config.width != 0 && config.height != 0 &&
+        config.width <= maximum_dimension &&
+        config.height <= maximum_dimension &&
+        (config.width & 1U) == 0 && (config.height & 1U) == 0 &&
+        config.frames_per_second >= minimum_frames_per_second &&
+        config.frames_per_second <= maximum_frames_per_second &&
+        config.gop_frame_count == config.frames_per_second * 2U &&
+        config.target_bitrate_bits_per_second >= minimum_bitrate &&
+        config.target_bitrate_bits_per_second <= maximum_bitrate &&
+        config.maximum_bitrate_bits_per_second ==
+            config.target_bitrate_bits_per_second * 3U / 2U &&
+        config.input_pixel_format == VRREC_SOURCE_PIXEL_FORMAT_NV12 &&
+        profile_is_supported &&
+        config.rate_control == VideoRateControl::QualityVbr &&
+        config.maximum_b_frame_count == 0;
+}
+
 vrrec_status_t CreateH264VideoEncoderConfig(
     std::uint32_t width,
     std::uint32_t height,

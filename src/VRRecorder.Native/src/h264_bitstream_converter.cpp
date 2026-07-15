@@ -250,6 +250,23 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
     H264Profile expected_profile,
     H264AnnexBConversionResult &result) noexcept
 {
+    return ConvertH264AnnexBToAvcc(
+        annex_b_access_unit,
+        expected_width,
+        expected_height,
+        expected_profile,
+        false,
+        result);
+}
+
+vrrec_status_t ConvertH264AnnexBToAvcc(
+    std::span<const std::byte> annex_b_access_unit,
+    std::uint32_t expected_width,
+    std::uint32_t expected_height,
+    H264Profile expected_profile,
+    bool parameter_sets_already_known,
+    H264AnnexBConversionResult &result) noexcept
+{
     result = H264AnnexBConversionResult {};
     std::vector<NalView> nals;
     try {
@@ -334,7 +351,8 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
         }
         return false;
     }();
-    if (contains_idr && sequence_parameter_set_count == 0U) {
+    if (contains_idr && sequence_parameter_set_count == 0U &&
+        !parameter_sets_already_known) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 

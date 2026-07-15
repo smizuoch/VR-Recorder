@@ -30,6 +30,9 @@ struct H264VideoEncoderConfig final {
     std::uint32_t maximum_b_frame_count = 0;
 };
 
+bool IsH264VideoEncoderConfigValid(
+    const H264VideoEncoderConfig &config) noexcept;
+
 vrrec_status_t CreateH264VideoEncoderConfig(
     std::uint32_t width,
     std::uint32_t height,

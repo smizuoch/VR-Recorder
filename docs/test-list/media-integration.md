@@ -35,6 +35,7 @@
 - [x] portable Annex B SPS／PPS／IDRからavcCとlength-prefixed AUを生成し、Exp-Golombとemulation-preventionを含むHigh／Main SPSを解析してcrop後の表示寸法を検証する。別IDの複数SPS／PPSはID順に決定生成し、同一ID競合、参照SPS不在、avcC count／16-bit size上限超過、unsupported NAL、profile／寸法／4:2:0 8-bit不一致をfail-closed拒否する
 - [x] H.264 software fallbackのFFmpeg contextをNV12／CFR／bitrate／GOP／B-frame 0／global headerに設定し、`h264_mf`へ`hw_encoding=0`とquality VBRだけを渡す。非canonical configとcaller-owned optionはcontext mutation前に拒否する
 - [x] stride付きsystem-memory NV12のY／UV planeを検証してFFmpeg所有のwritable `AVFrame`へrow copyし、呼出し元buffer変更後とoutstanding `av_frame_ref`保持中のframe再利用でも画素／PTS ownershipを分離する
+- [x] 同一H.264 packet streamの最初のSPS／PPS／IDRからavcC descriptorを一度だけ確定して最初のpacketを保持し、後続AUとparameter-setなしIDRをlength-prefix化する。packet flag不一致、descriptor前non-IDR、確定後parameter-set変更をterminal拒否する
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -106,6 +107,7 @@
 - [x] Carry a microsecond time base, codec format, profile/layout, AAC frame size/initial padding/exact 192 kbps, and owned extradata in typed H.264/AAC descriptors and reject invalid descriptors before header mutation
 - [x] Configure the H.264 software-fallback FFmpeg context for NV12, CFR, bitrate, GOP, zero B-frames, and a global header, passing only `hw_encoding=0` and quality VBR to `h264_mf`; reject noncanonical configs and caller-owned options before context mutation
 - [x] Validate strided system-memory NV12 Y/UV planes and row-copy them into a writable FFmpeg-owned `AVFrame`, preserving separate pixel/PTS ownership after caller-buffer mutation and frame reuse while an `av_frame_ref` remains outstanding
+- [x] Derive an avcC descriptor exactly once from the first SPS/PPS/IDR in the same H.264 packet stream without dropping that packet, then length-prefix following AUs and IDRs that omit parameter sets; terminally reject flag disagreement, a pre-descriptor non-IDR, or parameter-set changes after readiness
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video
