@@ -6,7 +6,7 @@
 - [x] 0.18～0.32 mの有限幅だけを許可し、hidden状態でoverlayを作成する
 - [x] Show／Hideの成功後だけvisibilityをcommitし、同一操作をidempotentにする
 - [x] 初期化失敗をrollbackし、Close／destructorでHide後にDestroyをexactly once行う
-- [ ] process-wide OpenVR ownerへlifecycle Portを接続し、実`IVROverlay` APIを呼ぶ
+- [x] process-wide OpenVR ownerへlifecycle Portを接続し、実`IVROverlay` APIを呼ぶ
 - [ ] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新する
 - [ ] mouse／ray eventをhit-testして共通application commandへdispatchする
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
@@ -19,7 +19,7 @@
 - [x] Accept only finite widths from 0.18 to 0.32 m and create the overlay hidden
 - [x] Commit visibility only after successful Show/Hide and make repeated operations idempotent
 - [x] Roll back failed initialization and Hide then Destroy exactly once from Close/destruction
-- [ ] Connect the lifecycle Port to the process-wide OpenVR owner and call the real `IVROverlay` API
+- [x] Connect the lifecycle Port to the process-wide OpenVR owner and call the real `IVROverlay` API
 - [ ] Update a 1024×512 BGRA texture on state changes and at 10 Hz while recording
 - [ ] Hit-test mouse/ray events and dispatch shared application commands
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms

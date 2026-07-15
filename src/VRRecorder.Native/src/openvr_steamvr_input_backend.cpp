@@ -1,4 +1,5 @@
 #include "openvr_steamvr_input_backend_core.hpp"
+#include "openvr_overlay_backend.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -36,7 +37,29 @@ vrrec_status_t MapApplicationError(vr::EVRApplicationError error) noexcept
     return VRREC_STATUS_INTERNAL_ERROR;
 }
 
-class WindowsOpenVrApi final : public OpenVrInputPort {
+vrrec_status_t MapOverlayError(vr::EVROverlayError error) noexcept
+{
+    if (error == vr::VROverlayError_None) {
+        return VRREC_STATUS_OK;
+    }
+    if (error == vr::VROverlayError_RequestFailed ||
+        error == vr::VROverlayError_TimedOut ||
+        error == vr::VROverlayError_OverlayLimitExceeded) {
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+    if (error == vr::VROverlayError_UnknownOverlay ||
+        error == vr::VROverlayError_InvalidHandle) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+    if (error == vr::VROverlayError_InvalidParameter ||
+        error == vr::VROverlayError_KeyTooLong ||
+        error == vr::VROverlayError_NameTooLong) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    return VRREC_STATUS_INTERNAL_ERROR;
+}
+
+class WindowsOpenVrApi final : public OpenVrRuntimePort {
 public:
     ~WindowsOpenVrApi() override
     {
@@ -58,11 +81,76 @@ public:
         initialized_ = true;
         applications_ = vr::VRApplications();
         input_ = vr::VRInput();
-        if (applications_ == nullptr || input_ == nullptr) {
+        overlay_ = vr::VROverlay();
+        if (applications_ == nullptr || input_ == nullptr ||
+            overlay_ == nullptr) {
             Shutdown();
             return VRREC_STATUS_INTERNAL_ERROR;
         }
         return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t CreateOverlay(
+        std::string_view key,
+        std::string_view name,
+        std::uint64_t &handle) noexcept override
+    {
+        handle = 0;
+        if (!initialized_ || overlay_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        try {
+            const std::string owned_key(key);
+            const std::string owned_name(name);
+            auto openvr_handle = vr::k_ulOverlayHandleInvalid;
+            const auto status = MapOverlayError(overlay_->CreateOverlay(
+                owned_key.c_str(),
+                owned_name.c_str(),
+                &openvr_handle));
+            if (status == VRREC_STATUS_OK) {
+                handle = openvr_handle;
+            }
+            return status;
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+    }
+
+    vrrec_status_t SetOverlayWidthInMeters(
+        std::uint64_t handle,
+        float width) noexcept override
+    {
+        return !initialized_ || overlay_ == nullptr
+            ? VRREC_STATUS_INVALID_STATE
+            : MapOverlayError(overlay_->SetOverlayWidthInMeters(
+                static_cast<vr::VROverlayHandle_t>(handle),
+                width));
+    }
+
+    vrrec_status_t ShowOverlay(std::uint64_t handle) noexcept override
+    {
+        return !initialized_ || overlay_ == nullptr
+            ? VRREC_STATUS_INVALID_STATE
+            : MapOverlayError(overlay_->ShowOverlay(
+                static_cast<vr::VROverlayHandle_t>(handle)));
+    }
+
+    vrrec_status_t HideOverlay(std::uint64_t handle) noexcept override
+    {
+        return !initialized_ || overlay_ == nullptr
+            ? VRREC_STATUS_INVALID_STATE
+            : MapOverlayError(overlay_->HideOverlay(
+                static_cast<vr::VROverlayHandle_t>(handle)));
+    }
+
+    vrrec_status_t DestroyOverlay(std::uint64_t handle) noexcept override
+    {
+        return !initialized_ || overlay_ == nullptr
+            ? VRREC_STATUS_INVALID_STATE
+            : MapOverlayError(overlay_->DestroyOverlay(
+                static_cast<vr::VROverlayHandle_t>(handle)));
     }
 
     vrrec_status_t AddApplicationManifest(
@@ -199,6 +287,7 @@ public:
         }
         input_ = nullptr;
         applications_ = nullptr;
+        overlay_ = nullptr;
         initialized_ = false;
         vr::VR_Shutdown();
     }
@@ -206,6 +295,7 @@ public:
 private:
     vr::IVRApplications *applications_ = nullptr;
     vr::IVRInput *input_ = nullptr;
+    vr::IVROverlay *overlay_ = nullptr;
     bool initialized_ = false;
 };
 
@@ -217,7 +307,7 @@ struct ProcessRuntimeResult final {
 const ProcessRuntimeResult &GetProcessRuntime() noexcept
 {
     static const auto result = [] {
-        auto api = std::unique_ptr<OpenVrInputPort>(
+        auto api = std::unique_ptr<OpenVrRuntimePort>(
             new (std::nothrow) WindowsOpenVrApi());
         if (!api) {
             return ProcessRuntimeResult {
@@ -250,6 +340,23 @@ std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
     return CreateOpenVrSteamVrInputBackend(
         config,
         std::move(port),
+        status);
+}
+
+std::unique_ptr<OpenVrOverlayLifecycle> CreateSteamVrOverlayLifecycle(
+    std::string_view application_manifest_path,
+    const OpenVrOverlayLifecycleConfig &config,
+    vrrec_status_t &status) noexcept
+{
+    const auto &process = GetProcessRuntime();
+    if (!process.runtime) {
+        status = process.status;
+        return nullptr;
+    }
+    return CreateOpenVrProcessOverlayLifecycle(
+        process.runtime,
+        application_manifest_path,
+        config,
         status);
 }
 

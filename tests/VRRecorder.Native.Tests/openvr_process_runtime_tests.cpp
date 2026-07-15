@@ -1,5 +1,7 @@
 #include "openvr_process_runtime.hpp"
 #include "native_thread_factory.hpp"
+#include "openvr_overlay_lifecycle_port.hpp"
+#include "openvr_overlay_lifecycle.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -32,13 +34,14 @@ struct RawState final {
     std::size_t update_calls = 0;
     std::size_t digital_calls = 0;
     std::size_t shutdown_calls = 0;
+    std::size_t overlay_destroy_calls = 0;
     std::uint64_t generation = 0;
     std::uint64_t failing_digital_handle = 0;
     vrrec_status_t update_status = VRREC_STATUS_OK;
     std::vector<std::thread::id> polling_threads;
 };
 
-class FakeRawApi final : public OpenVrInputPort {
+class FakeRawApi final : public OpenVrRuntimePort {
 public:
     explicit FakeRawApi(std::shared_ptr<RawState> state)
         : state_(std::move(state))
@@ -61,6 +64,49 @@ public:
             (temporary ? ":temporary" : ":persistent"));
         ++state_->application_manifest_calls;
         return application_manifest_status;
+    }
+
+    vrrec_status_t CreateOverlay(
+        std::string_view key,
+        std::string_view name,
+        std::uint64_t &handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-create:" + std::string(key) + ':' + std::string(name));
+        handle = 91;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t SetOverlayWidthInMeters(
+        std::uint64_t handle,
+        float width) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-width:" + std::to_string(handle) + ':' +
+            std::to_string(width));
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t ShowOverlay(std::uint64_t handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-show:" + std::to_string(handle));
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t HideOverlay(std::uint64_t handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-hide:" + std::to_string(handle));
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t DestroyOverlay(std::uint64_t handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-destroy:" + std::to_string(handle));
+        ++state_->overlay_destroy_calls;
+        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t SetActionManifestPath(
@@ -386,6 +432,105 @@ void SlowConsumerSkipsToTheLatestRevisionWithoutBlockingTheOwner()
     (void)raw;
 }
 
+void SharesOneRuntimeGenerationWithOverlayLifecycleClients()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto input = Client(runtime);
+    CHECK(input->Initialize() == VRREC_STATUS_OK);
+
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrProcessOverlayLifecyclePort(runtime, status);
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(overlay != nullptr);
+    CHECK(state->initialize_calls == 1);
+
+    std::uint64_t handle = 0;
+    CHECK(overlay->CreateOverlay(
+              "com.vrrecorder.desktop.wrist",
+              "VR Recorder Wrist",
+              handle) == VRREC_STATUS_OK);
+    CHECK(handle == 91);
+    CHECK(overlay->SetOverlayWidthInMeters(handle, 0.22F) ==
+          VRREC_STATUS_OK);
+    CHECK(overlay->ShowOverlay(handle) == VRREC_STATUS_OK);
+    CHECK(overlay->HideOverlay(handle) == VRREC_STATUS_OK);
+    CHECK(overlay->DestroyOverlay(handle) == VRREC_STATUS_OK);
+    CHECK(state->overlay_destroy_calls == 1);
+
+    input.reset();
+    CHECK(state->shutdown_calls == 0);
+    overlay.reset();
+    CHECK(state->shutdown_calls == 1);
+    CHECK(state->calls[state->calls.size() - 2] == "overlay-destroy:91");
+    CHECK(state->calls.back() == "shutdown");
+    (void)raw;
+}
+
+void RegistersTheApplicationBeforeComposingAnOverlay()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrProcessOverlayLifecycle(
+        runtime,
+        "C:/app/OpenVr/steamvr.vrmanifest",
+        config,
+        status);
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(overlay != nullptr);
+    CHECK((state->calls == std::vector<std::string> {
+        "initialize",
+        "application:C:/app/OpenVr/steamvr.vrmanifest:temporary",
+        "overlay-create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
+        "overlay-width:91:0.220000",
+    }));
+    CHECK(overlay->Show() == VRREC_STATUS_OK);
+    overlay.reset();
+    CHECK(state->calls[state->calls.size() - 3] == "overlay-hide:91");
+    CHECK(state->calls[state->calls.size() - 2] == "overlay-destroy:91");
+    CHECK(state->calls.back() == "shutdown");
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
+void ApplicationRegistrationFailureDoesNotCreateAnOverlay()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    raw->application_manifest_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+    auto status = VRREC_STATUS_OK;
+    auto overlay = CreateOpenVrProcessOverlayLifecycle(
+        runtime,
+        "C:/app/OpenVr/steamvr.vrmanifest",
+        config,
+        status);
+
+    CHECK(overlay == nullptr);
+    CHECK(status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK((state->calls == std::vector<std::string> {
+        "initialize",
+        "application:C:/app/OpenVr/steamvr.vrmanifest:temporary",
+        "shutdown",
+    }));
+    CHECK(state->overlay_destroy_calls == 0);
+    (void)raw;
+}
+
 std::unique_ptr<OpenVrInputPort> Client(
     const std::shared_ptr<OpenVrProcessRuntime> &runtime)
 {
@@ -527,6 +672,9 @@ int main()
     FailsClosedWhenThePollThreadCannotBePublished();
     SharesPollFailuresAndIsolatesPerActionReadFailures();
     SlowConsumerSkipsToTheLatestRevisionWithoutBlockingTheOwner();
+    SharesOneRuntimeGenerationWithOverlayLifecycleClients();
+    RegistersTheApplicationBeforeComposingAnOverlay();
+    ApplicationRegistrationFailureDoesNotCreateAnOverlay();
     FailsClosedBeforeAcquiringAReference();
     return 0;
 }

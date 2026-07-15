@@ -19,7 +19,7 @@ namespace vrrecorder::native {
 class OpenVrProcessRuntime final {
 public:
     explicit OpenVrProcessRuntime(
-        std::unique_ptr<OpenVrInputPort> api,
+        std::unique_ptr<OpenVrRuntimePort> api,
         NativeThreadFactoryPort &thread_factory) noexcept
         : api_(std::move(api)), thread_factory_(thread_factory)
     {
@@ -226,6 +226,51 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t CreateOverlay(
+        std::string_view key,
+        std::string_view name,
+        std::uint64_t &handle) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->CreateOverlay(key, name, handle);
+    }
+
+    vrrec_status_t SetOverlayWidthInMeters(
+        std::uint64_t handle,
+        float width) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->SetOverlayWidthInMeters(handle, width);
+    }
+
+    vrrec_status_t ShowOverlay(std::uint64_t handle) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->ShowOverlay(handle);
+    }
+
+    vrrec_status_t HideOverlay(std::uint64_t handle) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->HideOverlay(handle);
+    }
+
+    vrrec_status_t DestroyOverlay(std::uint64_t handle) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->DestroyOverlay(handle);
+    }
+
     void Release() noexcept
     {
         std::thread poll_thread;
@@ -325,7 +370,7 @@ private:
         }
     }
 
-    std::unique_ptr<OpenVrInputPort> api_;
+    std::unique_ptr<OpenVrRuntimePort> api_;
     NativeThreadFactoryPort &thread_factory_;
     std::mutex mutex_;
     std::condition_variable condition_;
@@ -480,10 +525,83 @@ private:
     bool has_snapshot_ = false;
 };
 
+class OpenVrProcessOverlayLifecyclePort final
+    : public OpenVrOverlayLifecyclePort {
+public:
+    explicit OpenVrProcessOverlayLifecyclePort(
+        std::shared_ptr<OpenVrProcessRuntime> runtime) noexcept
+        : runtime_(std::move(runtime))
+    {
+    }
+
+    ~OpenVrProcessOverlayLifecyclePort() override
+    {
+        if (acquired_) {
+            runtime_->Release();
+        }
+    }
+
+    vrrec_status_t Acquire() noexcept
+    {
+        if (acquired_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = runtime_->Acquire();
+        if (status == VRREC_STATUS_OK) {
+            acquired_ = true;
+        }
+        return status;
+    }
+
+    vrrec_status_t CreateOverlay(
+        std::string_view key,
+        std::string_view name,
+        std::uint64_t &handle) noexcept override
+    {
+        return acquired_
+            ? runtime_->CreateOverlay(key, name, handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t SetOverlayWidthInMeters(
+        std::uint64_t handle,
+        float width) noexcept override
+    {
+        return acquired_
+            ? runtime_->SetOverlayWidthInMeters(handle, width)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t ShowOverlay(std::uint64_t handle) noexcept override
+    {
+        return acquired_
+            ? runtime_->ShowOverlay(handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t HideOverlay(std::uint64_t handle) noexcept override
+    {
+        return acquired_
+            ? runtime_->HideOverlay(handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t DestroyOverlay(std::uint64_t handle) noexcept override
+    {
+        return acquired_
+            ? runtime_->DestroyOverlay(handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+private:
+    std::shared_ptr<OpenVrProcessRuntime> runtime_;
+    bool acquired_ = false;
+};
+
 }
 
 std::shared_ptr<OpenVrProcessRuntime> CreateOpenVrProcessRuntime(
-    std::unique_ptr<OpenVrInputPort> api,
+    std::unique_ptr<OpenVrRuntimePort> api,
     vrrec_status_t &status,
     NativeThreadFactoryPort *thread_factory) noexcept
 {
@@ -525,6 +643,68 @@ std::unique_ptr<OpenVrInputPort> CreateOpenVrProcessInputPort(
     }
     status = VRREC_STATUS_OK;
     return port;
+}
+
+std::unique_ptr<OpenVrOverlayLifecyclePort>
+CreateOpenVrProcessOverlayLifecyclePort(
+    std::shared_ptr<OpenVrProcessRuntime> runtime,
+    vrrec_status_t &status) noexcept
+{
+    status = VRREC_STATUS_INVALID_ARGUMENT;
+    if (!runtime) {
+        return nullptr;
+    }
+    auto port = std::unique_ptr<OpenVrProcessOverlayLifecyclePort>(
+        new (std::nothrow) OpenVrProcessOverlayLifecyclePort(
+            std::move(runtime)));
+    if (!port) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    status = port->Acquire();
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
+    return port;
+}
+
+std::unique_ptr<OpenVrOverlayLifecycle>
+CreateOpenVrProcessOverlayLifecycle(
+    std::shared_ptr<OpenVrProcessRuntime> runtime,
+    std::string_view application_manifest_path,
+    const OpenVrOverlayLifecycleConfig &config,
+    vrrec_status_t &status) noexcept
+{
+    status = VRREC_STATUS_INVALID_ARGUMENT;
+    if (!runtime || application_manifest_path.empty()) {
+        return nullptr;
+    }
+
+    auto input = CreateOpenVrProcessInputPort(runtime, status);
+    if (!input) {
+        return nullptr;
+    }
+    status = input->Initialize();
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
+    status = input->AddApplicationManifest(
+        application_manifest_path,
+        true);
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
+
+    auto overlay_port = CreateOpenVrProcessOverlayLifecyclePort(
+        std::move(runtime),
+        status);
+    if (!overlay_port) {
+        return nullptr;
+    }
+    return CreateOpenVrOverlayLifecycle(
+        config,
+        std::move(overlay_port),
+        status);
 }
 
 }

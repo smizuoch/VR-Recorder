@@ -1701,7 +1701,8 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_openvr_process_runtime
     openvr_process_runtime_tests.cpp
-    "${native_source_root}/src/openvr_process_runtime.cpp")
+    "${native_source_root}/src/openvr_process_runtime.cpp"
+    "${native_source_root}/src/openvr_overlay_lifecycle.cpp")
 target_compile_features(
     vrrecorder_native_openvr_process_runtime PRIVATE cxx_std_20)
 target_include_directories(
