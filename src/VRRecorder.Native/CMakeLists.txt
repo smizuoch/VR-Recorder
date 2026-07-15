@@ -65,6 +65,7 @@ target_sources(vrrecorder_native PRIVATE src/video_processing_plan.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_processing_encoder_sink.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_processing_layout_controller.cpp)
 target_sources(vrrecorder_native PRIVATE src/d3d11_video_frame_processor.cpp)
+target_sources(vrrecorder_native PRIVATE src/keyed_mutex_video_surface.cpp)
 target_sources(vrrecorder_native PRIVATE src/video_encoder_config.cpp)
 
 if(WIN32)
