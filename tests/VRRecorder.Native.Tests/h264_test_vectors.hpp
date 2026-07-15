@@ -150,6 +150,19 @@ inline std::vector<std::byte> MakePps(const PpsSettings &settings)
     BitWriter writer;
     writer.UnsignedExpGolomb(settings.picture_parameter_set_id);
     writer.UnsignedExpGolomb(settings.sequence_parameter_set_id);
+    writer.Bit(0); // entropy_coding_mode_flag
+    writer.Bit(0); // bottom_field_pic_order_in_frame_present_flag
+    writer.UnsignedExpGolomb(0); // num_slice_groups_minus1
+    writer.UnsignedExpGolomb(0); // num_ref_idx_l0_default_active_minus1
+    writer.UnsignedExpGolomb(0); // num_ref_idx_l1_default_active_minus1
+    writer.Bit(0); // weighted_pred_flag
+    writer.Bits(0, 2); // weighted_bipred_idc
+    writer.UnsignedExpGolomb(0); // pic_init_qp_minus26
+    writer.UnsignedExpGolomb(0); // pic_init_qs_minus26
+    writer.UnsignedExpGolomb(0); // chroma_qp_index_offset
+    writer.Bit(1); // deblocking_filter_control_present_flag
+    writer.Bit(0); // constrained_intra_pred_flag
+    writer.Bit(0); // redundant_pic_cnt_present_flag
     return EscapeRbsp(0x68, writer.FinishRbsp());
 }
 

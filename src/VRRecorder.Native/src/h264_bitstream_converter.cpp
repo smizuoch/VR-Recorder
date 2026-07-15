@@ -2,6 +2,7 @@
 #include "h264_sps_parser.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -20,6 +21,19 @@ struct NalView final {
     std::span<const std::byte> bytes;
     unsigned int type = 0;
 };
+
+struct SequenceParameterSetEntry final {
+    const NalView *nal = nullptr;
+    H264SpsInfo info {};
+};
+
+struct PictureParameterSetEntry final {
+    const NalView *nal = nullptr;
+    H264PpsInfo info {};
+};
+
+using SequenceParameterSets = std::array<SequenceParameterSetEntry, 32>;
+using PictureParameterSets = std::array<PictureParameterSetEntry, 256>;
 
 bool IsStartCodeAt(std::span<const std::byte> bytes, std::size_t offset, std::size_t &length) noexcept
 {
@@ -110,30 +124,77 @@ void AppendBigEndian32(std::vector<std::byte> &bytes, std::size_t value)
 }
 
 vrrec_status_t BuildAvcc(
-    std::span<const std::byte> sps,
-    std::span<const std::byte> pps,
-    const H264SpsInfo &sps_info,
+    const SequenceParameterSets &sequence_parameter_sets,
+    std::size_t sequence_parameter_set_count,
+    const PictureParameterSets &picture_parameter_sets,
+    std::size_t picture_parameter_set_count,
     std::vector<std::byte> &avcc)
 {
-    if (sps.size() > std::numeric_limits<std::uint16_t>::max() ||
-        pps.size() > std::numeric_limits<std::uint16_t>::max()) {
+    if (sequence_parameter_set_count == 0U ||
+        sequence_parameter_set_count > 31U ||
+        picture_parameter_set_count == 0U ||
+        picture_parameter_set_count > 255U) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
+    const SequenceParameterSetEntry *primary_sps = nullptr;
+    std::size_t parameter_set_bytes = 0;
+    for (const auto &entry : sequence_parameter_sets) {
+        if (entry.nal == nullptr) {
+            continue;
+        }
+        if (entry.nal->bytes.size() >
+            std::numeric_limits<std::uint16_t>::max()) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        if (primary_sps == nullptr) {
+            primary_sps = &entry;
+        }
+        parameter_set_bytes += 2U + entry.nal->bytes.size();
+    }
+    for (const auto &entry : picture_parameter_sets) {
+        if (entry.nal == nullptr) {
+            continue;
+        }
+        if (entry.nal->bytes.size() >
+            std::numeric_limits<std::uint16_t>::max()) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        parameter_set_bytes += 2U + entry.nal->bytes.size();
+    }
+    if (primary_sps == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    const auto &sps_info = primary_sps->info;
     try {
         avcc.clear();
-        avcc.reserve(11U + sps.size() + pps.size() + 4U);
+        avcc.reserve(7U + parameter_set_bytes + 4U);
         avcc.push_back(std::byte {0x01});
         avcc.push_back(static_cast<std::byte>(sps_info.profile_idc));
         avcc.push_back(
             static_cast<std::byte>(sps_info.profile_compatibility));
         avcc.push_back(static_cast<std::byte>(sps_info.level_idc));
         avcc.push_back(std::byte {0xff});
-        avcc.push_back(std::byte {0xe1});
-        AppendBigEndian16(avcc, sps.size());
-        avcc.insert(avcc.end(), sps.begin(), sps.end());
-        avcc.push_back(std::byte {0x01});
-        AppendBigEndian16(avcc, pps.size());
-        avcc.insert(avcc.end(), pps.begin(), pps.end());
+        avcc.push_back(static_cast<std::byte>(
+            0xe0U | sequence_parameter_set_count));
+        for (const auto &entry : sequence_parameter_sets) {
+            if (entry.nal == nullptr) {
+                continue;
+            }
+            AppendBigEndian16(avcc, entry.nal->bytes.size());
+            avcc.insert(
+                avcc.end(), entry.nal->bytes.begin(), entry.nal->bytes.end());
+        }
+        avcc.push_back(
+            static_cast<std::byte>(picture_parameter_set_count));
+        for (const auto &entry : picture_parameter_sets) {
+            if (entry.nal == nullptr) {
+                continue;
+            }
+            AppendBigEndian16(avcc, entry.nal->bytes.size());
+            avcc.insert(
+                avcc.end(), entry.nal->bytes.begin(), entry.nal->bytes.end());
+        }
         if (sps_info.profile_idc == HighProfileIdc) {
             avcc.push_back(static_cast<std::byte>(
                 0xfcU | sps_info.chroma_format_idc));
@@ -201,20 +262,68 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
         return VRREC_STATUS_INTERNAL_ERROR;
     }
 
-    const NalView *sps = nullptr;
-    const NalView *pps = nullptr;
+    SequenceParameterSets sequence_parameter_sets {};
+    PictureParameterSets picture_parameter_sets {};
+    std::size_t sequence_parameter_set_count = 0;
+    std::size_t picture_parameter_set_count = 0;
     for (const auto &nal : nals) {
         if (nal.type == 7U) {
-            if (sps != nullptr && !std::ranges::equal(nal.bytes, sps->bytes)) {
+            H264SpsInfo info {};
+            const auto parse_status = ParseH264Sps(nal.bytes, info);
+            if (parse_status != VRREC_STATUS_OK) {
+                return parse_status;
+            }
+            if (!MatchesExpectedSps(
+                    info,
+                    expected_width,
+                    expected_height,
+                    expected_profile)) {
                 return VRREC_STATUS_INVALID_ARGUMENT;
             }
-            sps = &nal;
+            auto &entry =
+                sequence_parameter_sets[info.sequence_parameter_set_id];
+            if (entry.nal != nullptr) {
+                if (!std::ranges::equal(nal.bytes, entry.nal->bytes)) {
+                    return VRREC_STATUS_INVALID_ARGUMENT;
+                }
+                continue;
+            }
+            entry = {&nal, info};
+            ++sequence_parameter_set_count;
         } else if (nal.type == 8U) {
-            if (pps != nullptr && !std::ranges::equal(nal.bytes, pps->bytes)) {
-                return VRREC_STATUS_INVALID_ARGUMENT;
+            H264PpsInfo info {};
+            const auto parse_status = ParseH264Pps(nal.bytes, info);
+            if (parse_status != VRREC_STATUS_OK) {
+                return parse_status;
             }
-            pps = &nal;
+            auto &entry =
+                picture_parameter_sets[info.picture_parameter_set_id];
+            if (entry.nal != nullptr) {
+                if (!std::ranges::equal(nal.bytes, entry.nal->bytes)) {
+                    return VRREC_STATUS_INVALID_ARGUMENT;
+                }
+                continue;
+            }
+            entry = {&nal, info};
+            ++picture_parameter_set_count;
         }
+    }
+
+    if ((sequence_parameter_set_count == 0U) !=
+        (picture_parameter_set_count == 0U)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    for (const auto &entry : picture_parameter_sets) {
+        if (entry.nal != nullptr &&
+            sequence_parameter_sets[entry.info.sequence_parameter_set_id].nal ==
+                nullptr) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+    }
+
+    if (sequence_parameter_set_count > 31U ||
+        picture_parameter_set_count > 255U) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
     const bool contains_idr = [&] {
@@ -225,30 +334,16 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
         }
         return false;
     }();
-    if (contains_idr && (sps == nullptr || pps == nullptr)) {
+    if (contains_idr && sequence_parameter_set_count == 0U) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (sps != nullptr) {
-        if (pps == nullptr) {
-            return VRREC_STATUS_INVALID_ARGUMENT;
-        }
-        H264SpsInfo sps_info {};
-        const auto parse_status = ParseH264Sps(sps->bytes, sps_info);
-        if (parse_status != VRREC_STATUS_OK) {
-            return parse_status;
-        }
-        if (!MatchesExpectedSps(
-                sps_info,
-                expected_width,
-                expected_height,
-                expected_profile)) {
-            return VRREC_STATUS_INVALID_ARGUMENT;
-        }
+    if (sequence_parameter_set_count != 0U) {
         const auto avcc_status = BuildAvcc(
-            sps->bytes,
-            pps->bytes,
-            sps_info,
+            sequence_parameter_sets,
+            sequence_parameter_set_count,
+            picture_parameter_sets,
+            picture_parameter_set_count,
             result.avcc);
         if (avcc_status != VRREC_STATUS_OK) {
             return avcc_status;
