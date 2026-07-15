@@ -397,7 +397,7 @@ public sealed class RepositoryComplianceTests
             .Where(entry =>
                 entry.GetProperty("origin").GetString() == "WindowsSystem")
             .ToArray();
-        Assert.Equal(7, windowsSystemEntries.Length);
+        Assert.Equal(11, windowsSystemEntries.Length);
         Assert.All(windowsSystemEntries, entry => Assert.Equal(
             "windows-x64",
             entry.GetProperty("platform").GetString()));

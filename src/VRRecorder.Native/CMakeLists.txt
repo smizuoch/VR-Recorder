@@ -150,6 +150,7 @@ if(WIN32)
             src/windows_d3d11_nv12_readback_port.cpp
             src/windows_d3d11_keyed_mutex_surface.cpp
             src/windows_software_encoder_probe_adapter_identity_lookup.cpp
+            src/windows_media_foundation_h264_decode_port.cpp
             src/wasapi_audio_capture_source_core.cpp
             src/wasapi_audio_capture_source.cpp)
     target_compile_definitions(
@@ -175,7 +176,11 @@ if(WIN32)
         PRIVATE
             d3d11
             dxgi
-            ksuser)
+            ksuser
+            mf
+            mfplat
+            mfuuid
+            wmcodecdspuuid)
 else()
     target_sources(
         vrrecorder_native
