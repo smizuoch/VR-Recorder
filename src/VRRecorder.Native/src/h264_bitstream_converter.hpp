@@ -20,6 +20,13 @@ struct H264AnnexBConversionResult final {
     std::vector<std::byte> access_unit;
 };
 
+vrrec_status_t ConvertH264AnnexBParameterSetsToAvcc(
+    std::span<const std::byte> annex_b_parameter_sets,
+    std::uint32_t expected_width,
+    std::uint32_t expected_height,
+    H264Profile expected_profile,
+    std::vector<std::byte> &avcc) noexcept;
+
 vrrec_status_t ConvertH264AnnexBToAvcc(
     std::span<const std::byte> annex_b_access_unit,
     std::uint32_t expected_width,

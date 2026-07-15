@@ -2,6 +2,7 @@
 #define VRRECORDER_NATIVE_H264_PACKET_NORMALIZER_HPP
 
 #include <optional>
+#include <span>
 
 #include "fragmented_mp4_mux_coordinator.hpp"
 #include "video_encoder_config.hpp"
@@ -29,6 +30,8 @@ public:
 
     H264PacketNormalizationResult Normalize(
         const EncodedMediaPacket &packet) noexcept;
+    vrrec_status_t InitializeFromAnnexBExtradata(
+        std::span<const std::byte> extradata) noexcept;
     const H264StreamDescriptor *Descriptor() const noexcept;
     void Abort() noexcept;
 

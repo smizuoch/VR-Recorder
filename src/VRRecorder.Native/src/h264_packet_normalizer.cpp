@@ -85,6 +85,44 @@ H264PacketNormalizationResult H264PacketNormalizer::Normalize(
     };
 }
 
+vrrec_status_t H264PacketNormalizer::InitializeFromAnnexBExtradata(
+    std::span<const std::byte> extradata) noexcept
+{
+    if (state_ != State::Active) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+    if (!IsH264VideoEncoderConfigValid(config_)) {
+        return Fail(VRREC_STATUS_INVALID_ARGUMENT).status;
+    }
+
+    std::vector<std::byte> avcc;
+    const auto status = ConvertH264AnnexBParameterSetsToAvcc(
+        extradata,
+        config_.width,
+        config_.height,
+        config_.profile,
+        avcc);
+    if (status != VRREC_STATUS_OK) {
+        return Fail(status).status;
+    }
+    if (descriptor_.has_value()) {
+        if (descriptor_->codec_extradata != avcc) {
+            return Fail(VRREC_STATUS_INVALID_ARGUMENT).status;
+        }
+        return VRREC_STATUS_OK;
+    }
+
+    descriptor_.emplace(H264StreamDescriptor {
+        MicrosecondPacketTimeBase,
+        config_.width,
+        config_.height,
+        config_.profile,
+        H264PacketFormat::AvccLengthPrefixed,
+        std::move(avcc),
+    });
+    return VRREC_STATUS_OK;
+}
+
 const H264StreamDescriptor *H264PacketNormalizer::Descriptor() const noexcept
 {
     return descriptor_.has_value() ? &*descriptor_ : nullptr;

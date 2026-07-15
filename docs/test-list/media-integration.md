@@ -37,6 +37,7 @@
 - [x] stride付きsystem-memory NV12のY／UV planeを検証してFFmpeg所有のwritable `AVFrame`へrow copyし、呼出し元buffer変更後とoutstanding `av_frame_ref`保持中のframe再利用でも画素／PTS ownershipを分離する
 - [x] 同一H.264 packet streamの最初のSPS／PPS／IDRからavcC descriptorを一度だけ確定して最初のpacketを保持し、後続AUとparameter-setなしIDRをlength-prefix化する。packet flag不一致、descriptor前non-IDR、確定後parameter-set変更をterminal拒否する
 - [x] opened libavcodec encoder contextのextradataをFFmpeg pointerの寿命へ依存しないowned bytesとしてreadbackし、再取得とAbort後の失敗でcaller出力を部分変更しない
+- [x] open時に得たcomplete Annex B SPS／PPSだけのcontext extradataからavcC descriptorを初期化し、同一bytes再取得を許可しながらincomplete／VCL混入／確定後競合をterminal拒否する。open時emptyの場合はfirst IDR経路を維持する
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -110,6 +111,7 @@
 - [x] Validate strided system-memory NV12 Y/UV planes and row-copy them into a writable FFmpeg-owned `AVFrame`, preserving separate pixel/PTS ownership after caller-buffer mutation and frame reuse while an `av_frame_ref` remains outstanding
 - [x] Derive an avcC descriptor exactly once from the first SPS/PPS/IDR in the same H.264 packet stream without dropping that packet, then length-prefix following AUs and IDRs that omit parameter sets; terminally reject flag disagreement, a pre-descriptor non-IDR, or parameter-set changes after readiness
 - [x] Read back opened libavcodec encoder-context extradata as owned bytes independent of FFmpeg pointer lifetime, without partially changing caller output on repeated reads or failure after Abort
+- [x] Initialize the avcC descriptor from complete Annex B SPS/PPS-only context extradata when available at open, allowing identical rereads while terminally rejecting incomplete data, embedded VCL, or post-readiness conflicts; preserve the first-IDR path when open-time extradata is empty
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video

@@ -146,6 +146,58 @@ void ConvertsFollowingNonIdrAndIdrWithoutRepublishedParameterSets()
     CHECK(repeated_idr.packet.payload == LengthPrefixed(idr));
 }
 
+void InitializesTheDescriptorFromOpenedContextExtradata()
+{
+    const auto sps = Sps();
+    const auto pps = Pps();
+    const std::vector<std::byte> idr {std::byte {0x65}, std::byte {0x88}};
+    H264PacketNormalizer normalizer(ExactConfig());
+
+    CHECK(normalizer.InitializeFromAnnexBExtradata(
+              AnnexB({sps, pps})) == VRREC_STATUS_OK);
+    const auto *descriptor = normalizer.Descriptor();
+    CHECK(descriptor != nullptr);
+    CHECK(!descriptor->codec_extradata.empty());
+    const auto extradata = descriptor->codec_extradata;
+    CHECK(normalizer.InitializeFromAnnexBExtradata(
+              AnnexB({sps, pps})) == VRREC_STATUS_OK);
+    CHECK(normalizer.Descriptor()->codec_extradata == extradata);
+
+    const auto normalized = normalizer.Normalize(
+        Packet(AnnexB({idr}), true));
+    CHECK(normalized.status == VRREC_STATUS_OK);
+    CHECK(!normalized.descriptor_became_ready);
+    CHECK(normalized.packet.payload == LengthPrefixed(idr));
+}
+
+void RejectsIncompleteOrConflictingContextExtradata()
+{
+    const auto sps = Sps();
+    const auto changed_sps = Sps(4);
+    const auto pps = Pps();
+    H264PacketNormalizer incomplete(ExactConfig());
+    CHECK(incomplete.InitializeFromAnnexBExtradata(
+              AnnexB({sps})) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(incomplete.Descriptor() == nullptr);
+
+    const std::vector<std::byte> idr {std::byte {0x65}, std::byte {0x88}};
+    H264PacketNormalizer contains_vcl(ExactConfig());
+    CHECK(contains_vcl.InitializeFromAnnexBExtradata(
+              AnnexB({sps, pps, idr})) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(contains_vcl.Descriptor() == nullptr);
+
+    H264PacketNormalizer conflicting(ExactConfig());
+    CHECK(conflicting.InitializeFromAnnexBExtradata(
+              AnnexB({sps, pps})) == VRREC_STATUS_OK);
+    const auto original = conflicting.Descriptor()->codec_extradata;
+    CHECK(conflicting.InitializeFromAnnexBExtradata(
+              AnnexB({changed_sps, pps})) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(conflicting.Descriptor()->codec_extradata == original);
+    CHECK(conflicting.InitializeFromAnnexBExtradata(
+              AnnexB({sps, pps})) == VRREC_STATUS_INVALID_STATE);
+}
+
 void RejectsAFirstPacketWithoutACompleteDescriptor()
 {
     const std::vector<std::byte> non_idr {
@@ -242,6 +294,8 @@ int main()
 {
     DerivesTheDescriptorFromTheFirstIdrAndConvertsThePacket();
     ConvertsFollowingNonIdrAndIdrWithoutRepublishedParameterSets();
+    InitializesTheDescriptorFromOpenedContextExtradata();
+    RejectsIncompleteOrConflictingContextExtradata();
     RejectsAFirstPacketWithoutACompleteDescriptor();
     RejectsPacketFlagsThatDisagreeWithTheBitstream();
     RejectsParameterSetChangesAfterDescriptorReadiness();

@@ -123,6 +123,81 @@ void AppendBigEndian32(std::vector<std::byte> &bytes, std::size_t value)
     bytes.push_back(static_cast<std::byte>(value & 0xffU));
 }
 
+vrrec_status_t CollectParameterSets(
+    std::span<const NalView> nals,
+    std::uint32_t expected_width,
+    std::uint32_t expected_height,
+    H264Profile expected_profile,
+    SequenceParameterSets &sequence_parameter_sets,
+    std::size_t &sequence_parameter_set_count,
+    PictureParameterSets &picture_parameter_sets,
+    std::size_t &picture_parameter_set_count) noexcept
+{
+    sequence_parameter_sets = {};
+    picture_parameter_sets = {};
+    sequence_parameter_set_count = 0;
+    picture_parameter_set_count = 0;
+    for (const auto &nal : nals) {
+        if (nal.type == 7U) {
+            H264SpsInfo info {};
+            const auto parse_status = ParseH264Sps(nal.bytes, info);
+            if (parse_status != VRREC_STATUS_OK) {
+                return parse_status;
+            }
+            if (!MatchesExpectedSps(
+                    info,
+                    expected_width,
+                    expected_height,
+                    expected_profile)) {
+                return VRREC_STATUS_INVALID_ARGUMENT;
+            }
+            auto &entry =
+                sequence_parameter_sets[info.sequence_parameter_set_id];
+            if (entry.nal != nullptr) {
+                if (!std::ranges::equal(nal.bytes, entry.nal->bytes)) {
+                    return VRREC_STATUS_INVALID_ARGUMENT;
+                }
+                continue;
+            }
+            entry = {&nal, info};
+            ++sequence_parameter_set_count;
+        } else if (nal.type == 8U) {
+            H264PpsInfo info {};
+            const auto parse_status = ParseH264Pps(nal.bytes, info);
+            if (parse_status != VRREC_STATUS_OK) {
+                return parse_status;
+            }
+            auto &entry =
+                picture_parameter_sets[info.picture_parameter_set_id];
+            if (entry.nal != nullptr) {
+                if (!std::ranges::equal(nal.bytes, entry.nal->bytes)) {
+                    return VRREC_STATUS_INVALID_ARGUMENT;
+                }
+                continue;
+            }
+            entry = {&nal, info};
+            ++picture_parameter_set_count;
+        }
+    }
+
+    if ((sequence_parameter_set_count == 0U) !=
+        (picture_parameter_set_count == 0U)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    for (const auto &entry : picture_parameter_sets) {
+        if (entry.nal != nullptr &&
+            sequence_parameter_sets[entry.info.sequence_parameter_set_id].nal ==
+                nullptr) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    if (sequence_parameter_set_count > 31U ||
+        picture_parameter_set_count > 255U) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    return VRREC_STATUS_OK;
+}
+
 vrrec_status_t BuildAvcc(
     const SequenceParameterSets &sequence_parameter_sets,
     std::size_t sequence_parameter_set_count,
@@ -243,6 +318,59 @@ vrrec_status_t BuildAccessUnit(
 
 } // namespace
 
+vrrec_status_t ConvertH264AnnexBParameterSetsToAvcc(
+    std::span<const std::byte> annex_b_parameter_sets,
+    std::uint32_t expected_width,
+    std::uint32_t expected_height,
+    H264Profile expected_profile,
+    std::vector<std::byte> &avcc) noexcept
+{
+    std::vector<NalView> nals;
+    try {
+        if (!ParseAnnexB(annex_b_parameter_sets, nals)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+    if (std::ranges::any_of(nals, [](const NalView &nal) {
+            return nal.type != 7U && nal.type != 8U;
+        })) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    SequenceParameterSets sequence_parameter_sets {};
+    PictureParameterSets picture_parameter_sets {};
+    std::size_t sequence_parameter_set_count = 0;
+    std::size_t picture_parameter_set_count = 0;
+    const auto collect_status = CollectParameterSets(
+        nals,
+        expected_width,
+        expected_height,
+        expected_profile,
+        sequence_parameter_sets,
+        sequence_parameter_set_count,
+        picture_parameter_sets,
+        picture_parameter_set_count);
+    if (collect_status != VRREC_STATUS_OK) {
+        return collect_status;
+    }
+    std::vector<std::byte> built_avcc;
+    const auto build_status = BuildAvcc(
+        sequence_parameter_sets,
+        sequence_parameter_set_count,
+        picture_parameter_sets,
+        picture_parameter_set_count,
+        built_avcc);
+    if (build_status != VRREC_STATUS_OK) {
+        return build_status;
+    }
+    avcc.swap(built_avcc);
+    return VRREC_STATUS_OK;
+}
+
 vrrec_status_t ConvertH264AnnexBToAvcc(
     std::span<const std::byte> annex_b_access_unit,
     std::uint32_t expected_width,
@@ -283,64 +411,17 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
     PictureParameterSets picture_parameter_sets {};
     std::size_t sequence_parameter_set_count = 0;
     std::size_t picture_parameter_set_count = 0;
-    for (const auto &nal : nals) {
-        if (nal.type == 7U) {
-            H264SpsInfo info {};
-            const auto parse_status = ParseH264Sps(nal.bytes, info);
-            if (parse_status != VRREC_STATUS_OK) {
-                return parse_status;
-            }
-            if (!MatchesExpectedSps(
-                    info,
-                    expected_width,
-                    expected_height,
-                    expected_profile)) {
-                return VRREC_STATUS_INVALID_ARGUMENT;
-            }
-            auto &entry =
-                sequence_parameter_sets[info.sequence_parameter_set_id];
-            if (entry.nal != nullptr) {
-                if (!std::ranges::equal(nal.bytes, entry.nal->bytes)) {
-                    return VRREC_STATUS_INVALID_ARGUMENT;
-                }
-                continue;
-            }
-            entry = {&nal, info};
-            ++sequence_parameter_set_count;
-        } else if (nal.type == 8U) {
-            H264PpsInfo info {};
-            const auto parse_status = ParseH264Pps(nal.bytes, info);
-            if (parse_status != VRREC_STATUS_OK) {
-                return parse_status;
-            }
-            auto &entry =
-                picture_parameter_sets[info.picture_parameter_set_id];
-            if (entry.nal != nullptr) {
-                if (!std::ranges::equal(nal.bytes, entry.nal->bytes)) {
-                    return VRREC_STATUS_INVALID_ARGUMENT;
-                }
-                continue;
-            }
-            entry = {&nal, info};
-            ++picture_parameter_set_count;
-        }
-    }
-
-    if ((sequence_parameter_set_count == 0U) !=
-        (picture_parameter_set_count == 0U)) {
-        return VRREC_STATUS_INVALID_ARGUMENT;
-    }
-    for (const auto &entry : picture_parameter_sets) {
-        if (entry.nal != nullptr &&
-            sequence_parameter_sets[entry.info.sequence_parameter_set_id].nal ==
-                nullptr) {
-            return VRREC_STATUS_INVALID_ARGUMENT;
-        }
-    }
-
-    if (sequence_parameter_set_count > 31U ||
-        picture_parameter_set_count > 255U) {
-        return VRREC_STATUS_INVALID_ARGUMENT;
+    const auto collect_status = CollectParameterSets(
+        nals,
+        expected_width,
+        expected_height,
+        expected_profile,
+        sequence_parameter_sets,
+        sequence_parameter_set_count,
+        picture_parameter_sets,
+        picture_parameter_set_count);
+    if (collect_status != VRREC_STATUS_OK) {
+        return collect_status;
     }
 
     const bool contains_idr = [&] {
