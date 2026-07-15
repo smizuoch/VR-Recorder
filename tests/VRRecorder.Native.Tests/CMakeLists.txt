@@ -1211,6 +1211,19 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
         "${native_source_root}/src/audio_pipeline_session.cpp"
         "${native_source_root}/src/audio_encoding_worker.cpp"
         "${native_source_root}/src/audio_encoding_pump.cpp")
+    if(WIN32)
+        target_sources(
+            vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
+            PRIVATE
+                "${native_source_root}/src/ffmpeg_h264_packet_encoder.cpp"
+                "${native_source_root}/src/ffmpeg_h264_software_codec_session.cpp"
+                "${native_source_root}/src/ffmpeg_h264_media_foundation_configuration.cpp"
+                "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp"
+                "${native_source_root}/src/h264_packet_normalizer.cpp"
+                "${native_source_root}/src/h264_bitstream_converter.cpp"
+                "${native_source_root}/src/h264_sps_parser.cpp"
+                "${native_source_root}/src/video_encoder_config.cpp")
+    endif()
     target_compile_features(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         PRIVATE cxx_std_20)
