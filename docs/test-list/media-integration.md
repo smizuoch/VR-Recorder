@@ -49,6 +49,7 @@
 - [x] stream別completionをdownstream成功後だけcommitし、peer完了前の重複completion／完了streamの追加packetをterminal protocol failureにする。video／audio両完了後だけ成功terminalの`Finishing`へ遷移し、後続Abortで巻き戻さない
 - [x] descriptorが最初の実IDR batchと同時に確定する経路では、video batchをowned queueへ原子的に追加してからdescriptor readinessを成立させる。先行AACと同じpre-header cutでDTS drainし、最初のvideo packetをlive側へずらさないdescriptor-aware Portを公開する
 - [x] video sinkはencoder writeのdescriptor-ready／identity／descriptor／nonempty first batchを一組として検証し、そのbatchだけをdescriptor-aware atomic Portへ渡す。専用Port欠落やmetadata不整合では通常submit前にencoderとmux boundaryをAbortする
+- [x] fake AAC encoder→audio sinkとdescriptor-ready fake H.264 encoder→video sinkを単一`PreHeaderCoordinator`へ合成し、AAC同期block、video first batchによるheader開始、DTS drain、両write成功、両Finish後`Finishing`までを一つのportable graphで検証する
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -134,6 +135,7 @@
 - [x] Commit each stream completion only after downstream success, terminally fail duplicate completion before its peer or packets from a completed stream, and enter successful terminal `Finishing` only after both video and audio complete without allowing a later Abort to roll it back
 - [x] When the descriptor becomes ready with the first real IDR batch, atomically add that owned video batch before committing descriptor readiness; expose a descriptor-aware Port that drains it in the same pre-header DTS cut as earlier AAC instead of shifting the first video packet to the live path
 - [x] Validate descriptor-ready, encoder identity, descriptor, and a nonempty first batch as one video-sink write contract, routing only that batch through the descriptor-aware atomic Port; abort the encoder and mux boundary before normal submission if the dedicated Port or metadata is inconsistent
+- [x] Compose a fake AAC encoder/audio sink and descriptor-ready fake H.264 encoder/video sink through one `PreHeaderCoordinator`, verifying blocked AAC submission, header start from the first video batch, DTS drain, both successful writes, and `Finishing` after both completions in one portable graph
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video
