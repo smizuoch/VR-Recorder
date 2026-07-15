@@ -118,6 +118,9 @@ target_sources(vrrecorder_native PRIVATE src/video_encoder_config.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_evidence_builder.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_pipeline.cpp)
 target_sources(vrrecorder_native PRIVATE src/encoder_probe_synthetic_nv12.cpp)
+target_sources(
+    vrrecorder_native
+    PRIVATE src/software_encoder_probe_platform_identity.cpp)
 
 if(VRRECORDER_SPOUT_FACTORY_VARIANT STREQUAL "PRODUCTION")
     if(NOT WIN32 OR NOT MSVC OR NOT VRRECORDER_ENABLE_SPOUT2_ADAPTER OR
@@ -146,6 +149,7 @@ if(WIN32)
             src/windows_d3d11_video_processor_port.cpp
             src/windows_d3d11_nv12_readback_port.cpp
             src/windows_d3d11_keyed_mutex_surface.cpp
+            src/windows_software_encoder_probe_adapter_identity_lookup.cpp
             src/wasapi_audio_capture_source_core.cpp
             src/wasapi_audio_capture_source.cpp)
     target_compile_definitions(

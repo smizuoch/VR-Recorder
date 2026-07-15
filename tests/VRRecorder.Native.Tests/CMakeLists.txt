@@ -858,6 +858,24 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_annex_b_encoder_probe_decoder)
 
 add_executable(
+    vrrecorder_native_software_encoder_probe_platform_identity
+    software_encoder_probe_platform_identity_tests.cpp
+    "${native_source_root}/src/software_encoder_probe_platform_identity.cpp")
+target_compile_features(
+    vrrecorder_native_software_encoder_probe_platform_identity
+    PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_software_encoder_probe_platform_identity
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_software_encoder_probe_platform_identity
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_software_encoder_probe_platform_identity)
+
+add_executable(
     vrrecorder_native_encoder_probe_pipeline
     encoder_probe_pipeline_tests.cpp
     "${native_source_root}/src/encoder_probe_pipeline.cpp"
@@ -1798,6 +1816,8 @@ add_test(NAME vrrecorder_native_encoder_probe_evidence_builder
     COMMAND vrrecorder_native_encoder_probe_evidence_builder)
 add_test(NAME vrrecorder_native_annex_b_encoder_probe_decoder
     COMMAND vrrecorder_native_annex_b_encoder_probe_decoder)
+add_test(NAME vrrecorder_native_software_encoder_probe_platform_identity
+    COMMAND vrrecorder_native_software_encoder_probe_platform_identity)
 add_test(NAME vrrecorder_native_encoder_probe_pipeline
     COMMAND vrrecorder_native_encoder_probe_pipeline)
 add_test(NAME vrrecorder_native_encoder_probe_synthetic_nv12
