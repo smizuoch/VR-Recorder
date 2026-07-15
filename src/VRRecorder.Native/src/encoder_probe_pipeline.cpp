@@ -39,6 +39,41 @@ void AppendPackets(
 
 }
 
+VerifiedEncoderProbeBackend::VerifiedEncoderProbeBackend(
+    EncoderProbeEncodeSessionFactoryPort &factory,
+    EncoderProbeDecodePort &decoder) noexcept
+    : factory_(factory), decoder_(decoder)
+{
+}
+
+vrrec_status_t VerifiedEncoderProbeBackend::Probe(
+    const vrrec_encoder_probe_config_v1 &config,
+    bool &packet_produced) noexcept
+{
+    packet_produced = false;
+    EncoderProbeEvidence evidence;
+    const auto status = RunVerifiedEncoderProbe(
+        config,
+        factory_,
+        decoder_,
+        evidence);
+    if (status == VRREC_STATUS_OK) {
+        packet_produced = true;
+    }
+    return status;
+}
+
+vrrec_status_t VerifiedEncoderProbeBackend::ProbeV2(
+    const vrrec_encoder_probe_config_v1 &config,
+    EncoderProbeEvidence &evidence)
+{
+    return RunVerifiedEncoderProbe(
+        config,
+        factory_,
+        decoder_,
+        evidence);
+}
+
 vrrec_status_t RunVerifiedEncoderProbe(
     const vrrec_encoder_probe_config_v1 &config,
     EncoderProbeEncodeSessionFactoryPort &factory,

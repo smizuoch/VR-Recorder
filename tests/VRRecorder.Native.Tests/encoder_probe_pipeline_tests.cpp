@@ -439,6 +439,49 @@ void IdentityOrDecodeFailureAfterFinishDoesNotPublishEvidence()
     CHECK(evidence.codec_name == "sentinel");
 }
 
+void BackendKeepsLegacyBoolAndStructuredEvidenceOnTheSamePipeline()
+{
+    FactoryState factory_state;
+    SessionState session_state;
+    FakeFactory factory(factory_state, session_state);
+    FakeDecoder decoder;
+    VerifiedEncoderProbeBackend backend(factory, decoder);
+
+    bool packet_produced = false;
+    CHECK(backend.Probe(Config(), packet_produced) == VRREC_STATUS_OK);
+    CHECK(packet_produced);
+    CHECK(factory_state.call_count == 1);
+    CHECK(decoder.call_count == 1);
+
+    EncoderProbeEvidence evidence;
+    CHECK(backend.ProbeV2(Config(), evidence) == VRREC_STATUS_OK);
+    CHECK(factory_state.call_count == 2);
+    CHECK(decoder.call_count == 2);
+    CHECK(evidence.actual_encoder_kind == VRREC_ENCODER_NVENC);
+    CHECK(evidence.codec_name == "h264_nvenc");
+    CHECK(evidence.validation_flags == UINT32_C(0x07ff));
+}
+
+void BackendNeverPublishesLegacySuccessAfterVerificationFailure()
+{
+    FactoryState factory_state;
+    factory_state.status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    factory_state.return_session = false;
+    SessionState session_state;
+    FakeFactory factory(factory_state, session_state);
+    FakeDecoder decoder;
+    VerifiedEncoderProbeBackend backend(factory, decoder);
+
+    bool packet_produced = true;
+    CHECK(backend.Probe(Config(), packet_produced) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(!packet_produced);
+    auto evidence = SentinelEvidence();
+    CHECK(backend.ProbeV2(Config(), evidence) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(evidence.codec_name == "sentinel");
+}
+
 }
 
 int main()
@@ -449,4 +492,6 @@ int main()
     FactoryFailureNeverStartsEncodingOrPublishesEvidence();
     EncodeOrFinishFailureAbortsExactlyOnce();
     IdentityOrDecodeFailureAfterFinishDoesNotPublishEvidence();
+    BackendKeepsLegacyBoolAndStructuredEvidenceOnTheSamePipeline();
+    BackendNeverPublishesLegacySuccessAfterVerificationFailure();
 }

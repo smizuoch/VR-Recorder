@@ -42,6 +42,24 @@ public:
         const vrrec_encoder_probe_config_v1 &config) noexcept = 0;
 };
 
+class VerifiedEncoderProbeBackend final : public EncoderProbeBackend {
+public:
+    VerifiedEncoderProbeBackend(
+        EncoderProbeEncodeSessionFactoryPort &factory,
+        EncoderProbeDecodePort &decoder) noexcept;
+
+    vrrec_status_t Probe(
+        const vrrec_encoder_probe_config_v1 &config,
+        bool &packet_produced) noexcept override;
+    vrrec_status_t ProbeV2(
+        const vrrec_encoder_probe_config_v1 &config,
+        EncoderProbeEvidence &evidence) override;
+
+private:
+    EncoderProbeEncodeSessionFactoryPort &factory_;
+    EncoderProbeDecodePort &decoder_;
+};
+
 vrrec_status_t RunVerifiedEncoderProbe(
     const vrrec_encoder_probe_config_v1 &config,
     EncoderProbeEncodeSessionFactoryPort &factory,
