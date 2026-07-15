@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "encoded_media_packet_submission_port.hpp"
+#include "h264_descriptor_packet_submission_port.hpp"
 #include "video_encoding_pump.hpp"
 
 namespace vrrecorder::native {
@@ -15,6 +16,9 @@ struct PacketVideoEncoderWrite final {
     vrrec_status_t status;
     std::uint64_t encode_latency_microseconds;
     std::vector<EncodedMediaPacket> packets;
+    bool descriptor_became_ready = false;
+    const void *encoder_identity = nullptr;
+    const H264StreamDescriptor *descriptor = nullptr;
 };
 
 class PacketVideoEncoder {
@@ -32,6 +36,10 @@ public:
     MuxingVideoEncoderSink(
         PacketVideoEncoder &encoder,
         EncodedMediaPacketSubmissionPort &mux) noexcept;
+    MuxingVideoEncoderSink(
+        PacketVideoEncoder &encoder,
+        EncodedMediaPacketSubmissionPort &mux,
+        H264DescriptorPacketSubmissionPort &descriptor_mux) noexcept;
 
     VideoEncoderWrite Write(
         const ScheduledVideoFrame &frame) noexcept override;
@@ -44,6 +52,7 @@ private:
 
     PacketVideoEncoder &encoder_;
     EncodedMediaPacketSubmissionPort &mux_;
+    H264DescriptorPacketSubmissionPort *descriptor_mux_;
     std::mutex operation_mutex_;
     std::atomic_bool aborted_ = false;
     std::atomic_bool finished_ = false;

@@ -10,7 +10,18 @@ MuxingVideoEncoderSink::MuxingVideoEncoderSink(
     PacketVideoEncoder &encoder,
     EncodedMediaPacketSubmissionPort &mux) noexcept
     : encoder_(encoder),
-      mux_(mux)
+      mux_(mux),
+      descriptor_mux_(nullptr)
+{
+}
+
+MuxingVideoEncoderSink::MuxingVideoEncoderSink(
+    PacketVideoEncoder &encoder,
+    EncodedMediaPacketSubmissionPort &mux,
+    H264DescriptorPacketSubmissionPort &descriptor_mux) noexcept
+    : encoder_(encoder),
+      mux_(mux),
+      descriptor_mux_(&descriptor_mux)
 {
 }
 
@@ -104,6 +115,23 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
         };
     }
 
+    const auto descriptor_metadata_valid =
+        encoded.descriptor_became_ready
+        ? descriptor_mux_ != nullptr &&
+            encoded.encoder_identity != nullptr &&
+            encoded.descriptor != nullptr &&
+            !encoded.packets.empty()
+        : encoded.encoder_identity == nullptr && encoded.descriptor == nullptr;
+    if (!descriptor_metadata_valid) {
+        Abort();
+        return {
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Muxing,
+        };
+    }
+
     if (encoded.packets.empty()) {
         return {
             VRREC_STATUS_OK,
@@ -120,9 +148,13 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
             VideoEncoderFailureStage::Encoding,
         };
     }
-    if (mux_.SubmitBatch(
-            MediaStreamKind::Video,
-            encoded.packets) != Mp4MuxResult::Written) {
+    const auto submit_result = encoded.descriptor_became_ready
+        ? descriptor_mux_->SubmitVideoDescriptorBatch(
+            encoded.encoder_identity,
+            *encoded.descriptor,
+            encoded.packets)
+        : mux_.SubmitBatch(MediaStreamKind::Video, encoded.packets);
+    if (submit_result != Mp4MuxResult::Written) {
         Abort();
         return {
             VRREC_STATUS_INTERNAL_ERROR,
