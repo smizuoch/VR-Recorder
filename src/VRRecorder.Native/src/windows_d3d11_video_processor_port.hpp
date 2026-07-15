@@ -14,6 +14,11 @@ CreateWindowsD3d11VideoProcessorPort(
     std::uint64_t adapter_luid,
     vrrec_status_t &status) noexcept;
 
+std::unique_ptr<D3d11VideoProcessorPort>
+CreateWindowsAdaptiveD3d11VideoProcessorPort(
+    std::uint64_t adapter_luid,
+    vrrec_status_t &status) noexcept;
+
 }
 
 #endif

@@ -503,6 +503,49 @@ void PreservesLogicalRedAcrossBgraAndRgbaChannelOrder()
         Nv12Chroma(rgba, 15, 31)));
 }
 
+void BindsLazilyAndRebindsToANewDeviceOnTheSameAdapter()
+{
+    const auto first_hardware = CreateHardwareVideoDevice();
+    const auto second_hardware = CreateHardwareVideoDevice();
+    CHECK(first_hardware.adapter_luid == second_hardware.adapter_luid);
+
+    vrrec_status_t create_status = VRREC_STATUS_INTERNAL_ERROR;
+    auto port = CreateWindowsAdaptiveD3d11VideoProcessorPort(
+        first_hardware.adapter_luid,
+        create_status);
+    CHECK(create_status == VRREC_STATUS_OK);
+    CHECK(port != nullptr);
+    D3d11VideoFrameProcessor processor(*port);
+
+    const HardwareDevice *devices[] = {
+        &first_hardware,
+        &second_hardware,
+    };
+    std::uint64_t generation_id = 31;
+    for (const auto *hardware : devices) {
+        const auto source = CreateOddColorSurface(
+            *hardware,
+            generation_id,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            0,
+            0,
+            255);
+        VideoProcessingPlan plan {};
+        CHECK(CreateSingleFileVideoProcessingPlan(
+                  source->Descriptor(),
+                  64,
+                  64,
+                  plan) == VRREC_STATUS_OK);
+        std::shared_ptr<VideoSurface> output;
+        CHECK(processor.Process(source, plan, output) == VRREC_STATUS_OK);
+        CHECK(output != nullptr);
+        CHECK(output->Descriptor().adapter_luid ==
+              first_hardware.adapter_luid);
+        CHECK(output->Descriptor().generation_id == generation_id);
+        ++generation_id;
+    }
+}
+
 ComOwner<ID3D11Texture2D> CreateKeyedMutexTestTexture(
     ID3D11Device *device,
     bool keyed)
@@ -642,6 +685,7 @@ int main()
 {
     ConvertsOddBgraToOwnedNv12AndPadsBeforeFit();
     PreservesLogicalRedAcrossBgraAndRgbaChannelOrder();
+    BindsLazilyAndRebindsToANewDeviceOnTheSameAdapter();
     UsesExactKeyedMutexKeysAndRetriesAfterARealTimeout();
     RejectsNonKeyedAndMismatchedTextures();
     return 0;

@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <utility>
 
@@ -542,6 +543,133 @@ private:
     std::atomic_bool aborted_ = false;
 };
 
+bool AreSameComObjects(IUnknown *left, IUnknown *right) noexcept
+{
+    if (left == nullptr || right == nullptr) {
+        return false;
+    }
+    ComOwner<IUnknown> left_identity;
+    ComOwner<IUnknown> right_identity;
+    if (FAILED(left->QueryInterface(
+            __uuidof(IUnknown),
+            reinterpret_cast<void **>(left_identity.Put()))) ||
+        FAILED(right->QueryInterface(
+            __uuidof(IUnknown),
+            reinterpret_cast<void **>(right_identity.Put())))) {
+        return false;
+    }
+    return left_identity.Get() == right_identity.Get();
+}
+
+D3d11VideoProcessorResult CreationFailure(vrrec_status_t status) noexcept
+{
+    return status == VRREC_STATUS_OUT_OF_MEMORY
+        ? D3d11VideoProcessorResult::OutOfMemory
+        : D3d11VideoProcessorResult::Failed;
+}
+
+class WindowsAdaptiveD3d11VideoProcessorPort final
+    : public D3d11VideoProcessorPort {
+public:
+    explicit WindowsAdaptiveD3d11VideoProcessorPort(
+        std::uint64_t adapter_luid) noexcept
+        : adapter_luid_(adapter_luid)
+    {
+    }
+
+    D3d11VideoProcessorResult Convert(
+        const std::shared_ptr<VideoSurface> &source,
+        const VideoProcessingPlan &plan,
+        std::shared_ptr<VideoSurface> &output) noexcept override
+    {
+        output.reset();
+        const std::lock_guard convert_lock(convert_mutex_);
+        if (aborted_.load(std::memory_order_acquire)) {
+            return D3d11VideoProcessorResult::Aborted;
+        }
+        if (!source || source->NativeHandle() == nullptr ||
+            source->Descriptor().adapter_luid != adapter_luid_) {
+            return D3d11VideoProcessorResult::Failed;
+        }
+
+        auto *texture = static_cast<ID3D11Texture2D *>(
+            source->NativeHandle());
+        ComOwner<ID3D11Device> source_device;
+        texture->GetDevice(source_device.Put());
+        if (!source_device) {
+            return D3d11VideoProcessorResult::Failed;
+        }
+
+        std::shared_ptr<D3d11VideoProcessorPort> active;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (aborted_.load(std::memory_order_acquire)) {
+                return D3d11VideoProcessorResult::Aborted;
+            }
+            if (!port_ || !AreSameComObjects(
+                    bound_device_.Get(),
+                    source_device.Get())) {
+                auto status = VRREC_STATUS_INTERNAL_ERROR;
+                auto created = CreateWindowsD3d11VideoProcessorPort(
+                    source_device.Get(),
+                    adapter_luid_,
+                    status);
+                if (!created) {
+                    return CreationFailure(status);
+                }
+
+                std::shared_ptr<D3d11VideoProcessorPort> shared;
+                try {
+                    shared = std::move(created);
+                } catch (const std::bad_alloc &) {
+                    return D3d11VideoProcessorResult::OutOfMemory;
+                } catch (...) {
+                    return D3d11VideoProcessorResult::Failed;
+                }
+                if (aborted_.load(std::memory_order_acquire)) {
+                    shared->Abort();
+                    return D3d11VideoProcessorResult::Aborted;
+                }
+                bound_device_ = std::move(source_device);
+                port_ = std::move(shared);
+            }
+            active = port_;
+        }
+
+        auto result = active->Convert(source, plan, output);
+        if (aborted_.load(std::memory_order_acquire)) {
+            active->Abort();
+            output.reset();
+            return D3d11VideoProcessorResult::Aborted;
+        }
+        return result;
+    }
+
+    void Abort() noexcept override
+    {
+        if (aborted_.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+
+        std::shared_ptr<D3d11VideoProcessorPort> active;
+        {
+            const std::lock_guard lock(state_mutex_);
+            active = port_;
+        }
+        if (active) {
+            active->Abort();
+        }
+    }
+
+private:
+    const std::uint64_t adapter_luid_;
+    std::mutex convert_mutex_;
+    std::mutex state_mutex_;
+    ComOwner<ID3D11Device> bound_device_;
+    std::shared_ptr<D3d11VideoProcessorPort> port_;
+    std::atomic_bool aborted_ = false;
+};
+
 }
 
 std::unique_ptr<D3d11VideoProcessorPort>
@@ -569,6 +697,26 @@ CreateWindowsD3d11VideoProcessorPort(
         return {};
     }
     return port;
+}
+
+std::unique_ptr<D3d11VideoProcessorPort>
+CreateWindowsAdaptiveD3d11VideoProcessorPort(
+    std::uint64_t adapter_luid,
+    vrrec_status_t &status) noexcept
+{
+    status = VRREC_STATUS_INVALID_ARGUMENT;
+    if (adapter_luid == 0) {
+        return {};
+    }
+
+    auto *created = new (std::nothrow)
+        WindowsAdaptiveD3d11VideoProcessorPort(adapter_luid);
+    if (created == nullptr) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return {};
+    }
+    status = VRREC_STATUS_OK;
+    return std::unique_ptr<D3d11VideoProcessorPort>(created);
 }
 
 }
