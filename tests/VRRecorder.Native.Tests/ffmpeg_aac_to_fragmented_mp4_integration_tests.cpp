@@ -292,6 +292,11 @@ struct AacDecodeOracleSummary final {
     std::int64_t first_dts_microseconds = 0;
     std::uint64_t decoded_frame_count = 0;
     std::uint64_t presented_decoded_frame_count = 0;
+    std::string video_codec_name;
+    std::uint64_t video_width = 0;
+    std::uint64_t video_height = 0;
+    std::uint64_t video_packet_count = 0;
+    std::uint64_t video_decoded_frame_count = 0;
 };
 
 std::string ShellQuote(const std::filesystem::path &path)
@@ -384,6 +389,16 @@ AacDecodeOracleSummary RunAacDecodeOracle(
             summary.decoded_frame_count = std::stoull(value);
         } else if (key == "presented_decoded_frame_count") {
             summary.presented_decoded_frame_count = std::stoull(value);
+        } else if (key == "video_codec_name") {
+            summary.video_codec_name = value;
+        } else if (key == "video_width") {
+            summary.video_width = std::stoull(value);
+        } else if (key == "video_height") {
+            summary.video_height = std::stoull(value);
+        } else if (key == "video_packet_count") {
+            summary.video_packet_count = std::stoull(value);
+        } else if (key == "video_decoded_frame_count") {
+            summary.video_decoded_frame_count = std::stoull(value);
         } else {
             CHECK(false);
         }
@@ -674,6 +689,11 @@ void WritesThreeSecondsOfRealAacPacketsIntoFragmentedMp4()
     CHECK(oracle.first_pts_microseconds == first_packet_pts_microseconds);
     CHECK(oracle.first_dts_microseconds == first_packet_dts_microseconds);
     CHECK(oracle.presented_decoded_frame_count == InputFrameCount);
+    CHECK(oracle.video_codec_name == "h264");
+    CHECK(oracle.video_width == 16);
+    CHECK(oracle.video_height == 16);
+    CHECK(oracle.video_packet_count == 0);
+    CHECK(oracle.video_decoded_frame_count == 0);
 }
 
 void FlushesTheOwnedAacPipelineThroughTheRealMuxGraph()

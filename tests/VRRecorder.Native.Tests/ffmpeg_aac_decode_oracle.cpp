@@ -234,6 +234,7 @@ int main(int argc, char **argv)
     Check(avformat_find_stream_info(format, nullptr), "find stream info");
 
     int audio_stream_index = -1;
+    int video_stream_index = -1;
     for (unsigned int index = 0; index < format->nb_streams; ++index) {
         const AVStream *stream = format->streams[index];
         if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -241,38 +242,69 @@ int main(int argc, char **argv)
                 Fail("multiple audio streams");
             }
             audio_stream_index = static_cast<int>(index);
-        } else if (stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) {
+        } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            if (video_stream_index >= 0) {
+                Fail("multiple video streams");
+            }
+            video_stream_index = static_cast<int>(index);
+        } else {
             Fail("unexpected non audio/video stream");
         }
     }
     if (audio_stream_index < 0) {
         Fail("missing audio stream");
     }
+    if (video_stream_index < 0) {
+        Fail("missing video stream");
+    }
 
     AVStream *audio_stream = format->streams[audio_stream_index];
-    const AVCodecParameters *parameters = audio_stream->codecpar;
-    if (parameters->codec_id != AV_CODEC_ID_AAC) {
+    const AVCodecParameters *audio_parameters = audio_stream->codecpar;
+    if (audio_parameters->codec_id != AV_CODEC_ID_AAC) {
         Fail("audio stream is not AAC");
     }
-    const AVCodec *codec = avcodec_find_decoder(parameters->codec_id);
-    if (codec == nullptr) {
+    const AVCodec *audio_codec = avcodec_find_decoder(audio_parameters->codec_id);
+    if (audio_codec == nullptr) {
         Fail("AAC decoder not found");
     }
-    AVCodecContext *decoder = avcodec_alloc_context3(codec);
-    if (decoder == nullptr) {
-        Fail("decoder allocation failed");
+    AVCodecContext *audio_decoder = avcodec_alloc_context3(audio_codec);
+    if (audio_decoder == nullptr) {
+        Fail("audio decoder allocation failed");
     }
-    Check(avcodec_parameters_to_context(decoder, parameters), "copy codec parameters");
-    Check(avcodec_open2(decoder, codec, nullptr), "open decoder");
+    Check(avcodec_parameters_to_context(audio_decoder, audio_parameters),
+        "copy audio codec parameters");
+    Check(avcodec_open2(audio_decoder, audio_codec, nullptr),
+        "open audio decoder");
+
+    AVStream *video_stream = format->streams[video_stream_index];
+    const AVCodecParameters *video_parameters = video_stream->codecpar;
+    if (video_parameters->codec_id != AV_CODEC_ID_H264) {
+        Fail("video stream is not H.264");
+    }
+    const AVCodec *video_codec = avcodec_find_decoder(video_parameters->codec_id);
+    if (video_codec == nullptr) {
+        Fail("H.264 decoder not found");
+    }
+    AVCodecContext *video_decoder = avcodec_alloc_context3(video_codec);
+    if (video_decoder == nullptr) {
+        Fail("video decoder allocation failed");
+    }
+    Check(avcodec_parameters_to_context(video_decoder, video_parameters),
+        "copy video codec parameters");
+    Check(avcodec_open2(video_decoder, video_codec, nullptr),
+        "open video decoder");
 
     AVPacket *packet = av_packet_alloc();
-    AVFrame *frame = av_frame_alloc();
-    if (packet == nullptr || frame == nullptr) {
-        Fail("packet/frame allocation failed");
+    AVFrame *audio_frame = av_frame_alloc();
+    AVFrame *video_frame = av_frame_alloc();
+    if (packet == nullptr || audio_frame == nullptr || video_frame == nullptr) {
+        Fail("packet/frames allocation failed");
     }
 
     std::uint64_t packet_count = 0;
     std::uint64_t decoded_frame_count = 0;
+    std::uint64_t video_packet_count = 0;
+    std::uint64_t video_decoded_frame_count = 0;
     std::int64_t first_pts_us = 0;
     std::int64_t first_dts_us = 0;
     bool saw_first_packet = false;
@@ -290,36 +322,69 @@ int main(int argc, char **argv)
                 saw_first_packet = true;
             }
             ++packet_count;
-            Check(avcodec_send_packet(decoder, packet), "send packet");
+            Check(avcodec_send_packet(audio_decoder, packet),
+                "send audio packet");
             while (true) {
-                const int receive_result = avcodec_receive_frame(decoder, frame);
+                const int receive_result =
+                    avcodec_receive_frame(audio_decoder, audio_frame);
                 if (receive_result == AVERROR(EAGAIN) ||
                     receive_result == AVERROR_EOF) {
                     break;
                 }
-                Check(receive_result, "receive frame");
+                Check(receive_result, "receive audio frame");
                 const auto decoded_samples =
-                    static_cast<std::uint64_t>(frame->nb_samples);
+                    static_cast<std::uint64_t>(audio_frame->nb_samples);
                 decoded_frame_count += decoded_samples;
-                av_frame_unref(frame);
+                av_frame_unref(audio_frame);
+            }
+        } else if (packet->stream_index == video_stream_index) {
+            ++video_packet_count;
+            Check(avcodec_send_packet(video_decoder, packet),
+                "send video packet");
+            while (true) {
+                const int receive_result =
+                    avcodec_receive_frame(video_decoder, video_frame);
+                if (receive_result == AVERROR(EAGAIN) ||
+                    receive_result == AVERROR_EOF) {
+                    break;
+                }
+                Check(receive_result, "receive video frame");
+                ++video_decoded_frame_count;
+                av_frame_unref(video_frame);
             }
         }
         av_packet_unref(packet);
     }
 
-    Check(avcodec_send_packet(decoder, nullptr), "send drain");
+    Check(avcodec_send_packet(audio_decoder, nullptr), "send audio drain");
     while (true) {
-        const int receive_result = avcodec_receive_frame(decoder, frame);
+        const int receive_result =
+            avcodec_receive_frame(audio_decoder, audio_frame);
         if (receive_result == AVERROR_EOF) {
             break;
         }
         if (receive_result == AVERROR(EAGAIN)) {
             continue;
         }
-        Check(receive_result, "receive drain frame");
-        const auto decoded_samples = static_cast<std::uint64_t>(frame->nb_samples);
+        Check(receive_result, "receive audio drain frame");
+        const auto decoded_samples =
+            static_cast<std::uint64_t>(audio_frame->nb_samples);
         decoded_frame_count += decoded_samples;
-        av_frame_unref(frame);
+        av_frame_unref(audio_frame);
+    }
+    Check(avcodec_send_packet(video_decoder, nullptr), "send video drain");
+    while (true) {
+        const int receive_result =
+            avcodec_receive_frame(video_decoder, video_frame);
+        if (receive_result == AVERROR_EOF) {
+            break;
+        }
+        if (receive_result == AVERROR(EAGAIN)) {
+            continue;
+        }
+        Check(receive_result, "receive video drain frame");
+        ++video_decoded_frame_count;
+        av_frame_unref(video_frame);
     }
 
     if (!saw_first_packet) {
@@ -328,8 +393,8 @@ int main(int argc, char **argv)
 
     std::cout << "codec_name=aac\n";
     std::cout << "profile=LC\n";
-    std::cout << "sample_rate=" << parameters->sample_rate << '\n';
-    std::cout << "channel_count=" << ChannelCount(*parameters) << '\n';
+    std::cout << "sample_rate=" << audio_parameters->sample_rate << '\n';
+    std::cout << "channel_count=" << ChannelCount(*audio_parameters) << '\n';
     std::cout << "packet_count=" << packet_count << '\n';
     std::cout << "bitrate_metadata_bits_per_second="
               << ReadAacBitrateMetadata(argv[1]) << '\n';
@@ -338,10 +403,18 @@ int main(int argc, char **argv)
     std::cout << "decoded_frame_count=" << decoded_frame_count << '\n';
     std::cout << "presented_decoded_frame_count="
               << ReadAudioPresentedSampleCount(argv[1]) << '\n';
+    std::cout << "video_codec_name=h264\n";
+    std::cout << "video_width=" << video_parameters->width << '\n';
+    std::cout << "video_height=" << video_parameters->height << '\n';
+    std::cout << "video_packet_count=" << video_packet_count << '\n';
+    std::cout << "video_decoded_frame_count="
+              << video_decoded_frame_count << '\n';
 
-    av_frame_free(&frame);
+    av_frame_free(&video_frame);
+    av_frame_free(&audio_frame);
     av_packet_free(&packet);
-    avcodec_free_context(&decoder);
+    avcodec_free_context(&video_decoder);
+    avcodec_free_context(&audio_decoder);
     avformat_close_input(&format);
     return 0;
 }

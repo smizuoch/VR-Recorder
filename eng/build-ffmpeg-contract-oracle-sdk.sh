@@ -50,6 +50,7 @@ configure_arguments=(
     --enable-avformat
     --enable-avutil
     --enable-decoder=aac
+    --enable-decoder=h264
     --enable-demuxer=mov
     --enable-protocol=file
 )
