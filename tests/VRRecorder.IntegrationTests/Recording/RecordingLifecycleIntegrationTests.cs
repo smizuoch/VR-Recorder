@@ -17,19 +17,15 @@ namespace VRRecorder.IntegrationTests.Recording;
 
 public sealed class RecordingLifecycleIntegrationTests
 {
-    private const string FfmpegPath = "/usr/bin/ffmpeg";
-    private const string FfprobePath = "/usr/bin/ffprobe";
-
     [Fact]
     [Trait("Scenario", "IT-019")]
     public async Task DiskLowSafelyStopsAndPublishesOnePlayableRecording()
     {
-        Assert.True(File.Exists(FfmpegPath), $"Missing host tool: {FfmpegPath}");
-        Assert.True(File.Exists(FfprobePath), $"Missing host tool: {FfprobePath}");
+        var tools = HostFfmpegTools.Resolve();
         using var directory = TemporaryDirectory.Create();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var clock = new ControllableMonotonicClock();
-        var backend = new SyntheticNativeRecordingBackend(FfmpegPath);
+        var backend = new SyntheticNativeRecordingBackend(tools.FfmpegPath);
         var engine = new NativeRecordingEngine(
             backend,
             clock,
@@ -38,7 +34,7 @@ public sealed class RecordingLifecycleIntegrationTests
         var finalization = new RecordingFileFinalizationUseCase(
             new SameDirectoryAtomicRecordingFileFinalizer(),
             new FfprobeRecordingFileValidator(
-                FfprobePath,
+                tools.FfprobePath,
                 new RecordingMediaExpectation(
                     Width: 320,
                     Height: 180,

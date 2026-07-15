@@ -9,20 +9,17 @@ namespace VRRecorder.IntegrationTests.Media;
 
 public sealed class RealMp4FinalizationIntegrationTests
 {
-    private const string FfmpegPath = "/usr/bin/ffmpeg";
-    private const string FfprobePath = "/usr/bin/ffprobe";
-
     [Fact]
     [Trait("Scenario", "IT-004")]
     public async Task SyntheticAvIsProbedBeforeFinalRenameIsPublished()
     {
-        Assert.True(File.Exists(FfmpegPath), $"Missing host tool: {FfmpegPath}");
-        Assert.True(File.Exists(FfprobePath), $"Missing host tool: {FfprobePath}");
+        var tools = HostFfmpegTools.Resolve();
         using var directory = TemporaryDirectory.Create();
         var temporaryPath = Path.Combine(directory.Path, "take.recording.mp4");
         var finalPath = Path.Combine(directory.Path, "take.mp4");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await GenerateSyntheticRecordingAsync(
+            tools.FfmpegPath,
             temporaryPath,
             timeout.Token);
         var expectation = new RecordingMediaExpectation(
@@ -35,7 +32,7 @@ public sealed class RealMp4FinalizationIntegrationTests
         var savedSink = new CountingSavedSink();
         var useCase = new RecordingFileFinalizationUseCase(
             new SameDirectoryAtomicRecordingFileFinalizer(),
-            new FfprobeRecordingFileValidator(FfprobePath, expectation),
+            new FfprobeRecordingFileValidator(tools.FfprobePath, expectation),
             new FileSystemRecordingRecoveryStore(),
             savedSink);
 
@@ -47,11 +44,15 @@ public sealed class RealMp4FinalizationIntegrationTests
         Assert.Equal(Path.GetFullPath(finalPath), saved.Recording.FinalPath);
         Assert.Equal(1, savedSink.CallCount);
         Assert.False(File.Exists(temporaryPath));
-        using var probe = await ProbeAsync(finalPath, timeout.Token);
+        using var probe = await ProbeAsync(
+            tools.FfprobePath,
+            finalPath,
+            timeout.Token);
         AssertPlayableMedia(probe.RootElement);
     }
 
     private static async Task GenerateSyntheticRecordingAsync(
+        string ffmpegPath,
         string outputPath,
         CancellationToken cancellationToken)
     {
@@ -72,7 +73,7 @@ public sealed class RealMp4FinalizationIntegrationTests
             "1000000", "-flush_packets", "1", "-f", "mp4", outputPath,
         ];
         var result = await RunProcessAsync(
-            FfmpegPath,
+            ffmpegPath,
             arguments,
             cancellationToken);
         Assert.True(
@@ -81,6 +82,7 @@ public sealed class RealMp4FinalizationIntegrationTests
     }
 
     private static async Task<JsonDocument> ProbeAsync(
+        string ffprobePath,
         string recordingPath,
         CancellationToken cancellationToken)
     {
@@ -91,7 +93,7 @@ public sealed class RealMp4FinalizationIntegrationTests
             "-of", "json", "-i", recordingPath,
         ];
         var result = await RunProcessAsync(
-            FfprobePath,
+            ffprobePath,
             arguments,
             cancellationToken);
         Assert.True(
