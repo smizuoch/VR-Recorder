@@ -101,7 +101,7 @@ public sealed class EncoderSelector
             var result = await _probe
                 .ProbeAsync(createRequest(candidate), cancellationToken)
                 .ConfigureAwait(false);
-            if (result == EncoderProbeResult.PacketProduced)
+            if (result.IsPacketProduced)
             {
                 return candidate;
             }

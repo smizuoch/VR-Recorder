@@ -25,7 +25,7 @@
 - [x] poll実行中のdestroyを安全に合流し、pointer-to-pointer destroyを冪等にする
 - [x] portable `UNAVAILABLE` Spout variantは明示的にBACKEND_UNAVAILABLEを返す
 - [x] encoder packet probeへ出力寸法・fps・adapter・16合成frameを固定ABIで渡す
-- [x] native packet probeをmanaged fallback結果へ変換し、Disposeを実行中probeと合流する
+- [x] native structured probe v2をmanagedの型付き証跡へ変換し、actual backend／codec／hardware／adapter LUID／opened format／寸法／FPS／全validation flag／UTF-8 identityを再検証して不一致をfail-closedにし、fallback結果とDisposeを実行中probeへ合流する
 - [x] bool-only probe v1を互換維持したまま、actual backend／codec／hardware／adapter LUID／driver／opened format／SPS・PPS・IDR・decode検証をcaller-owned UTF-8 bufferで返すsize付きstructured probe v2を追加し、requested identityの推測や検証flag不足をfail-closed拒否する
 - [ ] 4つのactual production factory sourceを実装し、production C ABI／composition smokeがplaceholder sourceへ委譲しないことを検証する
 - [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
@@ -59,7 +59,7 @@
 - [x] Safely join destroy with an active poll and make pointer-to-pointer destroy idempotent
 - [x] Return explicit BACKEND_UNAVAILABLE from the portable `UNAVAILABLE` Spout variant
 - [x] Pass output geometry, frame rate, adapter, and 16 synthetic frames to the encoder packet probe through a fixed ABI
-- [x] Translate native packet probing into managed fallback results and join Dispose with an in-flight probe
+- [x] Translate native structured probe-v2 output into typed managed evidence; revalidate the actual backend/codec, hardware mode, adapter LUID, opened format, dimensions, frame rate, every validation flag, and packed UTF-8 identities fail-closed; and join fallback and Dispose behavior with an in-flight probe
 - [x] Preserve bool-only probe-v1 compatibility while adding a sized structured probe-v2 result with caller-owned UTF-8 storage for the actual backend/codec, hardware mode, adapter LUID, driver, opened format, and SPS/PPS/IDR/decode validation, failing closed on inferred identity or missing validation flags
 - [ ] Implement all four actual production factory sources and verify with production C-ABI/composition smoke tests that none delegates to an unavailable source
 - [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI

@@ -210,6 +210,44 @@ extern "C" VRREC_TEST_API void vrrec_test_encoder_probe_set_result(
         packet_produced != 0);
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_encoder_probe_set_evidence_v2(
+    std::uint32_t actual_encoder_kind,
+    std::uint8_t hardware_accelerated,
+    std::uint64_t adapter_luid,
+    std::uint32_t opened_input_format,
+    std::uint32_t width,
+    std::uint32_t height,
+    std::uint32_t fps_numerator,
+    std::uint32_t fps_denominator,
+    std::uint32_t validation_flags,
+    const char *codec_name_utf8,
+    const char *driver_identity_utf8,
+    const char *ffmpeg_build_identity_utf8,
+    const char *profile_utf8,
+    const char *device_identity_utf8)
+{
+    const auto text = [](const char *value) {
+        return value == nullptr ? "" : value;
+    };
+    vrrecorder::native::testing::SetEncoderProbeEvidence(
+        vrrecorder::native::testing::TestEncoderProbeEvidence {
+            actual_encoder_kind,
+            hardware_accelerated != 0,
+            adapter_luid,
+            opened_input_format,
+            width,
+            height,
+            fps_numerator,
+            fps_denominator,
+            validation_flags,
+            text(codec_name_utf8),
+            text(driver_identity_utf8),
+            text(ffmpeg_build_identity_utf8),
+            text(profile_utf8),
+            text(device_identity_utf8),
+        });
+}
+
 extern "C" VRREC_TEST_API std::uint32_t
 vrrec_test_encoder_probe_call_count(void)
 {

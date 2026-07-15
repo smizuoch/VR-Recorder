@@ -6,7 +6,7 @@ internal sealed class NativeEncoderProbeLibrary : IDisposable
 {
     public const uint SupportedAbiVersion = 1;
     private readonly nint _library;
-    private readonly ProbeDelegate _probe;
+    private readonly ProbeV2Delegate _probeV2;
     private int _disposed;
 
     public NativeEncoderProbeLibrary(string libraryPath)
@@ -31,7 +31,7 @@ internal sealed class NativeEncoderProbeLibrary : IDisposable
         try
         {
             var abiVersion = Resolve<AbiVersionDelegate>("vrrec_abi_version");
-            _probe = Resolve<ProbeDelegate>("vrrec_encoder_probe_v1");
+            _probeV2 = Resolve<ProbeV2Delegate>("vrrec_encoder_probe_v2");
             var actualVersion = abiVersion();
             if (actualVersion != SupportedAbiVersion)
             {
@@ -44,6 +44,11 @@ internal sealed class NativeEncoderProbeLibrary : IDisposable
                 throw new TypeLoadException(
                     "Managed encoder probe layout does not match native ABI v1.");
             }
+            if (Marshal.SizeOf<NativeEncoderProbeResultV2>() != 96)
+            {
+                throw new TypeLoadException(
+                    "Managed encoder probe result layout does not match native ABI v2.");
+            }
         }
         catch
         {
@@ -52,10 +57,18 @@ internal sealed class NativeEncoderProbeLibrary : IDisposable
         }
     }
 
-    public NativeStatus Probe(
+    public NativeStatus ProbeV2(
         ref NativeEncoderProbeConfigV1 config,
-        out byte packetProduced) =>
-        _probe(ref config, out packetProduced);
+        ref NativeEncoderProbeResultV2 result,
+        nint utf8Buffer,
+        uint utf8Capacity,
+        out uint requiredUtf8Size) =>
+        _probeV2(
+            ref config,
+            ref result,
+            utf8Buffer,
+            utf8Capacity,
+            out requiredUtf8Size);
 
     public void Dispose()
     {
@@ -74,7 +87,10 @@ internal sealed class NativeEncoderProbeLibrary : IDisposable
     private delegate uint AbiVersionDelegate();
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate NativeStatus ProbeDelegate(
+    private delegate NativeStatus ProbeV2Delegate(
         ref NativeEncoderProbeConfigV1 config,
-        out byte packetProduced);
+        ref NativeEncoderProbeResultV2 result,
+        nint utf8Buffer,
+        uint utf8Capacity,
+        out uint requiredUtf8Size);
 }
