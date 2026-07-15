@@ -1496,6 +1496,25 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_spout_capture_pump)
 
 add_executable(
+    vrrecorder_native_spout2_source_backend
+    spout2_source_backend_tests.cpp
+    "${native_source_root}/src/spout2_source_backend_core.cpp")
+target_compile_features(
+    vrrecorder_native_spout2_source_backend PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_spout2_source_backend
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+target_link_libraries(
+    vrrecorder_native_spout2_source_backend PRIVATE Threads::Threads)
+set_target_properties(
+    vrrecorder_native_spout2_source_backend
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_spout2_source_backend)
+
+add_executable(
     vrrecorder_native_spout_capture_worker
     spout_capture_worker_tests.cpp
     "${native_source_root}/src/spout_capture_worker.cpp")
@@ -1707,6 +1726,11 @@ add_test(NAME vrrecorder_native_video_encoding_worker
     COMMAND vrrecorder_native_video_encoding_worker)
 add_test(NAME vrrecorder_native_spout_capture_pump
     COMMAND vrrecorder_native_spout_capture_pump)
+add_test(NAME vrrecorder_native_spout2_source_backend
+    COMMAND vrrecorder_native_spout2_source_backend)
+set_tests_properties(
+    vrrecorder_native_spout2_source_backend
+    PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_spout_capture_worker
     COMMAND vrrecorder_native_spout_capture_worker)
 add_test(NAME vrrecorder_native_video_pipeline_session
