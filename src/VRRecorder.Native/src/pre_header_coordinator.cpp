@@ -355,8 +355,11 @@ vrrec_status_t PreHeaderCoordinator::EncoderFinished(
     }
     lock.unlock();
     const auto status = submission_.EncoderFinished(stream);
+    lock.lock();
+    if (abort_requested_.load() || state_ == PreHeaderState::Aborted) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
     if (status != VRREC_STATUS_OK) {
-        lock.lock();
         FailLocked(status);
     }
     return status;
