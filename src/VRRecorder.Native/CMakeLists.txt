@@ -32,6 +32,7 @@ add_library(vrrecorder_native SHARED
     src/ffmpeg_fragmented_mp4_muxer.cpp
     src/fragmented_mp4_mux_coordinator.cpp
     src/h264_bitstream_converter.cpp
+    src/h264_sps_parser.cpp
     src/muxing_video_encoder_sink.cpp
     src/muxing_audio_encoder_sink.cpp
     src/shared_mux_finalization_session.cpp

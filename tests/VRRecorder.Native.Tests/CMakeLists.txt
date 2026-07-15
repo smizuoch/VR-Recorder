@@ -602,6 +602,23 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_h264_bitstream_converter)
 
 add_executable(
+    vrrecorder_native_h264_sps_parser
+    h264_sps_parser_tests.cpp
+    "${native_source_root}/src/h264_sps_parser.cpp")
+target_compile_features(
+    vrrecorder_native_h264_sps_parser PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_h264_sps_parser
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_h264_sps_parser
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_h264_sps_parser)
+
+add_executable(
     vrrecorder_native_video_encoder_config
     video_encoder_config_tests.cpp
     "${native_source_root}/src/video_encoder_config.cpp")
@@ -1205,6 +1222,8 @@ add_test(NAME vrrecorder_native_video_processing_plan
     COMMAND vrrecorder_native_video_processing_plan)
 add_test(NAME vrrecorder_native_h264_bitstream_converter
     COMMAND vrrecorder_native_h264_bitstream_converter)
+add_test(NAME vrrecorder_native_h264_sps_parser
+    COMMAND vrrecorder_native_h264_sps_parser)
 add_test(NAME vrrecorder_native_video_encoder_config
     COMMAND vrrecorder_native_video_encoder_config)
 add_test(NAME vrrecorder_native_fragmented_mp4_mux_coordinator
