@@ -40,6 +40,7 @@
 - [x] open時に得たcomplete Annex B SPS／PPSだけのcontext extradataからavcC descriptorを初期化し、同一bytes再取得を許可しながらincomplete／VCL混入／確定後競合をterminal拒否する。open時emptyの場合はfirst IDR経路を維持する
 - [x] system-memory NV12 copy、software `h264_mf` opened-context readback、portable send／receive session、late extradata、AVCC normalizerを一つのH.264 packet encoder ownerへ合成し、zero packet／Finish／failure Abortを固定する。実`h264_mf` packet生成成功はWindows MSVC＋admitted SDK gateに残す
 - [x] 将来のWindows production H.264 attachmentをexact 4 sourceとcanonical imported `FFmpeg::avcodec`／`avutil`に固定し、portable variant、adapter未承認、test-only target、alias、root／source欠落をconfigure時にfail-closed拒否する。actual artifact承認前はmain DLLを変更しない
+- [x] 同一production H.264 encoder identity由来のcomplete AVCC descriptor、既知のAAC descriptor、video／audio producer開始がすべて揃うまでmux headerを開始せず、順序に依存せずexactly once開始する。throwaway identity、不完全descriptor、header失敗、readiness前Abortをterminalにして下流をexactly once Abortする
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -116,6 +117,7 @@
 - [x] Initialize the avcC descriptor from complete Annex B SPS/PPS-only context extradata when available at open, allowing identical rereads while terminally rejecting incomplete data, embedded VCL, or post-readiness conflicts; preserve the first-IDR path when open-time extradata is empty
 - [x] Compose system-memory NV12 copying, software-`h264_mf` opened-context readback, the portable send/receive session, late extradata, and AVCC normalization under one H.264 packet-encoder owner, fixing zero-packet, Finish, and failure-Abort behavior; leave successful real `h264_mf` packet generation to the Windows MSVC plus admitted-SDK gate
 - [x] Fix the future Windows production H.264 attachment to exactly four sources and canonical imported `FFmpeg::avcodec`/`avutil`, failing configuration for the portable variant, unadmitted adapters, test-only targets, aliases, or missing roots/sources; do not mutate the main DLL before actual artifact admission
+- [x] Delay the mux header until a complete AVCC descriptor from the same production H.264 encoder identity, the known AAC descriptor, and both video/audio producer startups are ready, then start it exactly once regardless of readiness order; terminally and exactly-once abort downstream on a throwaway identity, incomplete descriptor, header failure, or pre-readiness Abort
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video

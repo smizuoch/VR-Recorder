@@ -27,6 +27,7 @@ add_library(vrrecorder_native SHARED
     src/media_stream_pipeline_adapters.cpp
     src/media_recording_pipeline.cpp
     src/pipeline_media_backend.cpp
+    src/pre_header_coordinator.cpp
     src/audio_encoder_config.cpp
     src/ffmpeg_encoder_state_machine.cpp
     src/ffmpeg_fragmented_mp4_muxer.cpp
