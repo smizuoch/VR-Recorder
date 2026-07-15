@@ -44,6 +44,92 @@ bool IsAudioDescriptorValid(
             AacTargetBitrateBitsPerSecond;
 }
 
+struct BatchMeasurements final {
+    std::size_t packet_count = 0;
+    std::size_t byte_count = 0;
+    std::int64_t minimum_dts = 0;
+    std::int64_t maximum_dts = 0;
+};
+
+bool MeasureBatch(
+    MediaStreamKind producer,
+    std::span<const EncodedMediaPacket> packets,
+    BatchMeasurements &measurements) noexcept
+{
+    if (packets.empty() ||
+        (producer != MediaStreamKind::Video &&
+         producer != MediaStreamKind::Audio)) {
+        return false;
+    }
+    measurements.packet_count = packets.size();
+    bool has_dts = false;
+    for (const auto &packet : packets) {
+        if (packet.stream != producer || packet.payload.empty() ||
+            packet.pts_microseconds == UnknownMediaTimestamp ||
+            packet.dts_microseconds == UnknownMediaTimestamp ||
+            packet.pts_microseconds < packet.dts_microseconds ||
+            packet.duration_microseconds <= 0) {
+            return false;
+        }
+        auto packet_bytes = packet.payload.size();
+        for (const auto &side_data : packet.side_data) {
+            if (side_data.payload.size() >
+                std::numeric_limits<std::size_t>::max() - packet_bytes) {
+                return false;
+            }
+            packet_bytes += side_data.payload.size();
+        }
+        if (packet_bytes >
+            std::numeric_limits<std::size_t>::max() -
+                measurements.byte_count) {
+            return false;
+        }
+        measurements.byte_count += packet_bytes;
+        if (!has_dts) {
+            measurements.minimum_dts = packet.dts_microseconds;
+            measurements.maximum_dts = packet.dts_microseconds;
+            has_dts = true;
+        } else {
+            measurements.minimum_dts = std::min(
+                measurements.minimum_dts,
+                packet.dts_microseconds);
+            measurements.maximum_dts = std::max(
+                measurements.maximum_dts,
+                packet.dts_microseconds);
+        }
+    }
+    return true;
+}
+
+bool FitsQueueLimits(
+    const PreHeaderQueueLimits &limits,
+    const BatchMeasurements &batch,
+    const std::size_t current_packet_count,
+    const std::size_t current_byte_count,
+    const bool has_current_dts,
+    const std::int64_t current_minimum_dts,
+    const std::int64_t current_maximum_dts) noexcept
+{
+    if (batch.packet_count > limits.maximum_packets_per_stream ||
+        current_packet_count >
+            limits.maximum_packets_per_stream - batch.packet_count ||
+        batch.byte_count > limits.maximum_bytes_per_stream ||
+        current_byte_count >
+            limits.maximum_bytes_per_stream - batch.byte_count) {
+        return false;
+    }
+    const auto minimum_dts = has_current_dts
+        ? std::min(current_minimum_dts, batch.minimum_dts)
+        : batch.minimum_dts;
+    const auto maximum_dts = has_current_dts
+        ? std::max(current_maximum_dts, batch.maximum_dts)
+        : batch.maximum_dts;
+    const auto span = static_cast<std::uint64_t>(maximum_dts) -
+        static_cast<std::uint64_t>(minimum_dts);
+    return span <= static_cast<std::uint64_t>(
+        limits.maximum_dts_span_microseconds_per_stream);
+}
+
 }
 
 PreHeaderCoordinator::PreHeaderCoordinator(
@@ -51,12 +137,14 @@ PreHeaderCoordinator::PreHeaderCoordinator(
     EncodedMediaPacketSubmissionPort &submission,
     AacStreamDescriptor audio_descriptor,
     FragmentedMp4FragmentPolicy fragment_policy,
-    const void *expected_video_encoder_identity)
+    const void *expected_video_encoder_identity,
+    PreHeaderQueueLimits queue_limits)
     : mux_session_(mux_session),
       submission_(submission),
       audio_descriptor_(std::move(audio_descriptor)),
       fragment_policy_(fragment_policy),
-      expected_video_encoder_identity_(expected_video_encoder_identity)
+      expected_video_encoder_identity_(expected_video_encoder_identity),
+      queue_limits_(queue_limits)
 {
 }
 
@@ -74,7 +162,10 @@ vrrec_status_t PreHeaderCoordinator::BeginPriming(
     }
     if (capture_epoch < 0 || expected_video_encoder_identity_ == nullptr ||
         !IsAudioDescriptorValid(audio_descriptor_) ||
-        fragment_policy_ != DefaultFragmentedMp4FragmentPolicy) {
+        fragment_policy_ != DefaultFragmentedMp4FragmentPolicy ||
+        queue_limits_.maximum_packets_per_stream == 0 ||
+        queue_limits_.maximum_bytes_per_stream == 0 ||
+        queue_limits_.maximum_dts_span_microseconds_per_stream < 0) {
         return FailLocked(VRREC_STATUS_INVALID_ARGUMENT);
     }
     if (abort_requested_.load()) {
@@ -157,15 +248,9 @@ Mp4MuxResult PreHeaderCoordinator::SubmitBatch(
     MediaStreamKind producer,
     std::span<const EncodedMediaPacket> packets) noexcept
 {
-    if (packets.empty() ||
-        (producer != MediaStreamKind::Video &&
-         producer != MediaStreamKind::Audio)) {
+    BatchMeasurements measurements;
+    if (!MeasureBatch(producer, packets, measurements)) {
         return Mp4MuxResult::InvalidPacket;
-    }
-    for (const auto &packet : packets) {
-        if (packet.stream != producer) {
-            return Mp4MuxResult::InvalidPacket;
-        }
     }
 
     std::unique_lock lock(mutex_);
@@ -192,11 +277,30 @@ Mp4MuxResult PreHeaderCoordinator::SubmitBatch(
         return Mp4MuxResult::InvalidState;
     }
 
+    auto &usage = producer == MediaStreamKind::Video
+        ? video_queue_usage_
+        : audio_queue_usage_;
+    if (!FitsQueueLimits(
+            queue_limits_,
+            measurements,
+            usage.packet_count,
+            usage.byte_count,
+            usage.has_dts,
+            usage.minimum_dts,
+            usage.maximum_dts)) {
+        FailLocked(VRREC_STATUS_BUFFER_TOO_SMALL);
+        return Mp4MuxResult::MuxFailed;
+    }
+
     std::shared_ptr<SubmissionTicket> ticket;
     QueuedBatch batch;
     try {
         ticket = std::make_shared<SubmissionTicket>();
-        ticket->packet_count = packets.size();
+        ticket->producer = producer;
+        ticket->packet_count = measurements.packet_count;
+        ticket->byte_count = measurements.byte_count;
+        ticket->minimum_dts = measurements.minimum_dts;
+        ticket->maximum_dts = measurements.maximum_dts;
         batch = {
             producer,
             std::vector<EncodedMediaPacket>(packets.begin(), packets.end()),
@@ -210,7 +314,16 @@ Mp4MuxResult PreHeaderCoordinator::SubmitBatch(
         return Mp4MuxResult::MuxFailed;
     }
     ++next_submission_sequence_;
-    queued_packet_count_ += packets.size();
+    queued_packet_count_ += measurements.packet_count;
+    usage.packet_count += measurements.packet_count;
+    usage.byte_count += measurements.byte_count;
+    usage.minimum_dts = usage.has_dts
+        ? std::min(usage.minimum_dts, measurements.minimum_dts)
+        : measurements.minimum_dts;
+    usage.maximum_dts = usage.has_dts
+        ? std::max(usage.maximum_dts, measurements.maximum_dts)
+        : measurements.maximum_dts;
+    usage.has_dts = true;
 
     ticket->changed.wait(lock, [&] {
         return ticket->completed;
@@ -475,6 +588,8 @@ void PreHeaderCoordinator::FailQueuedSubmissionsLocked(
     outstanding_tickets_.clear();
     queued_batches_.clear();
     queued_packet_count_ = 0;
+    video_queue_usage_ = {};
+    audio_queue_usage_ = {};
 }
 
 void PreHeaderCoordinator::CompleteTicketLocked(
@@ -498,6 +613,30 @@ void PreHeaderCoordinator::CompleteTicketLocked(
         ticket);
     if (found != outstanding_tickets_.end()) {
         outstanding_tickets_.erase(found);
+    }
+    RecomputeQueueUsageLocked();
+}
+
+void PreHeaderCoordinator::RecomputeQueueUsageLocked() noexcept
+{
+    video_queue_usage_ = {};
+    audio_queue_usage_ = {};
+    for (const auto &pending : outstanding_tickets_) {
+        if (pending->completed) {
+            continue;
+        }
+        auto &usage = pending->producer == MediaStreamKind::Video
+            ? video_queue_usage_
+            : audio_queue_usage_;
+        usage.packet_count += pending->packet_count;
+        usage.byte_count += pending->byte_count;
+        usage.minimum_dts = usage.has_dts
+            ? std::min(usage.minimum_dts, pending->minimum_dts)
+            : pending->minimum_dts;
+        usage.maximum_dts = usage.has_dts
+            ? std::max(usage.maximum_dts, pending->maximum_dts)
+            : pending->maximum_dts;
+        usage.has_dts = true;
     }
 }
 

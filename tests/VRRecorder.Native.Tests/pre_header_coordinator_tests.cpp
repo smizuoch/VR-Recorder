@@ -255,6 +255,72 @@ void AbortWakesAQueuedSubmissionWithoutWritingIt()
     CHECK(coordinator.State() == PreHeaderState::Aborted);
 }
 
+void QueueOverflowIsTerminalAndBatchAtomic(
+    PreHeaderQueueLimits limits,
+    std::vector<EncodedMediaPacket> first_batch,
+    std::vector<EncodedMediaPacket> overflowing_batch)
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity,
+        limits);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const auto producer = first_batch.front().stream;
+    auto first_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(producer, first_batch);
+    });
+    WaitForQueuedPackets(coordinator, first_batch.size());
+
+    CHECK(coordinator.SubmitBatch(producer, overflowing_batch) ==
+          Mp4MuxResult::MuxFailed);
+
+    CHECK(first_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(coordinator.QueuedPacketCountForTesting() == 0);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+}
+
+void EnforcesEveryPerStreamQueueLimitBeforeMutatingTheBatch()
+{
+    QueueOverflowIsTerminalAndBatchAtomic(
+        {2, 1'024, 1'000},
+        {Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})},
+        {
+            Packet(MediaStreamKind::Audio, 10, std::byte {0xA1}),
+            Packet(MediaStreamKind::Audio, 20, std::byte {0xA2}),
+        });
+    QueueOverflowIsTerminalAndBatchAtomic(
+        {10, 1, 1'000},
+        {Packet(MediaStreamKind::Video, 0, std::byte {0xB0})},
+        {Packet(MediaStreamKind::Video, 10, std::byte {0xB1})});
+    QueueOverflowIsTerminalAndBatchAtomic(
+        {10, 1'024, 50},
+        {Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})},
+        {Packet(MediaStreamKind::Audio, 51, std::byte {0xA1})});
+
+    auto audio_with_side_data =
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0});
+    audio_with_side_data.side_data.push_back(
+        {EncodedPacketSideDataKind::SkipSamples,
+         std::vector<std::byte>(SkipSamplesSideDataSize)});
+    QueueOverflowIsTerminalAndBatchAtomic(
+        {10, SkipSamplesSideDataSize + 1, 1'000},
+        {audio_with_side_data},
+        {Packet(MediaStreamKind::Audio, 1, std::byte {0xA1})});
+}
+
 void StartsExactlyOnceRegardlessOfReadinessOrder()
 {
     RecordingDownstream downstream;
@@ -382,6 +448,7 @@ int main()
     DoesNotStartTheHeaderBeforeDescriptorReadiness();
     QueuesOwnedPacketsAndDrainsThemInDeterministicDtsOrder();
     AbortWakesAQueuedSubmissionWithoutWritingIt();
+    EnforcesEveryPerStreamQueueLimitBeforeMutatingTheBatch();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();

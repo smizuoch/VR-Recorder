@@ -2,6 +2,7 @@
 #define VRRECORDER_NATIVE_PRE_HEADER_COORDINATOR_HPP
 
 #include <atomic>
+#include <cstddef>
 #include <condition_variable>
 #include <cstdint>
 #include <memory>
@@ -26,6 +27,20 @@ enum class PreHeaderState : std::uint8_t {
     Aborted,
 };
 
+struct PreHeaderQueueLimits final {
+    std::size_t maximum_packets_per_stream;
+    std::size_t maximum_bytes_per_stream;
+    std::int64_t maximum_dts_span_microseconds_per_stream;
+
+    bool operator==(const PreHeaderQueueLimits &) const = default;
+};
+
+inline constexpr PreHeaderQueueLimits DefaultPreHeaderQueueLimits {
+    512,
+    64U * 1'024U * 1'024U,
+    5'000'000,
+};
+
 class PreHeaderCoordinator final : public EncodedMediaPacketSubmissionPort {
 public:
     PreHeaderCoordinator(
@@ -33,7 +48,8 @@ public:
         EncodedMediaPacketSubmissionPort &submission,
         AacStreamDescriptor audio_descriptor,
         FragmentedMp4FragmentPolicy fragment_policy,
-        const void *expected_video_encoder_identity);
+        const void *expected_video_encoder_identity,
+        PreHeaderQueueLimits queue_limits = DefaultPreHeaderQueueLimits);
     ~PreHeaderCoordinator();
 
     PreHeaderCoordinator(const PreHeaderCoordinator &) = delete;
@@ -60,7 +76,11 @@ private:
     struct SubmissionTicket final {
         std::condition_variable changed;
         Mp4MuxResult result = Mp4MuxResult::MuxFailed;
+        MediaStreamKind producer = MediaStreamKind::Video;
         std::size_t packet_count = 0;
+        std::size_t byte_count = 0;
+        std::int64_t minimum_dts = 0;
+        std::int64_t maximum_dts = 0;
         bool completed = false;
     };
 
@@ -71,6 +91,14 @@ private:
         std::uint64_t sequence;
     };
 
+    struct QueueUsage final {
+        std::size_t packet_count = 0;
+        std::size_t byte_count = 0;
+        std::int64_t minimum_dts = 0;
+        std::int64_t maximum_dts = 0;
+        bool has_dts = false;
+    };
+
     vrrec_status_t TryStartHeaderLocked(
         std::unique_lock<std::mutex> &lock) noexcept;
     vrrec_status_t DrainQueuedPackets() noexcept;
@@ -79,6 +107,7 @@ private:
     void CompleteTicketLocked(
         const std::shared_ptr<SubmissionTicket> &ticket,
         Mp4MuxResult result) noexcept;
+    void RecomputeQueueUsageLocked() noexcept;
     void AbortDownstreamLocked() noexcept;
 
     MediaMuxSessionPort &mux_session_;
@@ -86,6 +115,7 @@ private:
     AacStreamDescriptor audio_descriptor_;
     FragmentedMp4FragmentPolicy fragment_policy_;
     const void *expected_video_encoder_identity_;
+    PreHeaderQueueLimits queue_limits_;
     mutable std::mutex mutex_;
     std::optional<H264StreamDescriptor> video_descriptor_;
     std::vector<QueuedBatch> queued_batches_;
@@ -93,6 +123,8 @@ private:
     std::int64_t capture_epoch_ = 0;
     std::size_t queued_packet_count_ = 0;
     std::uint64_t next_submission_sequence_ = 0;
+    QueueUsage video_queue_usage_;
+    QueueUsage audio_queue_usage_;
     bool video_started_ = false;
     bool audio_started_ = false;
     bool downstream_aborted_ = false;
