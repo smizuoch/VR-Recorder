@@ -73,6 +73,7 @@ if(WIN32)
         vrrecorder_native
         PRIVATE
             src/windows_d3d11_video_processor_port.cpp
+            src/windows_d3d11_keyed_mutex_surface.cpp
             src/wasapi_audio_capture_source.cpp)
     target_compile_definitions(
         vrrecorder_native

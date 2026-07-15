@@ -1233,7 +1233,9 @@ if(WIN32)
         vrrecorder_native_windows_d3d11_video_processor_integration
         windows_d3d11_video_processor_integration_tests.cpp
         "${native_source_root}/src/d3d11_video_frame_processor.cpp"
+        "${native_source_root}/src/keyed_mutex_video_surface.cpp"
         "${native_source_root}/src/windows_d3d11_video_processor_port.cpp"
+        "${native_source_root}/src/windows_d3d11_keyed_mutex_surface.cpp"
         "${native_source_root}/src/video_processing_plan.cpp")
     target_compile_features(
         vrrecorder_native_windows_d3d11_video_processor_integration
@@ -1259,6 +1261,7 @@ if(WIN32)
             CXX_EXTENSIONS OFF)
     vrrecorder_enable_strict_warnings(
         vrrecorder_native_windows_d3d11_video_processor_integration)
+
 endif()
 
 add_executable(

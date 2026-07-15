@@ -1,5 +1,6 @@
 #include "d3d11_video_frame_processor.hpp"
 #include "windows_d3d11_video_processor_port.hpp"
+#include "windows_d3d11_keyed_mutex_surface.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -470,11 +471,146 @@ void PreservesLogicalRedAcrossBgraAndRgbaChannelOrder()
         Nv12Chroma(rgba, 15, 31)));
 }
 
+ComOwner<ID3D11Texture2D> CreateKeyedMutexTestTexture(
+    ID3D11Device *device,
+    bool keyed)
+{
+    D3D11_TEXTURE2D_DESC descriptor {};
+    descriptor.Width = 64;
+    descriptor.Height = 32;
+    descriptor.MipLevels = 1;
+    descriptor.ArraySize = 1;
+    descriptor.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    descriptor.SampleDesc.Count = 1;
+    descriptor.Usage = D3D11_USAGE_DEFAULT;
+    descriptor.BindFlags =
+        D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    descriptor.MiscFlags = keyed
+        ? D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX
+        : 0;
+
+    ComOwner<ID3D11Texture2D> texture;
+    CHECK(SUCCEEDED(device->CreateTexture2D(
+        &descriptor,
+        nullptr,
+        texture.Put())));
+    return texture;
+}
+
+VideoSurfaceDescriptor KeyedMutexSurfaceDescriptor(
+    std::uint64_t adapter_luid)
+{
+    return {
+        adapter_luid,
+        64,
+        32,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        9,
+    };
+}
+
+void UsesExactKeyedMutexKeysAndRetriesAfterARealTimeout()
+{
+    const auto producer = CreateHardwareVideoDevice();
+    const auto consumer = CreateHardwareVideoDevice();
+    CHECK(producer.adapter_luid == consumer.adapter_luid);
+    const auto producer_texture = CreateKeyedMutexTestTexture(
+        producer.device.Get(),
+        true);
+
+    ComOwner<IDXGIResource> shared_resource;
+    CHECK(SUCCEEDED(producer_texture.Get()->QueryInterface(
+        __uuidof(IDXGIResource),
+        reinterpret_cast<void **>(shared_resource.Put()))));
+    HANDLE shared_handle = nullptr;
+    CHECK(SUCCEEDED(shared_resource.Get()->GetSharedHandle(
+        &shared_handle)));
+    CHECK(shared_handle != nullptr);
+
+    ComOwner<ID3D11Texture2D> consumer_texture;
+    CHECK(SUCCEEDED(consumer.device.Get()->OpenSharedResource(
+        shared_handle,
+        __uuidof(ID3D11Texture2D),
+        reinterpret_cast<void **>(consumer_texture.Put()))));
+
+    ComOwner<IDXGIKeyedMutex> producer_mutex;
+    CHECK(SUCCEEDED(producer_texture.Get()->QueryInterface(
+        __uuidof(IDXGIKeyedMutex),
+        reinterpret_cast<void **>(producer_mutex.Put()))));
+    CHECK(producer_mutex.Get()->AcquireSync(0, 0) == S_OK);
+
+    vrrec_status_t status = VRREC_STATUS_INTERNAL_ERROR;
+    auto surface = CreateWindowsD3d11KeyedMutexVideoSurface(
+        consumer_texture.Get(),
+        KeyedMutexSurfaceDescriptor(consumer.adapter_luid),
+        1,
+        2,
+        status);
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(surface != nullptr);
+    CHECK(surface->NativeHandle() == consumer_texture.Get());
+    CHECK(surface->Descriptor().generation_id == 9);
+
+    CHECK(surface->AcquireForRead(std::chrono::milliseconds(1)) ==
+          VideoSurfaceAcquireResult::Timeout);
+    CHECK(producer_mutex.Get()->ReleaseSync(1) == S_OK);
+    CHECK(surface->AcquireForRead(std::chrono::milliseconds(20)) ==
+          VideoSurfaceAcquireResult::Acquired);
+    CHECK(surface->ReleaseFromRead() == VRREC_STATUS_OK);
+
+    CHECK(producer_mutex.Get()->AcquireSync(2, 20) == S_OK);
+    CHECK(producer_mutex.Get()->ReleaseSync(0) == S_OK);
+}
+
+void RejectsNonKeyedAndMismatchedTextures()
+{
+    const auto hardware = CreateHardwareVideoDevice();
+    vrrec_status_t status = VRREC_STATUS_OK;
+
+    const auto plain_texture = CreateKeyedMutexTestTexture(
+        hardware.device.Get(),
+        false);
+    CHECK(!CreateWindowsD3d11KeyedMutexVideoSurface(
+        plain_texture.Get(),
+        KeyedMutexSurfaceDescriptor(hardware.adapter_luid),
+        0,
+        1,
+        status));
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+
+    const auto keyed_texture = CreateKeyedMutexTestTexture(
+        hardware.device.Get(),
+        true);
+    auto wrong_dimensions = KeyedMutexSurfaceDescriptor(
+        hardware.adapter_luid);
+    ++wrong_dimensions.width;
+    CHECK(!CreateWindowsD3d11KeyedMutexVideoSurface(
+        keyed_texture.Get(),
+        wrong_dimensions,
+        0,
+        1,
+        status));
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+
+    auto wrong_adapter = KeyedMutexSurfaceDescriptor(
+        hardware.adapter_luid);
+    ++wrong_adapter.adapter_luid;
+    CHECK(!CreateWindowsD3d11KeyedMutexVideoSurface(
+        keyed_texture.Get(),
+        wrong_adapter,
+        0,
+        1,
+        status));
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+}
+
 }
 
 int main()
 {
     ConvertsOddBgraToOwnedNv12AndPadsBeforeFit();
     PreservesLogicalRedAcrossBgraAndRgbaChannelOrder();
+    UsesExactKeyedMutexKeysAndRetriesAfterARealTimeout();
+    RejectsNonKeyedAndMismatchedTextures();
     return 0;
 }
