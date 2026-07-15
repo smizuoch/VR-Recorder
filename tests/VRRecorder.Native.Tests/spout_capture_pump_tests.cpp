@@ -70,6 +70,7 @@ public:
             1'920,
             1'080,
             VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            1,
         };
     }
 
@@ -155,11 +156,13 @@ public:
 SpoutFrame Frame(
     const char *sender,
     std::uint64_t sequence,
-    std::int64_t timestamp)
+    std::int64_t timestamp,
+    std::uint64_t generation = 1,
+    std::uint64_t adapter_luid = 42)
 {
     auto frame = SpoutFrame {
         sender,
-        42,
+        adapter_luid,
         "gpu",
         VRREC_GPU_VENDOR_NVIDIA,
         1'920,
@@ -171,10 +174,11 @@ SpoutFrame Frame(
     };
     frame.surface = std::make_shared<FakeVideoSurface>(
         VideoSurfaceDescriptor {
-            42,
+            adapter_luid,
             1'920,
             1'080,
             VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            generation,
         });
     return frame;
 }
@@ -238,6 +242,7 @@ void RejectsSurfaceMetadataThatDoesNotMatchTheTexture()
             1'280,
             720,
             VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            1,
         });
     backend.polls.push_back({VRREC_STATUS_OK, std::move(frame)});
     VideoCfrScheduler scheduler;
@@ -284,6 +289,107 @@ void AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler()
     CHECK(backend.abort_calls == 1);
 }
 
+void DropsAnOlderSurfaceGenerationWithoutReplacingTheNewFrame()
+{
+    ScriptedSpoutBackend backend;
+    auto newest = Frame("selected", 40, 4'000'000, 2);
+    const auto newest_surface = newest.surface;
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(newest)});
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 41, 4'010'000, 1),
+    });
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::StaleFrame);
+
+    ScheduledVideoFrame output {};
+    CHECK(scheduler.Schedule(0, output) == VideoScheduleResult::Ready);
+    CHECK(output.surface == newest_surface);
+    CHECK(output.surface->Descriptor().generation_id == 2);
+    CHECK(scheduler.Statistics().source_frame_count == 1);
+}
+
+void ReplacesTheSurfaceOnlyWithANewerGeneration()
+{
+    ScriptedSpoutBackend backend;
+    auto initial = Frame("selected", 50, 5'000'000, 1);
+    const auto initial_surface = initial.surface;
+    auto replacement = Frame("selected", 51, 5'010'000, 2);
+    const auto replacement_surface = replacement.surface;
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(initial)});
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(replacement)});
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+    ScheduledVideoFrame output {};
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(scheduler.Schedule(0, output) == VideoScheduleResult::Ready);
+    CHECK(output.surface == initial_surface);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(scheduler.Schedule(1, output) == VideoScheduleResult::Ready);
+    CHECK(output.surface == replacement_surface);
+    CHECK(scheduler.Schedule(2, output) == VideoScheduleResult::Ready);
+    CHECK(output.duplicated);
+    CHECK(output.surface == replacement_surface);
+}
+
+void DistinguishesAnAdapterChangeWithoutPushingItsSurface()
+{
+    ScriptedSpoutBackend backend;
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 60, 6'000'000, 1, 42),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 61, 6'010'000, 2, 84),
+    });
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::AdapterChanged);
+    CHECK(scheduler.Statistics().source_frame_count == 1);
+}
+
+void RejectsResourceMutationWithoutAGenerationAdvance()
+{
+    ScriptedSpoutBackend backend;
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 70, 7'000'000, 3),
+    });
+    auto changed = Frame("selected", 71, 7'010'000, 3);
+    changed.width = 1'280;
+    changed.height = 720;
+    changed.surface = std::make_shared<FakeVideoSurface>(
+        VideoSurfaceDescriptor {
+            42,
+            1'280,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            3,
+        });
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(changed)});
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(scheduler.Statistics().source_frame_count == 1);
+}
+
 }
 
 int main()
@@ -294,5 +400,9 @@ int main()
     RejectsSurfaceMetadataThatDoesNotMatchTheTexture();
     AbortStopsPollingAndReleasesTheBackend();
     AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler();
+    DropsAnOlderSurfaceGenerationWithoutReplacingTheNewFrame();
+    ReplacesTheSurfaceOnlyWithANewerGeneration();
+    DistinguishesAnAdapterChangeWithoutPushingItsSurface();
+    RejectsResourceMutationWithoutAGenerationAdvance();
     return 0;
 }

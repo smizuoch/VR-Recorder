@@ -102,12 +102,17 @@ void SpoutCaptureWorker::Run() noexcept
             return;
         }
         if (result == SpoutCaptureResult::FrameAccepted ||
-            result == SpoutCaptureResult::Timeout) {
+            result == SpoutCaptureResult::Timeout ||
+            result == SpoutCaptureResult::StaleFrame) {
             continue;
         }
 
         if (result == SpoutCaptureResult::SenderLost) {
             if (SetResult(SpoutCaptureWorkerResult::SenderLost)) {
+                source_.Abort();
+            }
+        } else if (result == SpoutCaptureResult::AdapterChanged) {
+            if (SetResult(SpoutCaptureWorkerResult::AdapterChanged)) {
                 source_.Abort();
             }
         } else {

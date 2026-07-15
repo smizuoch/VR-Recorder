@@ -73,6 +73,7 @@ vrrec_status_t CreateSingleFileVideoProcessingPlan(
         source.pixel_format,
         VRREC_SOURCE_PIXEL_FORMAT_NV12,
         source.pixel_format == VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+        source.generation_id,
     };
     return VRREC_STATUS_OK;
 }

@@ -15,6 +15,7 @@ enum class VideoPipelineResult {
     Stopped,
     Aborted,
     SenderLost,
+    AdapterChanged,
     CaptureFailed,
     EncoderFailed,
     InvalidState,

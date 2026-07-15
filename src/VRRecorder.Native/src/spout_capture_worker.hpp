@@ -14,6 +14,7 @@ namespace vrrecorder::native {
 enum class SpoutCaptureWorkerResult {
     Aborted,
     SenderLost,
+    AdapterChanged,
     InvalidState,
     Failed,
 };

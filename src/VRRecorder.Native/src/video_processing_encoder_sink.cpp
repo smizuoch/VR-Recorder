@@ -56,7 +56,10 @@ VideoFramePreparation ProcessingVideoEncoderSink::Prepare(
         return {processing_status, {}};
     }
 
-    if (!IsOutputValid(output, descriptor.adapter_luid)) {
+    if (!IsOutputValid(
+            output,
+            descriptor.adapter_luid,
+            descriptor.generation_id)) {
         return {VRREC_STATUS_INTERNAL_ERROR, {}};
     }
 
@@ -138,7 +141,8 @@ void ProcessingVideoEncoderSink::Abort() noexcept
 
 bool ProcessingVideoEncoderSink::IsOutputValid(
     const std::shared_ptr<VideoSurface> &surface,
-    std::uint64_t adapter_luid) const noexcept
+    std::uint64_t adapter_luid,
+    std::uint64_t generation_id) const noexcept
 {
     if (!surface || surface->NativeHandle() == nullptr) {
         return false;
@@ -146,6 +150,7 @@ bool ProcessingVideoEncoderSink::IsOutputValid(
 
     const auto descriptor = surface->Descriptor();
     return descriptor.adapter_luid == adapter_luid &&
+           descriptor.generation_id == generation_id &&
            descriptor.width == output_width_ &&
            descriptor.height == output_height_ &&
            descriptor.pixel_format == VRREC_SOURCE_PIXEL_FORMAT_NV12;

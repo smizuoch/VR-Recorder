@@ -52,8 +52,9 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
         return SpoutCaptureResult::Failed;
     }
 
+    VideoSurfaceDescriptor descriptor {};
     if (frame.sender_id != selected_sender_id_ ||
-        !IsFrameValid(frame)) {
+        !IsFrameValid(frame, descriptor)) {
         return SpoutCaptureResult::InvalidFrame;
     }
 
@@ -63,11 +64,30 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
         if (aborted_.load()) {
             return SpoutCaptureResult::Aborted;
         }
+        if (has_descriptor_ &&
+            descriptor.generation_id < latest_descriptor_.generation_id) {
+            return SpoutCaptureResult::StaleFrame;
+        }
+        if (has_descriptor_ && descriptor.adapter_luid !=
+                latest_descriptor_.adapter_luid) {
+            return SpoutCaptureResult::AdapterChanged;
+        }
+        if (has_descriptor_ && descriptor.generation_id ==
+                latest_descriptor_.generation_id &&
+            (descriptor.width != latest_descriptor_.width ||
+             descriptor.height != latest_descriptor_.height ||
+             descriptor.pixel_format != latest_descriptor_.pixel_format)) {
+            return SpoutCaptureResult::InvalidFrame;
+        }
         push_status = scheduler_.Push({
             frame.frame_sequence,
             frame.monotonic_timestamp_microseconds,
             frame.surface,
         });
+        if (push_status == VRREC_STATUS_OK) {
+            latest_descriptor_ = descriptor;
+            has_descriptor_ = true;
+        }
     }
     return push_status == VRREC_STATUS_OK
         ? SpoutCaptureResult::FrameAccepted
@@ -86,7 +106,9 @@ void SpoutCapturePump::Abort() noexcept
     backend_.Abort();
 }
 
-bool SpoutCapturePump::IsFrameValid(const SpoutFrame &frame) noexcept
+bool SpoutCapturePump::IsFrameValid(
+    const SpoutFrame &frame,
+    VideoSurfaceDescriptor &descriptor) noexcept
 {
     const auto vendor_defined =
         frame.gpu_vendor == VRREC_GPU_VENDOR_UNKNOWN ||
@@ -101,9 +123,10 @@ bool SpoutCapturePump::IsFrameValid(const SpoutFrame &frame) noexcept
         return false;
     }
 
-    const auto descriptor = frame.surface->Descriptor();
+    descriptor = frame.surface->Descriptor();
     return !frame.sender_id.empty() && !frame.gpu_identity.empty() &&
            frame.width > 0 && frame.height > 0 &&
+           descriptor.generation_id != 0 &&
            descriptor.adapter_luid == frame.adapter_luid &&
            descriptor.width == frame.width &&
            descriptor.height == frame.height &&

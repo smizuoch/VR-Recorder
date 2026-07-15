@@ -45,6 +45,7 @@ void VideoPipelineSession::CaptureJoinEntry(void *context) noexcept
     auto &join = *static_cast<CaptureJoinContext *>(context);
     join.result = join.session.capture_.Join();
     if (join.result == SpoutCaptureWorkerResult::SenderLost ||
+        join.result == SpoutCaptureWorkerResult::AdapterChanged ||
         join.result == SpoutCaptureWorkerResult::Failed) {
         join.session.encoding_.Abort();
     }
@@ -363,6 +364,13 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
             VRREC_STATUS_BACKEND_UNAVAILABLE,
             "Spout sender was lost while recording");
         return VideoPipelineResult::SenderLost;
+    }
+
+    if (capture_result == SpoutCaptureWorkerResult::AdapterChanged) {
+        events_.Faulted(
+            VRREC_STATUS_BACKEND_UNAVAILABLE,
+            "Spout capture adapter changed while recording");
+        return VideoPipelineResult::AdapterChanged;
     }
 
     if (capture_result == SpoutCaptureWorkerResult::Failed) {

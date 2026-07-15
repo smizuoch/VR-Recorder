@@ -26,6 +26,7 @@ struct VideoProcessingPlan final {
     vrrec_source_pixel_format_t output_pixel_format =
         static_cast<vrrec_source_pixel_format_t>(0);
     bool swap_red_blue_channels = false;
+    std::uint64_t source_generation_id = 0;
 };
 
 vrrec_status_t CreateSingleFileVideoProcessingPlan(

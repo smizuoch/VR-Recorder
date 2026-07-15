@@ -675,6 +675,23 @@ void SenderLossAbortsEncodingAndRaisesMediaFault()
     CHECK(events.fault_message != nullptr);
 }
 
+void AdapterChangeAbortsEncodingWithADistinctPipelineResult()
+{
+    CallOrder order;
+    FakeCaptureWorker capture(order);
+    capture.join_result = SpoutCaptureWorkerResult::AdapterChanged;
+    FakeEncodingWorker encoding(order);
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    CHECK(session.Start(std::chrono::milliseconds(100)) == VRREC_STATUS_OK);
+    CHECK(session.Join() == VideoPipelineResult::AdapterChanged);
+    CHECK(encoding.abort_calls == 1);
+    CHECK(events.fault_calls == 1);
+    CHECK(events.fault_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(events.fault_message != nullptr);
+}
+
 void EncoderFailureAbortsCapture()
 {
     CallOrder order;
@@ -1291,6 +1308,7 @@ int main(int argc, char **argv)
     StartsCaptureBeforeEncodingAndStopsInSafeOrder();
     RollsBackCaptureWhenEncodingCannotStart();
     SenderLossAbortsEncodingAndRaisesMediaFault();
+    AdapterChangeAbortsEncodingWithADistinctPipelineResult();
     EncoderFailureAbortsCapture();
     AbortDoesNotReturnUntilBothWorkersAreJoined();
     StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked();

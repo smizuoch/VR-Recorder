@@ -44,7 +44,8 @@ public:
 private:
     bool IsOutputValid(
         const std::shared_ptr<VideoSurface> &surface,
-        std::uint64_t adapter_luid) const noexcept;
+        std::uint64_t adapter_luid,
+        std::uint64_t generation_id) const noexcept;
 
     VideoFrameProcessor &processor_;
     VideoEncoderSink &encoder_;

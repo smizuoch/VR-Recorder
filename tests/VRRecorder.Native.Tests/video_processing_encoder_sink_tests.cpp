@@ -149,10 +149,17 @@ public:
 std::shared_ptr<FakeSurface> Surface(
     std::uint32_t width,
     std::uint32_t height,
-    vrrec_source_pixel_format_t format)
+    vrrec_source_pixel_format_t format,
+    std::uint64_t generation_id = 0)
 {
     return std::make_shared<FakeSurface>(
-        VideoSurfaceDescriptor {42, width, height, format});
+        VideoSurfaceDescriptor {
+            42,
+            width,
+            height,
+            format,
+            generation_id,
+        });
 }
 
 void ConvertsToValidatedNv12BeforeCallingTheEncoder()
@@ -258,6 +265,35 @@ void RejectsAnInvalidProcessorOutputSurface()
     });
     CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
     CHECK(write.failure_stage == VideoEncoderFailureStage::Processing);
+    CHECK(encoder.frames.empty());
+}
+
+void RejectsAProcessorOutputFromAnotherSurfaceGeneration()
+{
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12,
+        8);
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+
+    const auto preparation = sink.Prepare({
+        0,
+        1,
+        0,
+        0,
+        false,
+        Surface(
+            1'920,
+            1'080,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            9),
+    });
+
+    CHECK(preparation.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(processor.last_plan.source_generation_id == 9);
     CHECK(encoder.frames.empty());
 }
 
@@ -456,6 +492,7 @@ int main()
     PreparesAnOwnedFrameWithoutCallingTheEncoder();
     ClassifiesProcessorFailureAndSkipsTheEncoder();
     RejectsAnInvalidProcessorOutputSurface();
+    RejectsAProcessorOutputFromAnotherSurfaceGeneration();
     RejectsAnInputSurfaceWithoutANativeHandleBeforeProcessing();
     DelegatesFinishAndAbortsProcessorBeforeEncoder();
     AppliesValidatedLiveLayoutToTheNextFrame();

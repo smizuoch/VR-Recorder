@@ -14,7 +14,9 @@ namespace vrrecorder::native {
 enum class SpoutCaptureResult {
     FrameAccepted,
     Timeout,
+    StaleFrame,
     SenderLost,
+    AdapterChanged,
     Aborted,
     InvalidFrame,
     Failed,
@@ -41,12 +43,16 @@ public:
     void Abort() noexcept override;
 
 private:
-    static bool IsFrameValid(const SpoutFrame &frame) noexcept;
+    static bool IsFrameValid(
+        const SpoutFrame &frame,
+        VideoSurfaceDescriptor &descriptor) noexcept;
 
     SpoutSourceBackend &backend_;
     VideoCfrScheduler &scheduler_;
     std::string selected_sender_id_;
     std::mutex lifecycle_mutex_;
+    VideoSurfaceDescriptor latest_descriptor_ {};
+    bool has_descriptor_ = false;
     std::atomic_bool aborted_ = false;
 };
 

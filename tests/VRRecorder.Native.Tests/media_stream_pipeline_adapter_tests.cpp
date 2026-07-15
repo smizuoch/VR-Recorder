@@ -73,6 +73,8 @@ void AdaptsConfiguredVideoSession()
     CHECK(session.abort_calls == 1);
     session.join_result = VideoPipelineResult::SenderLost;
     CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    session.join_result = VideoPipelineResult::AdapterChanged;
+    CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
     session.join_result = VideoPipelineResult::EncoderFailed;
     CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
 }

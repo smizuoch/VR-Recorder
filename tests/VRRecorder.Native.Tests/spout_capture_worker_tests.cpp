@@ -183,16 +183,29 @@ void ContinuesAcrossTimeoutsUntilAborted()
 {
     BlockingCaptureSource source;
     source.results.push_back(SpoutCaptureResult::Timeout);
+    source.results.push_back(SpoutCaptureResult::StaleFrame);
     source.results.push_back(SpoutCaptureResult::FrameAccepted);
     SpoutCaptureWorker worker(source);
 
     CHECK(worker.Start(std::chrono::milliseconds(100)) == VRREC_STATUS_OK);
-    source.WaitForPolls(3);
+    source.WaitForPolls(4);
     worker.Abort();
     worker.Abort();
     CHECK(worker.Join() == SpoutCaptureWorkerResult::Aborted);
     CHECK(source.abort_calls == 1);
     CHECK(source.last_timeout == std::chrono::milliseconds(100));
+}
+
+void StopsDistinctlyWhenTheCaptureAdapterChanges()
+{
+    BlockingCaptureSource source;
+    source.results.push_back(SpoutCaptureResult::AdapterChanged);
+    SpoutCaptureWorker worker(source);
+
+    CHECK(worker.Start(std::chrono::milliseconds(50)) == VRREC_STATUS_OK);
+    CHECK(worker.Join() == SpoutCaptureWorkerResult::AdapterChanged);
+    CHECK(source.poll_calls == 1);
+    CHECK(source.abort_calls == 1);
 }
 
 void StopsWhenTheSelectedSenderIsLost()
@@ -384,6 +397,7 @@ int main()
 {
     ContinuesAcrossTimeoutsUntilAborted();
     StopsWhenTheSelectedSenderIsLost();
+    StopsDistinctlyWhenTheCaptureAdapterChanges();
     InvalidFramesFailTheWorker();
     RejectsInvalidPollIntervalsBeforeStarting();
     AbortBeforeStartPreventsWorkerLaunch();

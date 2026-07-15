@@ -13,6 +13,7 @@ struct VideoSurfaceDescriptor final {
     std::uint32_t width;
     std::uint32_t height;
     vrrec_source_pixel_format_t pixel_format;
+    std::uint64_t generation_id = 0;
 };
 
 enum class VideoSurfaceAcquireResult {
