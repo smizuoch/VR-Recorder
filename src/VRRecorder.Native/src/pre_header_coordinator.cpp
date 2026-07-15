@@ -265,6 +265,13 @@ Mp4MuxResult PreHeaderCoordinator::SubmitBatch(
         return Mp4MuxResult::InvalidPacket;
     }
     if (state_ == PreHeaderState::Running) {
+        const auto producer_finishing = producer == MediaStreamKind::Video
+            ? video_finish_in_progress_ || video_finished_
+            : audio_finish_in_progress_ || audio_finished_;
+        if (producer_finishing) {
+            FailLocked(VRREC_STATUS_INVALID_STATE);
+            return Mp4MuxResult::InvalidState;
+        }
         lock.unlock();
         const auto result = submission_.SubmitBatch(producer, packets);
         if (abort_requested_.load()) {
@@ -353,23 +360,44 @@ vrrec_status_t PreHeaderCoordinator::EncoderFinished(
         }
         return FailLocked(VRREC_STATUS_INVALID_STATE);
     }
+    auto &finish_in_progress = stream == MediaStreamKind::Video
+        ? video_finish_in_progress_
+        : audio_finish_in_progress_;
+    auto &finished = stream == MediaStreamKind::Video
+        ? video_finished_
+        : audio_finished_;
+    if (finish_in_progress || finished) {
+        return FailLocked(VRREC_STATUS_INVALID_STATE);
+    }
+    finish_in_progress = true;
     lock.unlock();
     const auto status = submission_.EncoderFinished(stream);
     lock.lock();
     if (abort_requested_.load() || state_ == PreHeaderState::Aborted) {
         return VRREC_STATUS_INVALID_STATE;
     }
-    if (status != VRREC_STATUS_OK) {
-        FailLocked(status);
+    if (state_ != PreHeaderState::Running) {
+        return VRREC_STATUS_INVALID_STATE;
     }
-    return status;
+    if (status != VRREC_STATUS_OK) {
+        finish_in_progress = false;
+        FailLocked(status);
+        return status;
+    }
+    finish_in_progress = false;
+    finished = true;
+    if (video_finished_ && audio_finished_) {
+        state_ = PreHeaderState::Finishing;
+    }
+    return VRREC_STATUS_OK;
 }
 
 void PreHeaderCoordinator::EncoderFailed(MediaStreamKind stream) noexcept
 {
     std::lock_guard lock(mutex_);
     if (state_ == PreHeaderState::Failed ||
-        state_ == PreHeaderState::Aborted) {
+        state_ == PreHeaderState::Aborted ||
+        state_ == PreHeaderState::Finishing) {
         FailQueuedSubmissionsLocked(Mp4MuxResult::MuxFailed);
         return;
     }
@@ -383,6 +411,10 @@ void PreHeaderCoordinator::Abort() noexcept
 {
     abort_requested_.store(true);
     std::lock_guard lock(mutex_);
+    if (state_ == PreHeaderState::Finishing) {
+        abort_requested_.store(false);
+        return;
+    }
     if (state_ == PreHeaderState::Failed ||
         state_ == PreHeaderState::Aborted) {
         FailQueuedSubmissionsLocked(Mp4MuxResult::MuxFailed);

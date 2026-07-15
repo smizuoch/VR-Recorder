@@ -129,6 +129,10 @@ private:
     QueueUsage audio_queue_usage_;
     bool video_started_ = false;
     bool audio_started_ = false;
+    bool video_finish_in_progress_ = false;
+    bool audio_finish_in_progress_ = false;
+    bool video_finished_ = false;
+    bool audio_finished_ = false;
     bool downstream_aborted_ = false;
     PreHeaderState state_ = PreHeaderState::Created;
     std::atomic_bool abort_requested_ = false;

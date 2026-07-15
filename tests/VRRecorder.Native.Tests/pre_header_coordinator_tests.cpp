@@ -81,8 +81,14 @@ public:
         return Mp4MuxResult::Written;
     }
 
-    vrrec_status_t EncoderFinished(MediaStreamKind) noexcept override
+    vrrec_status_t EncoderFinished(MediaStreamKind stream) noexcept override
     {
+        ++encoder_finished_calls;
+        try {
+            finished_streams.push_back(stream);
+        } catch (...) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        }
         return VRREC_STATUS_OK;
     }
 
@@ -103,8 +109,10 @@ public:
     vrrec_status_t start_status = VRREC_STATUS_OK;
     FragmentedMp4StreamConfiguration last_configuration {};
     std::vector<EncodedMediaPacket> submitted_packets;
+    std::vector<MediaStreamKind> finished_streams;
     std::size_t start_calls = 0;
     std::size_t submit_calls = 0;
+    std::size_t encoder_finished_calls = 0;
     std::size_t request_abort_calls = 0;
     std::size_t abort_calls = 0;
 };
@@ -592,6 +600,102 @@ void AbortWinsAnInFlightEncoderCompletion()
     CHECK(coordinator.State() == PreHeaderState::Aborted);
 }
 
+void DuplicateProducerCompletionBeforeItsPeerIsTerminal()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              VideoDescriptor()) == VRREC_STATUS_OK);
+
+    CHECK(coordinator.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_INVALID_STATE);
+
+    CHECK(downstream.encoder_finished_calls == 1);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+}
+
+void BothProducerCompletionsEnterTerminalFinishing()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              VideoDescriptor()) == VRREC_STATUS_OK);
+
+    CHECK(coordinator.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.State() == PreHeaderState::Running);
+    CHECK(coordinator.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.State() == PreHeaderState::Finishing);
+    CHECK(downstream.finished_streams ==
+          std::vector({MediaStreamKind::Video, MediaStreamKind::Audio}));
+
+    coordinator.Abort();
+    CHECK(coordinator.State() == PreHeaderState::Finishing);
+    CHECK(downstream.request_abort_calls == 0);
+    CHECK(downstream.abort_calls == 0);
+}
+
+void RejectsPacketsFromACompletedProducer()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              VideoDescriptor()) == VRREC_STATUS_OK);
+    CHECK(coordinator.EncoderFinished(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    const std::vector packet {
+        Packet(MediaStreamKind::Video, 0, std::byte {0xB0})};
+
+    CHECK(coordinator.SubmitBatch(MediaStreamKind::Video, packet) ==
+          Mp4MuxResult::InvalidState);
+
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+}
+
 void StartsExactlyOnceRegardlessOfReadinessOrder()
 {
     RecordingDownstream downstream;
@@ -723,6 +827,9 @@ int main()
     InvalidPreHeaderBatchTerminallyWakesExistingTickets();
     KeepsPacketsAfterTheHeaderAdmissionCutInTheLiveBacklog();
     AbortWinsAnInFlightEncoderCompletion();
+    DuplicateProducerCompletionBeforeItsPeerIsTerminal();
+    BothProducerCompletionsEnterTerminalFinishing();
+    RejectsPacketsFromACompletedProducer();
     StartsExactlyOnceRegardlessOfReadinessOrder();
     RejectsAThrowawayEncoderDescriptor();
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();

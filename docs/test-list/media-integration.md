@@ -46,6 +46,7 @@
 - [x] activeなpre-header／running submissionでstream不一致、empty payload、unknown timestamp、不正timingを検出したら原因を`InvalidPacket`で返しつつterminal failureへ遷移し、先行待機ticketを起床してretryを拒否する
 - [x] header成功直後にmutex下でadmission sequenceを一度だけcutし、cut未満のA/VだけをDTS mixed drainする。drain中のcut以降packetはlive backlogへ保持し、pre-header完了後に元batch境界を保って送ってから一度だけRunningへ遷移する
 - [x] Running後のdownstream `EncoderFinished`中にAbortが成立したら、遅延`OK`を成功として返さずAbort winnerを再検査して`INVALID_STATE`へ収束する
+- [x] stream別completionをdownstream成功後だけcommitし、peer完了前の重複completion／完了streamの追加packetをterminal protocol failureにする。video／audio両完了後だけ成功terminalの`Finishing`へ遷移し、後続Abortで巻き戻さない
 - [x] 実AAC factoryのopen済みcontext由来descriptorをencoder破棄後に実libavformat Portへ渡し、zero-packet MOV headerの`esds`／`btrt`へexact 192 kbpsが残ることを結合検証する
 - [x] mux headerをvideo／audio workerより先に開始し、header失敗または開始中Abortでは両streamを開始しない
 - [x] fragment条件をheader policyへ渡し、audio先行packetを理由にC++側で手動fragmentを確定しない
@@ -128,6 +129,7 @@
 - [x] On an active pre-header or running submission, report a producer mismatch, empty payload, unknown timestamp, or invalid timing as `InvalidPacket` while transitioning terminally, waking earlier queued tickets, and rejecting retries
 - [x] Cut the admission sequence exactly once under the mutex immediately after header success and DTS-mix only pre-cut A/V; retain packets arriving during the drain in a live backlog, preserve their original batch boundary after the pre-header drain, and transition to Running once
 - [x] If Abort wins while a downstream `EncoderFinished` is in flight after Running, recheck the winner and converge a late `OK` to `INVALID_STATE` instead of reporting successful completion
+- [x] Commit each stream completion only after downstream success, terminally fail duplicate completion before its peer or packets from a completed stream, and enter successful terminal `Finishing` only after both video and audio complete without allowing a later Abort to roll it back
 - [x] Move the opened-context descriptor from the real AAC factory into the real libavformat port after destroying the encoder, and verify exact 192 kbps in the zero-packet MOV header's `esds`/`btrt`
 - [x] Start the mux header before video/audio workers and start neither stream after header failure or an abort racing header start
 - [x] Pass fragment conditions in the header policy without manually cutting a fragment because an audio packet arrived ahead of video
