@@ -55,6 +55,7 @@ add_library(vrrecorder_native SHARED
     src/spout_capture_worker.cpp
     src/audio_timeline_buffer.cpp
     src/video_cfr_scheduler.cpp
+    src/steady_video_cfr_clock.cpp
     "${vrrecorder_native_factory_selection_marker_source}"
     ${vrrecorder_native_factory_sources})
 
