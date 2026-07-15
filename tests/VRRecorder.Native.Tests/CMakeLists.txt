@@ -587,7 +587,8 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_h264_bitstream_converter
     h264_bitstream_converter_tests.cpp
-    "${native_source_root}/src/h264_bitstream_converter.cpp")
+    "${native_source_root}/src/h264_bitstream_converter.cpp"
+    "${native_source_root}/src/h264_sps_parser.cpp")
 target_compile_features(
     vrrecorder_native_h264_bitstream_converter PRIVATE cxx_std_20)
 target_include_directories(

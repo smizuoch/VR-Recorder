@@ -1,8 +1,9 @@
 #include "h264_bitstream_converter.hpp"
+#include "h264_sps_parser.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <algorithm>
 #include <new>
 #include <span>
 #include <vector>
@@ -11,8 +12,8 @@ namespace vrrecorder::native {
 
 namespace {
 
-constexpr std::byte HighProfileIdc {0x64};
-constexpr std::byte MainProfileIdc {0x4d};
+constexpr std::uint8_t HighProfileIdc = 100;
+constexpr std::uint8_t MainProfileIdc = 77;
 
 struct NalView final {
     std::span<const std::byte> bytes;
@@ -79,37 +80,18 @@ bool IsSupportedVcl(unsigned int type) noexcept
 }
 
 bool MatchesExpectedSps(
-    std::span<const std::byte> sps,
+    const H264SpsInfo &sps,
     std::uint32_t expected_width,
     std::uint32_t expected_height,
     H264Profile expected_profile) noexcept
 {
-    if (expected_width != 16U || expected_height != 16U || sps.size() < 4U) {
-        return false;
-    }
     const auto expected_profile_idc = expected_profile == H264Profile::High
         ? HighProfileIdc
         : MainProfileIdc;
-    if (sps[1] != expected_profile_idc) {
-        return false;
-    }
-    constexpr std::byte expected_sps[] {
-        std::byte {0x67}, std::byte {0x64}, std::byte {0x00}, std::byte {0x0a},
-        std::byte {0xac}, std::byte {0xb2}, std::byte {0x3d}, std::byte {0x80},
-        std::byte {0x88}, std::byte {0x00}, std::byte {0x00}, std::byte {0x03},
-        std::byte {0x00}, std::byte {0x08}, std::byte {0x00}, std::byte {0x00},
-        std::byte {0x03}, std::byte {0x01}, std::byte {0xe0}, std::byte {0x78},
-        std::byte {0x91}, std::byte {0x32}, std::byte {0x40},
-    };
-    if (sps.size() != std::size(expected_sps)) {
-        return false;
-    }
-    for (std::size_t index = 0; index < sps.size(); ++index) {
-        if (sps[index] != expected_sps[index]) {
-            return false;
-        }
-    }
-    return true;
+    return sps.profile_idc == expected_profile_idc &&
+           sps.width == expected_width && sps.height == expected_height &&
+           sps.chroma_format_idc == 1U && sps.bit_depth_luma == 8U &&
+           sps.bit_depth_chroma == 8U;
 }
 
 void AppendBigEndian16(std::vector<std::byte> &bytes, std::size_t value)
@@ -129,19 +111,17 @@ void AppendBigEndian32(std::vector<std::byte> &bytes, std::size_t value)
 vrrec_status_t BuildAvcc(
     std::span<const std::byte> sps,
     std::span<const std::byte> pps,
-    H264Profile expected_profile,
+    const H264SpsInfo &sps_info,
     std::vector<std::byte> &avcc)
 {
-    const auto profile_idc = expected_profile == H264Profile::High
-        ? HighProfileIdc
-        : MainProfileIdc;
     try {
         avcc.clear();
         avcc.reserve(11U + sps.size() + pps.size() + 4U);
         avcc.push_back(std::byte {0x01});
-        avcc.push_back(profile_idc);
-        avcc.push_back(sps[2]);
-        avcc.push_back(sps[3]);
+        avcc.push_back(static_cast<std::byte>(sps_info.profile_idc));
+        avcc.push_back(
+            static_cast<std::byte>(sps_info.profile_compatibility));
+        avcc.push_back(static_cast<std::byte>(sps_info.level_idc));
         avcc.push_back(std::byte {0xff});
         avcc.push_back(std::byte {0xe1});
         AppendBigEndian16(avcc, sps.size());
@@ -149,10 +129,13 @@ vrrec_status_t BuildAvcc(
         avcc.push_back(std::byte {0x01});
         AppendBigEndian16(avcc, pps.size());
         avcc.insert(avcc.end(), pps.begin(), pps.end());
-        if (expected_profile == H264Profile::High) {
-            avcc.push_back(std::byte {0xfd});
-            avcc.push_back(std::byte {0xf8});
-            avcc.push_back(std::byte {0xf8});
+        if (sps_info.profile_idc == HighProfileIdc) {
+            avcc.push_back(static_cast<std::byte>(
+                0xfcU | sps_info.chroma_format_idc));
+            avcc.push_back(static_cast<std::byte>(
+                0xf8U | (sps_info.bit_depth_luma - 8U)));
+            avcc.push_back(static_cast<std::byte>(
+                0xf8U | (sps_info.bit_depth_chroma - 8U)));
             avcc.push_back(std::byte {0x00});
         }
         return VRREC_STATUS_OK;
@@ -242,9 +225,16 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
     }
 
     if (sps != nullptr) {
-        if (pps == nullptr ||
-            !MatchesExpectedSps(
-                sps->bytes,
+        if (pps == nullptr) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        H264SpsInfo sps_info {};
+        const auto parse_status = ParseH264Sps(sps->bytes, sps_info);
+        if (parse_status != VRREC_STATUS_OK) {
+            return parse_status;
+        }
+        if (!MatchesExpectedSps(
+                sps_info,
                 expected_width,
                 expected_height,
                 expected_profile)) {
@@ -253,7 +243,7 @@ vrrec_status_t ConvertH264AnnexBToAvcc(
         const auto avcc_status = BuildAvcc(
             sps->bytes,
             pps->bytes,
-            expected_profile,
+            sps_info,
             result.avcc);
         if (avcc_status != VRREC_STATUS_OK) {
             return avcc_status;

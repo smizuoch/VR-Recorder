@@ -1,5 +1,7 @@
 #include "h264_bitstream_converter.hpp"
+#include "h264_test_vectors.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <iostream>
@@ -53,6 +55,19 @@ std::vector<std::byte> AvccAu(std::initializer_list<std::span<const std::uint8_t
         result.push_back(static_cast<std::byte>(size & 0xffU));
         auto bytes = Bytes(nal);
         result.insert(result.end(), bytes.begin(), bytes.end());
+    }
+    return result;
+}
+
+std::vector<std::byte> AnnexBBytes(
+    std::initializer_list<std::span<const std::byte>> nals)
+{
+    std::vector<std::byte> result;
+    for (auto nal : nals) {
+        result.insert(
+            result.end(),
+            {std::byte {0}, std::byte {0}, std::byte {0}, std::byte {1}});
+        result.insert(result.end(), nal.begin(), nal.end());
     }
     return result;
 }
@@ -122,6 +137,111 @@ void ReusesKnownParameterSetsForFollowingNonIdrAccessUnits()
     CHECK(result.access_unit == AvccAu({NonIdr}));
 }
 
+void ConvertsCroppedHighProfileSpsAtRecordingResolution()
+{
+    test::SpsSettings settings;
+    settings.compatibility = 0x80;
+    settings.level_idc = 42;
+    settings.pic_width_in_mbs_minus1 = 119;
+    settings.pic_height_in_map_units_minus1 = 67;
+    settings.crop = true;
+    settings.crop_bottom = 4;
+    const auto sps = test::MakeSps(settings);
+    const auto pps = Bytes(Pps);
+    const auto idr = Bytes(Idr);
+    const auto annex_b = AnnexBBytes(
+        {std::span<const std::byte> {sps},
+         std::span<const std::byte> {pps},
+         std::span<const std::byte> {idr}});
+
+    H264AnnexBConversionResult result {};
+    CHECK(ConvertH264AnnexBToAvcc(
+              annex_b,
+              1'920,
+              1'080,
+              H264Profile::High,
+              result) == VRREC_STATUS_OK);
+    CHECK(result.profile == H264Profile::High);
+    CHECK(result.width == 1'920);
+    CHECK(result.height == 1'080);
+    CHECK(result.key_frame);
+    CHECK(result.access_unit == AvccAu({Idr}));
+    CHECK(result.avcc.size() == 15U + sps.size() + pps.size());
+    CHECK(result.avcc[1] == std::byte {100});
+    CHECK(result.avcc[2] == std::byte {0x80});
+    CHECK(result.avcc[3] == std::byte {42});
+    CHECK(result.avcc[6] == static_cast<std::byte>(sps.size() >> 8U));
+    CHECK(result.avcc[7] == static_cast<std::byte>(sps.size() & 0xffU));
+    CHECK(std::ranges::equal(
+        sps,
+        std::span<const std::byte> {result.avcc}.subspan(8U, sps.size())));
+}
+
+void ConvertsMainProfileSpsAtRecordingResolution()
+{
+    test::SpsSettings settings;
+    settings.profile_idc = 77;
+    settings.level_idc = 31;
+    settings.pic_width_in_mbs_minus1 = 79;
+    settings.pic_height_in_map_units_minus1 = 44;
+    const auto sps = test::MakeSps(settings);
+    const auto pps = Bytes(Pps);
+    const auto idr = Bytes(Idr);
+    const auto annex_b = AnnexBBytes(
+        {std::span<const std::byte> {sps},
+         std::span<const std::byte> {pps},
+         std::span<const std::byte> {idr}});
+
+    H264AnnexBConversionResult result {};
+    CHECK(ConvertH264AnnexBToAvcc(
+              annex_b,
+              1'280,
+              720,
+              H264Profile::Main,
+              result) == VRREC_STATUS_OK);
+    CHECK(result.profile == H264Profile::Main);
+    CHECK(result.width == 1'280);
+    CHECK(result.height == 720);
+    CHECK(result.key_frame);
+    CHECK(result.avcc.size() == 11U + sps.size() + pps.size());
+    CHECK(result.avcc[1] == std::byte {77});
+    CHECK(result.avcc[3] == std::byte {31});
+}
+
+void RejectsUnsupportedChromaFormatAndBitDepth()
+{
+    const auto pps = Bytes(Pps);
+    const auto idr = Bytes(Idr);
+    H264AnnexBConversionResult result {};
+
+    test::SpsSettings chroma_422;
+    chroma_422.chroma_format_idc = 2;
+    const auto chroma_sps = test::MakeSps(chroma_422);
+    CHECK(ConvertH264AnnexBToAvcc(
+              AnnexBBytes(
+                  {std::span<const std::byte> {chroma_sps},
+                   std::span<const std::byte> {pps},
+                   std::span<const std::byte> {idr}}),
+              16,
+              16,
+              H264Profile::High,
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    test::SpsSettings ten_bit;
+    ten_bit.bit_depth_luma_minus8 = 2;
+    ten_bit.bit_depth_chroma_minus8 = 2;
+    const auto ten_bit_sps = test::MakeSps(ten_bit);
+    CHECK(ConvertH264AnnexBToAvcc(
+              AnnexBBytes(
+                  {std::span<const std::byte> {ten_bit_sps},
+                   std::span<const std::byte> {pps},
+                   std::span<const std::byte> {idr}}),
+              16,
+              16,
+              H264Profile::High,
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+}
+
 void DedupesRepeatedIdenticalParameterSets()
 {
     const auto annex_b = AnnexB({Sps16x16, Pps, Sps16x16, Pps, Idr});
@@ -188,6 +308,9 @@ int main()
 {
     ConvertsSpsPpsAndIdrIntoAvccAndLengthPrefixedAccessUnit();
     ReusesKnownParameterSetsForFollowingNonIdrAccessUnits();
+    ConvertsCroppedHighProfileSpsAtRecordingResolution();
+    ConvertsMainProfileSpsAtRecordingResolution();
+    RejectsUnsupportedChromaFormatAndBitDepth();
     DedupesRepeatedIdenticalParameterSets();
     RejectsMalformedOrIncompleteAnnexB();
     return 0;
