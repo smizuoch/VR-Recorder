@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "encoder_probe_backend.hpp"
+#include "encoder_probe_identity.hpp"
 #include "media_backend.hpp"
 #include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
@@ -1327,46 +1328,6 @@ constexpr std::uint32_t RequiredEncoderPacketValidationFlags =
     VRREC_ENCODER_PROBE_VALIDATION_ZERO_B_FRAMES |
     VRREC_ENCODER_PROBE_VALIDATION_DECODED;
 
-struct ExpectedEncoderProbeIdentity final {
-    std::string_view codec_name;
-    bool hardware_accelerated;
-    vrrec_encoder_input_format_t opened_input_format;
-};
-
-std::optional<ExpectedEncoderProbeIdentity>
-ExpectedEncoderProbe(
-    vrrec_encoder_kind_t encoder_kind) noexcept
-{
-    switch (encoder_kind) {
-    case VRREC_ENCODER_NVENC:
-        return ExpectedEncoderProbeIdentity {
-            "h264_nvenc",
-            true,
-            VRREC_ENCODER_INPUT_D3D11_NV12,
-        };
-    case VRREC_ENCODER_AMF:
-        return ExpectedEncoderProbeIdentity {
-            "h264_amf",
-            true,
-            VRREC_ENCODER_INPUT_D3D11_NV12,
-        };
-    case VRREC_ENCODER_QSV:
-        return ExpectedEncoderProbeIdentity {
-            "h264_qsv",
-            true,
-            VRREC_ENCODER_INPUT_QSV_NV12,
-        };
-    case VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE:
-        return ExpectedEncoderProbeIdentity {
-            "h264_mf",
-            false,
-            VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12,
-        };
-    default:
-        return std::nullopt;
-    }
-}
-
 bool IsOwnedUtf8Text(const std::string &value) noexcept
 {
     std::string_view validated;
@@ -1383,13 +1344,14 @@ bool ValidateEncoderProbeEvidence(
     std::uint32_t &required_utf8_size) noexcept
 {
     required_utf8_size = 0;
-    const auto expected = ExpectedEncoderProbe(config.encoder_kind);
+    const auto expected = vrrecorder::native::
+        FindExpectedEncoderProbeIdentity(config.encoder_kind);
     if (!expected ||
         evidence.actual_encoder_kind != config.encoder_kind ||
         evidence.codec_name != expected->codec_name ||
         evidence.hardware_accelerated != expected->hardware_accelerated ||
         evidence.adapter_luid != config.adapter_luid ||
-        evidence.opened_input_format != expected->opened_input_format ||
+        evidence.opened_input_format != expected->input_format ||
         evidence.width != config.width ||
         evidence.height != config.height ||
         evidence.fps_numerator != config.fps_numerator ||
