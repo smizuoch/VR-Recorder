@@ -16,24 +16,14 @@ ProcessingVideoEncoderSink::ProcessingVideoEncoderSink(
 {
 }
 
-VideoEncoderWrite ProcessingVideoEncoderSink::Write(
+VideoFramePreparation ProcessingVideoEncoderSink::Prepare(
     const ScheduledVideoFrame &frame) noexcept
 {
     if (aborted_.load() || finished_.load() || !frame.surface) {
-        return {
-            VRREC_STATUS_INVALID_STATE,
-            0,
-            0,
-            VideoEncoderFailureStage::Processing,
-        };
+        return {VRREC_STATUS_INVALID_STATE, {}};
     }
     if (frame.surface->NativeHandle() == nullptr) {
-        return {
-            VRREC_STATUS_INVALID_ARGUMENT,
-            0,
-            0,
-            VideoEncoderFailureStage::Processing,
-        };
+        return {VRREC_STATUS_INVALID_ARGUMENT, {}};
     }
 
     const auto descriptor = frame.surface->Descriptor();
@@ -51,7 +41,7 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
               output_height_,
               plan);
     if (plan_status != VRREC_STATUS_OK) {
-        return {plan_status, 0, 0, VideoEncoderFailureStage::Processing};
+        return {plan_status, {}};
     }
 
     std::shared_ptr<VideoSurface> output;
@@ -60,34 +50,34 @@ VideoEncoderWrite ProcessingVideoEncoderSink::Write(
         plan,
         output);
     if (aborted_.load() || finished_.load()) {
-        return {
-            VRREC_STATUS_INVALID_STATE,
-            0,
-            0,
-            VideoEncoderFailureStage::Processing,
-        };
+        return {VRREC_STATUS_INVALID_STATE, {}};
     }
     if (processing_status != VRREC_STATUS_OK) {
-        return {
-            processing_status,
-            0,
-            0,
-            VideoEncoderFailureStage::Processing,
-        };
+        return {processing_status, {}};
     }
 
     if (!IsOutputValid(output, descriptor.adapter_luid)) {
-        return {
-            VRREC_STATUS_INTERNAL_ERROR,
-            0,
-            0,
-            VideoEncoderFailureStage::Processing,
-        };
+        return {VRREC_STATUS_INTERNAL_ERROR, {}};
     }
 
     auto processed = frame;
     processed.surface = std::move(output);
-    auto write = encoder_.Write(processed);
+    return {VRREC_STATUS_OK, std::move(processed)};
+}
+
+VideoEncoderWrite ProcessingVideoEncoderSink::WritePrepared(
+    const ScheduledVideoFrame &frame) noexcept
+{
+    if (aborted_.load() || finished_.load() || !frame.surface) {
+        return {
+            VRREC_STATUS_INVALID_STATE,
+            0,
+            0,
+            VideoEncoderFailureStage::Encoding,
+        };
+    }
+
+    auto write = encoder_.Write(frame);
     if (write.status != VRREC_STATUS_OK &&
         write.failure_stage == VideoEncoderFailureStage::None) {
         write.failure_stage = VideoEncoderFailureStage::Encoding;

@@ -43,12 +43,18 @@ public:
     {
         ++acquire_calls;
         last_timeout = timeout;
+        if (order != nullptr) {
+            order->push_back(1);
+        }
         return acquire_result;
     }
 
     vrrec_status_t ReleaseFromRead() noexcept override
     {
         ++release_calls;
+        if (order != nullptr) {
+            order->push_back(3);
+        }
         return release_status;
     }
 
@@ -56,6 +62,7 @@ public:
         VideoSurfaceAcquireResult::Acquired;
     vrrec_status_t release_status = VRREC_STATUS_OK;
     std::chrono::milliseconds last_timeout {0};
+    std::vector<int> *order = nullptr;
     std::size_t acquire_calls = 0;
     std::size_t release_calls = 0;
 };
@@ -88,6 +95,53 @@ public:
     std::vector<ScheduledVideoFrame> frames;
     std::size_t next = 0;
     std::size_t finish_calls = 0;
+    std::size_t abort_calls = 0;
+};
+
+class ScriptedPreparingVideoEncoderSink final
+    : public VideoFramePreparingEncoderSink {
+public:
+    VideoFramePreparation Prepare(
+        const ScheduledVideoFrame &frame) noexcept override
+    {
+        ++prepare_calls;
+        if (order != nullptr) {
+            order->push_back(2);
+        }
+        auto prepared = frame;
+        prepared.surface = prepared_surface;
+        return {prepare_status, std::move(prepared)};
+    }
+
+    VideoEncoderWrite WritePrepared(
+        const ScheduledVideoFrame &frame) noexcept override
+    {
+        frames.push_back(frame);
+        if (order != nullptr) {
+            order->push_back(4);
+        }
+        return write;
+    }
+
+    VideoEncoderWrite Finish() noexcept override
+    {
+        return {VRREC_STATUS_OK, 0, 0};
+    }
+
+    void Abort() noexcept override
+    {
+        ++abort_calls;
+        if (order != nullptr) {
+            order->push_back(5);
+        }
+    }
+
+    std::shared_ptr<VideoSurface> prepared_surface;
+    vrrec_status_t prepare_status = VRREC_STATUS_OK;
+    VideoEncoderWrite write {VRREC_STATUS_OK, 1, 100};
+    std::vector<ScheduledVideoFrame> frames;
+    std::vector<int> *order = nullptr;
+    std::size_t prepare_calls = 0;
     std::size_t abort_calls = 0;
 };
 
@@ -278,6 +332,75 @@ void ReleaseFailureAbortsWithoutCommittingSuccessfulWriteStatistics()
     CHECK(pump.Statistics().muxed_packet_count == 0);
 }
 
+void ReleasesTheSourceBeforeEncodingThePreparedOwnedSurface()
+{
+    std::vector<int> order;
+    VideoCfrScheduler scheduler;
+    ScriptedPreparingVideoEncoderSink sink;
+    sink.order = &order;
+    sink.prepared_surface = std::make_shared<ScriptedVideoSurface>();
+    VideoEncodingPump pump(scheduler, sink);
+    const auto source = std::make_shared<ScriptedVideoSurface>();
+    source->order = &order;
+    CHECK(scheduler.Push({90, 9'000'000, source}) == VRREC_STATUS_OK);
+    VideoEncodingRead read {};
+
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::Submitted);
+
+    CHECK(order == std::vector<int>({1, 2, 3, 4}));
+    CHECK(sink.prepare_calls == 1);
+    CHECK(sink.frames.size() == 1);
+    CHECK(sink.frames.front().surface == sink.prepared_surface);
+    CHECK(sink.frames.front().surface != source);
+    CHECK(read.muxed_packet_count == 1);
+}
+
+void ReleaseFailureRejectsThePreparedFrameBeforeEncoding()
+{
+    std::vector<int> order;
+    VideoCfrScheduler scheduler;
+    ScriptedPreparingVideoEncoderSink sink;
+    sink.order = &order;
+    sink.prepared_surface = std::make_shared<ScriptedVideoSurface>();
+    VideoEncodingPump pump(scheduler, sink);
+    const auto source = std::make_shared<ScriptedVideoSurface>();
+    source->order = &order;
+    source->release_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(scheduler.Push({100, 10'000'000, source}) == VRREC_STATUS_OK);
+    VideoEncodingRead read {};
+
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::SurfaceFailed);
+
+    CHECK(order == std::vector<int>({1, 2, 3, 5}));
+    CHECK(sink.prepare_calls == 1);
+    CHECK(sink.frames.empty());
+    CHECK(sink.abort_calls == 1);
+    CHECK(read.muxed_packet_count == 0);
+    CHECK(read.encode_latency_microseconds == 0);
+    CHECK(pump.Statistics().muxed_packet_count == 0);
+}
+
+void ProcessingFailureStillReleasesTheSourceExactlyOnce()
+{
+    std::vector<int> order;
+    VideoCfrScheduler scheduler;
+    ScriptedPreparingVideoEncoderSink sink;
+    sink.order = &order;
+    sink.prepare_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    VideoEncodingPump pump(scheduler, sink);
+    const auto source = std::make_shared<ScriptedVideoSurface>();
+    source->order = &order;
+    CHECK(scheduler.Push({110, 11'000'000, source}) == VRREC_STATUS_OK);
+    VideoEncodingRead read {};
+
+    CHECK(pump.PumpTick(0, read) == VideoEncodingResult::ProcessorFailed);
+
+    CHECK(order == std::vector<int>({1, 2, 3}));
+    CHECK(source->release_calls == 1);
+    CHECK(sink.frames.empty());
+    CHECK(read.encoder_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+}
+
 }
 
 int main()
@@ -291,5 +414,8 @@ int main()
     ReleasesTheSurfaceWhenTheEncoderFails();
     DistinguishesAbandonedAndDeviceLostSurfaceAcquisition();
     ReleaseFailureAbortsWithoutCommittingSuccessfulWriteStatistics();
+    ReleasesTheSourceBeforeEncodingThePreparedOwnedSurface();
+    ReleaseFailureRejectsThePreparedFrameBeforeEncoding();
+    ProcessingFailureStillReleasesTheSourceExactlyOnce();
     return 0;
 }

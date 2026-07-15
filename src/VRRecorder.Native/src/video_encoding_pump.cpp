@@ -15,6 +15,17 @@ VideoEncodingPump::VideoEncodingPump(
 {
 }
 
+VideoEncodingPump::VideoEncodingPump(
+    VideoCfrScheduler &scheduler,
+    VideoFramePreparingEncoderSink &sink,
+    std::chrono::milliseconds surface_acquire_timeout) noexcept
+    : scheduler_(scheduler),
+      sink_(sink),
+      preparing_sink_(&sink),
+      surface_acquire_timeout_(surface_acquire_timeout)
+{
+}
+
 VideoEncodingResult VideoEncodingPump::PumpTick(
     std::uint64_t output_tick,
     VideoEncodingRead &read) noexcept
@@ -58,7 +69,13 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
         }
     }
 
-    const auto write = sink_.Write(scheduled);
+    VideoFramePreparation preparation {};
+    auto write = VideoEncoderWrite {VRREC_STATUS_OK, 0, 0};
+    if (preparing_sink_ != nullptr) {
+        preparation = preparing_sink_->Prepare(scheduled);
+    } else {
+        write = sink_.Write(scheduled);
+    }
     if (scheduled.surface) {
         const auto release_status = scheduled.surface->ReleaseFromRead();
         if (release_status != VRREC_STATUS_OK) {
@@ -72,6 +89,19 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
             };
             return VideoEncodingResult::SurfaceFailed;
         }
+    }
+    if (preparing_sink_ != nullptr) {
+        if (preparation.status != VRREC_STATUS_OK) {
+            read = {
+                scheduled,
+                0,
+                0,
+                preparation.status,
+                false,
+            };
+            return VideoEncodingResult::ProcessorFailed;
+        }
+        write = preparing_sink_->WritePrepared(preparation.frame);
     }
     read = {
         scheduled,

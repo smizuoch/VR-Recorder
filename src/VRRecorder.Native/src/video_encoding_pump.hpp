@@ -34,6 +34,40 @@ public:
     virtual void Abort() noexcept = 0;
 };
 
+struct VideoFramePreparation final {
+    vrrec_status_t status = VRREC_STATUS_OK;
+    ScheduledVideoFrame frame {};
+};
+
+class VideoFramePreparingEncoderSink : public VideoEncoderSink {
+public:
+    virtual VideoFramePreparation Prepare(
+        const ScheduledVideoFrame &frame) noexcept = 0;
+    virtual VideoEncoderWrite WritePrepared(
+        const ScheduledVideoFrame &frame) noexcept = 0;
+
+    VideoEncoderWrite Write(
+        const ScheduledVideoFrame &frame) noexcept override
+    {
+        auto preparation = Prepare(frame);
+        if (preparation.status != VRREC_STATUS_OK) {
+            return {
+                preparation.status,
+                0,
+                0,
+                VideoEncoderFailureStage::Processing,
+            };
+        }
+
+        auto write = WritePrepared(preparation.frame);
+        if (write.status != VRREC_STATUS_OK &&
+            write.failure_stage == VideoEncoderFailureStage::None) {
+            write.failure_stage = VideoEncoderFailureStage::Encoding;
+        }
+        return write;
+    }
+};
+
 enum class VideoEncodingResult {
     Submitted,
     NoFrame,
@@ -70,6 +104,11 @@ public:
         VideoEncoderSink &sink,
         std::chrono::milliseconds surface_acquire_timeout =
             std::chrono::milliseconds(5)) noexcept;
+    VideoEncodingPump(
+        VideoCfrScheduler &scheduler,
+        VideoFramePreparingEncoderSink &sink,
+        std::chrono::milliseconds surface_acquire_timeout =
+            std::chrono::milliseconds(5)) noexcept;
 
     VideoEncodingResult PumpTick(
         std::uint64_t output_tick,
@@ -79,6 +118,7 @@ public:
 private:
     VideoCfrScheduler &scheduler_;
     VideoEncoderSink &sink_;
+    VideoFramePreparingEncoderSink *preparing_sink_ = nullptr;
     std::chrono::milliseconds surface_acquire_timeout_;
     std::atomic<std::uint64_t> muxed_packet_count_ {0};
     std::atomic<std::uint64_t> latest_encode_latency_microseconds_ {0};

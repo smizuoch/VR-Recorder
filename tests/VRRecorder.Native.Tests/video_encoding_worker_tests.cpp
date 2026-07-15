@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <future>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -144,6 +145,87 @@ public:
     std::size_t next_write = 0;
     std::size_t write_calls = 0;
     std::size_t finish_calls = 0;
+    std::size_t abort_calls = 0;
+};
+
+class WorkerSurface final : public VideoSurface {
+public:
+    explicit WorkerSurface(std::vector<int> *order = nullptr) noexcept
+        : order_(order)
+    {
+    }
+
+    VideoSurfaceDescriptor Descriptor() const noexcept override
+    {
+        return {42, 1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_BGRA8};
+    }
+
+    void *NativeHandle() const noexcept override
+    {
+        return reinterpret_cast<void *>(1);
+    }
+
+    VideoSurfaceAcquireResult AcquireForRead(
+        std::chrono::milliseconds) noexcept override
+    {
+        if (order_ != nullptr) {
+            order_->push_back(1);
+        }
+        return VideoSurfaceAcquireResult::Acquired;
+    }
+
+    vrrec_status_t ReleaseFromRead() noexcept override
+    {
+        if (order_ != nullptr) {
+            order_->push_back(3);
+        }
+        return release_status;
+    }
+
+    vrrec_status_t release_status = VRREC_STATUS_OK;
+
+private:
+    std::vector<int> *order_;
+};
+
+class WorkerPreparingVideoSink final
+    : public VideoFramePreparingEncoderSink {
+public:
+    VideoFramePreparation Prepare(
+        const ScheduledVideoFrame &frame) noexcept override
+    {
+        order.push_back(2);
+        auto prepared = frame;
+        prepared.surface = prepared_surface;
+        return {VRREC_STATUS_OK, std::move(prepared)};
+    }
+
+    VideoEncoderWrite WritePrepared(
+        const ScheduledVideoFrame &) noexcept override
+    {
+        ++write_calls;
+        order.push_back(4);
+        return {VRREC_STATUS_OK, 1, 100};
+    }
+
+    VideoEncoderWrite Finish() noexcept override
+    {
+        return {VRREC_STATUS_OK, 0, 0};
+    }
+
+    void Abort() noexcept override
+    {
+        if (abort_calls != 0) {
+            return;
+        }
+        ++abort_calls;
+        order.push_back(5);
+    }
+
+    std::shared_ptr<VideoSurface> prepared_surface =
+        std::make_shared<WorkerSurface>();
+    std::vector<int> order;
+    std::size_t write_calls = 0;
     std::size_t abort_calls = 0;
 };
 
@@ -586,6 +668,29 @@ void UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault()
     CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
 }
 
+void WorkerReleaseFailureRejectsPreparedFrameBeforeEncoding()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedCfrClock clock;
+    clock.ready_tick_count = 1;
+    WorkerPreparingVideoSink sink;
+    const auto source = std::make_shared<WorkerSurface>(&sink.order);
+    source->release_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(scheduler.Push({25, 2'500'000, source}) == VRREC_STATUS_OK);
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    CHECK(worker.Join() == VideoEncodingWorkerResult::Failed);
+
+    CHECK(sink.order == std::vector<int>({1, 2, 3, 5}));
+    CHECK(sink.write_calls == 0);
+    CHECK(sink.abort_calls == 1);
+    CHECK(events.first_packet_calls == 0);
+    CHECK(events.fault_calls == 1);
+    CHECK(worker.Statistics().muxed_packet_count == 0);
+}
+
 void AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding()
 {
     VideoCfrScheduler scheduler;
@@ -788,6 +893,7 @@ int main()
     AbortDominatesAnInFlightVideoWriteFailure();
     AbortDoesNotCommitASuccessfulInFlightVideoWrite();
     UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
+    WorkerReleaseFailureRejectsPreparedFrameBeforeEncoding();
     AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding();
     OutOfMemoryThreadCreationIsTerminalFailure();
     InternalThreadCreationFailureIsTerminalFailure();

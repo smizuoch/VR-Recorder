@@ -23,7 +23,8 @@ public:
     virtual void Abort() noexcept = 0;
 };
 
-class ProcessingVideoEncoderSink final : public VideoEncoderSink {
+class ProcessingVideoEncoderSink final
+    : public VideoFramePreparingEncoderSink {
 public:
     ProcessingVideoEncoderSink(
         VideoFrameProcessor &processor,
@@ -31,7 +32,9 @@ public:
         std::uint32_t output_width,
         std::uint32_t output_height) noexcept;
 
-    VideoEncoderWrite Write(
+    VideoFramePreparation Prepare(
+        const ScheduledVideoFrame &frame) noexcept override;
+    VideoEncoderWrite WritePrepared(
         const ScheduledVideoFrame &frame) noexcept override;
     VideoEncoderWrite Finish() noexcept override;
     void Abort() noexcept override;

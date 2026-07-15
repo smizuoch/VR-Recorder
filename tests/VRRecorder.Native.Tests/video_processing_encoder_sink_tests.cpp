@@ -186,6 +186,38 @@ void ConvertsToValidatedNv12BeforeCallingTheEncoder()
     CHECK(encoder.frames.front().source_sequence == 11);
 }
 
+void PreparesAnOwnedFrameWithoutCallingTheEncoder()
+{
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12);
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(
+        processor,
+        encoder,
+        1'920,
+        1'080);
+    const auto source = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+
+    const auto preparation = sink.Prepare(
+        {7, 11, 1'000'000, 2, false, source});
+
+    CHECK(preparation.status == VRREC_STATUS_OK);
+    CHECK(preparation.frame.surface == processor.next_output);
+    CHECK(preparation.frame.surface != source);
+    CHECK(encoder.frames.empty());
+
+    const auto write = sink.WritePrepared(preparation.frame);
+    CHECK(write.status == VRREC_STATUS_OK);
+    CHECK(encoder.frames.size() == 1);
+    CHECK(encoder.frames.front().surface == processor.next_output);
+}
+
 void ClassifiesProcessorFailureAndSkipsTheEncoder()
 {
     RecordingProcessor processor;
@@ -421,6 +453,7 @@ void RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout()
 int main()
 {
     ConvertsToValidatedNv12BeforeCallingTheEncoder();
+    PreparesAnOwnedFrameWithoutCallingTheEncoder();
     ClassifiesProcessorFailureAndSkipsTheEncoder();
     RejectsAnInvalidProcessorOutputSurface();
     RejectsAnInputSurfaceWithoutANativeHandleBeforeProcessing();

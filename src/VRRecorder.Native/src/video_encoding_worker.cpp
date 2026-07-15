@@ -22,7 +22,35 @@ VideoEncodingWorker::VideoEncodingWorker(
 VideoEncodingWorker::VideoEncodingWorker(
     VideoCfrScheduler &scheduler,
     VideoCfrClock &clock,
+    VideoFramePreparingEncoderSink &sink,
+    MediaEventSink &events) noexcept
+    : VideoEncodingWorker(
+          scheduler,
+          clock,
+          sink,
+          events,
+          DefaultNativeThreadFactory())
+{
+}
+
+VideoEncodingWorker::VideoEncodingWorker(
+    VideoCfrScheduler &scheduler,
+    VideoCfrClock &clock,
     VideoEncoderSink &sink,
+    MediaEventSink &events,
+    NativeThreadFactoryPort &thread_factory) noexcept
+    : clock_(clock),
+      sink_(sink),
+      events_(events),
+      thread_factory_(thread_factory),
+      pump_(scheduler, sink)
+{
+}
+
+VideoEncodingWorker::VideoEncodingWorker(
+    VideoCfrScheduler &scheduler,
+    VideoCfrClock &clock,
+    VideoFramePreparingEncoderSink &sink,
     MediaEventSink &events,
     NativeThreadFactoryPort &thread_factory) noexcept
     : clock_(clock),

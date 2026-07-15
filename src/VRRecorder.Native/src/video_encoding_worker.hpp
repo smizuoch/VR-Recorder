@@ -59,7 +59,18 @@ public:
     VideoEncodingWorker(
         VideoCfrScheduler &scheduler,
         VideoCfrClock &clock,
+        VideoFramePreparingEncoderSink &sink,
+        MediaEventSink &events) noexcept;
+    VideoEncodingWorker(
+        VideoCfrScheduler &scheduler,
+        VideoCfrClock &clock,
         VideoEncoderSink &sink,
+        MediaEventSink &events,
+        NativeThreadFactoryPort &thread_factory) noexcept;
+    VideoEncodingWorker(
+        VideoCfrScheduler &scheduler,
+        VideoCfrClock &clock,
+        VideoFramePreparingEncoderSink &sink,
         MediaEventSink &events,
         NativeThreadFactoryPort &thread_factory) noexcept;
     ~VideoEncodingWorker();
