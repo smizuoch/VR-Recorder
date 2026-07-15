@@ -74,6 +74,33 @@ std::size_t FindAscii(
     return static_cast<std::size_t>(found - bytes.begin());
 }
 
+template <std::size_t Size>
+std::size_t FindAsciiInRange(
+    const std::vector<unsigned char> &bytes,
+    const char (&text)[Size],
+    std::size_t begin,
+    std::size_t end)
+{
+    static_assert(Size == 5U);
+    if (begin > end || end > bytes.size()) {
+        Fail("invalid MP4 search range");
+    }
+    const unsigned char needle[] {
+        static_cast<unsigned char>(text[0]),
+        static_cast<unsigned char>(text[1]),
+        static_cast<unsigned char>(text[2]),
+        static_cast<unsigned char>(text[3]),
+    };
+    const auto found = std::search(
+        bytes.begin() + static_cast<std::ptrdiff_t>(begin),
+        bytes.begin() + static_cast<std::ptrdiff_t>(end),
+        std::begin(needle),
+        std::end(needle));
+    return found == bytes.begin() + static_cast<std::ptrdiff_t>(end)
+        ? std::numeric_limits<std::size_t>::max()
+        : static_cast<std::size_t>(found - bytes.begin());
+}
+
 std::uint32_t ReadAacBitrateMetadata(const char *path)
 {
     const auto bytes = ReadAllBytes(path);
@@ -106,67 +133,66 @@ std::uint32_t ReadAacBitrateMetadata(const char *path)
 }
 
 
-std::uint64_t ReadAudioPresentedSampleCount(const char *path)
+std::uint64_t ReadAudioPresentedSampleCount(
+    const char *path,
+    std::uint64_t audio_duration_samples,
+    std::uint32_t audio_track_id)
 {
     const auto bytes = ReadAllBytes(path);
-    std::uint64_t audio_duration = 0;
-    for (std::size_t offset = 0;
-         offset + 8U <= bytes.size();
-         ++offset) {
-        if (bytes[offset] != static_cast<unsigned char>('t') ||
-            bytes[offset + 1U] != static_cast<unsigned char>('r') ||
-            bytes[offset + 2U] != static_cast<unsigned char>('u') ||
-            bytes[offset + 3U] != static_cast<unsigned char>('n')) {
-            continue;
-        }
-        if (offset < 4U || bytes.size() - offset < 12U) {
-            Fail("truncated trun box");
-        }
-        const auto box_start = offset - 4U;
-        const auto box_size = ReadBigEndian32(bytes, box_start);
-        if (box_size < 20U || box_size > bytes.size() - box_start) {
-            Fail("invalid trun box size");
-        }
-        const auto flags = ReadBigEndian32(bytes, offset + 4U) & 0x00ffffffU;
-        const auto sample_count = ReadBigEndian32(bytes, offset + 8U);
-        std::size_t cursor = offset + 12U;
-        if ((flags & 0x000001U) != 0U) {
-            cursor += 4U;
-        }
-        if ((flags & 0x000004U) != 0U) {
-            cursor += 4U;
-        }
-        if ((flags & 0x000100U) == 0U) {
-            continue;
-        }
-        std::uint64_t duration_sum = 0;
-        for (std::uint32_t index = 0; index < sample_count; ++index) {
-            if (cursor > box_start + box_size || box_start + box_size - cursor < 4U) {
-                Fail("truncated trun sample duration");
-            }
-            duration_sum += ReadBigEndian32(bytes, cursor);
-            cursor += 4U;
-            if ((flags & 0x000200U) != 0U) {
-                cursor += 4U;
-            }
-            if ((flags & 0x000400U) != 0U) {
-                cursor += 4U;
-            }
-            if ((flags & 0x000800U) != 0U) {
-                cursor += 4U;
-            }
-        }
-        if (duration_sum > audio_duration) {
-            audio_duration = duration_sum;
-        }
-    }
-    if (audio_duration == 0U) {
-        Fail("missing audio trun sample durations");
+    if (audio_duration_samples == 0U || audio_track_id == 0U) {
+        Fail("missing audio duration or track identity");
     }
 
     std::uint64_t edit_media_time = 0;
-    const auto elst = FindAscii(bytes, "elst");
-    if (elst != std::numeric_limits<std::size_t>::max()) {
+    bool found_audio_track = false;
+    std::size_t search_start = 0;
+    while (search_start < bytes.size()) {
+        const auto trak = FindAsciiInRange(
+            bytes,
+            "trak",
+            search_start,
+            bytes.size());
+        if (trak == std::numeric_limits<std::size_t>::max()) {
+            break;
+        }
+        if (trak < 4U) {
+            Fail("invalid trak box");
+        }
+        const auto track_box_start = trak - 4U;
+        const auto track_box_size = ReadBigEndian32(bytes, track_box_start);
+        if (track_box_size < 8U ||
+            track_box_size > bytes.size() - track_box_start) {
+            Fail("invalid trak box size");
+        }
+        const auto track_box_end = track_box_start + track_box_size;
+        const auto tkhd = FindAsciiInRange(bytes, "tkhd", trak + 4U, track_box_end);
+        if (tkhd == std::numeric_limits<std::size_t>::max() ||
+            track_box_end - tkhd < 20U) {
+            Fail("missing or truncated tkhd box");
+        }
+        const auto tkhd_version = bytes[tkhd + 4U];
+        const auto track_id_offset = tkhd_version == 0U
+            ? tkhd + 16U
+            : tkhd_version == 1U
+                ? tkhd + 24U
+                : std::numeric_limits<std::size_t>::max();
+        if (track_id_offset == std::numeric_limits<std::size_t>::max() ||
+            track_id_offset > track_box_end ||
+            track_box_end - track_id_offset < 4U) {
+            Fail("unsupported or truncated tkhd box");
+        }
+        if (ReadBigEndian32(bytes, track_id_offset) != audio_track_id) {
+            search_start = track_box_end;
+            continue;
+        }
+        if (found_audio_track) {
+            Fail("duplicate audio track identity");
+        }
+        found_audio_track = true;
+        const auto elst = FindAsciiInRange(bytes, "elst", trak + 4U, track_box_end);
+        if (elst == std::numeric_limits<std::size_t>::max()) {
+            break;
+        }
         if (elst < 4U || bytes.size() - elst < 24U) {
             Fail("truncated elst box");
         }
@@ -188,11 +214,15 @@ std::uint64_t ReadAudioPresentedSampleCount(const char *path)
         } else {
             Fail("unsupported elst version");
         }
+        break;
     }
-    if (edit_media_time > audio_duration) {
+    if (!found_audio_track) {
+        Fail("audio track identity not found in MP4 metadata");
+    }
+    if (edit_media_time > audio_duration_samples) {
         Fail("audio edit list exceeds sample duration");
     }
-    return audio_duration - edit_media_time;
+    return audio_duration_samples - edit_media_time;
 }
 
 void Check(int result, const char *operation)
@@ -303,6 +333,7 @@ int main(int argc, char **argv)
 
     std::uint64_t packet_count = 0;
     std::uint64_t decoded_frame_count = 0;
+    std::uint64_t audio_duration_ticks = 0;
     std::uint64_t video_packet_count = 0;
     std::uint64_t video_decoded_frame_count = 0;
     std::int64_t first_pts_us = 0;
@@ -322,6 +353,14 @@ int main(int argc, char **argv)
                 saw_first_packet = true;
             }
             ++packet_count;
+            if (packet->duration <= 0 ||
+                static_cast<std::uint64_t>(packet->duration) >
+                    std::numeric_limits<std::uint64_t>::max() -
+                        audio_duration_ticks) {
+                Fail("invalid audio packet duration");
+            }
+            audio_duration_ticks +=
+                static_cast<std::uint64_t>(packet->duration);
             Check(avcodec_send_packet(audio_decoder, packet),
                 "send audio packet");
             while (true) {
@@ -390,6 +429,16 @@ int main(int argc, char **argv)
     if (!saw_first_packet) {
         Fail("no audio packets");
     }
+    if (audio_stream->id <= 0) {
+        Fail("invalid audio track identity");
+    }
+    const auto audio_duration_samples = av_rescale_q(
+        static_cast<std::int64_t>(audio_duration_ticks),
+        audio_stream->time_base,
+        AVRational {1, audio_parameters->sample_rate});
+    if (audio_duration_samples <= 0) {
+        Fail("invalid audio duration");
+    }
 
     std::cout << "codec_name=aac\n";
     std::cout << "profile=LC\n";
@@ -402,7 +451,11 @@ int main(int argc, char **argv)
     std::cout << "first_dts_microseconds=" << first_dts_us << '\n';
     std::cout << "decoded_frame_count=" << decoded_frame_count << '\n';
     std::cout << "presented_decoded_frame_count="
-              << ReadAudioPresentedSampleCount(argv[1]) << '\n';
+              << ReadAudioPresentedSampleCount(
+                     argv[1],
+                     static_cast<std::uint64_t>(audio_duration_samples),
+                     static_cast<std::uint32_t>(audio_stream->id))
+              << '\n';
     std::cout << "video_codec_name=h264\n";
     std::cout << "video_width=" << video_parameters->width << '\n';
     std::cout << "video_height=" << video_parameters->height << '\n';

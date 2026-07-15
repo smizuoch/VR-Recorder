@@ -544,13 +544,12 @@ StereoAudioCaptureSessionConfig CaptureConfig()
 
 H264StreamDescriptor VideoDescriptor()
 {
-    const std::array<std::uint8_t, 44> avcc {
-        0x01, 0x64, 0x00, 0x0a, 0xff, 0xe1, 0x00, 0x17,
-        0x67, 0x64, 0x00, 0x0a, 0xac, 0xb2, 0x3d, 0x80,
-        0x88, 0x00, 0x00, 0x03, 0x00, 0x08, 0x00, 0x00,
-        0x03, 0x01, 0xe0, 0x78, 0x91, 0x32, 0x40, 0x01,
-        0x00, 0x06, 0x68, 0xeb, 0xc3, 0xcb, 0x22, 0xc0,
-        0xfd, 0xf8, 0xf8, 0x00,
+    const std::array<std::uint8_t, 35> avcc {
+        0x01, 0x64, 0x10, 0x0a, 0xff, 0xe1, 0x00, 0x13,
+        0x67, 0x64, 0x10, 0x0a, 0xac, 0xbb, 0xd8, 0x08,
+        0x80, 0x00, 0x00, 0x03, 0x00, 0x80, 0x00, 0x00,
+        0x03, 0x01, 0x42, 0x01, 0x00, 0x05, 0x68, 0xee,
+        0x0f, 0x2c, 0x8b,
     };
     std::vector<std::byte> extradata(avcc.size());
     std::transform(
@@ -566,6 +565,111 @@ H264StreamDescriptor VideoDescriptor()
         H264PacketFormat::AvccLengthPrefixed,
         std::move(extradata),
     };
+}
+
+EncodedMediaPacket DeterministicH264Packet(
+    std::span<const std::uint8_t> idr,
+    std::int64_t timestamp_microseconds)
+{
+    CHECK(idr.size() <= 0xffU);
+    std::vector<std::byte> payload {
+        std::byte {0},
+        std::byte {0},
+        std::byte {0},
+        static_cast<std::byte>(idr.size()),
+    };
+    std::transform(
+        idr.begin(),
+        idr.end(),
+        std::back_inserter(payload),
+        [](std::uint8_t value) { return static_cast<std::byte>(value); });
+    return {
+        MediaStreamKind::Video,
+        timestamp_microseconds,
+        timestamp_microseconds,
+        1'000'000,
+        true,
+        std::move(payload),
+        {},
+    };
+}
+
+void WriteDeterministicH264Packets(FfmpegFragmentedMp4Muxer &mux)
+{
+    const std::array<std::uint8_t, 14> first {
+        0x65, 0x88, 0x84, 0x04, 0xbf, 0xfe, 0xf7,
+        0xad, 0xdf, 0x81, 0x4d, 0xc3, 0x2b, 0x3d,
+    };
+    const std::array<std::uint8_t, 15> second {
+        0x65, 0x88, 0x82, 0x01, 0x7f, 0xfe, 0xf7, 0xd4,
+        0xb7, 0xcc, 0xb2, 0xee, 0x07, 0x23, 0x80,
+    };
+    const std::array<std::uint8_t, 15> third {
+        0x65, 0x88, 0x84, 0x05, 0xff, 0xfe, 0xf7, 0xd4,
+        0xb7, 0xcc, 0xb2, 0xee, 0x07, 0x23, 0x81,
+    };
+    CHECK(mux.WritePacket(DeterministicH264Packet(first, 0)) ==
+          VRREC_STATUS_OK);
+    CHECK(mux.WritePacket(DeterministicH264Packet(second, 1'000'000)) ==
+          VRREC_STATUS_OK);
+    CHECK(mux.WritePacket(DeterministicH264Packet(third, 2'000'000)) ==
+          VRREC_STATUS_OK);
+}
+
+void RequiresThreeDecodedH264FramesAlongsideThreeSecondsOfRealAac()
+{
+    constexpr std::uint64_t SampleRate = 48'000;
+    constexpr std::uint64_t InputFrameCount = SampleRate * 3U;
+    constexpr std::size_t WindowFrameCount = 1'024;
+
+    AacAudioEncoderConfig config {};
+    CHECK(CreateAacAudioEncoderConfig(config) == VRREC_STATUS_OK);
+    auto encoder_result = FfmpegAacPacketEncoder::Create(config);
+    CHECK(encoder_result.status == VRREC_STATUS_OK);
+    CHECK(encoder_result.encoder != nullptr);
+    CHECK(encoder_result.descriptor.has_value());
+
+    ScratchOutput output;
+    const auto path = output.Path().string();
+    auto mux_result = LibavformatFragmentedMp4MuxerPort::Create(path.c_str());
+    CHECK(mux_result.status == VRREC_STATUS_OK);
+    CHECK(mux_result.port != nullptr);
+    FfmpegFragmentedMp4Muxer mux(*mux_result.port);
+    const FragmentedMp4StreamConfiguration streams {
+        VideoDescriptor(),
+        std::move(*encoder_result.descriptor),
+        DefaultFragmentedMp4FragmentPolicy,
+    };
+    encoder_result.descriptor.reset();
+    CHECK(mux.WriteHeader(streams) == VRREC_STATUS_OK);
+    WriteDeterministicH264Packets(mux);
+
+    std::uint64_t frame = 0;
+    while (frame < InputFrameCount) {
+        const auto frame_count = static_cast<std::size_t>(std::min(
+            static_cast<std::uint64_t>(WindowFrameCount),
+            InputFrameCount - frame));
+        auto samples = StereoFrames(frame, frame_count);
+        const auto encoded =
+            encoder_result.encoder->EncodePcm48k(frame, samples);
+        CHECK(encoded.status == VRREC_STATUS_OK);
+        for (const auto &packet : encoded.packets) {
+            CHECK(mux.WritePacket(packet) == VRREC_STATUS_OK);
+        }
+        frame += frame_count;
+    }
+    const auto finished = encoder_result.encoder->Finish();
+    CHECK(finished.status == VRREC_STATUS_OK);
+    for (const auto &packet : finished.packets) {
+        CHECK(mux.WritePacket(packet) == VRREC_STATUS_OK);
+    }
+    CHECK(mux.WriteTrailer() == VRREC_STATUS_OK);
+    CHECK(mux.FlushFile() == VRREC_STATUS_OK);
+
+    const auto oracle = RunAacDecodeOracle(output.Path());
+    CHECK(oracle.presented_decoded_frame_count == InputFrameCount);
+    CHECK(oracle.video_packet_count == 3);
+    CHECK(oracle.video_decoded_frame_count == 3);
 }
 
 void CarriesTheOpenedAacBitrateIntoTheRealFragmentedMp4Header()
@@ -786,6 +890,7 @@ int main()
 {
     CarriesTheOpenedAacBitrateIntoTheRealFragmentedMp4Header();
     WritesThreeSecondsOfRealAacPacketsIntoFragmentedMp4();
+    RequiresThreeDecodedH264FramesAlongsideThreeSecondsOfRealAac();
     FlushesTheOwnedAacPipelineThroughTheRealMuxGraph();
     return 0;
 }
