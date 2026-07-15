@@ -1,0 +1,32 @@
+VR Recorder - OpenVR source and binary candidate information
+
+This file is candidate evidence pending independent legal review. It is not an approval, distribution authorization, or release admission.
+
+Component: OpenVR SDK 2.15.6
+Upstream repository: https://github.com/ValveSoftware/openvr
+Release tag: v2.15.6
+Source commit: 0924064316de3effbcd1acf1e309182a2deb1c05
+Annotated tag object: 41bc3825fd35b04047610c86fee26fb33b017b29
+
+Official tag archive URL: https://codeload.github.com/ValveSoftware/openvr/tar.gz/refs/tags/v2.15.6
+Official tag archive length: 154998016
+Official tag archive SHA-256: e184cb625010fab7043a9d5e1e000fdeb3067a152bb3169ef53f64dfac37164c
+
+Selected deployment: x86_64, dynamic OpenVR runtime linkage
+openvr.h length: 296217
+openvr.h SHA-256: 1e6ed57199896cc1f7c5484e50fa18955e97be15be690beb28d998c877ead7fd
+openvr_api.lib length: 5500
+openvr_api.lib SHA-256: a0bf57c5920f569e8d21ab3e5bc95bac4b73e2016217f8b5b93495a2a7197bbb
+openvr_api.dll length: 837272
+openvr_api.dll SHA-256: bab8ac6ef64e68a9ca53315b0014d131088584b2efdfa6db511d67ec03cfcb4a
+openvr_api.dll.sig length: 1450
+openvr_api.dll.sig SHA-256: 6a47bb6e5e3d6850aef60abf4fb6b6f1799bee65f2af3bbdc89dac00b843bc5b
+
+Build/preparation recipe: eng/openvr-windows-x64-sdk-recipe.md
+Build/preparation recipe SHA-256: 4f1fcbffe5f352d5f8c5252861dc2c9fca670f227d86d84a099fc22af6da61ca
+
+License: BSD-3-Clause
+Repository license path: third-party/licenses/openvr/LICENSE.txt
+License SHA-256: f56ff606104d4ef18e617921a75c73ad73b5a1a1d70c69590c29de16919e04ad
+
+The official openvr_api.dll and its detached signature are retained from the exact tag archive without modification. The runtime DLL is intended to be staged beside vrrecorder_native.dll; no Steam installation copy or ambient PATH entry is accepted as the product dependency. The copyright notice, BSD-3-Clause conditions, and disclaimer must remain in the product Legal Bundle and third-party notices.

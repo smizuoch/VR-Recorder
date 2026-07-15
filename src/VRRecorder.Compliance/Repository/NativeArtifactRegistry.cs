@@ -103,6 +103,11 @@ internal static class NativeArtifactRegistryReader
                 componentId,
                 "spout2LegalCandidate",
                 candidateArtifacts);
+            ReadCandidateArtifacts(
+                component,
+                componentId,
+                "openVrLegalCandidate",
+                candidateArtifacts);
 
             if (!component.TryGetProperty("nativeArtifacts", out var nativeArtifacts))
             {

@@ -60,6 +60,9 @@ public static class RepositoryComplianceVerifier
         issues.AddRange(Spout2LegalCandidateVerifier.Verify(
             root,
             registry.Components));
+        issues.AddRange(OpenVrLegalCandidateVerifier.Verify(
+            root,
+            registry.Components));
         issues.AddRange(RepositoryNativeRuntimeLoadVerifier.Verify(root));
         issues.AddRange(RepositoryNativeLinkVerifier.Verify(root));
 

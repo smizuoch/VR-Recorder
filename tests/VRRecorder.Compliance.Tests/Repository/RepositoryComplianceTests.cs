@@ -7,6 +7,88 @@ namespace VRRecorder.Compliance.Tests.Repository;
 public sealed class RepositoryComplianceTests
 {
     [Fact]
+    public void OpenVrLegalCandidateBindsOfficialArchiveRecipeAndSdkArtifacts()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = OpenVrLegalCandidateVerifier.Verify(repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public void OpenVrLegalCandidateRejectsTamperAndPrematureAdmission()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vrrecorder-openvr-legal-candidate-{Guid.NewGuid():N}");
+        try
+        {
+            foreach (var relativePath in new[]
+                     {
+                         "third-party/registry.yml",
+                         "third-party/licenses/openvr/LICENSE.txt",
+                         "third-party/source-offers/OpenVR-SOURCE-INFO.candidate.txt",
+                         "eng/openvr-windows-x64-sdk-recipe.md",
+                     })
+            {
+                var destination = Path.Combine(root, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(Path.Combine(repositoryRoot, relativePath), destination);
+            }
+
+            Assert.Empty(OpenVrLegalCandidateVerifier.Verify(root));
+
+            var offerPath = Path.Combine(
+                root,
+                "third-party/source-offers/OpenVR-SOURCE-INFO.candidate.txt");
+            File.AppendAllText(offerPath, "tampered");
+            var issues = OpenVrLegalCandidateVerifier.Verify(root);
+            Assert.Contains(issues, issue =>
+                issue.Code == "openvr-candidate-file-mismatch" &&
+                issue.Subject == "openvr:source-offer");
+
+            File.Copy(
+                Path.Combine(
+                    repositoryRoot,
+                    "third-party/source-offers/OpenVR-SOURCE-INFO.candidate.txt"),
+                offerPath,
+                overwrite: true);
+            var registryPath = Path.Combine(root, "third-party/registry.yml");
+            var registry = File.ReadAllText(registryPath);
+            var componentStart = registry.IndexOf(
+                "\"id\": \"openvr\"",
+                StringComparison.Ordinal);
+            Assert.True(componentStart >= 0);
+            var approvalStart = registry.IndexOf(
+                "\"status\": \"pending-independent-review\"",
+                componentStart,
+                StringComparison.Ordinal);
+            Assert.True(approvalStart >= 0);
+            File.WriteAllText(
+                registryPath,
+                string.Concat(
+                    registry.AsSpan(0, approvalStart),
+                    "\"status\": \"approved\"",
+                    registry.AsSpan(
+                        approvalStart +
+                        "\"status\": \"pending-independent-review\"".Length)));
+            issues = OpenVrLegalCandidateVerifier.Verify(root);
+            Assert.Contains(issues, issue =>
+                issue.Code == "premature-openvr-legal-admission" &&
+                issue.Subject == "openvr");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Spout2LegalCandidateBindsOfficialArchivesRecipeAndStaticLibraries()
     {
         var repositoryRoot = FindRepositoryRoot();
