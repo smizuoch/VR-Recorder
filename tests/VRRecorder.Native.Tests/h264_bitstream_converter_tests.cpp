@@ -242,6 +242,37 @@ void RejectsUnsupportedChromaFormatAndBitDepth()
               result) == VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void RejectsParameterSetsThatExceedAvccLengthFields()
+{
+    auto oversized_sps = Bytes(Sps16x16);
+    oversized_sps.resize(65'536U, std::byte {0x55});
+    const auto pps = Bytes(Pps);
+    const auto idr = Bytes(Idr);
+    H264AnnexBConversionResult result {};
+    CHECK(ConvertH264AnnexBToAvcc(
+              AnnexBBytes(
+                  {std::span<const std::byte> {oversized_sps},
+                   std::span<const std::byte> {pps},
+                   std::span<const std::byte> {idr}}),
+              16,
+              16,
+              H264Profile::High,
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    auto oversized_pps = pps;
+    oversized_pps.resize(65'536U, std::byte {0x55});
+    const auto sps = Bytes(Sps16x16);
+    CHECK(ConvertH264AnnexBToAvcc(
+              AnnexBBytes(
+                  {std::span<const std::byte> {sps},
+                   std::span<const std::byte> {oversized_pps},
+                   std::span<const std::byte> {idr}}),
+              16,
+              16,
+              H264Profile::High,
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+}
+
 void DedupesRepeatedIdenticalParameterSets()
 {
     const auto annex_b = AnnexB({Sps16x16, Pps, Sps16x16, Pps, Idr});
@@ -311,6 +342,7 @@ int main()
     ConvertsCroppedHighProfileSpsAtRecordingResolution();
     ConvertsMainProfileSpsAtRecordingResolution();
     RejectsUnsupportedChromaFormatAndBitDepth();
+    RejectsParameterSetsThatExceedAvccLengthFields();
     DedupesRepeatedIdenticalParameterSets();
     RejectsMalformedOrIncompleteAnnexB();
     return 0;

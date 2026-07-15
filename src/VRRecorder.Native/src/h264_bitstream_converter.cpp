@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <new>
 #include <span>
 #include <vector>
@@ -114,6 +115,10 @@ vrrec_status_t BuildAvcc(
     const H264SpsInfo &sps_info,
     std::vector<std::byte> &avcc)
 {
+    if (sps.size() > std::numeric_limits<std::uint16_t>::max() ||
+        pps.size() > std::numeric_limits<std::uint16_t>::max()) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
     try {
         avcc.clear();
         avcc.reserve(11U + sps.size() + pps.size() + 4U);
