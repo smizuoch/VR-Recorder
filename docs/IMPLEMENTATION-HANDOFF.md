@@ -231,16 +231,17 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 
 - action manifestの録画、mic、overlay表示、recenter、haptic action定義
 - controller別recommended bindingのうち録画toggle。mic／overlay表示／recenter／hapticはmanifest定義済みだが、同梱bindingと実runtime検証は未完了
-- install rootからのabsolute manifest path解決
+- pinned OpenVR 2.15.6 SDK／runtime identity、candidate Legal evidence、production DLL link。独立Legal approvalとcanonical admissionは未完了
+- stable app keyを持つapplication `.vrmanifest`、current install contract、runtime generationごとのtemporary `IVRApplications`登録
+- OpenVR SDKを呼ぶnative `SteamVrInputBackend`のinit、action/application manifest、handle取得、`UpdateActionState`、digital polling
+- process-wide single runtime ownerと最大90 Hzのsingle poll thread。同じrevisionをrecord／mic actionへfan-outし、App／first-runは1つのlazy managed runtimeを共有する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
 未実装:
 
-- OpenVR SDK／`openvr_api` runtimeのpinned dependency、Legal admission、application `.vrmanifest`登録
-- OpenVR SDKを呼ぶnative `SteamVrInputBackend`
-- `SetActionManifestPath`、action set／action handle取得、`UpdateActionState`、実digital polling
-- process単位のsingle OpenVR runtime owner。Appは現在recordとmic用に別々の`NativeSteamVrInputRuntime`を生成する
+- OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
+- mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
 - `IVROverlay`の初期化、作成、表示、texture更新、event polling、破棄
 - elapsed／resolution／FPS／signalを含むWrist snapshot、layout／hit-test、1024×512 BGRA renderer、glyph／icon atlas
 - controller-relative Wrist Dock、absolute World Pin、pose readback
@@ -593,7 +594,7 @@ desktop録画が成立した後、次の順でproduction compositionへ接続す
 
 `actions.json`はOpenVR application manifestではない。unpackaged install rootを参照する`.vrmanifest`、stable application key、`IVRApplications`でのidempotent登録／更新／解除が別途必要である。temporary登録を起動ごとに行うかpersistent登録をinstall lifecycleで行うかをADR化し、SteamVR再起動、app upgradeでpath変更、uninstall後のstale manifestをRedにする。MSIXではpackage install locationへabsolute pathを再解決し、存在しない旧version pathを残さない。
 
-現在のApp hostは録画actionとmic actionに別々の`NativeSteamVrInputRuntime`を生成する。実OpenVRでは`VR_Init`／`VR_Shutdown`とaction state更新をprocess単位の一ownerへ集約し、一つの`UpdateActionState`／event poll結果をrecord、mic、overlay、placement、haptic consumerへ配る。first-run probeも同時に別runtimeを開かない。
+App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged runtimeを共有する。native process ownerは`VR_Init`／`VR_Shutdown`をruntime generation単位に集約し、最大90 Hzの一つのbackground pollで`UpdateActionState`と全登録digital actionを同じrevisionへ採取する。遅いconsumerは中間revisionをskipして最新snapshotを読むためpoll ownerを停止しない。overlay、placement、hapticはこのownerへ未接続である。
 
 ### 7.1 Input Red
 

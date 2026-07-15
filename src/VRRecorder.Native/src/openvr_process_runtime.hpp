@@ -8,10 +8,12 @@
 namespace vrrecorder::native {
 
 class OpenVrProcessRuntime;
+class NativeThreadFactoryPort;
 
 std::shared_ptr<OpenVrProcessRuntime> CreateOpenVrProcessRuntime(
     std::unique_ptr<OpenVrInputPort> api,
-    vrrec_status_t &status) noexcept;
+    vrrec_status_t &status,
+    NativeThreadFactoryPort *thread_factory = nullptr) noexcept;
 
 std::unique_ptr<OpenVrInputPort> CreateOpenVrProcessInputPort(
     std::shared_ptr<OpenVrProcessRuntime> runtime,

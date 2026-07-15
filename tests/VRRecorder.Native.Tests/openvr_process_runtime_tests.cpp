@@ -1,4 +1,5 @@
 #include "openvr_process_runtime.hpp"
+#include "native_thread_factory.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -6,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -27,7 +29,13 @@ struct RawState final {
     std::size_t initialize_calls = 0;
     std::size_t application_manifest_calls = 0;
     std::size_t manifest_calls = 0;
+    std::size_t update_calls = 0;
+    std::size_t digital_calls = 0;
     std::size_t shutdown_calls = 0;
+    std::uint64_t generation = 0;
+    std::uint64_t failing_digital_handle = 0;
+    vrrec_status_t update_status = VRREC_STATUS_OK;
+    std::vector<std::thread::id> polling_threads;
 };
 
 class FakeRawApi final : public OpenVrInputPort {
@@ -77,14 +85,17 @@ public:
         std::uint64_t &handle) noexcept override
     {
         state_->calls.emplace_back("action:" + std::string(path));
-        handle = 22;
+        handle = path.ends_with("/mic") ? 33 : 22;
         return VRREC_STATUS_OK;
     }
 
     vrrec_status_t UpdateActionState(std::uint64_t handle) noexcept override
     {
         state_->calls.emplace_back("update:" + std::to_string(handle));
-        return VRREC_STATUS_OK;
+        ++state_->update_calls;
+        ++state_->generation;
+        state_->polling_threads.push_back(std::this_thread::get_id());
+        return state_->update_status;
     }
 
     vrrec_status_t GetDigitalActionData(
@@ -92,8 +103,12 @@ public:
         OpenVrDigitalActionData &data) noexcept override
     {
         state_->calls.emplace_back("digital:" + std::to_string(handle));
-        data = {true, false, true};
-        return VRREC_STATUS_OK;
+        ++state_->digital_calls;
+        state_->polling_threads.push_back(std::this_thread::get_id());
+        data = {true, state_->generation % 2 == 1, true};
+        return handle == state_->failing_digital_handle
+            ? VRREC_STATUS_INTERNAL_ERROR
+            : VRREC_STATUS_OK;
     }
 
     void Shutdown() noexcept override
@@ -110,17 +125,265 @@ private:
     std::shared_ptr<RawState> state_;
 };
 
+class ScriptedThreadFactory final : public NativeThreadFactoryPort {
+public:
+    vrrec_status_t Start(
+        std::thread &thread,
+        NativeThreadEntry entry,
+        void *context) noexcept override
+    {
+        if (status == VRREC_STATUS_OK && publish_thread) {
+            thread = std::thread(entry, context);
+        }
+        return status;
+    }
+
+    vrrec_status_t status = VRREC_STATUS_OK;
+    bool publish_thread = true;
+};
+
 std::shared_ptr<OpenVrProcessRuntime> Runtime(
     std::shared_ptr<RawState> state,
-    FakeRawApi *&raw)
+    FakeRawApi *&raw,
+    NativeThreadFactoryPort *thread_factory = nullptr)
 {
     auto api = std::make_unique<FakeRawApi>(state);
     raw = api.get();
     auto status = VRREC_STATUS_INTERNAL_ERROR;
-    auto runtime = CreateOpenVrProcessRuntime(std::move(api), status);
+    auto runtime = CreateOpenVrProcessRuntime(
+        std::move(api),
+        status,
+        thread_factory);
     CHECK(status == VRREC_STATUS_OK);
     CHECK(runtime != nullptr);
     return runtime;
+}
+
+std::unique_ptr<OpenVrInputPort> Client(
+    const std::shared_ptr<OpenVrProcessRuntime> &runtime);
+
+void FansOutOneBackgroundPollRevisionToEveryActionClient()
+{
+    const auto test_thread = std::this_thread::get_id();
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto recording = Client(runtime);
+    auto microphone = Client(runtime);
+
+    CHECK(recording->Initialize() == VRREC_STATUS_OK);
+    CHECK(recording->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    CHECK(recording->SetActionManifestPath(
+              "C:/app/OpenVr/actions.json") == VRREC_STATUS_OK);
+    CHECK(microphone->Initialize() == VRREC_STATUS_OK);
+    CHECK(microphone->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    CHECK(microphone->SetActionManifestPath(
+              "C:/app/OpenVr/actions.json") == VRREC_STATUS_OK);
+
+    std::uint64_t set = 0;
+    std::uint64_t recording_action = 0;
+    std::uint64_t microphone_action = 0;
+    CHECK(recording->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    CHECK(recording->GetDigitalActionHandle(
+              "/actions/main/in/recording",
+              recording_action) == VRREC_STATUS_OK);
+    CHECK(microphone->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    CHECK(microphone->GetDigitalActionHandle(
+              "/actions/main/in/mic",
+              microphone_action) == VRREC_STATUS_OK);
+
+    CHECK(recording->UpdateActionState(set) == VRREC_STATUS_OK);
+    OpenVrDigitalActionData recording_data {};
+    CHECK(recording->GetDigitalActionData(
+              recording_action,
+              recording_data) == VRREC_STATUS_OK);
+    CHECK(microphone->UpdateActionState(set) == VRREC_STATUS_OK);
+    OpenVrDigitalActionData microphone_data {};
+    CHECK(microphone->GetDigitalActionData(
+              microphone_action,
+              microphone_data) == VRREC_STATUS_OK);
+
+    CHECK(state->update_calls == 1);
+    CHECK(state->digital_calls == 2);
+    CHECK(recording_data.state == microphone_data.state);
+    CHECK(recording_data.changed == microphone_data.changed);
+    CHECK(!state->polling_threads.empty());
+    for (const auto thread : state->polling_threads) {
+        CHECK(thread == state->polling_threads.front());
+        CHECK(thread != test_thread);
+    }
+
+    CHECK(recording->UpdateActionState(set) == VRREC_STATUS_OK);
+    CHECK(recording->GetDigitalActionData(
+              recording_action,
+              recording_data) == VRREC_STATUS_OK);
+    CHECK(microphone->UpdateActionState(set) == VRREC_STATUS_OK);
+    CHECK(microphone->GetDigitalActionData(
+              microphone_action,
+              microphone_data) == VRREC_STATUS_OK);
+    CHECK(state->update_calls == 2);
+    CHECK(state->digital_calls == 4);
+    CHECK(recording_data.state == microphone_data.state);
+
+    microphone.reset();
+    recording.reset();
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
+void FailsClosedWhenThePollThreadCannotBePublished()
+{
+    for (const auto scenario : {std::size_t {0}, std::size_t {1}}) {
+        auto state = std::make_shared<RawState>();
+        ScriptedThreadFactory thread_factory;
+        thread_factory.status = scenario == 0
+            ? VRREC_STATUS_OUT_OF_MEMORY
+            : VRREC_STATUS_OK;
+        thread_factory.publish_thread = scenario == 0;
+        FakeRawApi *raw = nullptr;
+        auto runtime = Runtime(state, raw, &thread_factory);
+        auto client = Client(runtime);
+        CHECK(client->Initialize() == VRREC_STATUS_OK);
+        CHECK(client->AddApplicationManifest(
+                  "C:/app/OpenVr/steamvr.vrmanifest",
+                  true) == VRREC_STATUS_OK);
+        CHECK(client->SetActionManifestPath(
+                  "C:/app/OpenVr/actions.json") == VRREC_STATUS_OK);
+        std::uint64_t set = 0;
+        std::uint64_t action = 0;
+        CHECK(client->GetActionSetHandle("/actions/main", set) ==
+              VRREC_STATUS_OK);
+        CHECK(client->GetDigitalActionHandle(
+                  "/actions/main/in/recording",
+                  action) == VRREC_STATUS_OK);
+
+        CHECK(client->UpdateActionState(set) == (scenario == 0
+            ? VRREC_STATUS_OUT_OF_MEMORY
+            : VRREC_STATUS_INTERNAL_ERROR));
+        CHECK(state->update_calls == 0);
+        CHECK(state->digital_calls == 0);
+        client.reset();
+        CHECK(state->shutdown_calls == 1);
+        (void)raw;
+    }
+}
+
+void SharesPollFailuresAndIsolatesPerActionReadFailures()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto recording = Client(runtime);
+    auto microphone = Client(runtime);
+    CHECK(recording->Initialize() == VRREC_STATUS_OK);
+    CHECK(recording->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    CHECK(recording->SetActionManifestPath(
+              "C:/app/OpenVr/actions.json") == VRREC_STATUS_OK);
+    CHECK(microphone->Initialize() == VRREC_STATUS_OK);
+
+    std::uint64_t set = 0;
+    std::uint64_t recording_action = 0;
+    std::uint64_t microphone_action = 0;
+    CHECK(recording->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    CHECK(recording->GetDigitalActionHandle(
+              "/actions/main/in/recording",
+              recording_action) == VRREC_STATUS_OK);
+    CHECK(microphone->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    CHECK(microphone->GetDigitalActionHandle(
+              "/actions/main/in/mic",
+              microphone_action) == VRREC_STATUS_OK);
+
+    state->update_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(recording->UpdateActionState(set) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(microphone->UpdateActionState(set) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(state->update_calls == 1);
+    CHECK(state->digital_calls == 0);
+
+    state->update_status = VRREC_STATUS_OK;
+    state->failing_digital_handle = microphone_action;
+    CHECK(recording->UpdateActionState(set) == VRREC_STATUS_OK);
+    OpenVrDigitalActionData recording_data {};
+    CHECK(recording->GetDigitalActionData(
+              recording_action,
+              recording_data) == VRREC_STATUS_OK);
+    CHECK(microphone->UpdateActionState(set) == VRREC_STATUS_OK);
+    auto microphone_data = OpenVrDigitalActionData {true, true, true};
+    CHECK(microphone->GetDigitalActionData(
+              microphone_action,
+              microphone_data) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(!microphone_data.is_active);
+    CHECK(!microphone_data.state);
+    CHECK(!microphone_data.changed);
+    CHECK(recording_data.is_active);
+    CHECK(state->update_calls == 2);
+    CHECK(state->digital_calls == 2);
+
+    microphone.reset();
+    recording.reset();
+    (void)raw;
+}
+
+void SlowConsumerSkipsToTheLatestRevisionWithoutBlockingTheOwner()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto recording = Client(runtime);
+    auto slow = Client(runtime);
+    CHECK(recording->Initialize() == VRREC_STATUS_OK);
+    CHECK(recording->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    CHECK(recording->SetActionManifestPath(
+              "C:/app/OpenVr/actions.json") == VRREC_STATUS_OK);
+    CHECK(slow->Initialize() == VRREC_STATUS_OK);
+
+    std::uint64_t set = 0;
+    std::uint64_t recording_action = 0;
+    std::uint64_t slow_action = 0;
+    CHECK(recording->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    CHECK(recording->GetDigitalActionHandle(
+              "/actions/main/in/recording",
+              recording_action) == VRREC_STATUS_OK);
+    CHECK(slow->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    CHECK(slow->GetDigitalActionHandle(
+              "/actions/main/in/mic",
+              slow_action) == VRREC_STATUS_OK);
+
+    auto latest = OpenVrDigitalActionData {};
+    for (auto revision = 0; revision != 3; ++revision) {
+        CHECK(recording->UpdateActionState(set) == VRREC_STATUS_OK);
+        CHECK(recording->GetDigitalActionData(
+                  recording_action,
+                  latest) == VRREC_STATUS_OK);
+    }
+    CHECK(state->update_calls == 3);
+
+    CHECK(slow->UpdateActionState(set) == VRREC_STATUS_OK);
+    OpenVrDigitalActionData slow_data {};
+    CHECK(slow->GetDigitalActionData(slow_action, slow_data) ==
+          VRREC_STATUS_OK);
+    CHECK(state->update_calls == 3);
+    CHECK(slow_data.state == latest.state);
+    CHECK(slow_data.changed == latest.changed);
+
+    slow.reset();
+    recording.reset();
+    (void)raw;
 }
 
 std::unique_ptr<OpenVrInputPort> Client(
@@ -167,7 +430,7 @@ void SharesInitializationManifestAndFinalShutdown()
     OpenVrDigitalActionData data {};
     CHECK(second->GetDigitalActionData(action, data) == VRREC_STATUS_OK);
     CHECK(data.is_active);
-    CHECK(!data.state);
+    CHECK(data.state);
     CHECK(data.changed);
 
     first->Shutdown();
@@ -260,6 +523,10 @@ int main()
     SharesInitializationManifestAndFinalShutdown();
     RejectsManifestDriftWithoutCallingTheRawApiAgain();
     RegistersAgainOnlyAfterACompleteRuntimeGeneration();
+    FansOutOneBackgroundPollRevisionToEveryActionClient();
+    FailsClosedWhenThePollThreadCannotBePublished();
+    SharesPollFailuresAndIsolatesPerActionReadFailures();
+    SlowConsumerSkipsToTheLatestRevisionWithoutBlockingTheOwner();
     FailsClosedBeforeAcquiringAReference();
     return 0;
 }

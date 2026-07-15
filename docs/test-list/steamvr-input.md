@@ -12,6 +12,7 @@
 - [x] OpenVR `SetActionManifestPath`へinstall directory内のabsolute pathを登録する
 - [x] stable app keyとcurrent install rootだけを許可するapplication `.vrmanifest`を同梱・検証する
 - [x] `IVRApplications`へcurrent `.vrmanifest`をruntime generationごとにtemporary登録する
+- [x] process-wide 1本の最大90 Hz poll loopから全digital actionへ同じrevisionをfan-outする
 - [ ] 実SteamVR runtimeでbinding読込みとcontroller再割当を検証する
 - [x] desktop click／keyboard／wrist rayと同じapplication dispatcherを実行する
 
@@ -27,5 +28,6 @@
 - [x] Register an install-directory absolute path through OpenVR `SetActionManifestPath`
 - [x] Ship and validate an application `.vrmanifest` restricted to the stable app key and current install root
 - [x] Temporarily register the current `.vrmanifest` through `IVRApplications` once per runtime generation
+- [x] Fan out one revision from a process-wide poll loop capped at 90 Hz to every digital action
 - [ ] Verify binding load and controller rebinding with a real SteamVR runtime
 - [x] Execute the same application dispatcher used by desktop click, keyboard, and wrist ray

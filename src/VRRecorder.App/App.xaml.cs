@@ -45,6 +45,7 @@ public partial class App
         _firstRunSetupVerification;
     private readonly HttpMessageInvoker _setupOscHttp;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
+    private readonly Lazy<ISteamVrInputRuntime> _steamVrInputRuntime;
     private Task? _steamVrInputTask;
     private IDisposable? _trayNotificationSubscription;
     private IDisposable? _trayStatusSubscription;
@@ -109,6 +110,13 @@ public partial class App
             new WindowsDnsSdOscQueryServiceBrowser(),
             _setupOscHttp,
             TimeSpan.FromSeconds(3));
+        _steamVrInputRuntime = new Lazy<ISteamVrInputRuntime>(
+            () => new NativeSteamVrInputRuntime(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    NativeLibraryFileName),
+                AppContext.BaseDirectory),
+            LazyThreadSafetyMode.ExecutionAndPublication);
         var setupProbe = new FirstRunSetupProbeRouter(
             new Dictionary<FirstRunSetupStep, IFirstRunSetupProbe>
             {
@@ -133,12 +141,8 @@ public partial class App
                             AppContext.BaseDirectory,
                             NativeLibraryFileName))),
                 [FirstRunSetupStep.SteamVrActionBinding] =
-                    new SteamVrActionBindingFirstRunSetupProbe(() =>
-                        new NativeSteamVrInputRuntime(
-                            Path.Combine(
-                                AppContext.BaseDirectory,
-                                NativeLibraryFileName),
-                            AppContext.BaseDirectory)),
+                    new SteamVrActionBindingFirstRunSetupProbe(
+                        () => _steamVrInputRuntime.Value),
                 [FirstRunSetupStep.LegalBundleVerification] =
                     new LegalBundleVerificationFirstRunSetupProbe(
                         settingsStore,
@@ -662,26 +666,21 @@ public partial class App
                 return;
             }
 
-            var nativeLibraryPath = Path.Combine(
-                AppContext.BaseDirectory,
-                NativeLibraryFileName);
-            _steamVrInputTask = Task.Run(() =>
-                RunSteamVrInputAsync(nativeLibraryPath));
+            _steamVrInputTask = Task.Run(RunSteamVrInputAsync);
         }
     }
 
-    private async Task RunSteamVrInputAsync(string nativeLibraryPath)
+    private async Task RunSteamVrInputAsync()
     {
         using var inputLifetime = CancellationTokenSource
             .CreateLinkedTokenSource(_steamVrInputLifetime.Token);
-        var microphoneInput = RunOptionalSteamVrMicrophoneInputAsync(
-            nativeLibraryPath,
-            inputLifetime.Token);
+        var microphoneInput = Task.CompletedTask;
         try
         {
-            var runtime = new NativeSteamVrInputRuntime(
-                nativeLibraryPath,
-                AppContext.BaseDirectory);
+            var runtime = _steamVrInputRuntime.Value;
+            microphoneInput = RunOptionalSteamVrMicrophoneInputAsync(
+                runtime,
+                inputLifetime.Token);
             await new SteamVrRecordingInputAdapter(runtime, _recordingInputs)
                 .RunAsync(inputLifetime.Token)
                 .ConfigureAwait(false);
@@ -711,14 +710,11 @@ public partial class App
     }
 
     private async Task RunOptionalSteamVrMicrophoneInputAsync(
-        string nativeLibraryPath,
+        ISteamVrInputRuntime runtime,
         CancellationToken cancellationToken)
     {
         try
         {
-            var runtime = new NativeSteamVrInputRuntime(
-                nativeLibraryPath,
-                AppContext.BaseDirectory);
             await new SteamVrMicrophoneInputAdapter(runtime, _uiCommands)
                 .RunAsync(cancellationToken)
                 .ConfigureAwait(false);

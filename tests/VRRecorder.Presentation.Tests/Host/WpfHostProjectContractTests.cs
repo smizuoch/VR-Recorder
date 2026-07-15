@@ -951,6 +951,10 @@ public sealed class WpfHostProjectContractTests
             "App.xaml.cs"));
 
         Assert.Contains("NativeSteamVrInputRuntime", appCode);
+        Assert.Contains("Lazy<ISteamVrInputRuntime>", appCode);
+        Assert.Equal(
+            1,
+            CountOccurrences(appCode, "new NativeSteamVrInputRuntime("));
         Assert.Contains("SteamVrRecordingInputAdapter", appCode);
         Assert.Contains("SteamVrMicrophoneInputAdapter", appCode);
         Assert.Contains("DesktopRecordingHostState.Ready", appCode);
@@ -970,6 +974,22 @@ public sealed class WpfHostProjectContractTests
         var start = appCode.IndexOf("StartSteamVrInput", readyCheck, StringComparison.Ordinal);
         Assert.True(readyCheck >= 0, "SteamVR input is missing the host-ready gate.");
         Assert.True(start > readyCheck, "SteamVR input must start after the host-ready gate.");
+    }
+
+    private static int CountOccurrences(string value, string expected)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = value.IndexOf(
+                   expected,
+                   offset,
+                   StringComparison.Ordinal)) >= 0)
+        {
+            ++count;
+            offset += expected.Length;
+        }
+
+        return count;
     }
 
     [Fact]
