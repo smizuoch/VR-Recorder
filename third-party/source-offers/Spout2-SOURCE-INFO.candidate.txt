@@ -1,0 +1,31 @@
+VR Recorder - Spout2 source and binary candidate information
+
+This file is candidate evidence pending independent legal review. It is not an approval, distribution authorization, or release admission.
+
+Component: Spout2 2.007.017
+Upstream repository: https://github.com/leadedge/Spout2
+Release tag: 2.007.017
+Source commit: f49e2f469f8cb25f559a6eaa61a3f5b8173fc100
+
+Source archive URL: https://github.com/leadedge/Spout2/archive/f49e2f469f8cb25f559a6eaa61a3f5b8173fc100.tar.gz
+Source archive length: 4920448
+Source archive SHA-256: 9d93cadc7fea63d3e8b26384da8f8f23982a06a07adb0363d75630a99ab1f8f1
+
+Official binary SDK URL: https://github.com/leadedge/Spout2/releases/download/2.007.017/Spout-SDK-binaries_2-007-017_1.zip
+Official binary SDK length: 3472666
+Official binary SDK SHA-256: 695f20e3505fa0da51b2eb959af359f5d9e2c914bb9676e9118d19f6a5424bf4
+
+Selected deployment: x86_64, MSVC dynamic runtime (MD), static Spout linkage
+SpoutDX_static.lib length: 1081676
+SpoutDX_static.lib SHA-256: 1e9aa2d17d05108af2f8eebb405a8d3b81355cef4633c110efab3886b7867afb
+Spout_static.lib length: 1441554
+Spout_static.lib SHA-256: ce3fdd36584d0e722f73f7eb26b66335c5948c25933304ba206af6ad32d7edbb
+
+Build/preparation recipe: eng/spout2-windows-x64-static-build-recipe.md
+Build/preparation recipe SHA-256: cc14b99a8797658139b04b215ff32d4f9a800ec8dcc8f769006fd07385772535
+
+License: BSD-2-Clause
+Repository license path: third-party/licenses/spout2/LICENSE.txt
+License SHA-256: 7b602b5c652a76ced1c6ff5f3f4c15c37a733230eeb5b8d075f1282b446b10be
+
+No Spout DLL is included in the runtime payload. The two official static libraries are linked into the first-party native DLL. The copyright notice, BSD-2-Clause conditions, and disclaimer must remain in the product Legal Bundle and third-party notices.

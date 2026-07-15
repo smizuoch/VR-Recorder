@@ -84,7 +84,7 @@ public static partial class RepositoryNativeLinkVerifier
         foreach (var entry in entries.Where(entry =>
                      entry.Origin == NativeDependencyOrigin.ThirdParty))
         {
-            var issue = NativeArtifactRegistryReader.ValidateDependency(
+            var issue = NativeArtifactRegistryReader.ValidateBuildDependency(
                 root,
                 registry,
                 entry.ComponentId!,

@@ -7,6 +7,88 @@ namespace VRRecorder.Compliance.Tests.Repository;
 public sealed class RepositoryComplianceTests
 {
     [Fact]
+    public void Spout2LegalCandidateBindsOfficialArchivesRecipeAndStaticLibraries()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        var issues = Spout2LegalCandidateVerifier.Verify(repositoryRoot);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public void Spout2LegalCandidateRejectsTamperAndPrematureAdmission()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"vrrecorder-spout2-legal-candidate-{Guid.NewGuid():N}");
+        try
+        {
+            foreach (var relativePath in new[]
+                     {
+                         "third-party/registry.yml",
+                         "third-party/licenses/spout2/LICENSE.txt",
+                         "third-party/source-offers/Spout2-SOURCE-INFO.candidate.txt",
+                         "eng/spout2-windows-x64-static-build-recipe.md",
+                     })
+            {
+                var destination = Path.Combine(root, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(Path.Combine(repositoryRoot, relativePath), destination);
+            }
+
+            Assert.Empty(Spout2LegalCandidateVerifier.Verify(root));
+
+            var offerPath = Path.Combine(
+                root,
+                "third-party/source-offers/Spout2-SOURCE-INFO.candidate.txt");
+            File.AppendAllText(offerPath, "tampered");
+            var issues = Spout2LegalCandidateVerifier.Verify(root);
+            Assert.Contains(issues, issue =>
+                issue.Code == "spout2-candidate-file-mismatch" &&
+                issue.Subject == "spout2:source-offer");
+
+            File.Copy(
+                Path.Combine(
+                    repositoryRoot,
+                    "third-party/source-offers/Spout2-SOURCE-INFO.candidate.txt"),
+                offerPath,
+                overwrite: true);
+            var registryPath = Path.Combine(root, "third-party/registry.yml");
+            var registry = File.ReadAllText(registryPath);
+            var componentStart = registry.IndexOf(
+                "\"id\": \"spout2\"",
+                StringComparison.Ordinal);
+            Assert.True(componentStart >= 0);
+            var approvalStart = registry.IndexOf(
+                "\"status\": \"pending-independent-review\"",
+                componentStart,
+                StringComparison.Ordinal);
+            Assert.True(approvalStart >= 0);
+            File.WriteAllText(
+                registryPath,
+                string.Concat(
+                    registry.AsSpan(0, approvalStart),
+                    "\"status\": \"approved\"",
+                    registry.AsSpan(
+                        approvalStart +
+                        "\"status\": \"pending-independent-review\"".Length)));
+            issues = Spout2LegalCandidateVerifier.Verify(root);
+            Assert.Contains(issues, issue =>
+                issue.Code == "premature-spout2-legal-admission" &&
+                issue.Subject == "spout2");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void FfmpegLegalCandidateBindsActualSourceRecipeAndArtifacts()
     {
         var repositoryRoot = FindRepositoryRoot();

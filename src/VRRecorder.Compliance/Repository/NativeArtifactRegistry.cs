@@ -9,7 +9,8 @@ internal sealed record NativeArtifactRegistry(
     int RegistryVersion,
     IReadOnlySet<string> ComponentIds,
     IReadOnlyList<RegisteredNativeComponent> Components,
-    IReadOnlyList<RegisteredNativeArtifact> Artifacts);
+    IReadOnlyList<RegisteredNativeArtifact> Artifacts,
+    IReadOnlyList<RegisteredNativeCandidateArtifact> CandidateArtifacts);
 
 internal sealed record RegisteredNativeComponent(
     string Id,
@@ -29,6 +30,11 @@ internal sealed record RegisteredNativeArtifact(
     string SourceArchiveSha256,
     string BuildRecipePath);
 
+internal sealed record RegisteredNativeCandidateArtifact(
+    string ComponentId,
+    string FileName,
+    string BinarySha256);
+
 internal static class NativeArtifactRegistryReader
 {
     public static NativeArtifactRegistry Read(string root)
@@ -44,6 +50,7 @@ internal static class NativeArtifactRegistryReader
         var componentIds = new HashSet<string>(StringComparer.Ordinal);
         var components = new List<RegisteredNativeComponent>();
         var artifacts = new List<RegisteredNativeArtifact>();
+        var candidateArtifacts = new List<RegisteredNativeCandidateArtifact>();
         foreach (var component in document.RootElement
                      .GetProperty("components")
                      .EnumerateArray())
@@ -86,6 +93,17 @@ internal static class NativeArtifactRegistryReader
                 approvalId,
                 approvalReviewer));
 
+            ReadCandidateArtifacts(
+                component,
+                componentId,
+                "ffmpegLegalCandidate",
+                candidateArtifacts);
+            ReadCandidateArtifacts(
+                component,
+                componentId,
+                "spout2LegalCandidate",
+                candidateArtifacts);
+
             if (!component.TryGetProperty("nativeArtifacts", out var nativeArtifacts))
             {
                 continue;
@@ -109,7 +127,60 @@ internal static class NativeArtifactRegistryReader
             registryVersion,
             componentIds,
             components,
-            artifacts);
+            artifacts,
+            candidateArtifacts);
+    }
+
+    public static ComplianceIssue? ValidateBuildDependency(
+        string root,
+        NativeArtifactRegistry registry,
+        string componentId,
+        string fileName,
+        string platform)
+    {
+        var admittedIssue = ValidateDependency(
+            root,
+            registry,
+            componentId,
+            fileName,
+            platform);
+        if (admittedIssue is null ||
+            !string.Equals(
+                admittedIssue.Code,
+                "missing-native-artifact-registration",
+                StringComparison.Ordinal))
+        {
+            return admittedIssue;
+        }
+
+        var componentMatches = registry.Components.Where(component =>
+                string.Equals(
+                    component.Id,
+                    componentId,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    component.ApprovalStatus,
+                    "pending-independent-review",
+                    StringComparison.Ordinal) &&
+                component.ApprovalId is null &&
+                component.ApprovalReviewer is null)
+            .ToArray();
+        var artifactMatches = registry.CandidateArtifacts.Where(artifact =>
+                string.Equals(
+                    artifact.ComponentId,
+                    componentId,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    artifact.FileName,
+                    fileName,
+                    StringComparison.OrdinalIgnoreCase) &&
+                IsLowerHexSha256(artifact.BinarySha256))
+            .ToArray();
+        return componentMatches.Length == 1 &&
+               artifactMatches.Length == 1 &&
+               string.Equals(platform, "windows-x64", StringComparison.Ordinal)
+            ? null
+            : admittedIssue;
     }
 
     public static ComplianceIssue? ValidateDependency(
@@ -190,6 +261,27 @@ internal static class NativeArtifactRegistryReader
             ? value
             : throw new InvalidDataException(
                 $"Native artifact property {propertyName} is missing.");
+    }
+
+    private static void ReadCandidateArtifacts(
+        JsonElement component,
+        string componentId,
+        string candidatePropertyName,
+        List<RegisteredNativeCandidateArtifact> artifacts)
+    {
+        if (!component.TryGetProperty(candidatePropertyName, out var candidate) ||
+            candidate.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        foreach (var artifact in candidate.GetProperty("artifacts").EnumerateArray())
+        {
+            artifacts.Add(new RegisteredNativeCandidateArtifact(
+                componentId,
+                RequiredString(artifact, "fileName"),
+                RequiredString(artifact, "sha256")));
+        }
     }
 
     private static string? OptionalString(

@@ -57,6 +57,9 @@ public static class RepositoryComplianceVerifier
         issues.AddRange(FfmpegLegalCandidateVerifier.Verify(
             root,
             registry.Components));
+        issues.AddRange(Spout2LegalCandidateVerifier.Verify(
+            root,
+            registry.Components));
         issues.AddRange(RepositoryNativeRuntimeLoadVerifier.Verify(root));
         issues.AddRange(RepositoryNativeLinkVerifier.Verify(root));
 

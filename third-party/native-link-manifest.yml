@@ -72,6 +72,16 @@
       "origin": "WindowsSystem",
       "componentId": null,
       "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
+    },
+    {
+      "consumerTarget": "vrrecorder_native",
+      "inputIdentity": "Spout2::SpoutDX_static",
+      "inputKind": "ToolchainTarget",
+      "platform": "windows-x64",
+      "origin": "ThirdParty",
+      "componentId": "spout2",
+      "artifactFileName": "SpoutDX_static.lib",
+      "sourcePath": "src/VRRecorder.Native/CMakeLists.txt"
     }
   ]
 }

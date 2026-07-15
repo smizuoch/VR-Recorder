@@ -78,15 +78,17 @@ if(VRRECORDER_SPOUT_FACTORY_VARIANT STREQUAL "PRODUCTION")
             FATAL_ERROR
             "The production Spout2 backend requires the pinned Windows MSVC static SDK")
     endif()
-    target_sources(
-        vrrecorder_native
-        PRIVATE
-            src/spout2_source_backend_core.cpp
-            src/windows_d3d11_owned_video_surface.cpp
-            src/windows_spout2_receiver_port.cpp)
-    target_link_libraries(
-        vrrecorder_native
-        PRIVATE Spout2::SpoutDX_static)
+    if(WIN32)
+        target_sources(
+            vrrecorder_native
+            PRIVATE
+                src/spout2_source_backend_core.cpp
+                src/windows_d3d11_owned_video_surface.cpp
+                src/windows_spout2_receiver_port.cpp)
+        target_link_libraries(
+            vrrecorder_native
+            PRIVATE Spout2::SpoutDX_static)
+    endif()
 endif()
 
 if(WIN32)

@@ -66,6 +66,60 @@
       }
     },
     {
+      "id": "spout2",
+      "displayName": "Spout2 DirectX receiver",
+      "version": "2.007.017",
+      "purl": "pkg:github/leadedge/Spout2@2.007.017",
+      "scope": "runtime-linked",
+      "licenseDeclared": "BSD-2-Clause",
+      "licenseConcluded": "BSD-2-Clause",
+      "copyrightNotice": "Copyright (c) 2020-2024, Lynn Jarvis. All rights reserved.",
+      "licenseFilePath": "third-party/licenses/spout2/LICENSE.txt",
+      "licenseFileSha256": "7b602b5c652a76ced1c6ff5f3f4c15c37a733230eeb5b8d075f1282b446b10be",
+      "repository": {
+        "url": "https://github.com/leadedge/Spout2",
+        "commit": "f49e2f469f8cb25f559a6eaa61a3f5b8173fc100"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [],
+      "spout2LegalCandidate": {
+        "schemaVersion": 1,
+        "sourceArchiveFileName": "Spout2-f49e2f469f8cb25f559a6eaa61a3f5b8173fc100.tar.gz",
+        "sourceArchiveLength": 4920448,
+        "sourceArchiveSha256": "9d93cadc7fea63d3e8b26384da8f8f23982a06a07adb0363d75630a99ab1f8f1",
+        "sourceDownloadUrl": "https://github.com/leadedge/Spout2/archive/f49e2f469f8cb25f559a6eaa61a3f5b8173fc100.tar.gz",
+        "binaryArchiveFileName": "Spout-SDK-binaries_2-007-017_1.zip",
+        "binaryArchiveLength": 3472666,
+        "binaryArchiveSha256": "695f20e3505fa0da51b2eb959af359f5d9e2c914bb9676e9118d19f6a5424bf4",
+        "binaryDownloadUrl": "https://github.com/leadedge/Spout2/releases/download/2.007.017/Spout-SDK-binaries_2-007-017_1.zip",
+        "deployment": "static",
+        "runtimeLibrary": "MD",
+        "buildRecipePath": "eng/spout2-windows-x64-static-build-recipe.md",
+        "buildRecipeLength": 2300,
+        "buildRecipeSha256": "cc14b99a8797658139b04b215ff32d4f9a800ec8dcc8f769006fd07385772535",
+        "sourceOfferPath": "third-party/source-offers/Spout2-SOURCE-INFO.candidate.txt",
+        "sourceOfferLength": 1778,
+        "sourceOfferSha256": "78ce27f850f0f765e7138c84cfea8239defbee5d7de9c96caa06e152865b4e17",
+        "artifacts": [
+          {
+            "fileName": "SpoutDX_static.lib",
+            "length": 1081676,
+            "sha256": "1e9aa2d17d05108af2f8eebb405a8d3b81355cef4633c110efab3886b7867afb"
+          },
+          {
+            "fileName": "Spout_static.lib",
+            "length": 1441554,
+            "sha256": "ce3fdd36584d0e722f73f7eb26b66335c5948c25933304ba206af6ad32d7edbb"
+          }
+        ]
+      }
+    },
+    {
       "id": "coverlet",
       "displayName": "Coverlet collector",
       "version": "6.0.4",
