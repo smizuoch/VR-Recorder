@@ -820,8 +820,8 @@ bool IsAbsoluteUtf8Path(std::string_view path) noexcept
         (path[2] == '\\' || path[2] == '/');
     const auto unc_path =
         path.size() >= 2 &&
-        (path[0] == '\\' && path[1] == '\\') ||
-        (path.size() >= 2 && path[0] == '/' && path[1] == '/');
+        ((path[0] == '\\' && path[1] == '\\') ||
+         (path[0] == '/' && path[1] == '/'));
     return drive_path || unc_path;
 #else
     return !path.empty() && path[0] == '/';

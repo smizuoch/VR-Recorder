@@ -71,17 +71,32 @@ if(WIN32)
     target_sources(
         vrrecorder_native
         PRIVATE
+            src/windows_d3d11_video_processor_port.cpp
             src/wasapi_audio_capture_source.cpp)
     target_compile_definitions(
         vrrecorder_native
         PRIVATE
             NOMINMAX
             WIN32_LEAN_AND_MEAN)
+    if(MSVC)
+        target_link_libraries(
+            vrrecorder_native
+            PRIVATE
+                Ole32.lib
+                Uuid.lib)
+    else()
+        target_link_libraries(
+            vrrecorder_native
+            PRIVATE
+                ole32
+                uuid)
+    endif()
     target_link_libraries(
         vrrecorder_native
         PRIVATE
-            Ole32.lib
-            Uuid.lib)
+            d3d11
+            dxgi
+            ksuser)
 else()
     target_sources(
         vrrecorder_native
@@ -112,6 +127,10 @@ set_target_properties(
         CXX_VISIBILITY_PRESET hidden
         OUTPUT_NAME vrrecorder_native
         VISIBILITY_INLINES_HIDDEN YES)
+
+if(WIN32)
+    set_target_properties(vrrecorder_native PROPERTIES PREFIX "")
+endif()
 
 vrrecorder_enable_strict_warnings(vrrecorder_native)
 

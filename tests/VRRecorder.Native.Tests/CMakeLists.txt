@@ -1210,6 +1210,39 @@ set_target_properties(
 vrrecorder_enable_strict_warnings(
     vrrecorder_native_d3d11_video_frame_processor)
 
+if(WIN32)
+    add_executable(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        windows_d3d11_video_processor_integration_tests.cpp
+        "${native_source_root}/src/d3d11_video_frame_processor.cpp"
+        "${native_source_root}/src/windows_d3d11_video_processor_port.cpp"
+        "${native_source_root}/src/video_processing_plan.cpp")
+    target_compile_features(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        PRIVATE cxx_std_20)
+    target_compile_definitions(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN)
+    target_include_directories(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        PRIVATE
+            "${native_source_root}/include"
+            "${native_source_root}/src")
+    target_link_libraries(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        PRIVATE
+            d3d11
+            dxgi)
+    set_target_properties(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        PROPERTIES
+            CXX_EXTENSIONS OFF)
+    vrrecorder_enable_strict_warnings(
+        vrrecorder_native_windows_d3d11_video_processor_integration)
+endif()
+
 add_executable(
     vrrecorder_native_video_encoding_pump
     video_encoding_pump_tests.cpp
@@ -1451,6 +1484,11 @@ add_test(NAME vrrecorder_native_video_processing_encoder_sink
     COMMAND vrrecorder_native_video_processing_encoder_sink)
 add_test(NAME vrrecorder_native_d3d11_video_frame_processor
     COMMAND vrrecorder_native_d3d11_video_frame_processor)
+if(TARGET vrrecorder_native_windows_d3d11_video_processor_integration)
+    add_test(
+        NAME vrrecorder_native_windows_d3d11_video_processor_integration
+        COMMAND vrrecorder_native_windows_d3d11_video_processor_integration)
+endif()
 add_test(NAME vrrecorder_native_video_encoding_pump
     COMMAND vrrecorder_native_video_encoding_pump)
 add_test(NAME vrrecorder_native_video_encoding_worker
