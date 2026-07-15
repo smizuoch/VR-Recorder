@@ -7,7 +7,6 @@
 #include <windows.h>
 #include <wrl/client.h>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -18,7 +17,7 @@
 #include <string>
 #include <utility>
 
-#include "audio_capture_normalizer.hpp"
+#include "wasapi_audio_capture_source_core.hpp"
 
 namespace vrrecorder::native {
 namespace {
@@ -35,16 +34,21 @@ bool IsDeviceLost(HRESULT result) noexcept
            result == AUDCLNT_E_SERVICE_NOT_RUNNING;
 }
 
+WasapiCapturePortResult MapRuntimeFailure(HRESULT result) noexcept
+{
+    return IsDeviceLost(result)
+        ? WasapiCapturePortResult::DeviceLost
+        : WasapiCapturePortResult::Failed;
+}
+
 std::uint32_t DefaultSpeakerMask(std::uint16_t channel_count) noexcept
 {
     if (channel_count == 1) {
         return 0x0000'0004;
     }
-
     if (channel_count == 2) {
         return 0x0000'0003;
     }
-
     return 0;
 }
 
@@ -109,7 +113,6 @@ bool TryConvertUtf8(
         converted.clear();
         return true;
     }
-
     if (value.size() > static_cast<std::size_t>(
             std::numeric_limits<int>::max())) {
         return false;
@@ -131,7 +134,6 @@ bool TryConvertUtf8(
     } catch (...) {
         return false;
     }
-
     return MultiByteToWideChar(
                CP_UTF8,
                MB_ERR_INVALID_CHARS,
@@ -141,29 +143,24 @@ bool TryConvertUtf8(
                required) == required;
 }
 
-class WasapiAudioCaptureSource final : public AudioCaptureSource {
+class WindowsWasapiCapturePort final : public WasapiCapturePort {
 public:
-    explicit WasapiAudioCaptureSource(HANDLE abort_event) noexcept
+    explicit WindowsWasapiCapturePort(HANDLE abort_event) noexcept
         : abort_event_(abort_event)
     {
     }
 
-    ~WasapiAudioCaptureSource() override
+    ~WindowsWasapiCapturePort() override
     {
-        ResetCapture();
-        if (abort_event_ != nullptr) {
-            CloseHandle(abort_event_);
-        }
+        Close();
     }
 
-    vrrec_status_t Start(
-        const AudioCaptureSourceConfig &config) noexcept override
+    WasapiCapturePortResult Start(
+        const AudioCaptureSourceConfig &config,
+        CapturePcmFormat &format) noexcept override
     {
-        if (started_ || abort_requested_.load() ||
-            config.session_start_qpc_100ns < 0 ||
-            (config.role != AudioCaptureRole::DesktopLoopback &&
-             config.role != AudioCaptureRole::Microphone)) {
-            return VRREC_STATUS_INVALID_ARGUMENT;
+        if (closed_ || started_ || abort_event_ == nullptr) {
+            return WasapiCapturePortResult::InvalidArgument;
         }
 
         capture_thread_id_ = GetCurrentThreadId();
@@ -172,17 +169,17 @@ public:
             COINIT_MULTITHREADED);
         if (FAILED(com_status)) {
             capture_thread_id_ = 0;
-            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+            return WasapiCapturePortResult::BackendUnavailable;
         }
-
         com_initialized_ = true;
+
         auto result = CoCreateInstance(
             __uuidof(MMDeviceEnumerator),
             nullptr,
             CLSCTX_ALL,
             IID_PPV_ARGS(enumerator_.GetAddressOf()));
         if (FAILED(result)) {
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         const auto expected_flow =
@@ -205,21 +202,19 @@ public:
                 config.endpoint_id_utf8.size() >
                     static_cast<std::size_t>(
                         std::numeric_limits<int>::max())) {
-                return FailStart(VRREC_STATUS_INVALID_ARGUMENT);
+                return WasapiCapturePortResult::InvalidArgument;
             }
 
             std::wstring endpoint_id;
             if (!TryConvertUtf8(config.endpoint_id_utf8, endpoint_id)) {
-                return FailStart(VRREC_STATUS_INVALID_ARGUMENT);
+                return WasapiCapturePortResult::InvalidArgument;
             }
-
             result = enumerator_->GetDevice(
                 endpoint_id.c_str(),
                 device_.GetAddressOf());
         }
-
         if (FAILED(result)) {
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         ComPtr<IMMEndpoint> endpoint;
@@ -228,7 +223,7 @@ public:
         if (FAILED(result) ||
             FAILED(endpoint->GetDataFlow(&actual_flow)) ||
             actual_flow != expected_flow) {
-            return FailStart(VRREC_STATUS_INVALID_ARGUMENT);
+            return WasapiCapturePortResult::InvalidArgument;
         }
 
         result = device_->Activate(
@@ -237,7 +232,7 @@ public:
             nullptr,
             reinterpret_cast<void **>(audio_client_.GetAddressOf()));
         if (FAILED(result)) {
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         WAVEFORMATEX *raw_format = nullptr;
@@ -246,27 +241,25 @@ public:
             if (raw_format != nullptr) {
                 CoTaskMemFree(raw_format);
             }
-
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         const auto format_supported = TryParseFormat(*raw_format, format_);
         if (!format_supported) {
             CoTaskMemFree(raw_format);
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         sample_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (sample_event_ == nullptr) {
             CoTaskMemFree(raw_format);
-            return FailStart(VRREC_STATUS_OUT_OF_MEMORY);
+            return WasapiCapturePortResult::OutOfMemory;
         }
 
         DWORD stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
         if (config.role == AudioCaptureRole::DesktopLoopback) {
             stream_flags |= AUDCLNT_STREAMFLAGS_LOOPBACK;
         }
-
         result = audio_client_->Initialize(
             AUDCLNT_SHAREMODE_SHARED,
             stream_flags,
@@ -276,211 +269,151 @@ public:
             nullptr);
         CoTaskMemFree(raw_format);
         if (FAILED(result)) {
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         result = audio_client_->SetEventHandle(sample_event_);
         if (FAILED(result)) {
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
-
         result = audio_client_->GetService(
             IID_PPV_ARGS(capture_client_.GetAddressOf()));
         if (FAILED(result)) {
-            return FailStart(VRREC_STATUS_BACKEND_UNAVAILABLE);
-        }
-
-        try {
-            normalizer_ = std::make_unique<StereoCaptureNormalizer48k>(
-                config.session_start_qpc_100ns);
-        } catch (const std::bad_alloc &) {
-            return FailStart(VRREC_STATUS_OUT_OF_MEMORY);
-        } catch (...) {
-            return FailStart(VRREC_STATUS_INTERNAL_ERROR);
+            return WasapiCapturePortResult::BackendUnavailable;
         }
 
         result = audio_client_->Start();
         if (FAILED(result)) {
-            return FailStart(IsDeviceLost(result)
-                ? VRREC_STATUS_BACKEND_UNAVAILABLE
-                : VRREC_STATUS_INTERNAL_ERROR);
+            return IsDeviceLost(result)
+                ? WasapiCapturePortResult::BackendUnavailable
+                : WasapiCapturePortResult::Failed;
         }
 
         started_ = true;
-        next_frame_48k_ = 0;
-        return VRREC_STATUS_OK;
+        format = format_;
+        return WasapiCapturePortResult::Ok;
     }
 
-    AudioCaptureRead Read() noexcept override
+    WasapiCapturePortResult Acquire(
+        WasapiCapturePacket &packet) noexcept override
     {
-        if (!started_ || GetCurrentThreadId() != capture_thread_id_) {
-            return {};
+        packet = {};
+        if (!started_ || capture_client_ == nullptr || packet_acquired_ ||
+            GetCurrentThreadId() != capture_thread_id_) {
+            return WasapiCapturePortResult::Failed;
+        }
+        if (WaitForSingleObject(abort_event_, 0) == WAIT_OBJECT_0) {
+            return WasapiCapturePortResult::Aborted;
         }
 
-        while (!abort_requested_.load()) {
-            UINT32 next_packet_size = 0;
-            auto result = capture_client_->GetNextPacketSize(
-                &next_packet_size);
-            if (IsDeviceLost(result)) {
-                return DeviceLost();
+        UINT32 next_packet_size = 0;
+        auto result = capture_client_->GetNextPacketSize(&next_packet_size);
+        if (FAILED(result)) {
+            return MapRuntimeFailure(result);
+        }
+        if (next_packet_size == 0) {
+            const HANDLE events[] {abort_event_, sample_event_};
+            const auto wait_result = WaitForMultipleObjects(
+                static_cast<DWORD>(std::size(events)),
+                events,
+                FALSE,
+                INFINITE);
+            if (wait_result == WAIT_OBJECT_0) {
+                return WasapiCapturePortResult::Aborted;
             }
-
-            if (FAILED(result)) {
-                return FailedRead();
-            }
-
-            if (next_packet_size == 0) {
-                const HANDLE events[] {abort_event_, sample_event_};
-                const auto wait_result = WaitForMultipleObjects(
-                    static_cast<DWORD>(std::size(events)),
-                    events,
-                    FALSE,
-                    INFINITE);
-                if (wait_result == WAIT_OBJECT_0) {
-                    return AbortedRead();
-                }
-
-                if (wait_result != WAIT_OBJECT_0 + 1U) {
-                    return FailedRead();
-                }
-
-                continue;
-            }
-
-            BYTE *data = nullptr;
-            UINT32 frame_count = 0;
-            DWORD flags = 0;
-            UINT64 device_position = 0;
-            UINT64 qpc_100ns = 0;
-            result = capture_client_->GetBuffer(
-                &data,
-                &frame_count,
-                &flags,
-                &device_position,
-                &qpc_100ns);
-            if (IsDeviceLost(result)) {
-                return DeviceLost();
-            }
-
-            if (result == AUDCLNT_S_BUFFER_EMPTY) {
-                continue;
-            }
-
-            if (FAILED(result) || frame_count == 0) {
-                return FailedRead();
-            }
-
-            if ((flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) == 0 &&
-                qpc_100ns > static_cast<UINT64>(
-                    std::numeric_limits<std::int64_t>::max())) {
-                capture_client_->ReleaseBuffer(frame_count);
-                return FailedRead();
-            }
-
-            const auto silent =
-                (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
-            const auto timestamp_error =
-                (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) != 0;
-            std::span<const std::byte> bytes;
-            if (!silent) {
-                if (data == nullptr ||
-                    frame_count >
-                        std::numeric_limits<std::size_t>::max() /
-                            format_.block_align) {
-                    capture_client_->ReleaseBuffer(frame_count);
-                    return FailedRead();
-                }
-
-                bytes = std::span<const std::byte>(
-                    reinterpret_cast<const std::byte *>(data),
-                    static_cast<std::size_t>(frame_count) *
-                        format_.block_align);
-            }
-
-            CapturedStereoPacket48k normalized {};
-            const auto normalization = normalizer_->Normalize(
-                format_,
-                {
-                    device_position,
-                    timestamp_error
-                        ? 0
-                        : static_cast<std::int64_t>(qpc_100ns),
-                    frame_count,
-                    bytes,
-                    silent,
-                    (flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0,
-                    timestamp_error,
-                },
-                normalized);
-            const auto release_result =
-                capture_client_->ReleaseBuffer(frame_count);
-            if (IsDeviceLost(release_result)) {
-                return DeviceLost();
-            }
-
-            if (FAILED(release_result) ||
-                normalization != CaptureNormalizationResult::Ready ||
-                normalized.start_frame_48k >
-                    std::numeric_limits<std::uint64_t>::max() -
-                        normalized.frame_count_48k) {
-                return FailedRead();
-            }
-
-            next_frame_48k_ = normalized.start_frame_48k +
-                normalized.frame_count_48k;
-            return {
-                AudioCaptureReadResult::Packet,
-                normalized,
-                0,
-            };
+            return wait_result == WAIT_OBJECT_0 + 1U
+                ? WasapiCapturePortResult::Empty
+                : WasapiCapturePortResult::Failed;
         }
 
-        return AbortedRead();
+        BYTE *data = nullptr;
+        UINT32 frame_count = 0;
+        DWORD flags = 0;
+        UINT64 device_position = 0;
+        UINT64 qpc_100ns = 0;
+        result = capture_client_->GetBuffer(
+            &data,
+            &frame_count,
+            &flags,
+            &device_position,
+            &qpc_100ns);
+        if (result == AUDCLNT_S_BUFFER_EMPTY) {
+            return WasapiCapturePortResult::Empty;
+        }
+        if (FAILED(result)) {
+            return MapRuntimeFailure(result);
+        }
+
+        packet_acquired_ = true;
+        acquired_frame_count_ = frame_count;
+        const auto silent =
+            (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
+        std::span<const std::byte> bytes;
+        if (!silent && data != nullptr && format_.block_align != 0 &&
+            frame_count <= std::numeric_limits<std::size_t>::max() /
+                format_.block_align) {
+            bytes = std::span<const std::byte>(
+                reinterpret_cast<const std::byte *>(data),
+                static_cast<std::size_t>(frame_count) *
+                    format_.block_align);
+        }
+        packet = {
+            device_position,
+            qpc_100ns,
+            frame_count,
+            bytes,
+            silent,
+            (flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0,
+            (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) != 0,
+        };
+        return WasapiCapturePortResult::Ok;
+    }
+
+    WasapiCapturePortResult Release(
+        std::uint32_t frame_count) noexcept override
+    {
+        if (!packet_acquired_ || capture_client_ == nullptr ||
+            GetCurrentThreadId() != capture_thread_id_) {
+            return WasapiCapturePortResult::Failed;
+        }
+
+        const auto valid_count = frame_count == 0 ||
+            frame_count == acquired_frame_count_;
+        const auto result = capture_client_->ReleaseBuffer(
+            valid_count ? frame_count : 0);
+        packet_acquired_ = false;
+        acquired_frame_count_ = 0;
+        if (!valid_count) {
+            return WasapiCapturePortResult::Failed;
+        }
+        return SUCCEEDED(result)
+            ? WasapiCapturePortResult::Ok
+            : MapRuntimeFailure(result);
     }
 
     void Abort() noexcept override
     {
-        if (abort_requested_.exchange(true)) {
+        if (abort_event_ != nullptr) {
+            SetEvent(abort_event_);
+        }
+    }
+
+    void Close() noexcept override
+    {
+        if (closed_) {
             return;
         }
+        closed_ = true;
 
-        SetEvent(abort_event_);
-    }
-
-private:
-    vrrec_status_t FailStart(vrrec_status_t status) noexcept
-    {
-        ResetCapture();
-        return status;
-    }
-
-    AudioCaptureRead DeviceLost() const noexcept
-    {
-        return {
-            AudioCaptureReadResult::DeviceLost,
-            {},
-            next_frame_48k_,
-        };
-    }
-
-    static AudioCaptureRead AbortedRead() noexcept
-    {
-        return {AudioCaptureReadResult::Aborted, {}, 0};
-    }
-
-    static AudioCaptureRead FailedRead() noexcept
-    {
-        return {AudioCaptureReadResult::Failed, {}, 0};
-    }
-
-    void ResetCapture() noexcept
-    {
+        if (packet_acquired_ && capture_client_ != nullptr) {
+            capture_client_->ReleaseBuffer(0);
+            packet_acquired_ = false;
+            acquired_frame_count_ = 0;
+        }
         if (started_ && audio_client_ != nullptr) {
             audio_client_->Stop();
         }
-
         started_ = false;
-        normalizer_.reset();
         capture_client_.Reset();
         audio_client_.Reset();
         device_.Reset();
@@ -489,28 +422,31 @@ private:
             CloseHandle(sample_event_);
             sample_event_ = nullptr;
         }
-
+        if (abort_event_ != nullptr) {
+            CloseHandle(abort_event_);
+            abort_event_ = nullptr;
+        }
         if (com_initialized_) {
             CoUninitialize();
             com_initialized_ = false;
         }
-
         capture_thread_id_ = 0;
     }
 
+private:
     HANDLE abort_event_ = nullptr;
     HANDLE sample_event_ = nullptr;
     ComPtr<IMMDeviceEnumerator> enumerator_;
     ComPtr<IMMDevice> device_;
     ComPtr<IAudioClient> audio_client_;
     ComPtr<IAudioCaptureClient> capture_client_;
-    std::unique_ptr<StereoCaptureNormalizer48k> normalizer_;
     CapturePcmFormat format_ {};
-    std::atomic_bool abort_requested_ = false;
-    std::uint64_t next_frame_48k_ = 0;
+    UINT32 acquired_frame_count_ = 0;
     DWORD capture_thread_id_ = 0;
+    bool packet_acquired_ = false;
     bool com_initialized_ = false;
     bool started_ = false;
+    bool closed_ = false;
 };
 
 }
@@ -519,19 +455,26 @@ vrrec_status_t CreateWasapiAudioCaptureSource(
     std::unique_ptr<AudioCaptureSource> &output) noexcept
 {
     output.reset();
-    const auto abort_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    auto abort_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (abort_event == nullptr) {
         return VRREC_STATUS_OUT_OF_MEMORY;
     }
 
     try {
-        output = std::make_unique<WasapiAudioCaptureSource>(abort_event);
+        auto port = std::make_unique<WindowsWasapiCapturePort>(abort_event);
+        abort_event = nullptr;
+        output = std::make_unique<WasapiAudioCaptureSourceCore>(
+            std::move(port));
         return VRREC_STATUS_OK;
     } catch (const std::bad_alloc &) {
-        CloseHandle(abort_event);
+        if (abort_event != nullptr) {
+            CloseHandle(abort_event);
+        }
         return VRREC_STATUS_OUT_OF_MEMORY;
     } catch (...) {
-        CloseHandle(abort_event);
+        if (abort_event != nullptr) {
+            CloseHandle(abort_event);
+        }
         return VRREC_STATUS_INTERNAL_ERROR;
     }
 }

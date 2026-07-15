@@ -402,6 +402,7 @@ if(WIN32)
         vrrecorder_native_audio_capture_source_factory
         PRIVATE
             "${native_source_root}/src/audio_capture_normalizer.cpp"
+            "${native_source_root}/src/wasapi_audio_capture_source_core.cpp"
             "${native_source_root}/src/wasapi_audio_capture_source.cpp")
     target_compile_definitions(
         vrrecorder_native_audio_capture_source_factory
@@ -454,6 +455,7 @@ if(WIN32)
         vrrecorder_native_audio_capture_platform_support
         PRIVATE
             "${native_source_root}/src/audio_capture_normalizer.cpp"
+            "${native_source_root}/src/wasapi_audio_capture_source_core.cpp"
             "${native_source_root}/src/wasapi_audio_capture_source.cpp")
     target_compile_definitions(
         vrrecorder_native_audio_capture_platform_support
