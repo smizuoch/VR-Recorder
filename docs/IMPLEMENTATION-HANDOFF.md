@@ -258,6 +258,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - selected handの実controllerとHMDからtracking system name／HMD model number／controller input profile pathを取得するdevice-profile query。同じprocess runtime generationで`GetStringTrackedDeviceProperty`を呼び、40-byte descriptor＋必要サイズ付きpacked UTF-8 C ABIからmanagedのexact `VrDeviceProfile`へ厳格decodeする
 - runtime identityからexact profileまたは旧global fallbackを選び、selected handへApplyした後にmode／hand／Standing origin／0.5 mm・0.1 degree matrix readbackを検証してからだけexact profileを保存するproduction placement coordinator。small／large nudgeは現在modeの親空間X／Yへ適用し、recenterは安全な既定Wrist Dockへ戻す。native lifecycleは同じprocess runtimeをこのApplication Portへ公開する
 - Appの録画host Ready後に起動する`recenter_overlay` observer。active rising edgeだけを同じlazy input runtimeからproduction placement commandへ渡し、lazy native overlay lifecycleを生成してApply／readback／settings保存まで通す。mic／recenter observerの片方が利用不能でもrecording inputを止めず、App終了時はobserver停止後にcoordinator／overlayを破棄する
+- start 30 ms×1、stop 20 ms×2、fault 80 ms×1を生成するpure haptic policy。duration／pulse count／frequency／amplitudeを検証し、disabledと同一／旧revisionを出力せず消費する。controller disconnect等のoutput例外は型付き失敗結果へ隔離し、後続revisionを妨げない
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -268,7 +269,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - production glyph／icon atlasを使うoverlay background hostのApp composition
 - production telemetryの採取・表示、production glyph／icon atlas
 - drag release、dock／pin commandでcontroller-relative／Standing absolute間を変換した確定poseをproduction placement coordinatorへ渡す経路
-- haptic action handleと録画開始／停止／fault pulse
+- haptic action handle、native output adapter、録画開始／停止／fault transitionからpure policyへの接続
 - first-run routerの`WristOverlayPlacement` production route
 - 実SteamVR／HMD／controller試験
 
@@ -671,6 +672,8 @@ settings schema v2へのmigration、pure pose contract、native pose Port、72-b
 - pulse列の途中でcontroller disconnect／runtime shutdownしてもuse-after-free、self-join、録画Abortを起こさない。
 
 durationは基本設計にあるが、amplitude／frequency tokenと、左手／右手／設定中の手のどこへ送るかは未決定である。action handle取得前にpolicy型とcontract testで固定し、controller不在やtrigger errorは診断だけへ残して録画結果と分離する。
+
+Applicationのpure policyはRed→Green済みである。start／stop／faultのdurationと回数を固定し、有限な非負frequency、0超1以下のamplitude、正のduration／pulse countをPort境界で検証する。disabledと同一／旧revisionは出力せず、出力失敗を型付き結果として返して後続revisionを継続する。frequency／amplitude token、対象controller、native action handle、recording transitionとのcompositionは後続の独立commitで閉じる。
 
 OpenVRの`IVROverlay`はoverlay作成、texture、transform、event、visibilityを別APIとして持つため、単一巨大adapterにしない。lifecycle、renderer、pose／transform、input、hapticをPortで分離する。
 
