@@ -126,6 +126,17 @@ std::string_view SteamVrActionSetPath();
 std::string_view SteamVrDigitalActionPath();
 std::uint32_t SteamVrPollCount();
 bool HasActiveSteamVrInput();
+void ResetSteamVrOverlay();
+bool HasActiveSteamVrOverlay();
+bool IsSteamVrOverlayVisible();
+std::string_view SteamVrOverlayManifestPath();
+std::string_view SteamVrOverlayKey();
+std::string_view SteamVrOverlayName();
+float SteamVrOverlayWidthInMeters();
+std::uint32_t SteamVrOverlayShowCount();
+std::uint32_t SteamVrOverlayHideCount();
+std::uint32_t SteamVrOverlayCloseCount();
+std::uint32_t SteamVrOverlayDestroyCount();
 struct TestSpoutSenderSnapshot {
     std::string sender_id;
     std::uint64_t latest_frame_generation;

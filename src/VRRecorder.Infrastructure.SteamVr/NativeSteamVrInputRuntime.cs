@@ -55,7 +55,7 @@ public sealed class NativeSteamVrInputRuntime : ISteamVrInputRuntime
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actionPath);
         cancellationToken.ThrowIfCancellationRequested();
-        using var library = new NativeSteamVrInputLibrary(_libraryPath);
+        using var library = new NativeSteamVrLibrary(_libraryPath);
         using var input = CreateInput(library, actionPath);
         while (true)
         {
@@ -64,7 +64,7 @@ public sealed class NativeSteamVrInputRuntime : ISteamVrInputRuntime
             {
                 StructSize = checked((uint)Marshal.SizeOf<
                     NativeSteamVrDigitalStateV1>()),
-                AbiVersion = NativeSteamVrInputLibrary.SupportedAbiVersion,
+                AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
             };
             var status = library.PollInput(
                 input.DangerousGetHandle(),
@@ -80,7 +80,7 @@ public sealed class NativeSteamVrInputRuntime : ISteamVrInputRuntime
     }
 
     private NativeSteamVrInputSafeHandle CreateInput(
-        NativeSteamVrInputLibrary library,
+        NativeSteamVrLibrary library,
         string actionPath)
     {
         var manifestPath = Marshal.StringToCoTaskMemUTF8(_manifestPath);
@@ -93,7 +93,7 @@ public sealed class NativeSteamVrInputRuntime : ISteamVrInputRuntime
             {
                 StructSize = checked((uint)Marshal.SizeOf<
                     NativeSteamVrInputConfigV1>()),
-                AbiVersion = NativeSteamVrInputLibrary.SupportedAbiVersion,
+                AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
                 ActionManifestPathUtf8 = manifestPath,
                 ActionSetPathUtf8 = actionSetPath,
                 DigitalActionPathUtf8 = digitalActionPath,

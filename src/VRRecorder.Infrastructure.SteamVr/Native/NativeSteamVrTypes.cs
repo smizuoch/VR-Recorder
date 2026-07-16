@@ -33,3 +33,15 @@ internal struct NativeSteamVrDigitalStateV1
     public byte Changed;
     public byte Reserved;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrOverlayConfigV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public nint ApplicationManifestPathUtf8;
+    public nint OverlayKeyUtf8;
+    public nint OverlayNameUtf8;
+    public float WidthInMeters;
+    public uint ReservedV1;
+}

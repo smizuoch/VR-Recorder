@@ -2,24 +2,31 @@ using Microsoft.Win32.SafeHandles;
 
 namespace VRRecorder.Infrastructure.SteamVr.Native;
 
-internal sealed class NativeSteamVrInputSafeHandle
+internal sealed class NativeSteamVrOverlaySafeHandle
     : SafeHandleZeroOrMinusOneIsInvalid
 {
     private readonly NativeSteamVrLibrary _library;
 
-    public NativeSteamVrInputSafeHandle(
-        nint input,
+    public NativeSteamVrOverlaySafeHandle(
+        nint overlay,
         NativeSteamVrLibrary library)
         : base(ownsHandle: true)
     {
         ArgumentNullException.ThrowIfNull(library);
         _library = library;
-        SetHandle(input);
+        SetHandle(overlay);
     }
 
     protected override bool ReleaseHandle()
     {
-        _library.DestroyInput(handle);
-        return true;
+        try
+        {
+            _library.DestroyOverlay(handle);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

@@ -361,6 +361,69 @@ extern "C" VRREC_TEST_API std::uint32_t vrrec_test_steamvr_poll_count(void)
     return vrrecorder::native::testing::SteamVrPollCount();
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_steamvr_overlay_reset(void)
+{
+    vrrecorder::native::testing::ResetSteamVrOverlay();
+}
+
+extern "C" VRREC_TEST_API std::uint8_t
+vrrec_test_steamvr_overlay_active(void)
+{
+    return vrrecorder::native::testing::HasActiveSteamVrOverlay() ? 1 : 0;
+}
+
+extern "C" VRREC_TEST_API std::uint8_t
+vrrec_test_steamvr_overlay_visible(void)
+{
+    return vrrecorder::native::testing::IsSteamVrOverlayVisible() ? 1 : 0;
+}
+
+extern "C" VRREC_TEST_API const char *
+vrrec_test_steamvr_overlay_manifest_path(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayManifestPath().data();
+}
+
+extern "C" VRREC_TEST_API const char *vrrec_test_steamvr_overlay_key(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayKey().data();
+}
+
+extern "C" VRREC_TEST_API const char *vrrec_test_steamvr_overlay_name(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayName().data();
+}
+
+extern "C" VRREC_TEST_API float
+vrrec_test_steamvr_overlay_width_in_meters(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayWidthInMeters();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_overlay_show_count(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayShowCount();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_overlay_hide_count(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayHideCount();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_overlay_close_count(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayCloseCount();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_overlay_destroy_count(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayDestroyCount();
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_spout_reset(void)
 {
     vrrecorder::native::testing::ResetSpoutSource();

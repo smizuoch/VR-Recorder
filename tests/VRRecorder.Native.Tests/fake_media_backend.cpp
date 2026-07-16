@@ -551,38 +551,86 @@ private:
 
 FakeSteamVrInputBackend *FakeSteamVrInputBackend::active_ = nullptr;
 
+struct FakeSteamVrOverlayState {
+    std::mutex mutex;
+    std::string application_manifest_path;
+    std::string overlay_key;
+    std::string overlay_name;
+    float width_in_meters = 0.0F;
+    bool active = false;
+    bool visible = false;
+    bool closed = false;
+    std::uint32_t show_count = 0;
+    std::uint32_t hide_count = 0;
+    std::uint32_t close_count = 0;
+    std::uint32_t destroy_count = 0;
+};
+
+FakeSteamVrOverlayState fake_steamvr_overlay;
+
 class FakeSteamVrOverlayLifecycle final : public OpenVrOverlayLifecycle {
 public:
+    FakeSteamVrOverlayLifecycle(
+        std::string_view application_manifest_path,
+        const OpenVrOverlayLifecycleConfig &config)
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        fake_steamvr_overlay.application_manifest_path =
+            application_manifest_path;
+        fake_steamvr_overlay.overlay_key = config.overlay_key_utf8;
+        fake_steamvr_overlay.overlay_name = config.overlay_name_utf8;
+        fake_steamvr_overlay.width_in_meters = config.width_in_meters;
+        fake_steamvr_overlay.active = true;
+        fake_steamvr_overlay.visible = false;
+        fake_steamvr_overlay.closed = false;
+    }
+
+    ~FakeSteamVrOverlayLifecycle() override
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        fake_steamvr_overlay.active = false;
+        ++fake_steamvr_overlay.destroy_count;
+    }
+
     vrrec_status_t Show() noexcept override
     {
-        if (closed_) {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        if (fake_steamvr_overlay.closed) {
             return VRREC_STATUS_INVALID_STATE;
         }
-        visible_ = true;
+        if (!fake_steamvr_overlay.visible) {
+            fake_steamvr_overlay.visible = true;
+            ++fake_steamvr_overlay.show_count;
+        }
         return VRREC_STATUS_OK;
     }
 
     vrrec_status_t Hide() noexcept override
     {
-        if (closed_) {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        if (fake_steamvr_overlay.closed) {
             return VRREC_STATUS_INVALID_STATE;
         }
-        visible_ = false;
+        if (fake_steamvr_overlay.visible) {
+            fake_steamvr_overlay.visible = false;
+            ++fake_steamvr_overlay.hide_count;
+        }
         return VRREC_STATUS_OK;
     }
 
     vrrec_status_t Close() noexcept override
     {
-        if (!closed_) {
-            visible_ = false;
-            closed_ = true;
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        if (!fake_steamvr_overlay.closed) {
+            if (fake_steamvr_overlay.visible) {
+                fake_steamvr_overlay.visible = false;
+                ++fake_steamvr_overlay.hide_count;
+            }
+            fake_steamvr_overlay.closed = true;
+            ++fake_steamvr_overlay.close_count;
         }
         return VRREC_STATUS_OK;
     }
-
-private:
-    bool visible_ = false;
-    bool closed_ = false;
 };
 
 struct FakeSpoutSourceState {
@@ -787,10 +835,10 @@ std::unique_ptr<OpenVrOverlayLifecycle> CreateSteamVrOverlayLifecycle(
     const OpenVrOverlayLifecycleConfig &config,
     vrrec_status_t &status) noexcept
 {
-    (void)application_manifest_path;
-    (void)config;
     status = VRREC_STATUS_OK;
-    return std::make_unique<FakeSteamVrOverlayLifecycle>();
+    return std::make_unique<FakeSteamVrOverlayLifecycle>(
+        application_manifest_path,
+        config);
 }
 
 std::unique_ptr<SpoutSourceBackend> CreateSpoutSourceBackend(
@@ -1033,6 +1081,82 @@ std::uint32_t SteamVrPollCount()
 bool HasActiveSteamVrInput()
 {
     return FakeSteamVrInputBackend::Active() != nullptr;
+}
+
+void ResetSteamVrOverlay()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    fake_steamvr_overlay.application_manifest_path.clear();
+    fake_steamvr_overlay.overlay_key.clear();
+    fake_steamvr_overlay.overlay_name.clear();
+    fake_steamvr_overlay.width_in_meters = 0.0F;
+    fake_steamvr_overlay.active = false;
+    fake_steamvr_overlay.visible = false;
+    fake_steamvr_overlay.closed = false;
+    fake_steamvr_overlay.show_count = 0;
+    fake_steamvr_overlay.hide_count = 0;
+    fake_steamvr_overlay.close_count = 0;
+    fake_steamvr_overlay.destroy_count = 0;
+}
+
+bool HasActiveSteamVrOverlay()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.active;
+}
+
+bool IsSteamVrOverlayVisible()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.visible;
+}
+
+std::string_view SteamVrOverlayManifestPath()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.application_manifest_path;
+}
+
+std::string_view SteamVrOverlayKey()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.overlay_key;
+}
+
+std::string_view SteamVrOverlayName()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.overlay_name;
+}
+
+float SteamVrOverlayWidthInMeters()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.width_in_meters;
+}
+
+std::uint32_t SteamVrOverlayShowCount()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.show_count;
+}
+
+std::uint32_t SteamVrOverlayHideCount()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.hide_count;
+}
+
+std::uint32_t SteamVrOverlayCloseCount()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.close_count;
+}
+
+std::uint32_t SteamVrOverlayDestroyCount()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.destroy_count;
 }
 
 void ResetSpoutSource()
