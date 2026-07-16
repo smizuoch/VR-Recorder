@@ -16,7 +16,7 @@
 - [x] 初回／revision変化を即時、Recording／SignalLostだけを100 ms周期にするpure update policyを固定する
 - [x] BGRA frame検証、texture-set commit、冪等Clear、Clear→Hide→Destroyを独立native texture Portで固定し、process-wide OpenVR ownerへ接続する
 - [x] HMDのDXGI adapter上でD3D11 BGRA textureを所有・再利用し、実RowPitchでuploadして`SetOverlayTexture(TextureType_DirectX)`へ渡す
-- [ ] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新する
+- [x] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新し、初回publish成功後だけShowするhostを固定する
 - [ ] mouse／ray eventをhit-testして共通application commandへdispatchする
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
 - [ ] 録画開始／停止／fault haptic pulseを実行する
@@ -38,7 +38,7 @@
 - [x] Fix a pure update policy that renders first/new revisions immediately and only Recording/SignalLost at 100 ms intervals
 - [x] Fix BGRA validation, texture-set commit, idempotent Clear, and Clear→Hide→Destroy in an independent native texture Port connected to the process-wide OpenVR owner
 - [x] Own and reuse a D3D11 BGRA texture on the HMD DXGI adapter, upload with the actual row pitch, and pass it to `SetOverlayTexture(TextureType_DirectX)`
-- [ ] Update a 1024×512 BGRA texture on state changes and at 10 Hz while recording
+- [x] Fix a host that updates the 1024×512 BGRA texture on state changes and at 10 Hz while recording, and Shows only after the first successful publish
 - [ ] Hit-test mouse/ray events and dispatch shared application commands
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
