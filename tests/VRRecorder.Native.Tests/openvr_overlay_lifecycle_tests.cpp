@@ -86,6 +86,42 @@ private:
     std::shared_ptr<FakeState> state_;
 };
 
+class FakeTexturePort final : public OpenVrOverlayTexturePort {
+public:
+    explicit FakeTexturePort(std::shared_ptr<FakeState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    vrrec_status_t SetOverlayBgraTexture(
+        std::uint64_t handle,
+        const OpenVrBgraTextureFrame &frame) noexcept override
+    {
+        state_->calls.emplace_back(
+            "texture:" + std::to_string(handle) + ':' +
+            std::to_string(frame.width) + 'x' +
+            std::to_string(frame.height) + ':' +
+            std::to_string(frame.stride_bytes) + ':' +
+            std::to_string(frame.pixel_bytes_size));
+        return set_status;
+    }
+
+    vrrec_status_t ClearOverlayTexture(
+        std::uint64_t handle) noexcept override
+    {
+        state_->calls.emplace_back("clear:" + std::to_string(handle));
+        ++clear_calls;
+        return clear_status;
+    }
+
+    vrrec_status_t set_status = VRREC_STATUS_OK;
+    vrrec_status_t clear_status = VRREC_STATUS_OK;
+    std::size_t clear_calls = 0;
+
+private:
+    std::shared_ptr<FakeState> state_;
+};
+
 OpenVrOverlayLifecycleConfig Config()
 {
     return OpenVrOverlayLifecycleConfig {
@@ -275,6 +311,127 @@ void DestructorClosesAnOpenOverlay()
     CHECK(state->destroy_calls == 1);
 }
 
+void OwnsBgraTextureAndClearsItBeforeOverlayDestruction()
+{
+    auto state = std::make_shared<FakeState>();
+    auto texture_port = std::make_unique<FakeTexturePort>(state);
+    auto *raw_texture = texture_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::move(texture_port),
+        status);
+    std::vector<std::uint8_t> pixels(1024U * 512U * 4U, 0x7f);
+    const auto frame = OpenVrBgraTextureFrame {
+        pixels.data(),
+        pixels.size(),
+        1024,
+        512,
+        4096,
+    };
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_OK);
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_OK);
+    CHECK(overlay->ClearTexture() == VRREC_STATUS_OK);
+    CHECK(overlay->ClearTexture() == VRREC_STATUS_OK);
+    CHECK(raw_texture->clear_calls == 1);
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_OK);
+    CHECK(overlay->Show() == VRREC_STATUS_OK);
+    CHECK(overlay->Close() == VRREC_STATUS_OK);
+    CHECK(overlay->Close() == VRREC_STATUS_OK);
+    CHECK(raw_texture->clear_calls == 2);
+    CHECK((state->calls == std::vector<std::string> {
+        "create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
+        "width:73:0.220000",
+        "texture:73:1024x512:4096:2097152",
+        "texture:73:1024x512:4096:2097152",
+        "clear:73",
+        "texture:73:1024x512:4096:2097152",
+        "show:73",
+        "clear:73",
+        "hide:73",
+        "destroy:73",
+    }));
+}
+
+void RejectsInvalidBgraFramesBeforeCallingTexturePort()
+{
+    auto state = std::make_shared<FakeState>();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        status);
+    std::vector<std::uint8_t> pixels(1024U * 512U * 4U);
+    auto frame = OpenVrBgraTextureFrame {
+        pixels.data(),
+        pixels.size(),
+        1024,
+        512,
+        4096,
+    };
+    const auto initial_call_count = state->calls.size();
+    for (const auto invalid_case : {
+             std::size_t {0},
+             std::size_t {1},
+             std::size_t {2},
+             std::size_t {3},
+             std::size_t {4},
+         }) {
+        auto invalid = frame;
+        if (invalid_case == 0) {
+            invalid.pixel_bytes = nullptr;
+        } else if (invalid_case == 1) {
+            invalid.pixel_bytes_size -= 1;
+        } else if (invalid_case == 2) {
+            invalid.width -= 1;
+        } else if (invalid_case == 3) {
+            invalid.height -= 1;
+        } else {
+            invalid.stride_bytes -= 1;
+        }
+        CHECK(overlay->UpdateBgraTexture(invalid) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    }
+    CHECK(state->calls.size() == initial_call_count);
+    CHECK(overlay->ClearTexture() == VRREC_STATUS_OK);
+}
+
+void ClearFailureDoesNotSkipHideOrDestroy()
+{
+    auto state = std::make_shared<FakeState>();
+    auto texture_port = std::make_unique<FakeTexturePort>(state);
+    auto *raw_texture = texture_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::move(texture_port),
+        status);
+    std::vector<std::uint8_t> pixels(1024U * 512U * 4U);
+    const auto frame = OpenVrBgraTextureFrame {
+        pixels.data(),
+        pixels.size(),
+        1024,
+        512,
+        4096,
+    };
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_OK);
+    CHECK(overlay->Show() == VRREC_STATUS_OK);
+    raw_texture->clear_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+
+    CHECK(overlay->Close() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(overlay->Close() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(state->calls[state->calls.size() - 3] == "clear:73");
+    CHECK(state->calls[state->calls.size() - 2] == "hide:73");
+    CHECK(state->calls.back() == "destroy:73");
+    CHECK(state->destroy_calls == 1);
+    CHECK(raw_texture->clear_calls == 1);
+}
+
 }
 
 int main()
@@ -285,5 +442,8 @@ int main()
     CommitsVisibilityOnlyAfterThePortSucceeds();
     CloseDestroysOnceAndCachesTheFirstCleanupResult();
     DestructorClosesAnOpenOverlay();
+    OwnsBgraTextureAndClearsItBeforeOverlayDestruction();
+    RejectsInvalidBgraFramesBeforeCallingTexturePort();
+    ClearFailureDoesNotSkipHideOrDestroy();
     return 0;
 }
