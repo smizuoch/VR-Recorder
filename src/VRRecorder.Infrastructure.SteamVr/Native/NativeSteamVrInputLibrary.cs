@@ -9,6 +9,9 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private readonly CreateInputDelegate _createInput;
     private readonly PollInputDelegate _pollInput;
     private readonly DestroyInputDelegate _destroyInput;
+    private readonly CreateHapticDelegate _createHaptic;
+    private readonly TriggerHapticDelegate _triggerHaptic;
+    private readonly DestroyHapticDelegate _destroyHaptic;
     private readonly CreateOverlayDelegate _createOverlay;
     private readonly OverlayOperationDelegate _showOverlay;
     private readonly OverlayOperationDelegate _hideOverlay;
@@ -50,6 +53,12 @@ internal sealed class NativeSteamVrLibrary : IDisposable
                 "vrrec_steamvr_input_poll_v1");
             _destroyInput = Resolve<DestroyInputDelegate>(
                 "vrrec_steamvr_input_destroy_v1");
+            _createHaptic = Resolve<CreateHapticDelegate>(
+                "vrrec_steamvr_haptic_create_v1");
+            _triggerHaptic = Resolve<TriggerHapticDelegate>(
+                "vrrec_steamvr_haptic_trigger_v1");
+            _destroyHaptic = Resolve<DestroyHapticDelegate>(
+                "vrrec_steamvr_haptic_destroy_v1");
             _createOverlay = Resolve<CreateOverlayDelegate>(
                 "vrrec_steamvr_overlay_create_v1");
             _showOverlay = Resolve<OverlayOperationDelegate>(
@@ -97,6 +106,18 @@ internal sealed class NativeSteamVrLibrary : IDisposable
         _pollInput(input, ref state);
 
     public void DestroyInput(nint input) => _destroyInput(input);
+
+    public NativeSteamVrStatus CreateHaptic(
+        ref NativeSteamVrHapticConfigV1 config,
+        out nint haptic) =>
+        _createHaptic(ref config, out haptic);
+
+    public NativeSteamVrStatus TriggerHaptic(
+        nint haptic,
+        ref NativeSteamVrHapticPulseV1 pulse) =>
+        _triggerHaptic(haptic, ref pulse);
+
+    public void DestroyHaptic(nint haptic) => _destroyHaptic(haptic);
 
     public NativeSteamVrStatus CreateOverlay(
         ref NativeSteamVrOverlayConfigV1 config,
@@ -178,6 +199,19 @@ internal sealed class NativeSteamVrLibrary : IDisposable
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void DestroyInputDelegate(nint input);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeSteamVrStatus CreateHapticDelegate(
+        ref NativeSteamVrHapticConfigV1 config,
+        out nint haptic);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeSteamVrStatus TriggerHapticDelegate(
+        nint haptic,
+        ref NativeSteamVrHapticPulseV1 pulse);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void DestroyHapticDelegate(nint haptic);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate NativeSteamVrStatus CreateOverlayDelegate(

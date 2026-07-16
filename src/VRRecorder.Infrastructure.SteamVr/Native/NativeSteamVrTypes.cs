@@ -36,6 +36,28 @@ internal struct NativeSteamVrDigitalStateV1
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrHapticConfigV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public nint ActionManifestPathUtf8;
+    public nint HapticActionPathUtf8;
+    public nint InputSourcePathUtf8;
+    public uint ReservedV1;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrHapticPulseV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public float DurationSeconds;
+    public float FrequencyHertz;
+    public float Amplitude;
+    public uint ReservedV1;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct NativeSteamVrOverlayConfigV1
 {
     public uint StructSize;

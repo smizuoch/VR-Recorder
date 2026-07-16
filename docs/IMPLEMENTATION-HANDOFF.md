@@ -261,6 +261,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - start 30 ms×1、stop 20 ms×2、fault 80 ms×1を生成するpure haptic policy。duration／pulse count／frequency／amplitudeを検証し、disabledと同一／旧revisionを出力せず消費する。controller disconnect等のoutput例外は型付き失敗結果へ隔離し、後続revisionを妨げない
 - input／overlayと同じprocess runtime generationを共有するnative haptic Portとproduction backend。`actions.json`から同階層のapplication manifestを一つの共通contractで導出し、temporary登録→action manifest→haptic action／controller input source handleの順で初期化する。正の有限duration、有限な非負frequency、0超1以下amplitudeの単発pulseだけを実`IVRInput::TriggerHapticVibrationAction`へ渡し、途中失敗は取得済みruntimeを解放する。trigger中はruntime lockで最終shutdownと直列化する
 - 40-byte haptic configと24-byte単発pulseを持つversioned C ABI。absolute action manifest、stable haptic action、left／right input source、reserved、duration／frequency／amplitudeをhandle生成／backend呼出し前に検証し、create／trigger／destroyとbackend error伝播を32-symbol export allowlistへ追加する
+- current installのaction manifestと選択handをC ABI configへ変換し、SafeHandleをnative DLLより先に破棄するmanaged haptic output。Application patternのpulse countをduration間隔の単発ABI callへ展開し、native statusを型付きmanaged例外へ変換する。left／right path、2 pulse、backend failure、Dispose後のnative handle破棄を実fixtureで固定する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -271,7 +272,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - production glyph／icon atlasを使うoverlay background hostのApp composition
 - production telemetryの採取・表示、production glyph／icon atlas
 - drag release、dock／pin commandでcontroller-relative／Standing absolute間を変換した確定poseをproduction placement coordinatorへ渡す経路
-- managed haptic output adapter、録画開始／停止／fault transitionからpure policyへの接続
+- frequency／amplitude／enabled設定と、録画開始／停止／fault transitionからhaptic policy／managed outputへのcomposition
 - first-run routerの`WristOverlayPlacement` production route
 - 実SteamVR／HMD／controller試験
 
@@ -675,7 +676,7 @@ settings schema v2へのmigration、pure pose contract、native pose Port、72-b
 
 durationは基本設計にあるが、amplitude／frequency tokenと、左手／右手／設定中の手のどこへ送るかは未決定である。action handle取得前にpolicy型とcontract testで固定し、controller不在やtrigger errorは診断だけへ残して録画結果と分離する。
 
-Applicationのpure policyはRed→Green済みである。start／stop／faultのdurationと回数を固定し、有限な非負frequency、0超1以下のamplitude、正のduration／pulse countをPort境界で検証する。disabledと同一／旧revisionは出力せず、出力失敗を型付き結果として返して後続revisionを継続する。native側も同じprocess runtime generationへ独立haptic Portとproduction backendを追加し、application／action manifest設定、実OpenVR action／input source handle取得、単発trigger、値検証、初期化失敗cleanup、最終shutdownとの直列化を固定した。40-byte config／24-byte pulseのC ABIとexport allowlistもGreenである。frequency／amplitude token、対象controllerのsettings mapping、managed adapter、recording transitionとのcompositionは後続の独立commitで閉じる。
+Applicationのpure policyはRed→Green済みである。start／stop／faultのdurationと回数を固定し、有限な非負frequency、0超1以下のamplitude、正のduration／pulse countをPort境界で検証する。disabledと同一／旧revisionは出力せず、出力失敗を型付き結果として返して後続revisionを継続する。native側も同じprocess runtime generationへ独立haptic Portとproduction backendを追加し、application／action manifest設定、実OpenVR action／input source handle取得、単発trigger、値検証、初期化失敗cleanup、最終shutdownとの直列化を固定した。40-byte config／24-byte pulseのC ABIとexport allowlist、selected handとpulse列を渡すmanaged SafeHandle adapterもGreenである。frequency／amplitude／enabled設定とrecording transitionとのcompositionは後続の独立commitで閉じる。
 
 OpenVRの`IVROverlay`はoverlay作成、texture、transform、event、visibilityを別APIとして持つため、単一巨大adapterにしない。lifecycle、renderer、pose／transform、input、hapticをPortで分離する。
 

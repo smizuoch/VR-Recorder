@@ -361,6 +361,62 @@ extern "C" VRREC_TEST_API std::uint32_t vrrec_test_steamvr_poll_count(void)
     return vrrecorder::native::testing::SteamVrPollCount();
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_steamvr_haptic_set_status(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::SetSteamVrHapticStatus(status);
+}
+
+extern "C" VRREC_TEST_API std::uint8_t
+vrrec_test_steamvr_haptic_active(void)
+{
+    return vrrecorder::native::testing::HasActiveSteamVrHaptic() ? 1 : 0;
+}
+
+extern "C" VRREC_TEST_API const char *
+vrrec_test_steamvr_haptic_manifest_path(void)
+{
+    return vrrecorder::native::testing::SteamVrHapticManifestPath().data();
+}
+
+extern "C" VRREC_TEST_API const char *
+vrrec_test_steamvr_haptic_action_path(void)
+{
+    return vrrecorder::native::testing::SteamVrHapticActionPath().data();
+}
+
+extern "C" VRREC_TEST_API const char *
+vrrec_test_steamvr_haptic_input_source_path(void)
+{
+    return vrrecorder::native::testing::SteamVrHapticInputSourcePath().data();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_haptic_trigger_count(void)
+{
+    return vrrecorder::native::testing::SteamVrHapticTriggerCount();
+}
+
+extern "C" VRREC_TEST_API float
+vrrec_test_steamvr_haptic_last_duration_seconds(void)
+{
+    return vrrecorder::native::testing::SteamVrLastHapticPulse()
+        .duration_seconds;
+}
+
+extern "C" VRREC_TEST_API float
+vrrec_test_steamvr_haptic_last_frequency_hertz(void)
+{
+    return vrrecorder::native::testing::SteamVrLastHapticPulse()
+        .frequency_hertz;
+}
+
+extern "C" VRREC_TEST_API float
+vrrec_test_steamvr_haptic_last_amplitude(void)
+{
+    return vrrecorder::native::testing::SteamVrLastHapticPulse().amplitude;
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_steamvr_overlay_reset(void)
 {
     vrrecorder::native::testing::ResetSteamVrOverlay();
