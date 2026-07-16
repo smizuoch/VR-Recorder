@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <condition_variable>
@@ -40,6 +41,13 @@ static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
 static_assert(sizeof(vrrec_steamvr_overlay_config_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_pointer_event_v1) == 32);
+static_assert(sizeof(vrrec_steamvr_overlay_pose_v1) == 72);
+static_assert(VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK == 1);
+static_assert(VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN == 2);
+static_assert(VRREC_STEAMVR_HAND_LEFT == 1);
+static_assert(VRREC_STEAMVR_HAND_RIGHT == 2);
+static_assert(VRREC_STEAMVR_TRACKING_ORIGIN_NONE == 0);
+static_assert(VRREC_STEAMVR_TRACKING_ORIGIN_STANDING == 1);
 static_assert(VRREC_STEAMVR_OVERLAY_POINTER_MOVE == 1);
 static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN == 2);
 static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_UP == 3);
@@ -264,6 +272,21 @@ vrrec_steamvr_overlay_bgra_frame_v1 ValidSteamVrOverlayFrame(
         512,
         4096,
         0,
+    };
+}
+
+vrrec_steamvr_overlay_pose_v1 ValidSteamVrOverlayPose()
+{
+    return vrrec_steamvr_overlay_pose_v1 {
+        sizeof(vrrec_steamvr_overlay_pose_v1),
+        VRREC_ABI_V1,
+        VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK,
+        VRREC_STEAMVR_HAND_LEFT,
+        VRREC_STEAMVR_TRACKING_ORIGIN_NONE,
+        0,
+        {1, 0, 0, 0.03F,
+         0, 1, 0, 0.05F,
+         0, 0, 1, -0.08F},
     };
 }
 
@@ -2329,6 +2352,83 @@ bool PollsSteamVrOverlayPointerEventsThroughVersionedAbi()
     return true;
 }
 
+bool AppliesAndReadsSteamVrOverlayPoseThroughVersionedAbi()
+{
+    vrrecorder::native::testing::ResetSteamVrOverlay();
+    auto config = ValidSteamVrOverlayConfig();
+    vrrec_steamvr_overlay_t *overlay = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_OK);
+    auto pose = ValidSteamVrOverlayPose();
+
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(nullptr, &pose) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    auto invalid = pose;
+    invalid.struct_size -= 1;
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, &invalid) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    invalid = pose;
+    invalid.abi_version += 1;
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, &invalid) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    invalid = pose;
+    invalid.transform[0] = 2;
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, &invalid) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, &pose) ==
+          VRREC_STATUS_OK);
+    auto readback = vrrec_steamvr_overlay_pose_v1 {
+        sizeof(vrrec_steamvr_overlay_pose_v1),
+        VRREC_ABI_V1,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        {},
+    };
+    CHECK(vrrec_steamvr_overlay_get_pose_v1(overlay, &readback) ==
+          VRREC_STATUS_OK);
+    CHECK(readback.placement_mode == pose.placement_mode);
+    CHECK(readback.hand == pose.hand);
+    CHECK(readback.tracking_origin == pose.tracking_origin);
+    CHECK(readback.reserved_v1 == 0);
+    CHECK(std::equal(
+        std::begin(readback.transform),
+        std::end(readback.transform),
+        std::begin(pose.transform)));
+
+    pose.placement_mode = VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN;
+    pose.hand = VRREC_STEAMVR_HAND_NONE;
+    pose.tracking_origin = VRREC_STEAMVR_TRACKING_ORIGIN_STANDING;
+    pose.transform[3] = 1.25F;
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, &pose) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_get_pose_v1(overlay, &readback) ==
+          VRREC_STATUS_OK);
+    CHECK(readback.placement_mode ==
+          VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN);
+    CHECK(readback.hand == VRREC_STEAMVR_HAND_NONE);
+    CHECK(readback.tracking_origin ==
+          VRREC_STEAMVR_TRACKING_ORIGIN_STANDING);
+    CHECK(readback.transform[3] == 1.25F);
+
+    CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_get_pose_v1(overlay, &readback) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(readback.placement_mode == 0);
+    CHECK(readback.hand == 0);
+    CHECK(readback.tracking_origin == 0);
+    CHECK(std::all_of(
+        std::begin(readback.transform),
+        std::end(readback.transform),
+        [](float value) { return value == 0; }));
+    vrrec_steamvr_overlay_destroy_v1(overlay);
+    return true;
+}
+
 bool RejectsInvalidSpoutSourceAbiInputs()
 {
     using vrrecorder::native::testing::ResetSpoutSource;
@@ -3416,6 +3516,7 @@ int main(int argc, char **argv)
         !RejectsInvalidSteamVrOverlayAbiInputs() ||
         !ControlsSteamVrOverlayThroughVersionedAbi() ||
         !PollsSteamVrOverlayPointerEventsThroughVersionedAbi() ||
+        !AppliesAndReadsSteamVrOverlayPoseThroughVersionedAbi() ||
         !RejectsInvalidSpoutSourceAbiInputs() ||
         !SnapshotsPackedUtf8WithRequiredSizing() ||
         !PollsFrameWithoutConsumingOnBufferRetry() ||

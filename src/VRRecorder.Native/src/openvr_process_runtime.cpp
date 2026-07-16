@@ -317,6 +317,28 @@ public:
         return api_->PollNextOverlayPointerEvent(handle, event, has_event);
     }
 
+    vrrec_status_t SetOverlayPose(
+        std::uint64_t handle,
+        const OpenVrOverlayPose &pose) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->SetOverlayPose(handle, pose);
+    }
+
+    vrrec_status_t GetOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPose &pose) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        if (references_ == 0) {
+            pose = {};
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        return api_->GetOverlayPose(handle, pose);
+    }
+
     void Release() noexcept
     {
         std::thread poll_thread;
@@ -755,6 +777,58 @@ private:
     bool acquired_ = false;
 };
 
+class OpenVrProcessOverlayPosePort final : public OpenVrOverlayPosePort {
+public:
+    explicit OpenVrProcessOverlayPosePort(
+        std::shared_ptr<OpenVrProcessRuntime> runtime) noexcept
+        : runtime_(std::move(runtime))
+    {
+    }
+
+    ~OpenVrProcessOverlayPosePort() override
+    {
+        if (acquired_) {
+            runtime_->Release();
+        }
+    }
+
+    vrrec_status_t Acquire() noexcept
+    {
+        if (acquired_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = runtime_->Acquire();
+        if (status == VRREC_STATUS_OK) {
+            acquired_ = true;
+        }
+        return status;
+    }
+
+    vrrec_status_t SetOverlayPose(
+        std::uint64_t handle,
+        const OpenVrOverlayPose &pose) noexcept override
+    {
+        return acquired_
+            ? runtime_->SetOverlayPose(handle, pose)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t GetOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        if (!acquired_) {
+            pose = {};
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        return runtime_->GetOverlayPose(handle, pose);
+    }
+
+private:
+    std::shared_ptr<OpenVrProcessRuntime> runtime_;
+    bool acquired_ = false;
+};
+
 }
 
 std::shared_ptr<OpenVrProcessRuntime> CreateOpenVrProcessRuntime(
@@ -873,7 +947,7 @@ CreateOpenVrProcessOverlayLifecycle(
 
     auto event_port = std::unique_ptr<OpenVrProcessOverlayEventPort>(
         new (std::nothrow) OpenVrProcessOverlayEventPort(
-            std::move(runtime)));
+            runtime));
     if (!event_port) {
         status = VRREC_STATUS_OUT_OF_MEMORY;
         return nullptr;
@@ -882,11 +956,23 @@ CreateOpenVrProcessOverlayLifecycle(
     if (status != VRREC_STATUS_OK) {
         return nullptr;
     }
+    auto pose_port = std::unique_ptr<OpenVrProcessOverlayPosePort>(
+        new (std::nothrow) OpenVrProcessOverlayPosePort(
+            std::move(runtime)));
+    if (!pose_port) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    status = pose_port->Acquire();
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
     return CreateOpenVrOverlayLifecycle(
         config,
         std::move(overlay_port),
         std::move(texture_port),
         std::move(event_port),
+        std::move(pose_port),
         status);
 }
 

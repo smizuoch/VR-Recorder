@@ -102,12 +102,20 @@ public sealed class WristOverlayPoseContractTests
         var rotated = new OverlayTransform(
             [0.03, 0.05, -0.08],
             [25.2, 0, 10]);
+        var roundedMatrix = WristOverlayPoseContract.ToOpenVrMatrix34(rounded);
+        var movedMatrix = WristOverlayPoseContract.ToOpenVrMatrix34(moved);
 
         Assert.True(WristOverlayPoseContract.MatchesReadback(
             rounded,
             expected));
+        Assert.True(WristOverlayPoseContract.MatchesReadback(
+            roundedMatrix,
+            expected));
         Assert.False(WristOverlayPoseContract.MatchesReadback(
             moved,
+            expected));
+        Assert.False(WristOverlayPoseContract.MatchesReadback(
+            movedMatrix,
             expected));
         Assert.False(WristOverlayPoseContract.MatchesReadback(
             rotated,

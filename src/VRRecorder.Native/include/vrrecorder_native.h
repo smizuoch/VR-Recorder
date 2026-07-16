@@ -36,6 +36,9 @@ typedef uint32_t vrrec_quality_preset_t;
 typedef uint32_t vrrec_gpu_vendor_t;
 typedef uint32_t vrrec_encoder_input_format_t;
 typedef uint32_t vrrec_steamvr_overlay_pointer_event_kind_t;
+typedef uint32_t vrrec_steamvr_overlay_placement_mode_t;
+typedef uint32_t vrrec_steamvr_hand_t;
+typedef uint32_t vrrec_steamvr_tracking_origin_t;
 
 #define VRREC_STATUS_OK INT32_C(0)
 #define VRREC_STATUS_INVALID_ARGUMENT INT32_C(1)
@@ -53,6 +56,14 @@ typedef uint32_t vrrec_steamvr_overlay_pointer_event_kind_t;
 #define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_LEFT UINT32_C(1)
 #define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_RIGHT UINT32_C(2)
 #define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_MIDDLE UINT32_C(4)
+
+#define VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK UINT32_C(1)
+#define VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN UINT32_C(2)
+#define VRREC_STEAMVR_HAND_NONE UINT32_C(0)
+#define VRREC_STEAMVR_HAND_LEFT UINT32_C(1)
+#define VRREC_STEAMVR_HAND_RIGHT UINT32_C(2)
+#define VRREC_STEAMVR_TRACKING_ORIGIN_NONE UINT32_C(0)
+#define VRREC_STEAMVR_TRACKING_ORIGIN_STANDING UINT32_C(1)
 
 #define VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED UINT32_C(1)
 #define VRREC_EVENT_STOPPED UINT32_C(2)
@@ -279,6 +290,21 @@ typedef struct vrrec_steamvr_overlay_pointer_event_v1 {
     uint32_t cursor_index;
 } vrrec_steamvr_overlay_pointer_event_v1;
 
+/*
+ * transform is a row-major OpenVR HmdMatrix34_t in right-handed metres:
+ * +X right, +Y up, and -Z forward. Wrist Dock requires LEFT/RIGHT hand and
+ * origin NONE. World Pin requires hand NONE and origin STANDING.
+ */
+typedef struct vrrec_steamvr_overlay_pose_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    vrrec_steamvr_overlay_placement_mode_t placement_mode;
+    vrrec_steamvr_hand_t hand;
+    vrrec_steamvr_tracking_origin_t tracking_origin;
+    uint32_t reserved_v1;
+    float transform[12];
+} vrrec_steamvr_overlay_pose_v1;
+
 typedef struct vrrec_spout_source_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -426,6 +452,14 @@ VRREC_API vrrec_status_t VRREC_CALL
 vrrec_steamvr_overlay_poll_pointer_event_v1(
     vrrec_steamvr_overlay_t *overlay,
     vrrec_steamvr_overlay_pointer_event_v1 *out_event);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_set_pose_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    const vrrec_steamvr_overlay_pose_v1 *pose);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_get_pose_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_overlay_pose_v1 *out_pose);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_close_v1(
     vrrec_steamvr_overlay_t *overlay);

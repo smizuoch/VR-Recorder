@@ -76,8 +76,9 @@ public:
         }
 
         auto error = vr::VRInitError_None;
-        auto *system = vr::VR_Init(&error, vr::VRApplication_Overlay);
-        if (error != vr::VRInitError_None || system == nullptr) {
+        system_ = vr::VR_Init(&error, vr::VRApplication_Overlay);
+        if (error != vr::VRInitError_None || system_ == nullptr) {
+            system_ = nullptr;
             return VRREC_STATUS_BACKEND_UNAVAILABLE;
         }
 
@@ -92,7 +93,7 @@ public:
         }
 
         auto adapter_index = std::int32_t {-1};
-        system->GetDXGIOutputInfo(&adapter_index);
+        system_->GetDXGIOutputInfo(&adapter_index);
         auto texture_status = VRREC_STATUS_INTERNAL_ERROR;
         auto graphics_port =
             CreateWindowsOpenVrOverlayTextureGraphicsPort(
@@ -281,6 +282,108 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t SetOverlayPose(
+        std::uint64_t handle,
+        const OpenVrOverlayPose &pose) noexcept override
+    {
+        if (!initialized_ || system_ == nullptr || overlay_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        auto matrix = vr::HmdMatrix34_t {};
+        for (auto row = std::size_t {0}; row < 3; ++row) {
+            for (auto column = std::size_t {0}; column < 4; ++column) {
+                matrix.m[row][column] =
+                    pose.transform.values[(row * 4) + column];
+            }
+        }
+        const auto openvr_handle =
+            static_cast<vr::VROverlayHandle_t>(handle);
+        if (pose.placement_mode == OpenVrOverlayPlacementMode::WorldPin) {
+            return MapOverlayError(overlay_->SetOverlayTransformAbsolute(
+                openvr_handle,
+                vr::TrackingUniverseStanding,
+                &matrix));
+        }
+
+        const auto role = pose.hand == OpenVrHand::Left
+            ? vr::TrackedControllerRole_LeftHand
+            : vr::TrackedControllerRole_RightHand;
+        const auto device =
+            system_->GetTrackedDeviceIndexForControllerRole(role);
+        return device == vr::k_unTrackedDeviceIndexInvalid
+            ? VRREC_STATUS_BACKEND_UNAVAILABLE
+            : MapOverlayError(
+                overlay_->SetOverlayTransformTrackedDeviceRelative(
+                    openvr_handle,
+                    device,
+                    &matrix));
+    }
+
+    vrrec_status_t GetOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        pose = {};
+        if (!initialized_ || system_ == nullptr || overlay_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto openvr_handle =
+            static_cast<vr::VROverlayHandle_t>(handle);
+        auto type = vr::VROverlayTransform_Invalid;
+        auto status = MapOverlayError(
+            overlay_->GetOverlayTransformType(openvr_handle, &type));
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        auto matrix = vr::HmdMatrix34_t {};
+        if (type == vr::VROverlayTransform_Absolute) {
+            auto origin = vr::TrackingUniverseRawAndUncalibrated;
+            status = MapOverlayError(overlay_->GetOverlayTransformAbsolute(
+                openvr_handle,
+                &origin,
+                &matrix));
+            if (status != VRREC_STATUS_OK) {
+                return status;
+            }
+            if (origin != vr::TrackingUniverseStanding) {
+                return VRREC_STATUS_INTERNAL_ERROR;
+            }
+            pose.placement_mode = OpenVrOverlayPlacementMode::WorldPin;
+            pose.hand = OpenVrHand::None;
+            pose.tracking_origin = OpenVrTrackingOrigin::Standing;
+        } else if (type == vr::VROverlayTransform_TrackedDeviceRelative) {
+            auto device = vr::k_unTrackedDeviceIndexInvalid;
+            status = MapOverlayError(
+                overlay_->GetOverlayTransformTrackedDeviceRelative(
+                    openvr_handle,
+                    &device,
+                    &matrix));
+            if (status != VRREC_STATUS_OK) {
+                return status;
+            }
+            const auto role =
+                system_->GetControllerRoleForTrackedDeviceIndex(device);
+            if (role != vr::TrackedControllerRole_LeftHand &&
+                role != vr::TrackedControllerRole_RightHand) {
+                return VRREC_STATUS_INTERNAL_ERROR;
+            }
+            pose.placement_mode = OpenVrOverlayPlacementMode::WristDock;
+            pose.hand = role == vr::TrackedControllerRole_LeftHand
+                ? OpenVrHand::Left
+                : OpenVrHand::Right;
+            pose.tracking_origin = OpenVrTrackingOrigin::None;
+        } else {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        for (auto row = std::size_t {0}; row < 3; ++row) {
+            for (auto column = std::size_t {0}; column < 4; ++column) {
+                pose.transform.values[(row * 4) + column] =
+                    matrix.m[row][column];
+            }
+        }
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t AddApplicationManifest(
         std::string_view absolute_path,
         bool temporary) noexcept override
@@ -416,12 +519,14 @@ public:
         input_ = nullptr;
         applications_ = nullptr;
         overlay_ = nullptr;
+        system_ = nullptr;
         initialized_ = false;
         vr::VR_Shutdown();
         texture_presenter_.reset();
     }
 
 private:
+    vr::IVRSystem *system_ = nullptr;
     vr::IVRApplications *applications_ = nullptr;
     vr::IVRInput *input_ = nullptr;
     vr::IVROverlay *overlay_ = nullptr;

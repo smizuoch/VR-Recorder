@@ -5,6 +5,7 @@
 
 #include "openvr_overlay_lifecycle_port.hpp"
 #include "openvr_overlay_event_port.hpp"
+#include "openvr_overlay_pose_port.hpp"
 #include "openvr_overlay_texture_port.hpp"
 
 namespace vrrecorder::native {
@@ -27,6 +28,9 @@ public:
     virtual vrrec_status_t PollPointerEvent(
         OpenVrOverlayPointerEvent &event,
         bool &has_event) noexcept = 0;
+    virtual vrrec_status_t SetPose(
+        const OpenVrOverlayPose &pose) noexcept = 0;
+    virtual vrrec_status_t GetPose(OpenVrOverlayPose &pose) noexcept = 0;
     virtual vrrec_status_t Close() noexcept = 0;
 };
 
@@ -40,6 +44,14 @@ std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
     std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
     std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
     std::unique_ptr<OpenVrOverlayEventPort> event_port,
+    vrrec_status_t &status) noexcept;
+
+std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
+    const OpenVrOverlayLifecycleConfig &config,
+    std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
+    std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
+    std::unique_ptr<OpenVrOverlayEventPort> event_port,
+    std::unique_ptr<OpenVrOverlayPosePort> pose_port,
     vrrec_status_t &status) noexcept;
 
 std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(

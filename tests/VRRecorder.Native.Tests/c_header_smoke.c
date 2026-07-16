@@ -36,6 +36,20 @@ _Static_assert(
     sizeof(vrrec_steamvr_overlay_pointer_event_v1) == 32,
     "SteamVR overlay pointer event ABI drift");
 _Static_assert(
+    sizeof(vrrec_steamvr_overlay_pose_v1) == 72,
+    "SteamVR overlay pose ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK == 1,
+    "SteamVR Wrist Dock ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN == 2,
+    "SteamVR World Pin ABI drift");
+_Static_assert(VRREC_STEAMVR_HAND_LEFT == 1, "SteamVR left hand ABI drift");
+_Static_assert(VRREC_STEAMVR_HAND_RIGHT == 2, "SteamVR right hand ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_TRACKING_ORIGIN_STANDING == 1,
+    "SteamVR standing origin ABI drift");
+_Static_assert(
     VRREC_STEAMVR_OVERLAY_POINTER_MOVE == 1,
     "SteamVR overlay pointer move ABI drift");
 _Static_assert(

@@ -117,6 +117,26 @@ public static class WristOverlayPoseContract
             return false;
         }
 
+        return MatchesMatrices(actualMatrix, expectedMatrix);
+    }
+
+    public static bool MatchesReadback(
+        OpenVrMatrix34 actual,
+        OverlayTransform expected)
+    {
+        if (!TryConvert(expected, out var expectedMatrix) ||
+            actual.ToArray().Any(value => !float.IsFinite(value)))
+        {
+            return false;
+        }
+
+        return MatchesMatrices(actual, expectedMatrix);
+    }
+
+    private static bool MatchesMatrices(
+        OpenVrMatrix34 actualMatrix,
+        OpenVrMatrix34 expectedMatrix)
+    {
         var x = actualMatrix.M03 - expectedMatrix.M03;
         var y = actualMatrix.M13 - expectedMatrix.M13;
         var z = actualMatrix.M23 - expectedMatrix.M23;

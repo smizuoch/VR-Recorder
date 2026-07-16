@@ -41,6 +41,7 @@ struct RawState final {
     std::vector<std::thread::id> polling_threads;
     OpenVrOverlayPointerEvent overlay_pointer_event {};
     bool has_overlay_pointer_event = false;
+    OpenVrOverlayPose overlay_pose {};
 };
 
 class FakeRawApi final : public OpenVrRuntimePort {
@@ -154,6 +155,26 @@ public:
         event = state_->overlay_pointer_event;
         has_event = state_->has_overlay_pointer_event;
         state_->has_overlay_pointer_event = false;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t SetOverlayPose(
+        std::uint64_t handle,
+        const OpenVrOverlayPose &pose) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-pose-set:" + std::to_string(handle));
+        state_->overlay_pose = pose;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-pose-get:" + std::to_string(handle));
+        pose = state_->overlay_pose;
         return VRREC_STATUS_OK;
     }
 
@@ -642,6 +663,45 @@ void RoutesOverlayPointerEventsThroughTheSharedRuntimeGeneration()
     (void)raw;
 }
 
+void RoutesOverlayPoseThroughTheSharedRuntimeGeneration()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrProcessOverlayLifecycle(
+        runtime,
+        "C:/app/OpenVr/steamvr.vrmanifest",
+        config,
+        status);
+    const auto pose = OpenVrOverlayPose {
+        OpenVrOverlayPlacementMode::WristDock,
+        OpenVrHand::Right,
+        OpenVrTrackingOrigin::None,
+        OpenVrMatrix34 {{
+            1, 0, 0, -0.03F,
+            0, 1, 0, 0.05F,
+            0, 0, 1, -0.08F,
+        }},
+    };
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(overlay->SetPose(pose) == VRREC_STATUS_OK);
+    auto readback = OpenVrOverlayPose {};
+    CHECK(overlay->GetPose(readback) == VRREC_STATUS_OK);
+    CHECK(readback == pose);
+    CHECK(state->calls[state->calls.size() - 2] == "overlay-pose-set:91");
+    CHECK(state->calls.back() == "overlay-pose-get:91");
+    overlay.reset();
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
 void ApplicationRegistrationFailureDoesNotCreateAnOverlay()
 {
     auto state = std::make_shared<RawState>();
@@ -816,6 +876,7 @@ int main()
     RegistersTheApplicationBeforeComposingAnOverlay();
     RoutesOverlayTextureThroughTheSharedRuntimeGeneration();
     RoutesOverlayPointerEventsThroughTheSharedRuntimeGeneration();
+    RoutesOverlayPoseThroughTheSharedRuntimeGeneration();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
     FailsClosedBeforeAcquiringAReference();
     return 0;

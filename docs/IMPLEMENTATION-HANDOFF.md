@@ -254,6 +254,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - recorder status subscriptionをatomicな最新1件へ畳み、初回即時かつ最大90 Hzでinteraction coordinatorを駆動するone-shot background host。遅いtick後はcatch-up連打せずmonotonic nowから再基準化し、cancel／fault時に必ずunsubscribeする
 - settings schema v2。旧v1のglobal hand／mode／transformを未知機器用fallbackとして無損失に移行し、OpenVRのtracking system name、HMD model number、controller input profile path、left／rightのexact keyごとに最大64件の配置を保存・選択・置換する。v1／v2 JSON Schemaは別identityで同梱し、v2保存値をprofile入りでoffline検証する
 - [`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)のpure pose contract。右手系+X右／+Y上／-Z前、m、pitch-X／yaw-Y／roll-Z degree、`Rz*Ry*Rx`、Standing World Pin、0.5 mm／0.1 degree readback許容差、5／20 mm nudge、120／80 mm detach／reattach hysteresisを固定し、初回setupのreadbackもEuler完全一致ではなく同じ行列許容差で判定する
+- lifecycle／texture／eventから分離したnative pose Portと72-byte versioned C ABI。Wrist Dockをleft／right tracked-device-relative、World PinをStanding absolute transformとして実`IVROverlay`へ適用・readbackし、mode／hand／origin、有限値、±100 m、右手系直交回転行列をABI境界とlifecycle境界でfail-closed検証する。同じprocess runtime generationへ接続し、managed lifecycleでは`OverlayTransform`と型付きreadbackへ変換する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -263,8 +264,8 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
 - production glyph／icon atlasを使うoverlay background hostのApp composition
 - production telemetryの採取・表示、production glyph／icon atlas
-- controller-relative Wrist Dock、absolute World Pin、pose readback
-- drag、nudge、recenter、dock／pin commandのruntime適用
+- profile選択とsettings永続化を束ねるproduction placement coordinator
+- drag、nudge、recenter、dock／pin commandから確定poseへのruntime適用
 - haptic action handleと録画開始／停止／fault pulse
 - first-run routerの`WristOverlayPlacement` production route
 - 実SteamVR／HMD／controller試験
@@ -613,7 +614,7 @@ desktop録画が成立した後、次の順でproduction compositionへ接続す
 
 `actions.json`はOpenVR application manifestではない。unpackaged install rootを参照する`.vrmanifest`、stable application key、`IVRApplications`でのidempotent登録／更新／解除が別途必要である。temporary登録を起動ごとに行うかpersistent登録をinstall lifecycleで行うかをADR化し、SteamVR再起動、app upgradeでpath変更、uninstall後のstale manifestをRedにする。MSIXではpackage install locationへabsolute pathを再解決し、存在しない旧version pathを残さない。
 
-App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged runtimeを共有する。native process ownerは`VR_Init`／`VR_Shutdown`をruntime generation単位に集約し、最大90 Hzの一つのbackground pollで`UpdateActionState`と全登録digital actionを同じrevisionへ採取する。遅いconsumerは中間revisionをskipして最新snapshotを読むためpoll ownerを停止しない。native overlay lifecycleはownerへ接続済みだが、managed overlay host、placement、hapticは未接続である。
+App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged runtimeを共有する。native process ownerは`VR_Init`／`VR_Shutdown`をruntime generation単位に集約し、最大90 Hzの一つのbackground pollで`UpdateActionState`と全登録digital actionを同じrevisionへ採取する。遅いconsumerは中間revisionをskipして最新snapshotを読むためpoll ownerを停止しない。native overlay lifecycle／event／poseとmanaged pose transportはownerへ接続済みだが、production placement coordinatorとhapticは未接続である。
 
 ### 7.1 Input Red
 
@@ -657,7 +658,7 @@ App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged 
 - dragなしで全操作へ到達可能。
 - first-run routerに`WristOverlayPlacement` routeを登録し、fake evidenceではなく実overlay visibility／mode／pose readback＋user confirmationで完了する。
 
-settings schema v2へのmigrationとpure pose contractはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。次はこのcontractだけを受け取るnative pose Port／C ABI／managed adapterを書く。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作を先に分ける。
+settings schema v2へのmigration、pure pose contract、native pose Port、72-byte C ABI、managed adapterはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。Wrist Dockは実OpenVRのtracked-device-relative、World PinはStanding absolute APIへ接続し、runtime readbackも同じ行列許容差で比較できる。次はruntime device identityからprofileを選び、配置の適用／readback／nudge／recenter／永続化を一つのproduction coordinatorで閉じる。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作を先に分ける。
 
 ### 7.5 Haptics Red
 

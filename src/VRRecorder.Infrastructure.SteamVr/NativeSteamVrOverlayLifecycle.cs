@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using VRRecorder.Application.Settings;
 using VRRecorder.Infrastructure.SteamVr.Native;
 
 namespace VRRecorder.Infrastructure.SteamVr;
@@ -146,6 +147,64 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
     public void ClearTexture() => Operate(
         static (library, overlay) => library.ClearOverlayTexture(overlay),
         "clear texture");
+
+    public void ApplyPlacement(
+        VrHand hand,
+        OverlayPlacementMode placementMode,
+        OverlayTransform transform)
+    {
+        if (!Enum.IsDefined(hand))
+        {
+            throw new ArgumentOutOfRangeException(nameof(hand), hand, null);
+        }
+        if (!Enum.IsDefined(placementMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(placementMode),
+                placementMode,
+                null);
+        }
+        var matrix = WristOverlayPoseContract.ToOpenVrMatrix34(transform);
+        var pose = CreateNativePose(hand, placementMode, matrix);
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var status = _library.SetOverlayPose(
+                _overlay.DangerousGetHandle(),
+                ref pose);
+            if (status != NativeSteamVrStatus.Ok)
+            {
+                throw Failure(status, "set pose");
+            }
+        }
+    }
+
+    public SteamVrOverlayPoseReadback ReadPlacement()
+    {
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var pose = new NativeSteamVrOverlayPoseV1
+            {
+                StructSize = checked((uint)Marshal.SizeOf<
+                    NativeSteamVrOverlayPoseV1>()),
+                AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
+            };
+            var status = _library.GetOverlayPose(
+                _overlay.DangerousGetHandle(),
+                ref pose);
+            if (status != NativeSteamVrStatus.Ok ||
+                !TryMapPose(pose, out var readback))
+            {
+                throw Failure(
+                    status == NativeSteamVrStatus.Ok
+                        ? NativeSteamVrStatus.InternalError
+                        : status,
+                    "get pose");
+            }
+            return readback;
+        }
+    }
 
     public SteamVrOverlayPointerEvent? PollPointerEvent()
     {
@@ -299,5 +358,85 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
             button,
             nativeEvent.CursorIndex);
         return true;
+    }
+
+    private static NativeSteamVrOverlayPoseV1 CreateNativePose(
+        VrHand hand,
+        OverlayPlacementMode placementMode,
+        OpenVrMatrix34 matrix) =>
+        new()
+        {
+            StructSize = checked((uint)Marshal.SizeOf<
+                NativeSteamVrOverlayPoseV1>()),
+            AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
+            PlacementMode = placementMode == OverlayPlacementMode.WristDock
+                ? 1u
+                : 2u,
+            Hand = placementMode == OverlayPlacementMode.WristDock
+                ? hand == VrHand.Left ? 1u : 2u
+                : 0u,
+            TrackingOrigin = placementMode == OverlayPlacementMode.WorldPin
+                ? 1u
+                : 0u,
+            M00 = matrix.M00,
+            M01 = matrix.M01,
+            M02 = matrix.M02,
+            M03 = matrix.M03,
+            M10 = matrix.M10,
+            M11 = matrix.M11,
+            M12 = matrix.M12,
+            M13 = matrix.M13,
+            M20 = matrix.M20,
+            M21 = matrix.M21,
+            M22 = matrix.M22,
+            M23 = matrix.M23,
+        };
+
+    private static bool TryMapPose(
+        NativeSteamVrOverlayPoseV1 pose,
+        out SteamVrOverlayPoseReadback readback)
+    {
+        readback = null!;
+        var matrix = new OpenVrMatrix34(
+            pose.M00,
+            pose.M01,
+            pose.M02,
+            pose.M03,
+            pose.M10,
+            pose.M11,
+            pose.M12,
+            pose.M13,
+            pose.M20,
+            pose.M21,
+            pose.M22,
+            pose.M23);
+        if (pose.ReservedV1 != 0 ||
+            matrix.ToArray().Any(value => !float.IsFinite(value)))
+        {
+            return false;
+        }
+        if (pose.PlacementMode == 1 &&
+            pose.TrackingOrigin == 0 &&
+            pose.Hand is 1 or 2)
+        {
+            readback = new SteamVrOverlayPoseReadback(
+                OverlayPlacementMode.WristDock,
+                pose.Hand == 1 ? VrHand.Left : VrHand.Right,
+                TrackingOrigin: null,
+                matrix);
+            return true;
+        }
+        if (pose.PlacementMode == 2 &&
+            pose.Hand == 0 &&
+            pose.TrackingOrigin == 1)
+        {
+            readback = new SteamVrOverlayPoseReadback(
+                OverlayPlacementMode.WorldPin,
+                DockHand: null,
+                WristOverlayTrackingOrigin.Standing,
+                matrix);
+            return true;
+        }
+        return false;
     }
 }

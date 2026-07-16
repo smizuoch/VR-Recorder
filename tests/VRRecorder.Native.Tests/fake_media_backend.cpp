@@ -570,6 +570,8 @@ struct FakeSteamVrOverlayState {
     std::uint8_t texture_last_byte = 0;
     bool texture_set = false;
     std::deque<testing::TestSteamVrOverlayPointerEvent> pointer_events;
+    OpenVrOverlayPose pose {};
+    bool pose_set = false;
 };
 
 FakeSteamVrOverlayState fake_steamvr_overlay;
@@ -675,6 +677,31 @@ public:
             next.cursor_index,
         };
         has_event = true;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t SetPose(const OpenVrOverlayPose &pose) noexcept override
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        fake_steamvr_overlay.pose = pose;
+        fake_steamvr_overlay.pose_set = true;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetPose(OpenVrOverlayPose &pose) noexcept override
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        pose = {};
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (!fake_steamvr_overlay.pose_set) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        pose = fake_steamvr_overlay.pose;
         return VRREC_STATUS_OK;
     }
 
@@ -1167,6 +1194,8 @@ void ResetSteamVrOverlay()
     fake_steamvr_overlay.texture_last_byte = 0;
     fake_steamvr_overlay.texture_set = false;
     fake_steamvr_overlay.pointer_events.clear();
+    fake_steamvr_overlay.pose = {};
+    fake_steamvr_overlay.pose_set = false;
 }
 
 bool HasActiveSteamVrOverlay()

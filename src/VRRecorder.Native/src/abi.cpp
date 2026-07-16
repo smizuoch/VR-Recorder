@@ -819,6 +819,52 @@ struct vrrec_steamvr_overlay final {
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t SetPose(
+        const vrrec_steamvr_overlay_pose_v1 &pose) noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        auto native_pose = vrrecorder::native::OpenVrOverlayPose {
+            static_cast<vrrecorder::native::OpenVrOverlayPlacementMode>(
+                pose.placement_mode),
+            static_cast<vrrecorder::native::OpenVrHand>(pose.hand),
+            static_cast<vrrecorder::native::OpenVrTrackingOrigin>(
+                pose.tracking_origin),
+            {},
+        };
+        std::copy(
+            std::begin(pose.transform),
+            std::end(pose.transform),
+            native_pose.transform.values.begin());
+        if (!vrrecorder::native::IsValidOpenVrOverlayPose(native_pose)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        return backend_->SetPose(native_pose);
+    }
+
+    vrrec_status_t GetPose(
+        vrrec_steamvr_overlay_pose_v1 &out_pose) noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        auto pose = vrrecorder::native::OpenVrOverlayPose {};
+        const auto status = backend_->GetPose(pose);
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        if (!vrrecorder::native::IsValidOpenVrOverlayPose(pose)) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        out_pose.placement_mode =
+            static_cast<std::uint32_t>(pose.placement_mode);
+        out_pose.hand = static_cast<std::uint32_t>(pose.hand);
+        out_pose.tracking_origin =
+            static_cast<std::uint32_t>(pose.tracking_origin);
+        std::copy(
+            pose.transform.values.begin(),
+            pose.transform.values.end(),
+            std::begin(out_pose.transform));
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t Close() noexcept
     {
         const std::lock_guard lock(operation_mutex_);
@@ -1371,6 +1417,33 @@ vrrec_status_t ValidateSteamVrOverlayBgraFrame(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
     return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSteamVrOverlayPoseInput(
+    const vrrec_steamvr_overlay_pose_v1 *pose) noexcept
+{
+    if (pose == nullptr ||
+        pose->struct_size < sizeof(vrrec_steamvr_overlay_pose_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (pose->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    return pose->reserved_v1 == 0
+        ? VRREC_STATUS_OK
+        : VRREC_STATUS_INVALID_ARGUMENT;
+}
+
+vrrec_status_t ValidateSteamVrOverlayPoseOutput(
+    const vrrec_steamvr_overlay_pose_v1 *pose) noexcept
+{
+    if (pose == nullptr ||
+        pose->struct_size < sizeof(vrrec_steamvr_overlay_pose_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    return pose->abi_version == VRREC_ABI_V1
+        ? VRREC_STATUS_OK
+        : VRREC_STATUS_UNSUPPORTED_ABI;
 }
 
 bool IsValidSpoutBackendText(const std::string &text) noexcept
@@ -2184,6 +2257,52 @@ vrrec_steamvr_overlay_poll_pointer_event_v1(
     }
     try {
         return overlay->PollPointerEvent(*out_event);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_set_pose_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    const vrrec_steamvr_overlay_pose_v1 *pose)
+{
+    const auto validation = ValidateSteamVrOverlayPoseInput(pose);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->SetPose(*pose);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_get_pose_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_overlay_pose_v1 *out_pose)
+{
+    const auto validation = ValidateSteamVrOverlayPoseOutput(out_pose);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    out_pose->placement_mode = 0;
+    out_pose->hand = 0;
+    out_pose->tracking_origin = 0;
+    out_pose->reserved_v1 = 0;
+    std::fill(
+        std::begin(out_pose->transform),
+        std::end(out_pose->transform),
+        0.0F);
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->GetPose(*out_pose);
     } catch (...) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }

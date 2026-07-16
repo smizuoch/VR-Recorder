@@ -14,10 +14,11 @@
 - [x] backendのmux成功通知後だけFIRST_VIDEO_PACKET_MUXEDを1回発行する
 - [x] trailer／flush／close完了通知後だけSTOPPEDをpacket count付きで1回発行する
 - [x] FAULTEDをterminal eventにし、abort後のcallbackを抑止する
-- [x] production shared libraryのexportを承認済み18 symbolに限定しlink mapを生成する
+- [x] production shared libraryのexportを承認済み28 symbolに限定しlink mapを生成する
 - [x] portable `UNAVAILABLE` media variantがC ABIから明示的にBACKEND_UNAVAILABLEを返す
 - [x] media／encoder probe／Spout／SteamVR factoryをfamily別にexactly one選び、未知variant／source欠落／full-production不完全をconfigure時に拒否し、selection intentをactual native binary hashへ結合する
 - [x] SteamVR inputのversioned config/state・create/poll/destroy ABIを固定する
+- [x] SteamVR overlay poseを72-byte固定ABIでset／getし、mode／hand／origin／右手系直交行列をfail-closed検証する
 - [x] managed bridgeがABI v1 callbackをFIRST／STOPPED／FAULTEDへ変換する
 - [x] 選択済みencoderを固定値でmanagedからnativeへ渡し、不正値を拒否し、旧40 byte configはMF softwareへ既定化する
 - [x] source pixel formatと推定source FPSをappend-only session configで渡し、旧160 byte configの既定値も固定する
@@ -55,10 +56,11 @@
 - [x] Emit one FIRST_VIDEO_PACKET_MUXED event only after the backend reports a successful mux write
 - [x] Emit one STOPPED event with packet counts only after trailer, flush, and close completion
 - [x] Make FAULTED terminal and suppress callbacks after abort
-- [x] Limit the production shared-library exports to 18 approved symbols and generate a link map
+- [x] Limit the production shared-library exports to 28 approved symbols and generate a link map
 - [x] Return explicit BACKEND_UNAVAILABLE from the portable `UNAVAILABLE` media variant through the C ABI
 - [x] Select exactly one media, encoder-probe, Spout, and SteamVR factory source per family; reject unknown variants, missing sources, and incomplete full-production configurations; and bind the selection intent to the actual native-binary hash
 - [x] Freeze the versioned SteamVR input config/state and create/poll/destroy ABI
+- [x] Set/get SteamVR overlay poses through a fixed 72-byte ABI and fail closed on invalid mode, hand, origin, or right-handed orthonormal matrices
 - [x] Translate ABI v1 callbacks into managed FIRST, STOPPED, and FAULTED events
 - [x] Carry the selected encoder through stable managed/native values, reject invalid values, and default legacy 40-byte configs to MF software
 - [x] Carry source pixel format and estimated source FPS in an append-only session config while freezing defaults for legacy 160-byte configs

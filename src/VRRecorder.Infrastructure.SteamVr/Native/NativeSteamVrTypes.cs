@@ -71,3 +71,26 @@ internal struct NativeSteamVrOverlayPointerEventV1
     public uint Button;
     public uint CursorIndex;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrOverlayPoseV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public uint PlacementMode;
+    public uint Hand;
+    public uint TrackingOrigin;
+    public uint ReservedV1;
+    public float M00;
+    public float M01;
+    public float M02;
+    public float M03;
+    public float M10;
+    public float M11;
+    public float M12;
+    public float M13;
+    public float M20;
+    public float M21;
+    public float M22;
+    public float M23;
+}

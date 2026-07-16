@@ -1,5 +1,6 @@
 #include "openvr_overlay_lifecycle.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -161,12 +162,59 @@ private:
     std::shared_ptr<FakeState> state_;
 };
 
+class FakePosePort final : public OpenVrOverlayPosePort {
+public:
+    explicit FakePosePort(std::shared_ptr<FakeState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    vrrec_status_t SetOverlayPose(
+        std::uint64_t handle,
+        const OpenVrOverlayPose &pose) noexcept override
+    {
+        state_->calls.emplace_back("pose-set:" + std::to_string(handle));
+        current_pose = pose;
+        return set_status;
+    }
+
+    vrrec_status_t GetOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        state_->calls.emplace_back("pose-get:" + std::to_string(handle));
+        pose = current_pose;
+        return get_status;
+    }
+
+    OpenVrOverlayPose current_pose {};
+    vrrec_status_t set_status = VRREC_STATUS_OK;
+    vrrec_status_t get_status = VRREC_STATUS_OK;
+
+private:
+    std::shared_ptr<FakeState> state_;
+};
+
 OpenVrOverlayLifecycleConfig Config()
 {
     return OpenVrOverlayLifecycleConfig {
         "com.vrrecorder.desktop.wrist",
         "VR Recorder Wrist",
         0.22F,
+    };
+}
+
+OpenVrOverlayPose WristPose()
+{
+    return OpenVrOverlayPose {
+        OpenVrOverlayPlacementMode::WristDock,
+        OpenVrHand::Left,
+        OpenVrTrackingOrigin::None,
+        OpenVrMatrix34 {{
+            1, 0, 0, 0.03F,
+            0, 1, 0, 0.05F,
+            0, 0, 1, -0.08F,
+        }},
     };
 }
 
@@ -574,6 +622,46 @@ void PointerInputConfigurationFailureRollsBackTheOverlay()
     }));
 }
 
+void AppliesAndReadsOnlyValidatedOverlayPoses()
+{
+    auto state = std::make_shared<FakeState>();
+    auto pose_port = std::make_unique<FakePosePort>(state);
+    auto *raw_pose = pose_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        std::make_unique<FakeEventPort>(state),
+        std::move(pose_port),
+        status);
+
+    CHECK(status == VRREC_STATUS_OK);
+    auto pose = WristPose();
+    auto invalid = pose;
+    invalid.transform.values[0] = 2;
+    CHECK(overlay->SetPose(invalid) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(state->calls.back() == "input:73:1024x512");
+
+    CHECK(overlay->SetPose(pose) == VRREC_STATUS_OK);
+    CHECK(raw_pose->current_pose == pose);
+    auto readback = OpenVrOverlayPose {};
+    CHECK(overlay->GetPose(readback) == VRREC_STATUS_OK);
+    CHECK(readback == pose);
+
+    raw_pose->current_pose.transform.values[3] =
+        std::numeric_limits<float>::quiet_NaN();
+    readback = pose;
+    CHECK(overlay->GetPose(readback) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(readback == OpenVrOverlayPose {});
+
+    CHECK(overlay->Close() == VRREC_STATUS_OK);
+    CHECK(overlay->SetPose(pose) == VRREC_STATUS_INVALID_STATE);
+    readback = pose;
+    CHECK(overlay->GetPose(readback) == VRREC_STATUS_INVALID_STATE);
+    CHECK(readback == OpenVrOverlayPose {});
+}
+
 }
 
 int main()
@@ -590,5 +678,6 @@ int main()
     ConfiguresAndPollsTopLeftPixelPointerEvents();
     RejectsInvalidPointerEventsReturnedByTheRuntime();
     PointerInputConfigurationFailureRollsBackTheOverlay();
+    AppliesAndReadsOnlyValidatedOverlayPoses();
     return 0;
 }

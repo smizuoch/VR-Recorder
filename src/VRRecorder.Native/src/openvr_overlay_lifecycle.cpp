@@ -26,10 +26,12 @@ public:
     OpenVrOverlayLifecycleCore(
         std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
         std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
-        std::unique_ptr<OpenVrOverlayEventPort> event_port) noexcept
+        std::unique_ptr<OpenVrOverlayEventPort> event_port,
+        std::unique_ptr<OpenVrOverlayPosePort> pose_port) noexcept
         : lifecycle_port_(std::move(lifecycle_port)),
           texture_port_(std::move(texture_port)),
-          event_port_(std::move(event_port))
+          event_port_(std::move(event_port)),
+          pose_port_(std::move(pose_port))
     {
     }
 
@@ -185,6 +187,36 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t SetPose(
+        const OpenVrOverlayPose &pose) noexcept override
+    {
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (!IsValidOpenVrOverlayPose(pose)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        return pose_port_->SetOverlayPose(handle_, pose);
+    }
+
+    vrrec_status_t GetPose(OpenVrOverlayPose &pose) noexcept override
+    {
+        pose = {};
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = pose_port_->GetOverlayPose(handle_, pose);
+        if (status != VRREC_STATUS_OK) {
+            pose = {};
+            return status;
+        }
+        if (!IsValidOpenVrOverlayPose(pose)) {
+            pose = {};
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t Close() noexcept override
     {
         if (closed_) {
@@ -213,6 +245,7 @@ private:
     std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port_;
     std::unique_ptr<OpenVrOverlayTexturePort> texture_port_;
     std::unique_ptr<OpenVrOverlayEventPort> event_port_;
+    std::unique_ptr<OpenVrOverlayPosePort> pose_port_;
     std::uint64_t handle_ = 0;
     bool visible_ = false;
     bool texture_set_ = false;
@@ -265,6 +298,27 @@ public:
     }
 };
 
+class UnavailableOpenVrOverlayPosePort final : public OpenVrOverlayPosePort {
+public:
+    vrrec_status_t SetOverlayPose(
+        std::uint64_t handle,
+        const OpenVrOverlayPose &pose) noexcept override
+    {
+        (void)handle;
+        (void)pose;
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+
+    vrrec_status_t GetOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        (void)handle;
+        pose = {};
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+};
+
 }
 
 std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
@@ -312,8 +366,31 @@ std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
     std::unique_ptr<OpenVrOverlayEventPort> event_port,
     vrrec_status_t &status) noexcept
 {
+    auto pose_port = std::unique_ptr<OpenVrOverlayPosePort>(
+        new (std::nothrow) UnavailableOpenVrOverlayPosePort());
+    if (!pose_port) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    return CreateOpenVrOverlayLifecycle(
+        config,
+        std::move(lifecycle_port),
+        std::move(texture_port),
+        std::move(event_port),
+        std::move(pose_port),
+        status);
+}
+
+std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
+    const OpenVrOverlayLifecycleConfig &config,
+    std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
+    std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
+    std::unique_ptr<OpenVrOverlayEventPort> event_port,
+    std::unique_ptr<OpenVrOverlayPosePort> pose_port,
+    vrrec_status_t &status) noexcept
+{
     status = VRREC_STATUS_INVALID_ARGUMENT;
-    if (!lifecycle_port || !texture_port || !event_port ||
+    if (!lifecycle_port || !texture_port || !event_port || !pose_port ||
         !IsPresent(config.overlay_key_utf8) ||
         !IsPresent(config.overlay_name_utf8) ||
         !std::isfinite(config.width_in_meters) ||
@@ -326,7 +403,8 @@ std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
         new (std::nothrow) OpenVrOverlayLifecycleCore(
             std::move(lifecycle_port),
             std::move(texture_port),
-            std::move(event_port)));
+            std::move(event_port),
+            std::move(pose_port)));
     if (!concrete) {
         status = VRREC_STATUS_OUT_OF_MEMORY;
         return nullptr;

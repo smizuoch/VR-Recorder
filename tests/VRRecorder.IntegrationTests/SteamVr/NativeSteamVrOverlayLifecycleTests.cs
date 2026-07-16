@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using VRRecorder.Application.Presentation;
+using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Infrastructure.SteamVr;
 using VRRecorder.Presentation.Wrist;
@@ -8,6 +9,74 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
+    [Fact]
+    public void AppliesAndReadsTypedWristDockAndWorldPinPoses()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        var dockTransform = new OverlayTransform(
+            [-0.03, 0.05, -0.08],
+            [25, 0, -10]);
+
+        overlay.ApplyPlacement(
+            VrHand.Right,
+            OverlayPlacementMode.WristDock,
+            dockTransform);
+        var dock = overlay.ReadPlacement();
+
+        Assert.Equal(OverlayPlacementMode.WristDock, dock.PlacementMode);
+        Assert.Equal(VrHand.Right, dock.DockHand);
+        Assert.Null(dock.TrackingOrigin);
+        Assert.Equal(
+            WristOverlayPoseContract
+                .ToOpenVrMatrix34(dockTransform)
+                .ToArray(),
+            dock.Transform.ToArray());
+
+        var pinTransform = new OverlayTransform(
+            [1.25, 1.5, -2],
+            [0, 45, 0]);
+        overlay.ApplyPlacement(
+            VrHand.Left,
+            OverlayPlacementMode.WorldPin,
+            pinTransform);
+        var pin = overlay.ReadPlacement();
+
+        Assert.Equal(OverlayPlacementMode.WorldPin, pin.PlacementMode);
+        Assert.Null(pin.DockHand);
+        Assert.Equal(
+            WristOverlayTrackingOrigin.Standing,
+            pin.TrackingOrigin);
+        Assert.Equal(
+            WristOverlayPoseContract
+                .ToOpenVrMatrix34(pinTransform)
+                .ToArray(),
+            pin.Transform.ToArray());
+
+        overlay.Close();
+        var applyException = Assert.Throws<SteamVrOverlayException>(() =>
+            overlay.ApplyPlacement(
+                VrHand.Left,
+                OverlayPlacementMode.WristDock,
+                dockTransform));
+        Assert.Equal(3, applyException.Status);
+        Assert.Equal("set pose", applyException.Operation);
+        var readException = Assert.Throws<SteamVrOverlayException>(
+            overlay.ReadPlacement);
+        Assert.Equal(3, readException.Status);
+        Assert.Equal("get pose", readException.Operation);
+    }
+
     [Fact]
     public void AdaptsNativeLifecycleToWristPresentationPorts()
     {

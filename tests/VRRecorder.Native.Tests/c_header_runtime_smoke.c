@@ -172,6 +172,19 @@ int main(void)
     CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(
               NULL,
               &pointer_event) == VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_overlay_pose_v1 pose = {
+        sizeof(vrrec_steamvr_overlay_pose_v1),
+        VRREC_ABI_V1,
+        VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK,
+        VRREC_STEAMVR_HAND_LEFT,
+        VRREC_STEAMVR_TRACKING_ORIGIN_NONE,
+        0,
+        {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0},
+    };
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(NULL, &pose) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_get_pose_v1(NULL, &pose) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
     vrrec_steamvr_overlay_destroy_v1(NULL);
 
     vrrec_spout_source_config_v1 spout_config = {
