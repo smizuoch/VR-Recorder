@@ -1,10 +1,89 @@
 using System.Runtime.InteropServices;
+using VRRecorder.Application.Presentation;
+using VRRecorder.Domain.Recording;
 using VRRecorder.Infrastructure.SteamVr;
+using VRRecorder.Presentation.Wrist;
 
 namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
+    [Fact]
+    public void AdaptsNativeLifecycleToWristPresentationPorts()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        var adapter = new NativeSteamVrWristOverlayAdapter(
+            FixturePath(),
+            install.Path);
+        var frame = RenderFrame(revision: 10);
+
+        adapter.Publish(frame);
+        adapter.Show();
+        Assert.Equal(1u, controls.TextureUpdateCount());
+        Assert.True(controls.IsVisible());
+        Assert.Null(adapter.PollPointerEvent());
+
+        controls.PushPointerEvent(
+            kind: 2,
+            pixelX: 456,
+            pixelY: 78,
+            button: 1,
+            cursorIndex: 3);
+        var pointerEvent = adapter.PollPointerEvent();
+        Assert.True(pointerEvent.HasValue);
+        Assert.Equal(WristPointerEventKind.ButtonDown, pointerEvent.Value.Kind);
+        Assert.Equal(456, pointerEvent.Value.PixelX);
+        Assert.Equal(78, pointerEvent.Value.PixelY);
+        Assert.Equal(WristPointerButton.Primary, pointerEvent.Value.Button);
+        Assert.Equal(3u, pointerEvent.Value.CursorIndex);
+
+        foreach (var expected in new[]
+                 {
+                     (
+                         NativeKind: 1u,
+                         NativeButton: 0u,
+                         Kind: WristPointerEventKind.Move,
+                         Button: WristPointerButton.None),
+                     (
+                         NativeKind: 2u,
+                         NativeButton: 2u,
+                         Kind: WristPointerEventKind.ButtonDown,
+                         Button: WristPointerButton.Secondary),
+                     (
+                         NativeKind: 3u,
+                         NativeButton: 4u,
+                         Kind: WristPointerEventKind.ButtonUp,
+                         Button: WristPointerButton.Middle),
+                 })
+        {
+            controls.PushPointerEvent(
+                expected.NativeKind,
+                pixelX: 1,
+                pixelY: 2,
+                button: expected.NativeButton,
+                cursorIndex: 4);
+            var mapped = adapter.PollPointerEvent();
+            Assert.True(mapped.HasValue);
+            Assert.Equal(expected.Kind, mapped.Value.Kind);
+            Assert.Equal(expected.Button, mapped.Value.Button);
+        }
+
+        adapter.Dispose();
+        adapter.Dispose();
+        Assert.False(controls.IsActive());
+        Assert.Throws<ObjectDisposedException>(() => adapter.Publish(frame));
+        Assert.Throws<ObjectDisposedException>(() =>
+            adapter.PollPointerEvent());
+    }
+
     [Fact]
     public void PollsTypedPointerEventsOneAtATime()
     {
@@ -162,6 +241,58 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         "VRRecorder.Native.Tests",
         "build",
         "libvrrecorder_native_test.so");
+
+    private static WristTextureFrame RenderFrame(long revision) =>
+        new WristTextureRenderer(
+                new OnePixelRasterAssets(),
+                new WristTextureThemeSet(Theme(10), Theme(80)))
+            .Render(
+                new WristUiProjector(EnglishUiLocalizer.Instance).Project(
+                    new RecorderStatusSnapshot(
+                        revision,
+                        RecorderState.Ready,
+                        RecorderAvailableActions.Start)),
+                WristLayoutOptions.Default);
+
+    private static WristTextureTheme Theme(byte seed) => new(
+        new WristTexturePalette(
+            Opaque(seed, 1),
+            Opaque(seed, 2),
+            Opaque(seed, 3),
+            Opaque(seed, 4),
+            Opaque(seed, 5),
+            Opaque(seed, 6),
+            Opaque(seed, 7),
+            Opaque(seed, 8),
+            Opaque(seed, 9),
+            Opaque(seed, 10),
+            Opaque(seed, 11)),
+        new WristTextureMetrics(20, 28, 20, 12, 48, 72, 36));
+
+    private static WristBgra32 Opaque(byte seed, byte offset) => new(
+        (byte)(seed + offset),
+        (byte)(seed + offset + 1),
+        (byte)(seed + offset + 2),
+        byte.MaxValue);
+
+    private sealed class OnePixelRasterAssets : IWristRasterAssetProvider
+    {
+        public bool TryRasterizeIcon(
+            WristIconRasterRequest request,
+            out WristAlphaMask? mask)
+        {
+            mask = new WristAlphaMask(1, 1, [byte.MaxValue]);
+            return true;
+        }
+
+        public bool TryRasterizeText(
+            WristTextRasterRequest request,
+            out WristAlphaMask? mask)
+        {
+            mask = new WristAlphaMask(1, 1, [byte.MaxValue]);
+            return true;
+        }
+    }
 
     private static string FindRepositoryRoot()
     {

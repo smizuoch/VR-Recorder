@@ -36,13 +36,22 @@
         "type": "Project",
         "dependencies": {
           "VRRecorder.Application": "[1.0.0, )",
-          "VRRecorder.DesignSystem": "[1.0.0, )"
+          "VRRecorder.DesignSystem": "[1.0.0, )",
+          "VRRecorder.Presentation.Wrist": "[1.0.0, )"
         }
       },
       "vrrecorder.infrastructure.storage": {
         "type": "Project",
         "dependencies": {
           "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.presentation.wrist": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )",
+          "VRRecorder.DesignSystem": "[1.0.0, )",
+          "VRRecorder.Domain": "[1.0.0, )"
         }
       }
     },
