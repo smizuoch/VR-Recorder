@@ -24,6 +24,7 @@
 - [x] discontinuity付きshort packet直後のunflagged forward device-position gapを欠損無音区間として保持し、通常gap／逆行は拒否する
 - [x] event-driven WASAPI sourceがloopback／microphone、QPC、silent／loss flag、同一thread release、Abortを扱う
 - [x] PICOの`default-capture`からproduction WASAPI sourceで3秒／48 kHzを500 ms間隔で10回連続captureする
+- [x] PICOの`default-capture`をMicOnly routingのfull production sessionへ接続し、179 AAC packetをmuxしてpinned oracleで178 decoded frame／182,272 sample／presentation 0.000～3.797秒を確認する
 - [x] replacement endpointのStart失敗後もtimelineを破棄せず再接続を継続する
 - [x] desktop／microphoneを同一48 kHz frame windowでmixし、片側lossだけを無音化する
 - [x] 二入力のframe skewをmix前に拒否し、blocked readをAbortで解除する
@@ -68,6 +69,7 @@ The 48 kHz mixing, routing, click-prevention, and silence-continuity rules from 
 - [x] Preserve an unflagged forward device-position gap immediately after a short discontinuity packet as missing silence while rejecting ordinary gaps and backward positions
 - [x] Cover loopback/microphone, QPC, silent/loss flags, same-thread release, and abort in the event-driven WASAPI source
 - [x] Capture three seconds of 48 kHz audio from the PICO `default-capture` endpoint through the production WASAPI source ten consecutive times at 500 ms intervals
+- [x] Connect PICO `default-capture` to a full production session under MicOnly routing, mux 179 AAC packets, and use the pinned oracle to verify 178 decoded frames/182,272 samples with presentation from 0.000 through 3.797 seconds
 - [x] Keep the timeline recoverable after a replacement endpoint fails to start
 - [x] Mix desktop and microphone over the same 48 kHz frame window while silencing only a lost side
 - [x] Reject dual-input frame skew before mixing and release blocked reads on abort
