@@ -727,6 +727,7 @@ public partial class App
             var runtime = new WindowsWristOverlayRuntime(
                 _recordingHost,
                 _uiCommands,
+                _wristOverlayPlacement.Value,
                 overlay,
                 overlay,
                 _wristLocalizer,

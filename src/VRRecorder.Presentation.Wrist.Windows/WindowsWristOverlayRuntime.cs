@@ -11,6 +11,7 @@ public sealed class WindowsWristOverlayRuntime
     public WindowsWristOverlayRuntime(
         IRecorderStatusSource statuses,
         IUiCommandDispatcher commands,
+        IWristOverlayAdjustmentCommands placementCommands,
         IWristTexturePublisher texturePublisher,
         IWristPointerEventSource pointerEvents,
         IUiLocalizer localizer,
@@ -19,6 +20,7 @@ public sealed class WindowsWristOverlayRuntime
     {
         ArgumentNullException.ThrowIfNull(statuses);
         ArgumentNullException.ThrowIfNull(commands);
+        ArgumentNullException.ThrowIfNull(placementCommands);
         ArgumentNullException.ThrowIfNull(texturePublisher);
         ArgumentNullException.ThrowIfNull(pointerEvents);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -31,14 +33,18 @@ public sealed class WindowsWristOverlayRuntime
                 WindowsWristTextureThemes.Default),
             layoutOptions,
             texturePublisher);
+        var session = new WristUiSession(
+            localizer,
+            commands,
+            placementCommands);
         var interaction = new WristOverlayInteractionHost(
             textures,
             layoutOptions,
-            new WristInputAdapter(commands),
+            new WristInputAdapter(session),
             pointerEvents);
         _background = new WristOverlayBackgroundHost(
             statuses,
-            new WristUiProjector(localizer),
+            session,
             interaction,
             clock);
     }
