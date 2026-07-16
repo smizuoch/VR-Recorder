@@ -9,6 +9,8 @@ public enum UiCommandId
     Retry,
     OpenOverlayPositioning,
     CloseOverlayPositioning,
+    DockOverlayToWrist,
+    PinOverlayInWorld,
     NudgeOverlayUp,
     NudgeOverlayDown,
     NudgeOverlayLeft,

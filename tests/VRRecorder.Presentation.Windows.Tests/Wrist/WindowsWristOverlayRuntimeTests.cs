@@ -96,7 +96,7 @@ public sealed class WindowsWristOverlayRuntimeTests
         Assert.Equal(WristPage.Main, Page(main));
         Assert.Equal(8, positioning.Revision);
         Assert.Equal(WristPage.Positioning, Page(positioning));
-        Assert.Equal(6, positioning.Layout.HitTargets.Count);
+        Assert.Equal(8, positioning.Layout.HitTargets.Count);
 
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);

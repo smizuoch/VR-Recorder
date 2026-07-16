@@ -66,6 +66,18 @@ public sealed class WristUiSession
                 case UiCommandId.CloseOverlayPositioning:
                     SetPage(WristPage.Main);
                     break;
+                case UiCommandId.DockOverlayToWrist:
+                    await SetPlacementModeAsync(
+                            OverlayPlacementMode.WristDock,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
+                case UiCommandId.PinOverlayInWorld:
+                    await SetPlacementModeAsync(
+                            OverlayPlacementMode.WorldPin,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    break;
                 case UiCommandId.NudgeOverlayUp:
                     await NudgeAsync(
                             WristOverlayNudgeDirection.Up,
@@ -131,6 +143,16 @@ public sealed class WristUiSession
                 direction,
                 WristOverlayNudgeSize.Small,
                 cancellationToken)
+            .ConfigureAwait(false);
+        IncrementPresentationRevision();
+    }
+
+    private async Task SetPlacementModeAsync(
+        OverlayPlacementMode placementMode,
+        CancellationToken cancellationToken)
+    {
+        await _placement
+            .SetPlacementModeAsync(placementMode, cancellationToken)
             .ConfigureAwait(false);
         IncrementPresentationRevision();
     }

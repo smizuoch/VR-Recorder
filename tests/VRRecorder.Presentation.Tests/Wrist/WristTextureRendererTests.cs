@@ -117,7 +117,7 @@ public sealed class WristTextureRendererTests
 
         var frame = renderer.Render(snapshot, WristLayoutOptions.Default);
 
-        Assert.Equal(6, frame.Layout.HitTargets.Count);
+        Assert.Equal(8, frame.Layout.HitTargets.Count);
         Assert.Equal(
             snapshot.Actions.Select(action => action.IconSemanticId),
             assets.IconRequests

@@ -28,6 +28,14 @@ public sealed class JapaneseUiLocalizer : IUiLocalizer
             ["overlay.move.short"] = "移動",
             ["overlay.move.accessible"] = "オーバーレイを移動",
             ["overlay.move.tooltip"] = "位置調整を開きます",
+            ["overlay.dock.short"] = "手首",
+            ["overlay.dock.accessible"] = "オーバーレイを手首へ固定",
+            ["overlay.dock.tooltip"] =
+                "オーバーレイを選択中の手首へ取り付けます",
+            ["overlay.pin.short"] = "空間固定",
+            ["overlay.pin.accessible"] = "オーバーレイを空間へ固定",
+            ["overlay.pin.tooltip"] =
+                "オーバーレイを現在の空間位置へ固定します",
             ["overlay.nudge.up.short"] = "上",
             ["overlay.nudge.up.accessible"] = "オーバーレイを上へ移動",
             ["overlay.nudge.up.tooltip"] = "オーバーレイを上へ移動します",

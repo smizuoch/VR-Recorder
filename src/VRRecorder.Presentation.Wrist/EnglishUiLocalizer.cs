@@ -27,6 +27,14 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
             ["overlay.move.short"] = "MOVE",
             ["overlay.move.accessible"] = "Move overlay",
             ["overlay.move.tooltip"] = "Open overlay positioning controls",
+            ["overlay.dock.short"] = "DOCK",
+            ["overlay.dock.accessible"] = "Dock overlay to wrist",
+            ["overlay.dock.tooltip"] =
+                "Attach the overlay to the selected wrist",
+            ["overlay.pin.short"] = "PIN",
+            ["overlay.pin.accessible"] = "Pin overlay in the world",
+            ["overlay.pin.tooltip"] =
+                "Keep the overlay at its current world position",
             ["overlay.nudge.up.short"] = "UP",
             ["overlay.nudge.up.accessible"] = "Move overlay up",
             ["overlay.nudge.up.tooltip"] = "Move the overlay up",

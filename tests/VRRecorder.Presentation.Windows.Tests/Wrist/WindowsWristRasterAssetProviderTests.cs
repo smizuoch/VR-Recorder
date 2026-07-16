@@ -93,6 +93,8 @@ public sealed class WindowsWristRasterAssetProviderTests
 
     [Theory]
     [InlineData("overlay.move")]
+    [InlineData("overlay.dock")]
+    [InlineData("overlay.pin")]
     [InlineData("overlay.nudge.up")]
     [InlineData("overlay.nudge.down")]
     [InlineData("overlay.nudge.left")]

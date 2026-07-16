@@ -42,6 +42,12 @@ public sealed class WindowsWristRasterAssetProvider
             ["overlay.move"] = new(
                 "drag-indicator.svg",
                 "064a5e0aab0df33a1f4f11c4c7d409410868c4e130c34cf432658f1a9f2699d5"),
+            ["overlay.dock"] = new(
+                "drag-indicator.svg",
+                "064a5e0aab0df33a1f4f11c4c7d409410868c4e130c34cf432658f1a9f2699d5"),
+            ["overlay.pin"] = new(
+                "center-focus-strong.svg",
+                "600bae74e809ff62808d421106c9b65a8a081b226616352e40b159745df7bf85"),
             ["overlay.nudge.up"] = new(
                 "arrow-up.svg",
                 "b13097ba84a1951f65afafcc3d67386f56642abfc2d9812769614a37abfbf8ec"),

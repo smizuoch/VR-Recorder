@@ -99,6 +99,12 @@ public sealed class WristUiProjector : IWristUiSnapshotProjector
     private UiActionSnapshot[] CreatePositioningActions() =>
     [
         CreatePositioningAction(
+            "overlay.dock",
+            UiCommandId.DockOverlayToWrist),
+        CreatePositioningAction(
+            "overlay.pin",
+            UiCommandId.PinOverlayInWorld),
+        CreatePositioningAction(
             "overlay.nudge.up",
             UiCommandId.NudgeOverlayUp),
         CreatePositioningAction(

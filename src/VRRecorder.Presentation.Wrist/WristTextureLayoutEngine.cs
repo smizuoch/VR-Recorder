@@ -163,9 +163,13 @@ public static class WristTextureLayoutEngine
         const int top = 128;
         const int bottom = PixelHeight - 16;
         const int gap = 16;
-        const int maximumColumns = 4;
+        const int maximumColumns = 5;
         const int maximumRows = 2;
-        var columns = actions.Length <= 6 ? 3 : maximumColumns;
+        var columns = actions.Length <= 6
+            ? 3
+            : actions.Length <= 8
+                ? 4
+                : maximumColumns;
         var rows = checked((actions.Length + columns - 1) / columns);
         if (rows > maximumRows)
         {

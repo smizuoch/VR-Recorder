@@ -35,6 +35,14 @@ public sealed class WristUiSessionTests
             CancellationToken.None);
         var nudged = session.Project(status);
         await session.DispatchAsync(
+            UiCommandId.PinOverlayInWorld,
+            UiActivationKind.WristRay,
+            CancellationToken.None);
+        await session.DispatchAsync(
+            UiCommandId.DockOverlayToWrist,
+            UiActivationKind.WristRay,
+            CancellationToken.None);
+        await session.DispatchAsync(
             UiCommandId.RecenterOverlay,
             UiActivationKind.WristRay,
             CancellationToken.None);
@@ -56,10 +64,16 @@ public sealed class WristUiSessionTests
                     WristOverlayNudgeSize.Small),
             ],
             placement.Nudges);
+        Assert.Equal(
+            [
+                OverlayPlacementMode.WorldPin,
+                OverlayPlacementMode.WristDock,
+            ],
+            placement.PlacementModes);
         Assert.Equal(2, nudged.PresentationRevision);
         Assert.Equal(1, placement.RecenterCount);
         Assert.Equal(WristPage.Main, returned.Page);
-        Assert.Equal(4, returned.PresentationRevision);
+        Assert.Equal(6, returned.PresentationRevision);
         Assert.Empty(application.Commands);
     }
 
@@ -109,6 +123,8 @@ public sealed class WristUiSessionTests
 
         public int RecenterCount { get; private set; }
 
+        public List<OverlayPlacementMode> PlacementModes { get; } = [];
+
         public Task<VrOverlayPlacement> NudgeAsync(
             WristOverlayNudgeDirection direction,
             WristOverlayNudgeSize size,
@@ -132,6 +148,7 @@ public sealed class WristUiSessionTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            PlacementModes.Add(placementMode);
             return Task.FromResult(DefaultPlacement() with
             {
                 PlacementMode = placementMode,

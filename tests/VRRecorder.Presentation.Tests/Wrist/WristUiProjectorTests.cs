@@ -248,7 +248,7 @@ public sealed class WristUiProjectorTests
     }
 
     [Fact]
-    public void PositioningPageExposesNudgeRecenterAndBackActions()
+    public void PositioningPageExposesDockPinNudgeRecenterAndBackActions()
     {
         var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
             .Project(
@@ -260,6 +260,8 @@ public sealed class WristUiProjectorTests
 
         Assert.Equal(
             [
+                UiCommandId.DockOverlayToWrist,
+                UiCommandId.PinOverlayInWorld,
                 UiCommandId.NudgeOverlayUp,
                 UiCommandId.NudgeOverlayDown,
                 UiCommandId.NudgeOverlayLeft,
@@ -268,6 +270,11 @@ public sealed class WristUiProjectorTests
                 UiCommandId.CloseOverlayPositioning,
             ],
             snapshot.Actions.Select(action => action.Command));
+        Assert.Equal(
+            ["overlay.dock", "overlay.pin"],
+            snapshot.Actions
+                .Take(2)
+                .Select(action => action.IconSemanticId));
         Assert.All(snapshot.Actions, action =>
         {
             Assert.True(action.IsEnabled);

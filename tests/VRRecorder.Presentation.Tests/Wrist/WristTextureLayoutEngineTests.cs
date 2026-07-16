@@ -126,7 +126,7 @@ public sealed class WristTextureLayoutEngineTests
             snapshot,
             WristLayoutOptions.Default);
 
-        Assert.Equal(6, layout.HitTargets.Count);
+        Assert.Equal(8, layout.HitTargets.Count);
         Assert.All(layout.HitTargets, target =>
         {
             Assert.Equal(WristElementKind.SecondaryAction, target.Kind);
@@ -147,6 +147,38 @@ public sealed class WristTextureLayoutEngineTests
                     layout.HitTargets[right].Bounds));
             }
         }
+    }
+
+    [Fact]
+    public void RecordingPositioningGridKeepsStopAndAllControlsReachable()
+    {
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(
+                new RecorderStatusSnapshot(
+                    Revision: 45,
+                    RecorderState.Recording,
+                    RecorderAvailableActions.Stop),
+                WristPage.Positioning);
+
+        var layout = WristTextureLayoutEngine.Layout(
+            snapshot,
+            WristLayoutOptions.Default);
+
+        Assert.Equal(9, layout.HitTargets.Count);
+        Assert.Equal(
+            UiCommandId.ToggleRecording,
+            layout.HitTargets[0].Command);
+        Assert.Contains(
+            layout.HitTargets,
+            target => target.Command == UiCommandId.DockOverlayToWrist);
+        Assert.Contains(
+            layout.HitTargets,
+            target => target.Command == UiCommandId.PinOverlayInWorld);
+        Assert.All(layout.HitTargets, target =>
+        {
+            Assert.True(target.Bounds.Right <= 992);
+            Assert.True(target.Bounds.Bottom <= 496);
+        });
     }
 
     [Fact]
