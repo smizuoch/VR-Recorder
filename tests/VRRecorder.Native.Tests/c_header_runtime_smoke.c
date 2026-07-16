@@ -8,9 +8,13 @@ int vrrec_c_header_smoke(void);
 #if defined(_WIN32)
 #define VRREC_TEST_OUTPUT_PATH "C:\\VR Recorder\\capture.recording.mp4"
 #define VRREC_TEST_MANIFEST_PATH "C:\\VR Recorder\\actions.json"
+#define VRREC_TEST_APPLICATION_MANIFEST_PATH \
+    "C:\\VR Recorder\\OpenVr\\steamvr.vrmanifest"
 #else
 #define VRREC_TEST_OUTPUT_PATH "/tmp/capture.recording.mp4"
 #define VRREC_TEST_MANIFEST_PATH "/opt/VR Recorder/actions.json"
+#define VRREC_TEST_APPLICATION_MANIFEST_PATH \
+    "/opt/VR Recorder/OpenVr/steamvr.vrmanifest"
 #endif
 
 #define CHECK(condition)                                                        \
@@ -129,6 +133,29 @@ int main(void)
               &input_config,
               &input) == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(input == NULL);
+
+    vrrec_steamvr_overlay_config_v1 overlay_config = {
+        sizeof(vrrec_steamvr_overlay_config_v1),
+        VRREC_ABI_V1,
+        VRREC_TEST_APPLICATION_MANIFEST_PATH,
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+        0,
+    };
+    vrrec_steamvr_overlay_t *overlay =
+        (vrrec_steamvr_overlay_t *)(uintptr_t)UINTPTR_MAX;
+    CHECK(vrrec_steamvr_overlay_create_v1(
+              &overlay_config,
+              &overlay) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(overlay == NULL);
+    CHECK(vrrec_steamvr_overlay_show_v1(NULL) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_hide_v1(NULL) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_close_v1(NULL) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_overlay_destroy_v1(NULL);
 
     vrrec_spout_source_config_v1 spout_config = {
         sizeof(vrrec_spout_source_config_v1),

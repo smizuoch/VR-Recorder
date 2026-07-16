@@ -23,6 +23,7 @@ extern "C" {
 
 typedef struct vrrec_session vrrec_session_t;
 typedef struct vrrec_steamvr_input vrrec_steamvr_input_t;
+typedef struct vrrec_steamvr_overlay vrrec_steamvr_overlay_t;
 typedef struct vrrec_spout_source vrrec_spout_source_t;
 typedef int32_t vrrec_status_t;
 typedef uint32_t vrrec_event_kind_t;
@@ -232,6 +233,16 @@ typedef struct vrrec_steamvr_digital_state_v1 {
     uint8_t reserved;
 } vrrec_steamvr_digital_state_v1;
 
+typedef struct vrrec_steamvr_overlay_config_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    const char *application_manifest_path_utf8;
+    const char *overlay_key_utf8;
+    const char *overlay_name_utf8;
+    float width_in_meters;
+    uint32_t reserved_v1;
+} vrrec_steamvr_overlay_config_v1;
+
 typedef struct vrrec_spout_source_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -356,6 +367,22 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_input_poll_v1(
 
 VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
     vrrec_steamvr_input_t *input);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_create_v1(
+    const vrrec_steamvr_overlay_config_v1 *config,
+    vrrec_steamvr_overlay_t **out_overlay);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_show_v1(
+    vrrec_steamvr_overlay_t *overlay);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_hide_v1(
+    vrrec_steamvr_overlay_t *overlay);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_close_v1(
+    vrrec_steamvr_overlay_t *overlay);
+
+VRREC_API void VRREC_CALL vrrec_steamvr_overlay_destroy_v1(
+    vrrec_steamvr_overlay_t *overlay);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_spout_source_create_v1(
     const vrrec_spout_source_config_v1 *config,

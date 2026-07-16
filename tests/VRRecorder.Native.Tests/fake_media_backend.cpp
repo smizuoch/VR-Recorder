@@ -9,6 +9,7 @@
 
 #include "encoder_probe_backend.hpp"
 #include "media_backend.hpp"
+#include "openvr_overlay_backend.hpp"
 #include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
@@ -550,6 +551,40 @@ private:
 
 FakeSteamVrInputBackend *FakeSteamVrInputBackend::active_ = nullptr;
 
+class FakeSteamVrOverlayLifecycle final : public OpenVrOverlayLifecycle {
+public:
+    vrrec_status_t Show() noexcept override
+    {
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        visible_ = true;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t Hide() noexcept override
+    {
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        visible_ = false;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t Close() noexcept override
+    {
+        if (!closed_) {
+            visible_ = false;
+            closed_ = true;
+        }
+        return VRREC_STATUS_OK;
+    }
+
+private:
+    bool visible_ = false;
+    bool closed_ = false;
+};
+
 struct FakeSpoutSourceState {
     std::mutex mutex;
     std::condition_variable condition;
@@ -745,6 +780,17 @@ std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
 {
     status = VRREC_STATUS_OK;
     return std::make_unique<FakeSteamVrInputBackend>(config);
+}
+
+std::unique_ptr<OpenVrOverlayLifecycle> CreateSteamVrOverlayLifecycle(
+    std::string_view application_manifest_path,
+    const OpenVrOverlayLifecycleConfig &config,
+    vrrec_status_t &status) noexcept
+{
+    (void)application_manifest_path;
+    (void)config;
+    status = VRREC_STATUS_OK;
+    return std::make_unique<FakeSteamVrOverlayLifecycle>();
 }
 
 std::unique_ptr<SpoutSourceBackend> CreateSpoutSourceBackend(

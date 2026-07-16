@@ -27,6 +27,9 @@ _Static_assert(
     sizeof(vrrec_steamvr_digital_state_v1) == 12,
     "SteamVR digital state ABI drift");
 _Static_assert(
+    sizeof(vrrec_steamvr_overlay_config_v1) == 40,
+    "SteamVR overlay config ABI drift");
+_Static_assert(
     sizeof(vrrec_spout_source_config_v1) == 16,
     "Spout source config ABI drift");
 _Static_assert(

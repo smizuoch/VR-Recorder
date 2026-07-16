@@ -37,6 +37,7 @@ static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
 static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
+static_assert(sizeof(vrrec_steamvr_overlay_config_v1) == 40);
 static_assert(sizeof(vrrec_spout_source_config_v1) == 16);
 static_assert(sizeof(vrrec_spout_sender_snapshot_v1) == 24);
 static_assert(sizeof(vrrec_spout_frame_v1) == 80);
@@ -220,6 +221,26 @@ vrrec_steamvr_input_config_v1 ValidSteamVrConfig()
         manifest_path,
         "/actions/vrrecorder",
         "/actions/vrrecorder/in/toggle_recording",
+    };
+}
+
+vrrec_steamvr_overlay_config_v1 ValidSteamVrOverlayConfig()
+{
+#if defined(_WIN32)
+    constexpr auto manifest_path =
+        "C:\\VR Recorder\\OpenVr\\steamvr.vrmanifest";
+#else
+    constexpr auto manifest_path =
+        "/opt/VR Recorder/OpenVr/steamvr.vrmanifest";
+#endif
+    return vrrec_steamvr_overlay_config_v1 {
+        sizeof(vrrec_steamvr_overlay_config_v1),
+        VRREC_ABI_V1,
+        manifest_path,
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+        0,
     };
 }
 
@@ -2046,6 +2067,91 @@ bool PollsSteamVrDigitalStateThroughVersionedAbi()
     return true;
 }
 
+bool RejectsInvalidSteamVrOverlayAbiInputs()
+{
+    auto config = ValidSteamVrOverlayConfig();
+    auto *overlay = reinterpret_cast<vrrec_steamvr_overlay_t *>(UINTPTR_MAX);
+    CHECK(vrrec_steamvr_overlay_create_v1(nullptr, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(overlay == nullptr);
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    config.struct_size = sizeof(config) - 1;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    config = ValidSteamVrOverlayConfig();
+    config.application_manifest_path_utf8 =
+        "relative/OpenVr/steamvr.vrmanifest";
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+#if defined(_WIN32)
+    config.application_manifest_path_utf8 =
+        "C:\\VR Recorder\\OpenVr\\other.vrmanifest";
+#else
+    config.application_manifest_path_utf8 =
+        "/opt/VR Recorder/OpenVr/other.vrmanifest";
+#endif
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.overlay_key_utf8 = "com.example.untrusted";
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.overlay_name_utf8 = "Untrusted Overlay";
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.width_in_meters = 0.17F;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.width_in_meters = 0.33F;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.width_in_meters = std::numeric_limits<float>::quiet_NaN();
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.reserved_v1 = 1;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    CHECK(vrrec_steamvr_overlay_show_v1(nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_hide_v1(nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_close_v1(nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_overlay_destroy_v1(nullptr);
+    return true;
+}
+
+bool ControlsSteamVrOverlayThroughVersionedAbi()
+{
+    auto config = ValidSteamVrOverlayConfig();
+    vrrec_steamvr_overlay_t *overlay = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_OK);
+    CHECK(overlay != nullptr);
+    CHECK(vrrec_steamvr_overlay_show_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_show_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_hide_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_show_v1(overlay) ==
+          VRREC_STATUS_INVALID_STATE);
+    vrrec_steamvr_overlay_destroy_v1(overlay);
+    return true;
+}
+
 bool RejectsInvalidSpoutSourceAbiInputs()
 {
     using vrrecorder::native::testing::ResetSpoutSource;
@@ -3130,6 +3236,8 @@ int main(int argc, char **argv)
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||
+        !RejectsInvalidSteamVrOverlayAbiInputs() ||
+        !ControlsSteamVrOverlayThroughVersionedAbi() ||
         !RejectsInvalidSpoutSourceAbiInputs() ||
         !SnapshotsPackedUtf8WithRequiredSizing() ||
         !PollsFrameWithoutConsumingOnBufferRetry() ||

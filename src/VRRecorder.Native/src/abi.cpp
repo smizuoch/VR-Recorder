@@ -21,6 +21,7 @@
 #include "encoder_probe_backend.hpp"
 #include "encoder_probe_identity.hpp"
 #include "media_backend.hpp"
+#include "openvr_overlay_backend.hpp"
 #include "spout_source_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
@@ -724,6 +725,64 @@ private:
     std::mutex poll_mutex_;
 };
 
+struct vrrec_steamvr_overlay final {
+    explicit vrrec_steamvr_overlay(
+        const vrrec_steamvr_overlay_config_v1 &config)
+        : application_manifest_path_(config.application_manifest_path_utf8),
+          overlay_key_(config.overlay_key_utf8),
+          overlay_name_(config.overlay_name_utf8),
+          width_in_meters_(config.width_in_meters)
+    {
+    }
+
+    vrrec_status_t InitializeBackend()
+    {
+        const auto lifecycle_config =
+            vrrecorder::native::OpenVrOverlayLifecycleConfig {
+                overlay_key_.c_str(),
+                overlay_name_.c_str(),
+                width_in_meters_,
+            };
+        auto status = VRREC_STATUS_INTERNAL_ERROR;
+        backend_ = vrrecorder::native::CreateSteamVrOverlayLifecycle(
+            application_manifest_path_,
+            lifecycle_config,
+            status);
+        if (!backend_) {
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+        return status;
+    }
+
+    vrrec_status_t Show() noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        return backend_->Show();
+    }
+
+    vrrec_status_t Hide() noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        return backend_->Hide();
+    }
+
+    vrrec_status_t Close() noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        return backend_->Close();
+    }
+
+private:
+    std::string application_manifest_path_;
+    std::string overlay_key_;
+    std::string overlay_name_;
+    float width_in_meters_;
+    std::unique_ptr<vrrecorder::native::OpenVrOverlayLifecycle> backend_;
+    std::mutex operation_mutex_;
+};
+
 struct vrrec_spout_source final {
     explicit vrrec_spout_source(
         const vrrec_spout_source_config_v1 &config)
@@ -1193,6 +1252,51 @@ vrrec_status_t ValidateSteamVrCreateArguments(
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
 
+    return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSteamVrOverlayCreateArguments(
+    const vrrec_steamvr_overlay_config_v1 *config,
+    vrrec_steamvr_overlay_t **out_overlay) noexcept
+{
+    if (out_overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    *out_overlay = nullptr;
+    if (config == nullptr ||
+        config->struct_size < sizeof(vrrec_steamvr_overlay_config_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (config->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+
+    std::string_view manifest_path;
+    std::string_view overlay_key;
+    std::string_view overlay_name;
+    if (!TryValidateUtf8Text(
+            config->application_manifest_path_utf8,
+            4096,
+            manifest_path) ||
+        !IsAbsoluteUtf8Path(manifest_path) ||
+        (!manifest_path.ends_with("/OpenVr/steamvr.vrmanifest") &&
+         !manifest_path.ends_with("\\OpenVr\\steamvr.vrmanifest")) ||
+        !TryValidateUtf8Text(
+            config->overlay_key_utf8,
+            127,
+            overlay_key) ||
+        overlay_key != "com.vrrecorder.desktop.wrist" ||
+        !TryValidateUtf8Text(
+            config->overlay_name_utf8,
+            127,
+            overlay_name) ||
+        overlay_name != "VR Recorder Wrist" ||
+        !std::isfinite(config->width_in_meters) ||
+        config->width_in_meters < 0.18F ||
+        config->width_in_meters > 0.32F ||
+        config->reserved_v1 != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
     return VRREC_STATUS_OK;
 }
 
@@ -1893,6 +1997,85 @@ extern "C" VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
 {
     try {
         delete input;
+    } catch (...) {
+        // Destruction is the final fail-safe and cannot report across C ABI.
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_create_v1(
+    const vrrec_steamvr_overlay_config_v1 *config,
+    vrrec_steamvr_overlay_t **out_overlay)
+{
+    const auto validation = ValidateSteamVrOverlayCreateArguments(
+        config,
+        out_overlay);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    try {
+        auto overlay = std::make_unique<vrrec_steamvr_overlay>(*config);
+        const auto status = overlay->InitializeBackend();
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        *out_overlay = overlay.release();
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_show_v1(vrrec_steamvr_overlay_t *overlay)
+{
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->Show();
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_hide_v1(vrrec_steamvr_overlay_t *overlay)
+{
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->Hide();
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_close_v1(vrrec_steamvr_overlay_t *overlay)
+{
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->Close();
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API void VRREC_CALL vrrec_steamvr_overlay_destroy_v1(
+    vrrec_steamvr_overlay_t *overlay)
+{
+    if (overlay == nullptr) {
+        return;
+    }
+    try {
+        static_cast<void>(overlay->Close());
+        delete overlay;
     } catch (...) {
         // Destruction is the final fail-safe and cannot report across C ABI.
     }
