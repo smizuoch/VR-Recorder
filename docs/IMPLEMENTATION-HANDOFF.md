@@ -238,6 +238,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - renderer／pose／input／hapticから分離したoverlay lifecycle Port。有限な0.18～0.32 m幅、hidden create、idempotent Show／Hide、失敗rollback、exactly-once Destroyを固定し、process ownerとpinned OpenVRの実`IVROverlay`へ接続済み
 - stable key／name、current installのapplication manifest path、有限幅を検証し、Show／Hide／Close／Destroyの所有権を固定するversioned native C ABI
 - current installを解決してC ABIを呼び、overlay SafeHandleをnative DLLより先に破棄するmanaged lifecycle wrapper
+- 1024×512／2倍densityのpure Wrist layout。stable element ID、pixel bounds、z-order、64／56 dp target、RTL mirror、disabled非dispatchのray hit-testを固定済み
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -246,7 +247,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
 - mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
 - overlay texture更新、event polling、managed lifecycleのApp host接続
-- elapsed／resolution／FPS／signalを含むWrist snapshot、layout／hit-test、1024×512 BGRA renderer、glyph／icon atlas
+- elapsed／resolution／FPS／signalを含むWrist snapshot、1024×512 BGRA renderer、glyph／icon atlas
 - controller-relative Wrist Dock、absolute World Pin、pose readback
 - drag、nudge、recenter、dock／pin commandのruntime適用
 - haptic action handleと録画開始／停止／fault pulse
