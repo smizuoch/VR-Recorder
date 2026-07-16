@@ -9,7 +9,9 @@
 #include <utility>
 
 #include "openvr.h"
+#include "openvr_overlay_texture_presenter.hpp"
 #include "openvr_process_runtime.hpp"
+#include "windows_openvr_overlay_texture_graphics_port.hpp"
 
 namespace vrrecorder::native {
 namespace {
@@ -87,6 +89,26 @@ public:
             Shutdown();
             return VRREC_STATUS_INTERNAL_ERROR;
         }
+
+        auto adapter_index = std::int32_t {-1};
+        system->GetDXGIOutputInfo(&adapter_index);
+        auto texture_status = VRREC_STATUS_INTERNAL_ERROR;
+        auto graphics_port =
+            CreateWindowsOpenVrOverlayTextureGraphicsPort(
+                overlay_,
+                adapter_index,
+                texture_status);
+        if (!graphics_port) {
+            Shutdown();
+            return texture_status;
+        }
+        texture_presenter_ = CreateOpenVrOverlayTexturePresenter(
+            std::move(graphics_port),
+            texture_status);
+        if (!texture_presenter_) {
+            Shutdown();
+            return texture_status;
+        }
         return VRREC_STATUS_OK;
     }
 
@@ -157,20 +179,17 @@ public:
         std::uint64_t handle,
         const OpenVrBgraTextureFrame &frame) noexcept override
     {
-        (void)handle;
-        (void)frame;
-        return initialized_
-            ? VRREC_STATUS_BACKEND_UNAVAILABLE
-            : VRREC_STATUS_INVALID_STATE;
+        return !initialized_ || !texture_presenter_
+            ? VRREC_STATUS_INVALID_STATE
+            : texture_presenter_->SetOverlayBgraTexture(handle, frame);
     }
 
     vrrec_status_t ClearOverlayTexture(
         std::uint64_t handle) noexcept override
     {
-        (void)handle;
-        return initialized_
-            ? VRREC_STATUS_BACKEND_UNAVAILABLE
-            : VRREC_STATUS_INVALID_STATE;
+        return !initialized_ || !texture_presenter_
+            ? VRREC_STATUS_INVALID_STATE
+            : texture_presenter_->ClearOverlayTexture(handle);
     }
 
     vrrec_status_t AddApplicationManifest(
@@ -310,12 +329,14 @@ public:
         overlay_ = nullptr;
         initialized_ = false;
         vr::VR_Shutdown();
+        texture_presenter_.reset();
     }
 
 private:
     vr::IVRApplications *applications_ = nullptr;
     vr::IVRInput *input_ = nullptr;
     vr::IVROverlay *overlay_ = nullptr;
+    std::unique_ptr<OpenVrOverlayTexturePort> texture_presenter_;
     bool initialized_ = false;
 };
 

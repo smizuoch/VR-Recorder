@@ -190,6 +190,8 @@ if(VRRECORDER_STEAMVR_FACTORY_VARIANT STREQUAL "PRODUCTION")
             PRIVATE
                 src/openvr_process_runtime.cpp
                 src/openvr_overlay_lifecycle.cpp
+                src/openvr_overlay_texture_presenter.cpp
+                src/windows_openvr_overlay_texture_graphics_port.cpp
                 src/openvr_steamvr_input_backend_core.cpp)
         target_link_libraries(
             vrrecorder_native

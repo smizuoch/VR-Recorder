@@ -243,6 +243,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - elapsed、canvas resolution、target／actual FPS、Spout／desktop audio／mic health、warning／fault、placement modeとInvariant表示文字列を保持する検証済みWrist telemetry snapshot
 - 初回／revision変化は即時、Recording／SignalLost中だけ100 ms周期とし、publish成功後だけnext cursorを採用できるpure texture update policy
 - lifecycle Portと分離したnative texture Port。1024×512 BGRA／stride／bufferを検証し、成功後だけtexture-set、Clear冪等、CloseでClear→Hide→Destroy、Clear失敗時も後段cleanup継続を固定し、input／lifecycleと同じprocess-wide OpenVR ownerのruntime generationへ接続済み
+- HMDの`GetDXGIOutputInfo` adapter上で作る1024×512 `B8G8R8A8_UNORM` dynamic texture presenter。実RowPitchでBGRAをuploadし、`TextureType_DirectX`／`ColorSpace_Auto`で`SetOverlayTexture`へsubmitする。未submitの失敗resourceは即解放し、submit済みresourceは`ClearOverlayTexture`成功まで保持する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
