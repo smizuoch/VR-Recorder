@@ -35,6 +35,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Infrastructure.S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.NativeCoverage", "src\VRRecorder.NativeCoverage\VRRecorder.NativeCoverage.csproj", "{6FC35140-EBA7-4F23-BA94-48D045515AF4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Presentation.Wrist.Windows", "src\VRRecorder.Presentation.Wrist.Windows\VRRecorder.Presentation.Wrist.Windows.csproj", "{0D89C0D6-C72C-4FF4-BB21-E78D9A05F7C1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VRRecorder.Presentation.Windows.Tests", "tests\VRRecorder.Presentation.Windows.Tests\VRRecorder.Presentation.Windows.Tests.csproj", "{07B3A847-3A06-42DB-8F1D-5E2C7678C371}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -105,5 +109,13 @@ Global
 		{6FC35140-EBA7-4F23-BA94-48D045515AF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6FC35140-EBA7-4F23-BA94-48D045515AF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6FC35140-EBA7-4F23-BA94-48D045515AF4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D89C0D6-C72C-4FF4-BB21-E78D9A05F7C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D89C0D6-C72C-4FF4-BB21-E78D9A05F7C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D89C0D6-C72C-4FF4-BB21-E78D9A05F7C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D89C0D6-C72C-4FF4-BB21-E78D9A05F7C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{07B3A847-3A06-42DB-8F1D-5E2C7678C371}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{07B3A847-3A06-42DB-8F1D-5E2C7678C371}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{07B3A847-3A06-42DB-8F1D-5E2C7678C371}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07B3A847-3A06-42DB-8F1D-5E2C7678C371}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

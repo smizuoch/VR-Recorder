@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>VRRecorder.Presentation.Wrist.Windows</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../VRRecorder.Presentation.Wrist/VRRecorder.Presentation.Wrist.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets/MaterialSymbols/*.svg"
+             CopyToOutputDirectory="Always"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
