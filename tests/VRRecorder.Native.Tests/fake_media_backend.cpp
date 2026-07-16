@@ -11,6 +11,7 @@
 #include "media_backend.hpp"
 #include "openvr_overlay_backend.hpp"
 #include "spout_source_backend.hpp"
+#include "steamvr_haptic_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
 namespace vrrecorder::native {
@@ -551,6 +552,78 @@ private:
 
 FakeSteamVrInputBackend *FakeSteamVrInputBackend::active_ = nullptr;
 
+class FakeSteamVrHapticBackend final : public SteamVrHapticBackend {
+public:
+    explicit FakeSteamVrHapticBackend(const SteamVrHapticConfig &config)
+        : manifest_path_(config.action_manifest_path),
+          action_path_(config.haptic_action_path),
+          input_source_path_(config.input_source_path)
+    {
+        active_ = this;
+    }
+
+    ~FakeSteamVrHapticBackend() override
+    {
+        if (active_ == this) {
+            active_ = nullptr;
+        }
+    }
+
+    vrrec_status_t Trigger(
+        const OpenVrHapticPulse &pulse) noexcept override
+    {
+        last_pulse_ = pulse;
+        ++trigger_count_;
+        return status_;
+    }
+
+    static FakeSteamVrHapticBackend *Active() noexcept
+    {
+        return active_;
+    }
+
+    void SetStatus(vrrec_status_t status) noexcept
+    {
+        status_ = status;
+    }
+
+    const std::string &ManifestPath() const noexcept
+    {
+        return manifest_path_;
+    }
+
+    const std::string &ActionPath() const noexcept
+    {
+        return action_path_;
+    }
+
+    const std::string &InputSourcePath() const noexcept
+    {
+        return input_source_path_;
+    }
+
+    std::uint32_t TriggerCount() const noexcept
+    {
+        return trigger_count_;
+    }
+
+    const OpenVrHapticPulse &LastPulse() const noexcept
+    {
+        return last_pulse_;
+    }
+
+private:
+    std::string manifest_path_;
+    std::string action_path_;
+    std::string input_source_path_;
+    OpenVrHapticPulse last_pulse_ {};
+    vrrec_status_t status_ = VRREC_STATUS_OK;
+    std::uint32_t trigger_count_ = 0;
+    static FakeSteamVrHapticBackend *active_;
+};
+
+FakeSteamVrHapticBackend *FakeSteamVrHapticBackend::active_ = nullptr;
+
 struct FakeSteamVrOverlayState {
     std::mutex mutex;
     std::string application_manifest_path;
@@ -945,6 +1018,23 @@ std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
     return std::make_unique<FakeSteamVrInputBackend>(config);
 }
 
+std::unique_ptr<SteamVrHapticBackend> CreateSteamVrHapticBackend(
+    const SteamVrHapticConfig &config,
+    vrrec_status_t &status) noexcept
+{
+    try {
+        auto backend = std::make_unique<FakeSteamVrHapticBackend>(config);
+        status = VRREC_STATUS_OK;
+        return backend;
+    } catch (const std::bad_alloc &) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    } catch (...) {
+        status = VRREC_STATUS_INTERNAL_ERROR;
+        return nullptr;
+    }
+}
+
 std::unique_ptr<OpenVrOverlayLifecycle> CreateSteamVrOverlayLifecycle(
     std::string_view application_manifest_path,
     const OpenVrOverlayLifecycleConfig &config,
@@ -1196,6 +1286,46 @@ std::uint32_t SteamVrPollCount()
 bool HasActiveSteamVrInput()
 {
     return FakeSteamVrInputBackend::Active() != nullptr;
+}
+
+void SetSteamVrHapticStatus(std::int32_t status)
+{
+    FakeSteamVrHapticBackend::Active()->SetStatus(status);
+}
+
+bool HasActiveSteamVrHaptic()
+{
+    return FakeSteamVrHapticBackend::Active() != nullptr;
+}
+
+std::string_view SteamVrHapticManifestPath()
+{
+    return FakeSteamVrHapticBackend::Active()->ManifestPath();
+}
+
+std::string_view SteamVrHapticActionPath()
+{
+    return FakeSteamVrHapticBackend::Active()->ActionPath();
+}
+
+std::string_view SteamVrHapticInputSourcePath()
+{
+    return FakeSteamVrHapticBackend::Active()->InputSourcePath();
+}
+
+std::uint32_t SteamVrHapticTriggerCount()
+{
+    return FakeSteamVrHapticBackend::Active()->TriggerCount();
+}
+
+TestSteamVrHapticPulse SteamVrLastHapticPulse()
+{
+    const auto &pulse = FakeSteamVrHapticBackend::Active()->LastPulse();
+    return TestSteamVrHapticPulse {
+        pulse.duration_seconds,
+        pulse.frequency_hertz,
+        pulse.amplitude,
+    };
 }
 
 void ResetSteamVrOverlay()

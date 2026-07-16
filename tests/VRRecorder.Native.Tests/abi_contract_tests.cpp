@@ -38,6 +38,8 @@ static_assert(sizeof(vrrec_event_v1) == 48);
 static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
 static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
+static_assert(sizeof(vrrec_steamvr_haptic_config_v1) == 40);
+static_assert(sizeof(vrrec_steamvr_haptic_pulse_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_overlay_config_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_pointer_event_v1) == 32);
@@ -238,6 +240,35 @@ vrrec_steamvr_input_config_v1 ValidSteamVrConfig()
         manifest_path,
         "/actions/vrrecorder",
         "/actions/vrrecorder/in/toggle_recording",
+    };
+}
+
+vrrec_steamvr_haptic_config_v1 ValidSteamVrHapticConfig()
+{
+#if defined(_WIN32)
+    constexpr auto manifest_path = "C:\\VR Recorder\\OpenVr\\actions.json";
+#else
+    constexpr auto manifest_path = "/opt/VR Recorder/OpenVr/actions.json";
+#endif
+    return vrrec_steamvr_haptic_config_v1 {
+        sizeof(vrrec_steamvr_haptic_config_v1),
+        VRREC_ABI_V1,
+        manifest_path,
+        "/actions/vrrecorder/out/haptic",
+        "/user/hand/right",
+        0,
+    };
+}
+
+vrrec_steamvr_haptic_pulse_v1 ValidSteamVrHapticPulse()
+{
+    return vrrec_steamvr_haptic_pulse_v1 {
+        sizeof(vrrec_steamvr_haptic_pulse_v1),
+        VRREC_ABI_V1,
+        0.03F,
+        120.0F,
+        0.65F,
+        0,
     };
 }
 
@@ -2114,6 +2145,113 @@ bool PollsSteamVrDigitalStateThroughVersionedAbi()
     return true;
 }
 
+bool RejectsInvalidSteamVrHapticAbiInputs()
+{
+    auto config = ValidSteamVrHapticConfig();
+    auto *haptic = reinterpret_cast<vrrec_steamvr_haptic_t *>(UINTPTR_MAX);
+    CHECK(vrrec_steamvr_haptic_create_v1(nullptr, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(haptic == nullptr);
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    config.struct_size -= 1;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
+    config.abi_version += 1;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    config = ValidSteamVrHapticConfig();
+    config.action_manifest_path_utf8 = "relative/actions.json";
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
+    config.haptic_action_path_utf8 = "haptic";
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
+    config.input_source_path_utf8 = "/user/head";
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
+    config.reserved_v1 = 1;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    config = ValidSteamVrHapticConfig();
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_OK);
+    CHECK(haptic != nullptr);
+
+    auto pulse = ValidSteamVrHapticPulse();
+    CHECK(vrrec_steamvr_haptic_trigger_v1(nullptr, &pulse) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_haptic_trigger_v1(haptic, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    pulse.struct_size -= 1;
+    CHECK(vrrec_steamvr_haptic_trigger_v1(haptic, &pulse) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    pulse = ValidSteamVrHapticPulse();
+    pulse.abi_version += 1;
+    CHECK(vrrec_steamvr_haptic_trigger_v1(haptic, &pulse) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    for (const auto invalid_case : {
+             std::uint32_t {0},
+             std::uint32_t {1},
+             std::uint32_t {2},
+             std::uint32_t {3},
+         }) {
+        pulse = ValidSteamVrHapticPulse();
+        if (invalid_case == 0) {
+            pulse.duration_seconds = 0.0F;
+        } else if (invalid_case == 1) {
+            pulse.frequency_hertz = -1.0F;
+        } else if (invalid_case == 2) {
+            pulse.amplitude = 1.01F;
+        } else {
+            pulse.reserved_v1 = 1;
+        }
+        CHECK(vrrec_steamvr_haptic_trigger_v1(haptic, &pulse) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    }
+    vrrec_steamvr_haptic_destroy_v1(haptic);
+    vrrec_steamvr_haptic_destroy_v1(nullptr);
+    return true;
+}
+
+bool TriggersSteamVrHapticThroughVersionedAbi()
+{
+    using namespace vrrecorder::native::testing;
+    CHECK(!HasActiveSteamVrHaptic());
+    auto config = ValidSteamVrHapticConfig();
+    vrrec_steamvr_haptic_t *haptic = nullptr;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_OK);
+    CHECK(haptic != nullptr);
+    CHECK(HasActiveSteamVrHaptic());
+    CHECK(SteamVrHapticManifestPath() == config.action_manifest_path_utf8);
+    CHECK(SteamVrHapticActionPath() == config.haptic_action_path_utf8);
+    CHECK(SteamVrHapticInputSourcePath() == config.input_source_path_utf8);
+
+    auto pulse = ValidSteamVrHapticPulse();
+    CHECK(vrrec_steamvr_haptic_trigger_v1(haptic, &pulse) ==
+          VRREC_STATUS_OK);
+    CHECK(SteamVrHapticTriggerCount() == 1);
+    const auto observed = SteamVrLastHapticPulse();
+    CHECK(observed.duration_seconds == pulse.duration_seconds);
+    CHECK(observed.frequency_hertz == pulse.frequency_hertz);
+    CHECK(observed.amplitude == pulse.amplitude);
+
+    SetSteamVrHapticStatus(VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(vrrec_steamvr_haptic_trigger_v1(haptic, &pulse) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(SteamVrHapticTriggerCount() == 2);
+    vrrec_steamvr_haptic_destroy_v1(haptic);
+    CHECK(!HasActiveSteamVrHaptic());
+    return true;
+}
+
 bool RejectsInvalidSteamVrOverlayAbiInputs()
 {
     auto config = ValidSteamVrOverlayConfig();
@@ -3632,6 +3770,8 @@ int main(int argc, char **argv)
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !RejectsInvalidSteamVrAbiInputs() ||
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||
+        !RejectsInvalidSteamVrHapticAbiInputs() ||
+        !TriggersSteamVrHapticThroughVersionedAbi() ||
         !RejectsInvalidSteamVrOverlayAbiInputs() ||
         !ControlsSteamVrOverlayThroughVersionedAbi() ||
         !PollsSteamVrOverlayPointerEventsThroughVersionedAbi() ||

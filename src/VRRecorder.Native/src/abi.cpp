@@ -23,6 +23,7 @@
 #include "media_backend.hpp"
 #include "openvr_overlay_backend.hpp"
 #include "spout_source_backend.hpp"
+#include "steamvr_haptic_backend.hpp"
 #include "steamvr_input_backend.hpp"
 
 #if defined(VRRECORDER_NATIVE_FACTORY_SELECTION_MARKER)
@@ -725,6 +726,53 @@ private:
     std::mutex poll_mutex_;
 };
 
+struct vrrec_steamvr_haptic final {
+    explicit vrrec_steamvr_haptic(
+        const vrrec_steamvr_haptic_config_v1 &config)
+        : manifest_path_(config.action_manifest_path_utf8),
+          action_path_(config.haptic_action_path_utf8),
+          input_source_path_(config.input_source_path_utf8)
+    {
+    }
+
+    vrrec_status_t InitializeBackend()
+    {
+        const auto config = vrrecorder::native::SteamVrHapticConfig {
+            manifest_path_,
+            action_path_,
+            input_source_path_,
+        };
+        auto status = VRREC_STATUS_INTERNAL_ERROR;
+        backend_ = vrrecorder::native::CreateSteamVrHapticBackend(
+            config,
+            status);
+        if (!backend_) {
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+        return status;
+    }
+
+    vrrec_status_t Trigger(
+        const vrrec_steamvr_haptic_pulse_v1 &pulse) noexcept
+    {
+        const std::lock_guard lock(trigger_mutex_);
+        return backend_->Trigger(vrrecorder::native::OpenVrHapticPulse {
+            pulse.duration_seconds,
+            pulse.frequency_hertz,
+            pulse.amplitude,
+        });
+    }
+
+private:
+    std::string manifest_path_;
+    std::string action_path_;
+    std::string input_source_path_;
+    std::unique_ptr<vrrecorder::native::SteamVrHapticBackend> backend_;
+    std::mutex trigger_mutex_;
+};
+
 struct vrrec_steamvr_overlay final {
     explicit vrrec_steamvr_overlay(
         const vrrec_steamvr_overlay_config_v1 &config)
@@ -1358,6 +1406,61 @@ vrrec_status_t ValidateSteamVrCreateArguments(
     }
 
     return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSteamVrHapticCreateArguments(
+    const vrrec_steamvr_haptic_config_v1 *config,
+    vrrec_steamvr_haptic_t **out_haptic) noexcept
+{
+    if (out_haptic == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    *out_haptic = nullptr;
+    if (config == nullptr ||
+        config->struct_size < sizeof(vrrec_steamvr_haptic_config_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (config->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    const auto haptic_action_path = std::string_view(
+        config->haptic_action_path_utf8 == nullptr
+            ? ""
+            : config->haptic_action_path_utf8);
+    const auto input_source_path = std::string_view(
+        config->input_source_path_utf8 == nullptr
+            ? ""
+            : config->input_source_path_utf8);
+    if (config->action_manifest_path_utf8 == nullptr ||
+        !IsAbsoluteUtf8Path(config->action_manifest_path_utf8) ||
+        haptic_action_path != "/actions/vrrecorder/out/haptic" ||
+        (input_source_path != "/user/hand/left" &&
+         input_source_path != "/user/hand/right") ||
+        config->reserved_v1 != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSteamVrHapticPulse(
+    const vrrec_steamvr_haptic_pulse_v1 *pulse) noexcept
+{
+    if (pulse == nullptr ||
+        pulse->struct_size < sizeof(vrrec_steamvr_haptic_pulse_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (pulse->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    return pulse->reserved_v1 == 0 &&
+            vrrecorder::native::IsValidOpenVrHapticPulse(
+                vrrecorder::native::OpenVrHapticPulse {
+                    pulse->duration_seconds,
+                    pulse->frequency_hertz,
+                    pulse->amplitude,
+                })
+        ? VRREC_STATUS_OK
+        : VRREC_STATUS_INVALID_ARGUMENT;
 }
 
 vrrec_status_t ValidateSteamVrOverlayCreateArguments(
@@ -2209,6 +2312,61 @@ extern "C" VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
 {
     try {
         delete input;
+    } catch (...) {
+        // Destruction is the final fail-safe and cannot report across C ABI.
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_haptic_create_v1(
+    const vrrec_steamvr_haptic_config_v1 *config,
+    vrrec_steamvr_haptic_t **out_haptic)
+{
+    const auto validation = ValidateSteamVrHapticCreateArguments(
+        config,
+        out_haptic);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    try {
+        auto haptic = std::make_unique<vrrec_steamvr_haptic>(*config);
+        const auto status = haptic->InitializeBackend();
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        *out_haptic = haptic.release();
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_haptic_trigger_v1(
+    vrrec_steamvr_haptic_t *haptic,
+    const vrrec_steamvr_haptic_pulse_v1 *pulse)
+{
+    if (haptic == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto validation = ValidateSteamVrHapticPulse(pulse);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    try {
+        return haptic->Trigger(*pulse);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API void VRREC_CALL vrrec_steamvr_haptic_destroy_v1(
+    vrrec_steamvr_haptic_t *haptic)
+{
+    try {
+        delete haptic;
     } catch (...) {
         // Destruction is the final fail-safe and cannot report across C ABI.
     }

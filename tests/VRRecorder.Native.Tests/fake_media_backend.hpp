@@ -126,6 +126,18 @@ std::string_view SteamVrActionSetPath();
 std::string_view SteamVrDigitalActionPath();
 std::uint32_t SteamVrPollCount();
 bool HasActiveSteamVrInput();
+struct TestSteamVrHapticPulse {
+    float duration_seconds;
+    float frequency_hertz;
+    float amplitude;
+};
+void SetSteamVrHapticStatus(std::int32_t status);
+bool HasActiveSteamVrHaptic();
+std::string_view SteamVrHapticManifestPath();
+std::string_view SteamVrHapticActionPath();
+std::string_view SteamVrHapticInputSourcePath();
+std::uint32_t SteamVrHapticTriggerCount();
+TestSteamVrHapticPulse SteamVrLastHapticPulse();
 void ResetSteamVrOverlay();
 bool HasActiveSteamVrOverlay();
 bool IsSteamVrOverlayVisible();

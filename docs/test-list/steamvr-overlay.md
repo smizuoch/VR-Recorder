@@ -33,6 +33,7 @@
 - [x] `recenter_overlay` actionのrising edgeをAppのlazy native overlay lifecycleとproduction placement coordinatorへ接続する
 - [x] start 30 ms×1、stop 20 ms×2、fault 80 ms×1のpure haptic policy、値検証、disabled、revision重複排除、output失敗隔離を固定する
 - [x] native haptic Port／production backendをprocess-wide OpenVR generationへ接続し、application／action manifest設定、action／input source handle取得、単発pulse検証、失敗cleanup、実`TriggerHapticVibrationAction`呼び出しを固定する
+- [x] 40-byte config／24-byte pulseのversioned haptic C ABIでpath／source／値を検証し、create／trigger／destroyとbackend errorを固定する
 - [ ] drag releaseとWrist Dock／World Pin commandから親空間を変換した確定poseをproduction placement coordinatorへ渡す
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -70,6 +71,7 @@
 - [x] Connect `recenter_overlay` rising edges to the App's lazy native overlay lifecycle and production placement coordinator
 - [x] Fix the pure start 30 ms×1, stop 20 ms×2, and fault 80 ms×1 haptic policy with value validation, disabled behavior, revision deduplication, and output-failure isolation
 - [x] Connect the native haptic Port/production backend to the process-wide OpenVR generation and fix application/action manifest setup, action/input-source handle lookup, single-pulse validation, failure cleanup, and the real `TriggerHapticVibrationAction` call
+- [x] Fix the versioned haptic C ABI with a 40-byte config and 24-byte pulse, validate paths/source/values, and cover create/trigger/destroy plus backend errors
 - [ ] Convert parent space for drag release and Wrist Dock/World Pin commands, then pass the resolved pose to the production placement coordinator
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

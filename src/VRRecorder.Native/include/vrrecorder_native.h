@@ -23,6 +23,7 @@ extern "C" {
 
 typedef struct vrrec_session vrrec_session_t;
 typedef struct vrrec_steamvr_input vrrec_steamvr_input_t;
+typedef struct vrrec_steamvr_haptic vrrec_steamvr_haptic_t;
 typedef struct vrrec_steamvr_overlay vrrec_steamvr_overlay_t;
 typedef struct vrrec_spout_source vrrec_spout_source_t;
 typedef int32_t vrrec_status_t;
@@ -252,6 +253,24 @@ typedef struct vrrec_steamvr_digital_state_v1 {
     uint8_t reserved;
 } vrrec_steamvr_digital_state_v1;
 
+typedef struct vrrec_steamvr_haptic_config_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    const char *action_manifest_path_utf8;
+    const char *haptic_action_path_utf8;
+    const char *input_source_path_utf8;
+    uint32_t reserved_v1;
+} vrrec_steamvr_haptic_config_v1;
+
+typedef struct vrrec_steamvr_haptic_pulse_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    float duration_seconds;
+    float frequency_hertz;
+    float amplitude;
+    uint32_t reserved_v1;
+} vrrec_steamvr_haptic_pulse_v1;
+
 typedef struct vrrec_steamvr_overlay_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -446,6 +465,17 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_input_poll_v1(
 
 VRREC_API void VRREC_CALL vrrec_steamvr_input_destroy_v1(
     vrrec_steamvr_input_t *input);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_haptic_create_v1(
+    const vrrec_steamvr_haptic_config_v1 *config,
+    vrrec_steamvr_haptic_t **out_haptic);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_haptic_trigger_v1(
+    vrrec_steamvr_haptic_t *haptic,
+    const vrrec_steamvr_haptic_pulse_v1 *pulse);
+
+VRREC_API void VRREC_CALL vrrec_steamvr_haptic_destroy_v1(
+    vrrec_steamvr_haptic_t *haptic);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_create_v1(
     const vrrec_steamvr_overlay_config_v1 *config,
