@@ -12,6 +12,8 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private readonly CreateOverlayDelegate _createOverlay;
     private readonly OverlayOperationDelegate _showOverlay;
     private readonly OverlayOperationDelegate _hideOverlay;
+    private readonly UpdateOverlayBgraDelegate _updateOverlayBgra;
+    private readonly OverlayOperationDelegate _clearOverlayTexture;
     private readonly OverlayOperationDelegate _closeOverlay;
     private readonly DestroyOverlayDelegate _destroyOverlay;
     private int _disposed;
@@ -50,6 +52,10 @@ internal sealed class NativeSteamVrLibrary : IDisposable
                 "vrrec_steamvr_overlay_show_v1");
             _hideOverlay = Resolve<OverlayOperationDelegate>(
                 "vrrec_steamvr_overlay_hide_v1");
+            _updateOverlayBgra = Resolve<UpdateOverlayBgraDelegate>(
+                "vrrec_steamvr_overlay_update_bgra_v1");
+            _clearOverlayTexture = Resolve<OverlayOperationDelegate>(
+                "vrrec_steamvr_overlay_clear_texture_v1");
             _closeOverlay = Resolve<OverlayOperationDelegate>(
                 "vrrec_steamvr_overlay_close_v1");
             _destroyOverlay = Resolve<DestroyOverlayDelegate>(
@@ -90,6 +96,14 @@ internal sealed class NativeSteamVrLibrary : IDisposable
 
     public NativeSteamVrStatus HideOverlay(nint overlay) =>
         _hideOverlay(overlay);
+
+    public NativeSteamVrStatus UpdateOverlayBgra(
+        nint overlay,
+        ref NativeSteamVrOverlayBgraFrameV1 frame) =>
+        _updateOverlayBgra(overlay, ref frame);
+
+    public NativeSteamVrStatus ClearOverlayTexture(nint overlay) =>
+        _clearOverlayTexture(overlay);
 
     public NativeSteamVrStatus CloseOverlay(nint overlay) =>
         _closeOverlay(overlay);
@@ -132,6 +146,11 @@ internal sealed class NativeSteamVrLibrary : IDisposable
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate NativeSteamVrStatus OverlayOperationDelegate(nint overlay);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeSteamVrStatus UpdateOverlayBgraDelegate(
+        nint overlay,
+        ref NativeSteamVrOverlayBgraFrameV1 frame);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void DestroyOverlayDelegate(nint overlay);

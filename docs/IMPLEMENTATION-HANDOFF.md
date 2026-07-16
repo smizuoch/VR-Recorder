@@ -238,6 +238,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - renderer／pose／input／hapticから分離したoverlay lifecycle Port。有限な0.18～0.32 m幅、hidden create、idempotent Show／Hide、失敗rollback、exactly-once Destroyを固定し、process ownerとpinned OpenVRの実`IVROverlay`へ接続済み
 - stable key／name、current installのapplication manifest path、有限幅と40-byte BGRA frame descriptorを検証し、Update／Clear／Show／Hide／Close／Destroyの所有権を固定するversioned native C ABI
 - current installを解決してC ABIを呼び、overlay SafeHandleをnative DLLより先に破棄するmanaged lifecycle wrapper
+- `ReadOnlyMemory<byte>`のarray offsetを保ち、同期C ABI call中だけBGRA bufferをpinしてUpdate／Clearするmanaged lifecycle wrapper。overlay SafeHandleはnative DLLより先に破棄する
 - 1024×512／2倍densityのpure Wrist layout。stable element ID、pixel bounds、z-order、64／56 dp target、RTL mirror、disabled非dispatchのray hit-testを固定済み
 - 解決済みthemeとallowlist済みraster providerだけを入力にするopaque BGRA compositor。英日、200% text scale、RTL、high contrast、missing asset fail-closed、synthetic golden SHA-256を固定済み
 - elapsed、canvas resolution、target／actual FPS、Spout／desktop audio／mic health、warning／fault、placement modeとInvariant表示文字列を保持する検証済みWrist telemetry snapshot

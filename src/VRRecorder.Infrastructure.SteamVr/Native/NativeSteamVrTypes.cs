@@ -45,3 +45,16 @@ internal struct NativeSteamVrOverlayConfigV1
     public float WidthInMeters;
     public uint ReservedV1;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrOverlayBgraFrameV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public nint PixelBytes;
+    public ulong PixelBytesSize;
+    public uint Width;
+    public uint Height;
+    public uint StrideBytes;
+    public uint ReservedV1;
+}

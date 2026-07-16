@@ -9,6 +9,7 @@
 - [x] process-wide OpenVR ownerへlifecycle Portを接続し、実`IVROverlay` APIを呼ぶ
 - [x] versioned C ABIでstable key／name／manifest path／幅と40-byte BGRA frameを検証し、lifecycle／textureを所有・破棄する
 - [x] managed SafeHandleでoverlayとnative DLLの寿命を揃え、Close／Disposeを冪等にする
+- [x] managed `ReadOnlyMemory<byte>`のarray offsetを保って同期native call中だけpinし、BGRA Update／ClearをSafeHandleの寿命内で実行する
 - [x] 1024×512座標、stable element ID、2倍density、RTL、最小target、disabled hit-testをpure layoutで固定する
 - [x] 解決済みtheme／raster assetだけを受け取るBGRA compositorをgolden hash、英日、200%、RTL、high contrast、missing assetで固定する
 - [x] elapsed／resolution／target・actual FPS／Spout・audio・mic health／alert／placementを検証済みWrist snapshotへ保持する
@@ -30,6 +31,7 @@
 - [x] Connect the lifecycle Port to the process-wide OpenVR owner and call the real `IVROverlay` API
 - [x] Validate the stable key, name, manifest path, width, and 40-byte BGRA frame at the versioned C ABI and own/destroy the lifecycle and texture
 - [x] Align overlay and native DLL lifetimes with a managed SafeHandle and make Close/Dispose idempotent
+- [x] Preserve the managed `ReadOnlyMemory<byte>` array offset, pin only for the synchronous native call, and run BGRA Update/Clear within the SafeHandle lifetime
 - [x] Fix 1024x512 coordinates, stable element IDs, 2x density, RTL, minimum targets, and disabled hit-testing in a pure layout
 - [x] Fix the resolved-theme/raster-asset-only BGRA compositor with a golden hash, English/Japanese, 200%, RTL, high contrast, and missing-asset tests
 - [x] Carry elapsed time, resolution, target/actual FPS, Spout/audio/mic health, alerts, and placement in a validated wrist snapshot

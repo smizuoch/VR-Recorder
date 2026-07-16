@@ -11,6 +11,10 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
     public const float DefaultWidthInMeters = 0.22F;
     public const float MinimumWidthInMeters = 0.18F;
     public const float MaximumWidthInMeters = 0.32F;
+    public const int TexturePixelWidth = 1024;
+    public const int TexturePixelHeight = 512;
+    public const int TextureStrideBytes = 4096;
+    public const int TexturePixelBytesSize = 2_097_152;
 
     private readonly object _lifetimeGate = new();
     private readonly NativeSteamVrLibrary _library;
@@ -56,6 +60,92 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
     public void Hide() => Operate(
         static (library, overlay) => library.HideOverlay(overlay),
         "hide");
+
+    public void UpdateBgraTexture(
+        ReadOnlyMemory<byte> bgraPixels,
+        int pixelWidth,
+        int pixelHeight,
+        int strideBytes)
+    {
+        if (pixelWidth != TexturePixelWidth)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(pixelWidth),
+                pixelWidth,
+                "The SteamVR overlay texture width must be 1024 pixels.");
+        }
+
+        if (pixelHeight != TexturePixelHeight)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(pixelHeight),
+                pixelHeight,
+                "The SteamVR overlay texture height must be 512 pixels.");
+        }
+
+        if (strideBytes != TextureStrideBytes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(strideBytes),
+                strideBytes,
+                "The SteamVR overlay texture stride must be 4096 bytes.");
+        }
+
+        if (bgraPixels.Length != TexturePixelBytesSize)
+        {
+            throw new ArgumentException(
+                "The SteamVR overlay BGRA buffer must contain 2097152 bytes.",
+                nameof(bgraPixels));
+        }
+
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            byte[]? copiedPixels = null;
+            if (!MemoryMarshal.TryGetArray(
+                    bgraPixels,
+                    out ArraySegment<byte> segment))
+            {
+                copiedPixels = bgraPixels.ToArray();
+                segment = new ArraySegment<byte>(copiedPixels);
+            }
+
+            var pinnedPixels = GCHandle.Alloc(
+                segment.Array!,
+                GCHandleType.Pinned);
+            try
+            {
+                var frame = new NativeSteamVrOverlayBgraFrameV1
+                {
+                    StructSize = checked((uint)Marshal.SizeOf<
+                        NativeSteamVrOverlayBgraFrameV1>()),
+                    AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
+                    PixelBytes = pinnedPixels.AddrOfPinnedObject() +
+                        segment.Offset,
+                    PixelBytesSize = checked((ulong)segment.Count),
+                    Width = TexturePixelWidth,
+                    Height = TexturePixelHeight,
+                    StrideBytes = TextureStrideBytes,
+                };
+                var status = _library.UpdateOverlayBgra(
+                    _overlay.DangerousGetHandle(),
+                    ref frame);
+                if (status != NativeSteamVrStatus.Ok)
+                {
+                    throw Failure(status, "update texture");
+                }
+            }
+            finally
+            {
+                pinnedPixels.Free();
+                GC.KeepAlive(copiedPixels);
+            }
+        }
+    }
+
+    public void ClearTexture() => Operate(
+        static (library, overlay) => library.ClearOverlayTexture(overlay),
+        "clear texture");
 
     public void Close() => Operate(
         static (library, overlay) => library.CloseOverlay(overlay),

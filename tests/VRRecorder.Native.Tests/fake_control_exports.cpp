@@ -424,6 +424,30 @@ vrrec_test_steamvr_overlay_destroy_count(void)
     return vrrecorder::native::testing::SteamVrOverlayDestroyCount();
 }
 
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_overlay_texture_update_count(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayTextureUpdateCount();
+}
+
+extern "C" VRREC_TEST_API std::uint32_t
+vrrec_test_steamvr_overlay_clear_texture_count(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayClearTextureCount();
+}
+
+extern "C" VRREC_TEST_API std::uint8_t
+vrrec_test_steamvr_overlay_texture_first_byte(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayTextureFirstByte();
+}
+
+extern "C" VRREC_TEST_API std::uint8_t
+vrrec_test_steamvr_overlay_texture_last_byte(void)
+{
+    return vrrecorder::native::testing::SteamVrOverlayTextureLastByte();
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_spout_reset(void)
 {
     vrrecorder::native::testing::ResetSpoutSource();

@@ -36,6 +36,32 @@ public sealed class NativeSteamVrOverlayLifecycleTests
             Assert.Equal("VR Recorder Wrist", controls.OverlayName());
             Assert.Equal(0.22F, controls.WidthInMeters());
 
+            var backingPixels = new byte[(1024 * 512 * 4) + 2];
+            backingPixels[1] = 0x4a;
+            backingPixels[^2] = 0x7c;
+            var pixels = backingPixels.AsMemory(1, 1024 * 512 * 4);
+            Assert.Throws<ArgumentException>(() =>
+                overlay.UpdateBgraTexture(
+                    ReadOnlyMemory<byte>.Empty,
+                    1024,
+                    512,
+                    4096));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                overlay.UpdateBgraTexture(pixels, 1023, 512, 4096));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                overlay.UpdateBgraTexture(pixels, 1024, 511, 4096));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                overlay.UpdateBgraTexture(pixels, 1024, 512, 4095));
+            Assert.Equal(0u, controls.TextureUpdateCount());
+            overlay.UpdateBgraTexture(pixels, 1024, 512, 4096);
+            overlay.UpdateBgraTexture(pixels, 1024, 512, 4096);
+            Assert.Equal(2u, controls.TextureUpdateCount());
+            Assert.Equal(0x4a, controls.TextureFirstByte());
+            Assert.Equal(0x7c, controls.TextureLastByte());
+            overlay.ClearTexture();
+            overlay.ClearTexture();
+            Assert.Equal(1u, controls.ClearTextureCount());
+
             overlay.Show();
             overlay.Show();
             Assert.True(controls.IsVisible());
@@ -53,12 +79,18 @@ public sealed class NativeSteamVrOverlayLifecycleTests
                 overlay.Show);
             Assert.Equal(3, exception.Status);
             Assert.Equal("show", exception.Operation);
+            var updateException = Assert.Throws<SteamVrOverlayException>(() =>
+                overlay.UpdateBgraTexture(pixels, 1024, 512, 4096));
+            Assert.Equal(3, updateException.Status);
+            Assert.Equal("update texture", updateException.Operation);
 
             overlay.Dispose();
             overlay.Dispose();
             Assert.False(controls.IsActive());
             Assert.Equal(1u, controls.DestroyCount());
             Assert.Throws<ObjectDisposedException>(overlay.Show);
+            Assert.Throws<ObjectDisposedException>(() =>
+                overlay.UpdateBgraTexture(pixels, 1024, 512, 4096));
         }
 
         Assert.False(controls.IsActive());
@@ -103,6 +135,10 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         private readonly UInt32ResultDelegate _hideCount;
         private readonly UInt32ResultDelegate _closeCount;
         private readonly UInt32ResultDelegate _destroyCount;
+        private readonly UInt32ResultDelegate _textureUpdateCount;
+        private readonly UInt32ResultDelegate _clearTextureCount;
+        private readonly ByteResultDelegate _textureFirstByte;
+        private readonly ByteResultDelegate _textureLastByte;
 
         public NativeSteamVrOverlayFixtureControls(string path)
         {
@@ -128,6 +164,14 @@ public sealed class NativeSteamVrOverlayLifecycleTests
                 "vrrec_test_steamvr_overlay_close_count");
             _destroyCount = Resolve<UInt32ResultDelegate>(
                 "vrrec_test_steamvr_overlay_destroy_count");
+            _textureUpdateCount = Resolve<UInt32ResultDelegate>(
+                "vrrec_test_steamvr_overlay_texture_update_count");
+            _clearTextureCount = Resolve<UInt32ResultDelegate>(
+                "vrrec_test_steamvr_overlay_clear_texture_count");
+            _textureFirstByte = Resolve<ByteResultDelegate>(
+                "vrrec_test_steamvr_overlay_texture_first_byte");
+            _textureLastByte = Resolve<ByteResultDelegate>(
+                "vrrec_test_steamvr_overlay_texture_last_byte");
         }
 
         public void Reset() => _reset();
@@ -151,6 +195,14 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         public uint CloseCount() => _closeCount();
 
         public uint DestroyCount() => _destroyCount();
+
+        public uint TextureUpdateCount() => _textureUpdateCount();
+
+        public uint ClearTextureCount() => _clearTextureCount();
+
+        public byte TextureFirstByte() => _textureFirstByte();
+
+        public byte TextureLastByte() => _textureLastByte();
 
         public void Dispose() => NativeLibrary.Free(_library);
 
