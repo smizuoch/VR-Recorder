@@ -14,7 +14,7 @@ public sealed record VRRecorderSettings(
 {
     public static VRRecorderSettings CreateDefault() =>
         new(
-            SchemaVersion: 1,
+            SchemaVersion: 2,
             Recording: new RecordingSettings(
                 OutputFolder: "knownfolder:Downloads",
                 SelfTimerSeconds: 0,
@@ -36,7 +36,8 @@ public sealed record VRRecorderSettings(
                 OverlayPlacementMode.WristDock,
                 new OverlayTransform(
                     Position: [0.03, 0.05, -0.08],
-                    RotationEuler: [25, 0, 10])),
+                    RotationEuler: [25, 0, 10]),
+                PlacementProfiles: []),
             Osc: new OscSettings(
                 AutoDiscover: true,
                 FallbackHost: "127.0.0.1",
@@ -66,6 +67,22 @@ public sealed record AudioSettings(
 
 public sealed record VrSettings(
     VrHand Hand,
+    OverlayPlacementMode PlacementMode,
+    OverlayTransform Transform,
+    IReadOnlyList<VrOverlayPlacementProfile> PlacementProfiles = null!);
+
+public sealed record VrDeviceProfile(
+    string TrackingSystemName,
+    string HmdModelNumber,
+    string ControllerInputProfilePath);
+
+public sealed record VrOverlayPlacementProfile(
+    VrDeviceProfile Device,
+    VrHand Hand,
+    OverlayPlacementMode PlacementMode,
+    OverlayTransform Transform);
+
+public sealed record VrOverlayPlacement(
     OverlayPlacementMode PlacementMode,
     OverlayTransform Transform);
 

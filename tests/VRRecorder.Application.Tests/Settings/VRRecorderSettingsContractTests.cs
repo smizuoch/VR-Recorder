@@ -5,6 +5,31 @@ namespace VRRecorder.Application.Tests.Settings;
 
 public sealed class VRRecorderSettingsContractTests
 {
+    [Fact]
+    public void DuplicatePlacementProfileKeyIsRejected()
+    {
+        var defaults = VRRecorderSettings.CreateDefault();
+        var device = new VrDeviceProfile(
+            "lighthouse",
+            "index-hmd",
+            "/input/index_controller_profile.json");
+        var profile = new VrOverlayPlacementProfile(
+            device,
+            VrHand.Left,
+            OverlayPlacementMode.WristDock,
+            new OverlayTransform([0, 0, 0], [0, 0, 0]));
+        var invalid = defaults with
+        {
+            Vr = defaults.Vr with
+            {
+                PlacementProfiles = [profile, profile],
+            },
+        };
+
+        Assert.Throws<InvalidDataException>(() =>
+            VRRecorderSettingsContract.Validate(invalid));
+    }
+
     [Theory]
     [InlineData(-96.001)]
     [InlineData(24.001)]

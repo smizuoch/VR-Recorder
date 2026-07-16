@@ -8,15 +8,37 @@ namespace VRRecorder.IntegrationTests.Storage;
 public sealed class SettingsJsonSchemaTests
 {
     [Fact]
-    public async Task PackagedV1SchemaValidatesPersistedDesignDefaults()
+    public async Task PackagedV2SchemaValidatesPersistedDesignDefaults()
     {
         using var directory = TemporaryDirectory.Create();
         var settingsPath = Path.Combine(directory.Path, "settings.json");
         var store = new JsonFileSettingsStore(settingsPath);
-        await store.SaveAsync(
-            VRRecorderSettings.CreateDefault(),
-            CancellationToken.None);
+        var defaults = VRRecorderSettings.CreateDefault();
+        var settingsWithProfile = defaults with
+        {
+            Vr = defaults.Vr with
+            {
+                PlacementProfiles =
+                [
+                    new VrOverlayPlacementProfile(
+                        new VrDeviceProfile(
+                            "lighthouse",
+                            "index-hmd",
+                            "/input/index_controller_profile.json"),
+                        VrHand.Left,
+                        OverlayPlacementMode.WristDock,
+                        new OverlayTransform(
+                            [0.03, 0.05, -0.08],
+                            [25, 0, 10])),
+                ],
+            },
+        };
+        await store.SaveAsync(settingsWithProfile, CancellationToken.None);
         var schemaPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Schemas",
+            "vr-recorder-settings-v2.schema.json");
+        var legacySchemaPath = Path.Combine(
             AppContext.BaseDirectory,
             "Schemas",
             "vr-recorder-settings-v1.schema.json");
@@ -24,8 +46,14 @@ public sealed class SettingsJsonSchemaTests
         Assert.True(
             File.Exists(schemaPath),
             $"The packaged settings schema was not found at {schemaPath}.");
+        Assert.True(
+            File.Exists(legacySchemaPath),
+            $"The legacy settings schema was not found at {legacySchemaPath}.");
         Assert.Contains(
             "VRRecorder.Settings.v1.schema.json",
+            typeof(JsonFileSettingsStore).Assembly.GetManifestResourceNames());
+        Assert.Contains(
+            "VRRecorder.Settings.v2.schema.json",
             typeof(JsonFileSettingsStore).Assembly.GetManifestResourceNames());
         using var schema = JsonDocument.Parse(
             await File.ReadAllBytesAsync(schemaPath));
@@ -36,7 +64,7 @@ public sealed class SettingsJsonSchemaTests
             "https://json-schema.org/draft/2020-12/schema",
             schema.RootElement.GetProperty("$schema").GetString());
         Assert.Equal(
-            1,
+            2,
             schema.RootElement
                 .GetProperty("properties")
                 .GetProperty("schemaVersion")
@@ -54,22 +82,39 @@ public sealed class SettingsJsonSchemaTests
             JsonElement instance)
         {
             var errors = new List<string>();
-            Validate(schema, instance, "$", errors);
+            Validate(schema, schema, instance, "$", errors);
             return errors;
         }
 
         private static void Validate(
+            JsonElement rootSchema,
             JsonElement schema,
             JsonElement instance,
             string path,
             List<string> errors)
         {
+            if (schema.TryGetProperty("$ref", out var reference))
+            {
+                Validate(
+                    rootSchema,
+                    ResolveLocalReference(rootSchema, reference.GetString()!),
+                    instance,
+                    path,
+                    errors);
+                return;
+            }
+
             if (schema.TryGetProperty("anyOf", out var alternatives))
             {
                 var matched = alternatives.EnumerateArray().Any(alternative =>
                 {
                     var alternativeErrors = new List<string>();
-                    Validate(alternative, instance, path, alternativeErrors);
+                    Validate(
+                        rootSchema,
+                        alternative,
+                        instance,
+                        path,
+                        alternativeErrors);
                     return alternativeErrors.Count == 0;
                 });
                 if (!matched)
@@ -104,10 +149,10 @@ public sealed class SettingsJsonSchemaTests
             switch (instance.ValueKind)
             {
                 case JsonValueKind.Object:
-                    ValidateObject(schema, instance, path, errors);
+                    ValidateObject(rootSchema, schema, instance, path, errors);
                     break;
                 case JsonValueKind.Array:
-                    ValidateArray(schema, instance, path, errors);
+                    ValidateArray(rootSchema, schema, instance, path, errors);
                     break;
                 case JsonValueKind.String:
                     ValidateString(schema, instance, path, errors);
@@ -119,6 +164,7 @@ public sealed class SettingsJsonSchemaTests
         }
 
         private static void ValidateObject(
+            JsonElement rootSchema,
             JsonElement schema,
             JsonElement instance,
             string path,
@@ -145,6 +191,7 @@ public sealed class SettingsJsonSchemaTests
                     properties.TryGetProperty(property.Name, out var propertySchema))
                 {
                     Validate(
+                        rootSchema,
                         propertySchema,
                         property.Value,
                         $"{path}.{property.Name}",
@@ -161,6 +208,7 @@ public sealed class SettingsJsonSchemaTests
         }
 
         private static void ValidateArray(
+            JsonElement rootSchema,
             JsonElement schema,
             JsonElement instance,
             string path,
@@ -184,7 +232,12 @@ public sealed class SettingsJsonSchemaTests
                 var index = 0;
                 foreach (var item in instance.EnumerateArray())
                 {
-                    Validate(itemSchema, item, $"{path}[{index}]", errors);
+                    Validate(
+                        rootSchema,
+                        itemSchema,
+                        item,
+                        $"{path}[{index}]",
+                        errors);
                     index++;
                 }
             }
@@ -201,6 +254,12 @@ public sealed class SettingsJsonSchemaTests
                 text.Length < minimum.GetInt32())
             {
                 errors.Add($"{path} is too short.");
+            }
+
+            if (schema.TryGetProperty("maxLength", out var maximum) &&
+                text.Length > maximum.GetInt32())
+            {
+                errors.Add($"{path} is too long.");
             }
 
             if (schema.TryGetProperty("pattern", out var pattern) &&
@@ -249,6 +308,28 @@ public sealed class SettingsJsonSchemaTests
                 "null" => instance.ValueKind == JsonValueKind.Null,
                 _ => false,
             };
+
+        private static JsonElement ResolveLocalReference(
+            JsonElement rootSchema,
+            string reference)
+        {
+            if (!reference.StartsWith("#/", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Only local JSON schema references are supported: {reference}");
+            }
+
+            var current = rootSchema;
+            foreach (var token in reference[2..].Split('/'))
+            {
+                var propertyName = token
+                    .Replace("~1", "/", StringComparison.Ordinal)
+                    .Replace("~0", "~", StringComparison.Ordinal);
+                current = current.GetProperty(propertyName);
+            }
+
+            return current;
+        }
     }
 
     private sealed class TemporaryDirectory : IDisposable

@@ -116,7 +116,8 @@ CMake／CTestは現在のnative graphに対して再実行済みです。FFmpeg 
 - capture timeline overrunとmixed-window underrunをinput role／正確な48 kHz frame付きで検出し、48-byte C ABI event、typed P/Invoke callback、bounded structured log、privacy-safe bundleへ伝播するaudio health経路
 - Windows Core Audio MMDevice COMからactive render／capture endpointのfriendly nameとopaque IDを列挙し、非activeな保存済み選択を保持してlocalized／accessible selectorへ統合、明示変更だけを同時更新へ三者マージして次回native startへ渡すsettings経路
 - `ole32.dll` COM解放call siteをWindowsSystem integrityとしてruntime-load manifestへ明示登録し、第三者配布物へ誤分類しないadmission
-- System／English／Japaneseのoptional schema v1 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
+- System／English／Japaneseのoptional schema v2 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
+- schema v1のglobal VR配置をschema v2 fallbackへ無損失に移行し、tracking system／HMD model／controller input profile／左右のexact keyごとに配置を保存するsettings経路
 - VR hand／Wrist Dock・World PinとOSC auto discovery／loopback fallback host・portをlocalized／accessible settings controlへ投影し、overlay transformやportの同時更新を保持して個別保存する経路（OpenVR／fallback snapshot backendへのruntime適用は未実装）
 - 設計上の12初回setup項目をversion付き固定順序として扱い、厳格JSONをatomic保存して完了済みprefixから再開し、破損／順序外完了／旧versionの完了誤認をfail-safeで拒否するApp構成済み経路（画面／実機probeは未実装）
 - 初回setupの現在項目を12個の個別localized resource、1-origin step番号、全体件数、進捗率へ投影する英日／200% pseudo／high-contrast／accessible WPF画面。録画権利認可より先に未完了を表示し、閉じても録画を無効のまま保ち、画面自身には完了APIを持たせない（7・8番目のprobe接続は未実装）

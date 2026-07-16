@@ -38,7 +38,7 @@ public sealed class JsonFileSettingsStoreTests
     }
 
     [Fact]
-    public async Task DefaultsRoundTripAsDeterministicAtomicSchemaV1Json()
+    public async Task DefaultsRoundTripAsDeterministicAtomicSchemaV2Json()
     {
         using var directory = TemporaryDirectory.Create();
         var settingsPath = Path.Combine(directory.Path, "settings.json");
@@ -54,7 +54,8 @@ public sealed class JsonFileSettingsStoreTests
         Assert.Equivalent(expected, loaded, strict: true);
         Assert.Equal(firstBytes, secondBytes);
         var json = Encoding.UTF8.GetString(firstBytes);
-        Assert.Contains("\"schemaVersion\": 1", json, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": 2", json, StringComparison.Ordinal);
+        Assert.Contains("\"placementProfiles\": []", json, StringComparison.Ordinal);
         Assert.Contains(
             "\"outputFolder\": \"knownfolder:Downloads\"",
             json,
@@ -66,6 +67,73 @@ public sealed class JsonFileSettingsStoreTests
             directory.Path,
             "*.tmp-*",
             SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
+    public async Task SchemaV1GlobalPlacementMigratesToSchemaV2Fallback()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(
+            settingsPath,
+            """
+            {
+              "schemaVersion": 1,
+              "recording": {
+                "outputFolder": "knownfolder:Downloads",
+                "selfTimerSeconds": 0,
+                "autoStopSeconds": null,
+                "resolutionChangePolicy": "SingleFileFit"
+              },
+              "video": {
+                "frameRate": 30,
+                "encoder": "Auto",
+                "qualityPreset": "High",
+                "codec": "H264"
+              },
+              "audio": {
+                "routing": "Mixed",
+                "desktopEndpointId": "default-render",
+                "microphoneEndpointId": "default-capture",
+                "desktopGainDb": -6,
+                "microphoneGainDb": -6
+              },
+              "vr": {
+                "hand": "Right",
+                "placementMode": "WorldPin",
+                "transform": {
+                  "position": [1, 2, 3],
+                  "rotationEuler": [4, 5, 6]
+                }
+              },
+              "osc": {
+                "autoDiscover": true,
+                "fallbackHost": "127.0.0.1",
+                "fallbackSendPort": 9000,
+                "fallbackReceivePort": 9001
+              }
+            }
+            """);
+        var store = new JsonFileSettingsStore(settingsPath);
+
+        var migrated = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(2, migrated.SchemaVersion);
+        Assert.Equal(VrHand.Right, migrated.Vr.Hand);
+        Assert.Equal(OverlayPlacementMode.WorldPin, migrated.Vr.PlacementMode);
+        Assert.Equal([1d, 2d, 3d], migrated.Vr.Transform.Position);
+        Assert.Equal([4d, 5d, 6d], migrated.Vr.Transform.RotationEuler);
+        Assert.Empty(migrated.Vr.PlacementProfiles);
+        Assert.True(File.Exists(settingsPath));
+        Assert.Empty(Directory.EnumerateFiles(
+            directory.Path,
+            "*.corrupt-*",
+            SearchOption.TopDirectoryOnly));
+
+        await store.SaveAsync(migrated, CancellationToken.None);
+        var persisted = await File.ReadAllTextAsync(settingsPath);
+        Assert.Contains("\"schemaVersion\": 2", persisted, StringComparison.Ordinal);
+        Assert.Contains("\"placementProfiles\": []", persisted, StringComparison.Ordinal);
     }
 
     [Fact]

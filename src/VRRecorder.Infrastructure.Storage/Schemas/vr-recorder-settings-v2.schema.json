@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:vr-recorder:schema:settings:v2",
+  "title": "VR-Recorder settings schema v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recording",
+    "video",
+    "audio",
+    "vr",
+    "osc"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "uiLocale": {
+      "type": "string",
+      "enum": ["System", "English", "Japanese"]
+    },
+    "recording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outputFolder",
+        "selfTimerSeconds",
+        "autoStopSeconds",
+        "resolutionChangePolicy"
+      ],
+      "properties": {
+        "outputFolder": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selfTimerSeconds": {
+          "type": "integer",
+          "enum": [0, 3, 5, 10]
+        },
+        "autoStopSeconds": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "enum": [3, 5, 10, 30, 60]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolutionChangePolicy": {
+          "type": "string",
+          "enum": ["SingleFileFit", "ExactFollowSegments"]
+        }
+      }
+    },
+    "video": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frameRate", "encoder", "qualityPreset", "codec"],
+      "properties": {
+        "frameRate": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 120
+        },
+        "encoder": {
+          "type": "string",
+          "enum": ["Auto", "Nvenc", "Amf", "Qsv", "MediaFoundationSoftware"]
+        },
+        "qualityPreset": {
+          "type": "string",
+          "enum": ["Standard", "High"]
+        },
+        "codec": {
+          "type": "string",
+          "enum": ["H264"]
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routing",
+        "desktopEndpointId",
+        "microphoneEndpointId",
+        "desktopGainDb",
+        "microphoneGainDb"
+      ],
+      "properties": {
+        "routing": {
+          "type": "string",
+          "enum": ["Mixed", "DesktopOnly", "MicOnly", "Muted"]
+        },
+        "desktopEndpointId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "microphoneEndpointId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "desktopGainDb": {
+          "type": "number"
+        },
+        "microphoneGainDb": {
+          "type": "number"
+        }
+      }
+    },
+    "vr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hand",
+        "placementMode",
+        "transform",
+        "placementProfiles"
+      ],
+      "properties": {
+        "hand": {
+          "type": "string",
+          "enum": ["Left", "Right"]
+        },
+        "placementMode": {
+          "type": "string",
+          "enum": ["WristDock", "WorldPin"]
+        },
+        "transform": {
+          "$ref": "#/$defs/overlayTransform"
+        },
+        "placementProfiles": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/placementProfile"
+          }
+        }
+      }
+    },
+    "osc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "autoDiscover",
+        "fallbackHost",
+        "fallbackSendPort",
+        "fallbackReceivePort"
+      ],
+      "properties": {
+        "autoDiscover": {
+          "type": "boolean"
+        },
+        "fallbackHost": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "ipv4",
+              "pattern": "^127\\."
+            },
+            {
+              "type": "string",
+              "format": "ipv6",
+              "pattern": "^(?:(?:0+:){7}0*1|::1)$"
+            }
+          ]
+        },
+        "fallbackSendPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "fallbackReceivePort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    }
+  },
+  "$defs": {
+    "overlayTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "rotationEuler"],
+      "properties": {
+        "position": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "rotationEuler": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "placementProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "hand", "placementMode", "transform"],
+      "properties": {
+        "device": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "trackingSystemName",
+            "hmdModelNumber",
+            "controllerInputProfilePath"
+          ],
+          "properties": {
+            "trackingSystemName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "hmdModelNumber": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "controllerInputProfilePath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "hand": {
+          "type": "string",
+          "enum": ["Left", "Right"]
+        },
+        "placementMode": {
+          "type": "string",
+          "enum": ["WristDock", "WorldPin"]
+        },
+        "transform": {
+          "$ref": "#/$defs/overlayTransform"
+        }
+      }
+    }
+  }
+}

@@ -123,13 +123,30 @@ public sealed class JsonFileSettingsStore : ISettingsStore
             FileShare.Read,
             bufferSize: 81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var settings = await JsonSerializer
-            .DeserializeAsync<VRRecorderSettings>(
-                stream,
-                SerializerOptions,
-                cancellationToken)
-            .ConfigureAwait(false) ??
+        using var document = await JsonDocument
+            .ParseAsync(stream, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var settings = document.RootElement
+            .Deserialize<VRRecorderSettings>(SerializerOptions) ??
             throw new InvalidDataException("The settings document is empty.");
+        if (settings.SchemaVersion == 1)
+        {
+            if (settings.Vr is null ||
+                document.RootElement
+                    .GetProperty("vr")
+                    .TryGetProperty("placementProfiles", out _))
+            {
+                throw new InvalidDataException(
+                    "The settings schema v1 document is malformed.");
+            }
+
+            settings = settings with
+            {
+                SchemaVersion = 2,
+                Vr = settings.Vr with { PlacementProfiles = [] },
+            };
+        }
+
         VRRecorderSettingsContract.Validate(settings);
         return settings;
     }

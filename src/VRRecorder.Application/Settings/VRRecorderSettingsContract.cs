@@ -10,7 +10,7 @@ public static class VRRecorderSettingsContract
     public static void Validate(VRRecorderSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (settings.SchemaVersion != 1)
+        if (settings.SchemaVersion != 2)
         {
             throw new InvalidDataException(
                 $"Settings schema {settings.SchemaVersion} is not supported.");
@@ -48,6 +48,48 @@ public static class VRRecorderSettingsContract
         ArgumentNullException.ThrowIfNull(settings.Vr.Transform);
         EnsureVector(settings.Vr.Transform.Position, "position");
         EnsureVector(settings.Vr.Transform.RotationEuler, "rotationEuler");
+        ArgumentNullException.ThrowIfNull(settings.Vr.PlacementProfiles);
+        if (settings.Vr.PlacementProfiles.Count > 64)
+        {
+            throw new InvalidDataException(
+                "At most 64 VR overlay placement profiles may be stored.");
+        }
+
+        var profileKeys = new HashSet<(
+            string TrackingSystem,
+            string Hmd,
+            string Controller,
+            VrHand Hand)>();
+        foreach (var profile in settings.Vr.PlacementProfiles)
+        {
+            ArgumentNullException.ThrowIfNull(profile);
+            ArgumentNullException.ThrowIfNull(profile.Device);
+            EnsureProfileIdentity(
+                profile.Device.TrackingSystemName,
+                "tracking system name");
+            EnsureProfileIdentity(
+                profile.Device.HmdModelNumber,
+                "HMD model number");
+            EnsureProfileIdentity(
+                profile.Device.ControllerInputProfilePath,
+                "controller input profile path");
+            EnsureDefined(profile.Hand);
+            EnsureDefined(profile.PlacementMode);
+            ArgumentNullException.ThrowIfNull(profile.Transform);
+            EnsureVector(profile.Transform.Position, "profile position");
+            EnsureVector(
+                profile.Transform.RotationEuler,
+                "profile rotationEuler");
+            if (!profileKeys.Add((
+                    profile.Device.TrackingSystemName,
+                    profile.Device.HmdModelNumber,
+                    profile.Device.ControllerInputProfilePath,
+                    profile.Hand)))
+            {
+                throw new InvalidDataException(
+                    "VR overlay placement profile keys must be unique.");
+            }
+        }
 
         ArgumentNullException.ThrowIfNull(settings.Osc);
         if (!IPAddress.TryParse(settings.Osc.FallbackHost, out var address) ||
@@ -101,6 +143,16 @@ public static class VRRecorderSettingsContract
         {
             throw new InvalidDataException(
                 $"The {name} must be between 1 and 65535.");
+        }
+    }
+
+    private static void EnsureProfileIdentity(string value, string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        if (value.Length > 512)
+        {
+            throw new InvalidDataException(
+                $"The VR device {name} must be at most 512 characters.");
         }
     }
 }

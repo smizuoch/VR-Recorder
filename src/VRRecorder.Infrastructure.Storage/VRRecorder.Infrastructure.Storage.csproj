@@ -16,5 +16,11 @@
              CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Schemas/vr-recorder-settings-v1.schema.json"
                       LogicalName="VRRecorder.Settings.v1.schema.json" />
+    <None Remove="Schemas/vr-recorder-settings-v2.schema.json" />
+    <Content Include="Schemas/vr-recorder-settings-v2.schema.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Schemas/vr-recorder-settings-v2.schema.json"
+                      LogicalName="VRRecorder.Settings.v2.schema.json" />
   </ItemGroup>
 </Project>
