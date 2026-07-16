@@ -12,6 +12,7 @@
 - [x] 1024×512座標、stable element ID、2倍density、RTL、最小target、disabled hit-testをpure layoutで固定する
 - [x] 解決済みtheme／raster assetだけを受け取るBGRA compositorをgolden hash、英日、200%、RTL、high contrast、missing assetで固定する
 - [x] elapsed／resolution／target・actual FPS／Spout・audio・mic health／alert／placementを検証済みWrist snapshotへ保持する
+- [x] 初回／revision変化を即時、Recording／SignalLostだけを100 ms周期にするpure update policyを固定する
 - [ ] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新する
 - [ ] mouse／ray eventをhit-testして共通application commandへdispatchする
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
@@ -30,6 +31,7 @@
 - [x] Fix 1024x512 coordinates, stable element IDs, 2x density, RTL, minimum targets, and disabled hit-testing in a pure layout
 - [x] Fix the resolved-theme/raster-asset-only BGRA compositor with a golden hash, English/Japanese, 200%, RTL, high contrast, and missing-asset tests
 - [x] Carry elapsed time, resolution, target/actual FPS, Spout/audio/mic health, alerts, and placement in a validated wrist snapshot
+- [x] Fix a pure update policy that renders first/new revisions immediately and only Recording/SignalLost at 100 ms intervals
 - [ ] Update a 1024×512 BGRA texture on state changes and at 10 Hz while recording
 - [ ] Hit-test mouse/ray events and dispatch shared application commands
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms

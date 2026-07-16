@@ -241,6 +241,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - 1024×512／2倍densityのpure Wrist layout。stable element ID、pixel bounds、z-order、64／56 dp target、RTL mirror、disabled非dispatchのray hit-testを固定済み
 - 解決済みthemeとallowlist済みraster providerだけを入力にするopaque BGRA compositor。英日、200% text scale、RTL、high contrast、missing asset fail-closed、synthetic golden SHA-256を固定済み
 - elapsed、canvas resolution、target／actual FPS、Spout／desktop audio／mic health、warning／fault、placement modeとInvariant表示文字列を保持する検証済みWrist telemetry snapshot
+- 初回／revision変化は即時、Recording／SignalLost中だけ100 ms周期とし、publish成功後だけnext cursorを採用できるpure texture update policy
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -249,7 +250,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
 - mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
 - overlay texture更新、event polling、managed lifecycleのApp host接続
-- production telemetryの採取・表示、production glyph／icon atlas、OpenVR texture publisher／10 Hz scheduler
+- production telemetryの採取・表示、production glyph／icon atlas、OpenVR texture publisher／update host
 - controller-relative Wrist Dock、absolute World Pin、pose readback
 - drag、nudge、recenter、dock／pin commandのruntime適用
 - haptic action handleと録画開始／停止／fault pulse

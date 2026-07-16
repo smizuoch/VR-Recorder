@@ -1,0 +1,122 @@
+using VRRecorder.Application.Presentation;
+using VRRecorder.Domain.Recording;
+using VRRecorder.Presentation.Wrist;
+
+namespace VRRecorder.Presentation.Tests.Wrist;
+
+public sealed class WristTextureUpdatePolicyTests
+{
+    [Fact]
+    public void UpdatesImmediatelyForFirstFrameAndEveryNewRevision()
+    {
+        var ready = Snapshot(1, RecorderState.Ready);
+
+        var first = WristTextureUpdatePolicy.Evaluate(
+            previous: null,
+            ready,
+            TimeSpan.Zero);
+        var unchanged = WristTextureUpdatePolicy.Evaluate(
+            first.NextCursor,
+            ready,
+            TimeSpan.FromSeconds(1));
+        var changed = WristTextureUpdatePolicy.Evaluate(
+            first.NextCursor,
+            Snapshot(2, RecorderState.Ready),
+            TimeSpan.FromMilliseconds(1));
+
+        Assert.True(first.ShouldRender);
+        Assert.Equal(WristTextureUpdateReason.InitialFrame, first.Reason);
+        Assert.False(unchanged.ShouldRender);
+        Assert.Equal(WristTextureUpdateReason.None, unchanged.Reason);
+        Assert.True(changed.ShouldRender);
+        Assert.Equal(WristTextureUpdateReason.RevisionChanged, changed.Reason);
+    }
+
+    [Fact]
+    public void RecordingHeartbeatIsCappedAtTenHertzFromCommittedCursor()
+    {
+        var recording = Snapshot(5, RecorderState.Recording);
+        var initial = WristTextureUpdatePolicy.Evaluate(
+            previous: null,
+            recording,
+            TimeSpan.Zero);
+
+        var tooEarly = WristTextureUpdatePolicy.Evaluate(
+            initial.NextCursor,
+            recording,
+            TimeSpan.FromMilliseconds(99));
+        var due = WristTextureUpdatePolicy.Evaluate(
+            initial.NextCursor,
+            recording,
+            TimeSpan.FromMilliseconds(100));
+        var committedTooEarly = WristTextureUpdatePolicy.Evaluate(
+            due.NextCursor,
+            recording,
+            TimeSpan.FromMilliseconds(199));
+        var committedDue = WristTextureUpdatePolicy.Evaluate(
+            due.NextCursor,
+            recording,
+            TimeSpan.FromMilliseconds(200));
+
+        Assert.False(tooEarly.ShouldRender);
+        Assert.True(due.ShouldRender);
+        Assert.Equal(
+            WristTextureUpdateReason.RecordingHeartbeat,
+            due.Reason);
+        Assert.False(committedTooEarly.ShouldRender);
+        Assert.True(committedDue.ShouldRender);
+    }
+
+    [Fact]
+    public void CallerCanRetryWhenFailedRenderDoesNotCommitNextCursor()
+    {
+        var recording = Snapshot(7, RecorderState.Recording);
+        var committed = WristTextureUpdatePolicy.Evaluate(
+            previous: null,
+            recording,
+            TimeSpan.Zero).NextCursor;
+        var failedAttempt = WristTextureUpdatePolicy.Evaluate(
+            committed,
+            recording,
+            TimeSpan.FromMilliseconds(100));
+
+        var retry = WristTextureUpdatePolicy.Evaluate(
+            committed,
+            recording,
+            TimeSpan.FromMilliseconds(101));
+
+        Assert.True(failedAttempt.ShouldRender);
+        Assert.True(retry.ShouldRender);
+        Assert.Equal(
+            WristTextureUpdateReason.RecordingHeartbeat,
+            retry.Reason);
+    }
+
+    [Theory]
+    [InlineData(RecorderState.Recording)]
+    [InlineData(RecorderState.SignalLost)]
+    public void RecordingLikeStatesRefreshTelemetry(RecorderState state)
+    {
+        var snapshot = Snapshot(9, state);
+        var committed = WristTextureUpdatePolicy.Evaluate(
+            previous: null,
+            snapshot,
+            TimeSpan.Zero).NextCursor;
+
+        var decision = WristTextureUpdatePolicy.Evaluate(
+            committed,
+            snapshot,
+            TimeSpan.FromMilliseconds(100));
+
+        Assert.True(decision.ShouldRender);
+    }
+
+    private static WristUiSnapshot Snapshot(
+        long revision,
+        RecorderState state) =>
+        new WristUiProjector(EnglishUiLocalizer.Instance).Project(
+            new RecorderStatusSnapshot(
+                revision,
+                state,
+                RecorderAvailableActions.None));
+}
