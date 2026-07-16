@@ -129,7 +129,7 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
         }
 
         var actualDuration = double.Parse(
-            root.GetProperty("format").GetProperty("duration").GetString()!,
+            video.GetProperty("duration").GetString()!,
             CultureInfo.InvariantCulture);
         return Math.Abs(actualDuration - expectedDuration.TotalSeconds) <= 0.1;
     }
@@ -172,7 +172,7 @@ public sealed class FfprobeRecordingFileValidator : IRecordingFileValidator
         string[] arguments =
         [
             "-v", "error", "-show_entries",
-            "format=duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels",
+            "format=duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,duration",
             "-of", "json", "-i", recordingPath,
         ];
         foreach (var argument in arguments)

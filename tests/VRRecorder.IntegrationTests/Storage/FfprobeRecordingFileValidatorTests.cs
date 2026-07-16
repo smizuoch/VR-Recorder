@@ -50,6 +50,46 @@ public sealed class FfprobeRecordingFileValidatorTests
         Assert.Equal(RecordingFileValidation.Invalid, invalid);
     }
 
+    [Fact]
+    public async Task VideoDurationOwnsExpectedLengthWhenAudioExtendsContainer()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var ffprobePath = Path.Combine(directory.Path, "ffprobe-fixture");
+        var recordingPath = Path.Combine(directory.Path, "recording.mp4");
+        await File.WriteAllBytesAsync(recordingPath, []);
+        await File.WriteAllTextAsync(
+            ffprobePath,
+            CreateProbeFixtureScript(
+                "30/1",
+                videoDuration: "3.900000",
+                formatDuration: "4.100000"));
+        File.SetUnixFileMode(
+            ffprobePath,
+            UnixFileMode.UserRead |
+            UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute);
+        var validator = new FfprobeRecordingFileValidator(ffprobePath);
+        var expectation = new RecordingMediaExpectation(
+            Width: 320,
+            Height: 180,
+            FramesPerSecond: 30,
+            AudioSampleRate: 48000,
+            AudioChannels: 2,
+            ExpectedDuration: TimeSpan.FromSeconds(3.9));
+
+        var result = await validator.ValidateAsync(
+            new FinalizedRecording(recordingPath),
+            expectation,
+            CancellationToken.None);
+
+        Assert.Equal(RecordingFileValidation.Valid, result);
+    }
+
     [Theory]
     [InlineData("0/0")]
     [InlineData("NaN/1")]
@@ -90,7 +130,10 @@ public sealed class FfprobeRecordingFileValidatorTests
         Assert.Equal(RecordingFileValidation.Invalid, result);
     }
 
-    private static string CreateProbeFixtureScript(string frameRate)
+    private static string CreateProbeFixtureScript(
+        string frameRate,
+        string videoDuration = "3.000000",
+        string formatDuration = "3.000000")
     {
         var json = JsonSerializer.Serialize(new
         {
@@ -103,6 +146,7 @@ public sealed class FfprobeRecordingFileValidatorTests
                     width = 320,
                     height = 180,
                     r_frame_rate = frameRate,
+                    duration = videoDuration,
                 },
                 new
                 {
@@ -114,7 +158,7 @@ public sealed class FfprobeRecordingFileValidatorTests
             },
             format = new
             {
-                duration = "3.000000",
+                duration = formatDuration,
             },
         });
         return $"#!/bin/sh\nprintf '%s\\n' '{json}'\n";
