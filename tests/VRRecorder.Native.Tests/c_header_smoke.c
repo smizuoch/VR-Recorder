@@ -33,6 +33,27 @@ _Static_assert(
     sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40,
     "SteamVR overlay BGRA frame ABI drift");
 _Static_assert(
+    sizeof(vrrec_steamvr_overlay_pointer_event_v1) == 32,
+    "SteamVR overlay pointer event ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_POINTER_MOVE == 1,
+    "SteamVR overlay pointer move ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN == 2,
+    "SteamVR overlay pointer down ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_UP == 3,
+    "SteamVR overlay pointer up ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_LEFT == 1,
+    "SteamVR overlay pointer left button ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_RIGHT == 2,
+    "SteamVR overlay pointer right button ABI drift");
+_Static_assert(
+    VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_MIDDLE == 4,
+    "SteamVR overlay pointer middle button ABI drift");
+_Static_assert(
     sizeof(vrrec_spout_source_config_v1) == 16,
     "Spout source config ABI drift");
 _Static_assert(

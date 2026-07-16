@@ -141,6 +141,14 @@ std::uint32_t SteamVrOverlayTextureUpdateCount();
 std::uint32_t SteamVrOverlayClearTextureCount();
 std::uint8_t SteamVrOverlayTextureFirstByte();
 std::uint8_t SteamVrOverlayTextureLastByte();
+struct TestSteamVrOverlayPointerEvent {
+    std::uint32_t kind;
+    std::uint32_t pixel_x;
+    std::uint32_t pixel_y;
+    std::uint32_t button;
+    std::uint32_t cursor_index;
+};
+void PushSteamVrOverlayPointerEvent(TestSteamVrOverlayPointerEvent event);
 struct TestSpoutSenderSnapshot {
     std::string sender_id;
     std::uint64_t latest_frame_generation;

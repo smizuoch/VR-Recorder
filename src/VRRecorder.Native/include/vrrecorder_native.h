@@ -35,6 +35,7 @@ typedef uint32_t vrrec_audio_routing_t;
 typedef uint32_t vrrec_quality_preset_t;
 typedef uint32_t vrrec_gpu_vendor_t;
 typedef uint32_t vrrec_encoder_input_format_t;
+typedef uint32_t vrrec_steamvr_overlay_pointer_event_kind_t;
 
 #define VRREC_STATUS_OK INT32_C(0)
 #define VRREC_STATUS_INVALID_ARGUMENT INT32_C(1)
@@ -45,6 +46,13 @@ typedef uint32_t vrrec_encoder_input_format_t;
 #define VRREC_STATUS_INTERNAL_ERROR INT32_C(6)
 #define VRREC_STATUS_BUFFER_TOO_SMALL INT32_C(7)
 #define VRREC_STATUS_TIMEOUT INT32_C(8)
+
+#define VRREC_STEAMVR_OVERLAY_POINTER_MOVE UINT32_C(1)
+#define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN UINT32_C(2)
+#define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_UP UINT32_C(3)
+#define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_LEFT UINT32_C(1)
+#define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_RIGHT UINT32_C(2)
+#define VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_MIDDLE UINT32_C(4)
 
 #define VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED UINT32_C(1)
 #define VRREC_EVENT_STOPPED UINT32_C(2)
@@ -254,6 +262,23 @@ typedef struct vrrec_steamvr_overlay_bgra_frame_v1 {
     uint32_t reserved_v1;
 } vrrec_steamvr_overlay_bgra_frame_v1;
 
+/*
+ * pixel_x and pixel_y use a top-left origin within the fixed 1024x512
+ * overlay texture. When has_event is zero, every payload field is zero.
+ * Move events have button zero. Button events use the LEFT, RIGHT, or MIDDLE
+ * bit value declared above.
+ */
+typedef struct vrrec_steamvr_overlay_pointer_event_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t has_event;
+    vrrec_steamvr_overlay_pointer_event_kind_t kind;
+    uint32_t pixel_x;
+    uint32_t pixel_y;
+    uint32_t button;
+    uint32_t cursor_index;
+} vrrec_steamvr_overlay_pointer_event_v1;
+
 typedef struct vrrec_spout_source_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -396,6 +421,11 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_update_bgra_v1(
 VRREC_API vrrec_status_t VRREC_CALL
 vrrec_steamvr_overlay_clear_texture_v1(
     vrrec_steamvr_overlay_t *overlay);
+
+VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_poll_pointer_event_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_overlay_pointer_event_v1 *out_event);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_close_v1(
     vrrec_steamvr_overlay_t *overlay);

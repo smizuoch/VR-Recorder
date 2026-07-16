@@ -39,6 +39,13 @@ static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
 static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
 static_assert(sizeof(vrrec_steamvr_overlay_config_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40);
+static_assert(sizeof(vrrec_steamvr_overlay_pointer_event_v1) == 32);
+static_assert(VRREC_STEAMVR_OVERLAY_POINTER_MOVE == 1);
+static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN == 2);
+static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_UP == 3);
+static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_LEFT == 1);
+static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_RIGHT == 2);
+static_assert(VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_MIDDLE == 4);
 static_assert(sizeof(vrrec_spout_source_config_v1) == 16);
 static_assert(sizeof(vrrec_spout_sender_snapshot_v1) == 24);
 static_assert(sizeof(vrrec_spout_frame_v1) == 80);
@@ -2236,6 +2243,92 @@ bool ControlsSteamVrOverlayThroughVersionedAbi()
     return true;
 }
 
+bool PollsSteamVrOverlayPointerEventsThroughVersionedAbi()
+{
+    using vrrecorder::native::testing::PushSteamVrOverlayPointerEvent;
+    using vrrecorder::native::testing::ResetSteamVrOverlay;
+    using vrrecorder::native::testing::TestSteamVrOverlayPointerEvent;
+
+    ResetSteamVrOverlay();
+    auto config = ValidSteamVrOverlayConfig();
+    vrrec_steamvr_overlay_t *overlay = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_OK);
+
+    auto event = vrrec_steamvr_overlay_pointer_event_v1 {
+        sizeof(vrrec_steamvr_overlay_pointer_event_v1),
+        VRREC_ABI_V1,
+        1,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+    };
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(nullptr, &event) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(event.struct_size == sizeof(event));
+    CHECK(event.abi_version == VRREC_ABI_V1);
+    CHECK(event.has_event == 0);
+    CHECK(event.kind == 0);
+    CHECK(event.pixel_x == 0);
+    CHECK(event.pixel_y == 0);
+    CHECK(event.button == 0);
+    CHECK(event.cursor_index == 0);
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    event.struct_size = sizeof(event) - 1;
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, &event) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    event.struct_size = sizeof(event);
+    event.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, &event) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    event.abi_version = VRREC_ABI_V1;
+
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, &event) ==
+          VRREC_STATUS_OK);
+    CHECK(event.has_event == 0);
+    CHECK(event.kind == 0);
+    CHECK(event.pixel_x == 0);
+    CHECK(event.pixel_y == 0);
+    CHECK(event.button == 0);
+    CHECK(event.cursor_index == 0);
+
+    PushSteamVrOverlayPointerEvent(TestSteamVrOverlayPointerEvent {
+        VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN,
+        123,
+        45,
+        VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_LEFT,
+        7,
+    });
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, &event) ==
+          VRREC_STATUS_OK);
+    CHECK(event.has_event == 1);
+    CHECK(event.kind == VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN);
+    CHECK(event.pixel_x == 123);
+    CHECK(event.pixel_y == 45);
+    CHECK(event.button == VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_LEFT);
+    CHECK(event.cursor_index == 7);
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, &event) ==
+          VRREC_STATUS_OK);
+    CHECK(event.has_event == 0);
+    CHECK(event.kind == 0);
+
+    CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
+    event.has_event = 1;
+    event.kind = VRREC_STEAMVR_OVERLAY_POINTER_MOVE;
+    event.pixel_x = 999;
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(overlay, &event) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(event.has_event == 0);
+    CHECK(event.kind == 0);
+    CHECK(event.pixel_x == 0);
+    vrrec_steamvr_overlay_destroy_v1(overlay);
+    return true;
+}
+
 bool RejectsInvalidSpoutSourceAbiInputs()
 {
     using vrrecorder::native::testing::ResetSpoutSource;
@@ -3322,6 +3415,7 @@ int main(int argc, char **argv)
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||
         !RejectsInvalidSteamVrOverlayAbiInputs() ||
         !ControlsSteamVrOverlayThroughVersionedAbi() ||
+        !PollsSteamVrOverlayPointerEventsThroughVersionedAbi() ||
         !RejectsInvalidSpoutSourceAbiInputs() ||
         !SnapshotsPackedUtf8WithRequiredSizing() ||
         !PollsFrameWithoutConsumingOnBufferRetry() ||

@@ -788,6 +788,37 @@ struct vrrec_steamvr_overlay final {
         return backend_->ClearTexture();
     }
 
+    vrrec_status_t PollPointerEvent(
+        vrrec_steamvr_overlay_pointer_event_v1 &out_event) noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        auto event = vrrecorder::native::OpenVrOverlayPointerEvent {};
+        auto has_event = false;
+        const auto status = backend_->PollPointerEvent(event, has_event);
+        if (status != VRREC_STATUS_OK || !has_event) {
+            return status;
+        }
+        switch (event.kind) {
+            case vrrecorder::native::OpenVrOverlayPointerEventKind::Move:
+                out_event.kind = VRREC_STEAMVR_OVERLAY_POINTER_MOVE;
+                break;
+            case vrrecorder::native::OpenVrOverlayPointerEventKind::ButtonDown:
+                out_event.kind = VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_DOWN;
+                break;
+            case vrrecorder::native::OpenVrOverlayPointerEventKind::ButtonUp:
+                out_event.kind = VRREC_STEAMVR_OVERLAY_POINTER_BUTTON_UP;
+                break;
+            default:
+                return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        out_event.has_event = 1;
+        out_event.pixel_x = event.pixel_x;
+        out_event.pixel_y = event.pixel_y;
+        out_event.button = event.button;
+        out_event.cursor_index = event.cursor_index;
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t Close() noexcept
     {
         const std::lock_guard lock(operation_mutex_);
@@ -2124,6 +2155,35 @@ vrrec_steamvr_overlay_clear_texture_v1(
     }
     try {
         return overlay->ClearTexture();
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_poll_pointer_event_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_overlay_pointer_event_v1 *out_event)
+{
+    if (out_event == nullptr ||
+        out_event->struct_size <
+            sizeof(vrrec_steamvr_overlay_pointer_event_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (out_event->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    out_event->has_event = 0;
+    out_event->kind = 0;
+    out_event->pixel_x = 0;
+    out_event->pixel_y = 0;
+    out_event->button = 0;
+    out_event->cursor_index = 0;
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->PollPointerEvent(*out_event);
     } catch (...) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }

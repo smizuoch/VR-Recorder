@@ -247,7 +247,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - HMDの`GetDXGIOutputInfo` adapter上で作る1024×512 `B8G8R8A8_UNORM` dynamic texture presenter。実RowPitchでBGRAをuploadし、`TextureType_DirectX`／`ColorSpace_Auto`で`SetOverlayTexture`へsubmitする。未submitの失敗resourceは即解放し、submit済みresourceは`ClearOverlayTexture`成功まで保持する
 - renderer／pure update policy／publisherを直列化するmanaged texture update host。初回／revision変化とRecording／SignalLostの100 ms heartbeatだけをpublishし、初回publish→Show成功後だけcursor／visibleをcommitする。publish／Show失敗時は同一revisionを再試行できる
 - Wrist pixel座標をz-order済みstable semantic targetへhit-testし、current snapshotのenabled actionとsemantic ID／commandが一致するときだけ既存`IUiCommandDispatcher`へ`WristRay`としてdispatchする入力adapter。miss／stale／重複targetは副作用なく無視する
-- lifecycle／textureと分離したnative overlay event Port。input／lifecycle／textureと同じprocess runtime generationへ接続し、実`SetOverlayInputMethod(Mouse)`／1024×512 mouse scale／`PollNextOverlayEvent`を呼ぶ。OpenVRのGL左下座標をtop-left pixelへ上下反転し、Move／ButtonDown／ButtonUpだけをbutton／bounds検証後に返す。configure失敗はDestroy rollback、不正runtime eventはゼロ化してfail-closedにする
+- lifecycle／textureと分離したnative overlay event Port。input／lifecycle／textureと同じprocess runtime generationへ接続し、実`SetOverlayInputMethod(Mouse)`／1024×512 mouse scale／`PollNextOverlayEvent`を呼ぶ。OpenVRのGL左下座標をtop-left pixelへ上下反転し、Move／ButtonDown／ButtonUpだけをbutton／bounds検証後に返す。configure失敗はDestroy rollback、不正runtime eventはゼロ化してfail-closedにし、32-byte versioned C ABIから1件ずつ公開する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -255,7 +255,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 
 - OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
 - mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
-- overlay texture更新、event polling、managed lifecycleのApp host接続
+- overlay texture publisherとevent pollingのmanaged App host接続
 - production telemetryの採取・表示、production glyph／icon atlas、OpenVR texture publisher／update host
 - controller-relative Wrist Dock、absolute World Pin、pose readback
 - drag、nudge、recenter、dock／pin commandのruntime適用

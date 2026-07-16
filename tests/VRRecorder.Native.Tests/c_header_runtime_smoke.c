@@ -159,6 +159,19 @@ int main(void)
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(vrrec_steamvr_overlay_clear_texture_v1(NULL) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_overlay_pointer_event_v1 pointer_event = {
+        sizeof(vrrec_steamvr_overlay_pointer_event_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    };
+    CHECK(vrrec_steamvr_overlay_poll_pointer_event_v1(
+              NULL,
+              &pointer_event) == VRREC_STATUS_INVALID_ARGUMENT);
     vrrec_steamvr_overlay_destroy_v1(NULL);
 
     vrrec_spout_source_config_v1 spout_config = {

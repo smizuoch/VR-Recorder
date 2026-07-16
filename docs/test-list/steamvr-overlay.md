@@ -19,6 +19,7 @@
 - [x] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新し、初回publish成功後だけShowするhostを固定する
 - [x] mouse／ray座標をstable semantic targetへhit-testし、current snapshotと一致するenabled actionだけを共通application commandへdispatchする
 - [x] overlay作成transactionで1024×512 pointer inputを構成し、event Portをprocess ownerと実`PollNextOverlayEvent`へ接続してGL座標をtop-left pixelへ変換・検証する
+- [x] 32-byte versioned C ABIでpointer eventを1件ずつ返し、no-event／error時はpayloadをゼロ化する
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -42,6 +43,7 @@
 - [x] Fix a host that updates the 1024×512 BGRA texture on state changes and at 10 Hz while recording, and Shows only after the first successful publish
 - [x] Hit-test mouse/ray coordinates to stable semantic targets and dispatch shared application commands only for enabled actions matching the current snapshot
 - [x] Configure 1024×512 pointer input in the overlay creation transaction, connect the event Port to the process owner and real `PollNextOverlayEvent`, and convert GL coordinates to validated top-left pixels
+- [x] Return one pointer event at a time through a 32-byte versioned C ABI and zero the payload on no-event or error
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

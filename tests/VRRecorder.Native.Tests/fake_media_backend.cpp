@@ -569,6 +569,7 @@ struct FakeSteamVrOverlayState {
     std::uint8_t texture_first_byte = 0;
     std::uint8_t texture_last_byte = 0;
     bool texture_set = false;
+    std::deque<testing::TestSteamVrOverlayPointerEvent> pointer_events;
 };
 
 FakeSteamVrOverlayState fake_steamvr_overlay;
@@ -658,9 +659,23 @@ public:
         const std::lock_guard lock(fake_steamvr_overlay.mutex);
         event = {};
         has_event = false;
-        return fake_steamvr_overlay.closed
-            ? VRREC_STATUS_INVALID_STATE
-            : VRREC_STATUS_OK;
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (fake_steamvr_overlay.pointer_events.empty()) {
+            return VRREC_STATUS_OK;
+        }
+        const auto next = fake_steamvr_overlay.pointer_events.front();
+        fake_steamvr_overlay.pointer_events.pop_front();
+        event = OpenVrOverlayPointerEvent {
+            static_cast<OpenVrOverlayPointerEventKind>(next.kind),
+            next.pixel_x,
+            next.pixel_y,
+            next.button,
+            next.cursor_index,
+        };
+        has_event = true;
+        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t Close() noexcept override
@@ -1151,6 +1166,7 @@ void ResetSteamVrOverlay()
     fake_steamvr_overlay.texture_first_byte = 0;
     fake_steamvr_overlay.texture_last_byte = 0;
     fake_steamvr_overlay.texture_set = false;
+    fake_steamvr_overlay.pointer_events.clear();
 }
 
 bool HasActiveSteamVrOverlay()
@@ -1235,6 +1251,12 @@ std::uint8_t SteamVrOverlayTextureLastByte()
 {
     const std::lock_guard lock(fake_steamvr_overlay.mutex);
     return fake_steamvr_overlay.texture_last_byte;
+}
+
+void PushSteamVrOverlayPointerEvent(TestSteamVrOverlayPointerEvent event)
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    fake_steamvr_overlay.pointer_events.push_back(event);
 }
 
 void ResetSpoutSource()
