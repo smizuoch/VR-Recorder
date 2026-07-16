@@ -2,23 +2,23 @@
 
 - 更新日: 2026-07-16
 - 対象branch: `main`
-- 実装基準commit: `b1e07eb`（Windows production／test-only oracle FFmpeg SDKの再現・hash契約）
-- 現在の判定: 実装checkpoint。録画可能な配布製品でも、release候補でもない
+- 実装基準commit: `079b785`（実Spout／WASAPI録画のoracle検証後publication）
+- 現在の判定: desktop production録画checkpoint。配布製品でもrelease候補でもない
 - 配布方針: unpackaged self-contained `win-x64` payloadで実機検証し、同一payloadの合格後だけMicrosoft Store MSIX候補へ進める
 
 ## 1. 最初に読む結論
 
-次回はMSIXやOpenVR overlayから始めない。strict runtime stagingの基盤は作り直さず、実行可能なrelease smokeで最初に失敗するproduction gateから直す。
+desktop production録画の縦切りは完了した。次回はMSIX、staging foundationの再設計、FFmpeg SDK再構築から始めず、既存production App compositionへOpenVR overlayを接続して実SteamVRで最初に失敗するgateから直す。
 
-2026-07-16 checkpointでは、証跡付きのFFmpeg／Spout2／OpenVR SDKを使うfull-production configureと`vrrecorder_native.dll`のMSVC Release compile／linkが成功した。実`h264_mf`へ90枚のNV12 frame、AACへ3秒の48 kHz stereo PCMを渡してfragmented MP4を生成し、別root・別processのpinned oracleでH.264／AACをdecodeするWindows testもGreenである。`h264_mf`がpacket durationを0で返す場合はvideoだけを1 codec tickへ補完し、CFR input frameにも1 tickのdurationを明示した。FFmpegの独立Legal review／canonical registry admission、実Spout sender／WASAPI deviceを使うdesktop録画、Windows GPU／SteamVR／HMD HILは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「3秒A/V未完了」という記述より本段落を優先する。
+2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。独立Legal review／canonical registry admission、VRChat sender、microphone／device change／privacy、SteamVR／HMD HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.5節を優先する。
 
 推奨順は次のとおり。
 
-1. 既存のfull-production build directoryとSDKを再利用し、実Spout sender／WASAPI deviceからdesktop操作で3秒MP4を作る。
+1. 既存のfull-production build directory、SDK、production App compositionを再利用し、SteamVR上でoverlay lifecycle／texture／input／pose／hapticを実行する。
 2. その実行で最初に失敗したgateだけをRed→最小Greenにし、対象test／subsystem gate後に1コミットする。
-3. 実録画のpending fileをpinned oracleでprobe／decodeし、成功後だけfinal pathへ公開する。
-4. manifest v2／declared length／Legal anchor、PE admission、repository-derived graph builder、staging CLI、post-publish sealerを縦切りで追加する。
-5. OpenVR overlayへproduction glyph／renderer／App composition／move・pinを接続する。既に実装済みのinput／pose／recenter／hapticsは作り直さない。
+3. production glyph／icon asset、App composition、move／pinを完成させ、実HMDで表示、左右入力、STOP到達性、recenter、hapticを確認する。
+4. VRChat sender、microphone、device change／unplug／privacy、encoder fallback／part rolloverを同じrelease smoke方式で閉じる。
+5. manifest v2／declared length／Legal anchor、PE admission、repository-derived graph builder、staging CLI、post-publish sealerを縦切りで追加する。
 6. full-production staging profileとtwo-phase Release publishを全actual artifactで通す。
 7. 全機能を含むunpackaged directoryを再生成・再identity化し、Windows／GPU／VRChat／SteamVR／HMDの最終Hardware Validation Payloadとして合格させる。
 8. 実在するticket／requester／independent reviewerからLegal approvalを取得し、合格payloadだけを別projectでMSIXへ包む。
@@ -57,6 +57,10 @@
 | `f1aaff0` | Release Appを`ApprovedWindowsRuntime.props`限定へ変更 |
 | `e358204` | non-native asset owner／scope closureとfactory evidence target固定 |
 | `cf07e1b` | Windows-only orchestration、ADS拒否、end-to-end staging境界 |
+| `3d1a99c` | 共有D3D11 immediate contextのmultithread保護 |
+| `1a24950` | software H.264のCFR PTSをcodec tickへ修正 |
+| `9aabe3f` | pending録画をfinal公開前に検証 |
+| `079b785` | 期待録画長をvideo timelineで検証 |
 
 現在固定済みの主な不変条件:
 
@@ -178,9 +182,41 @@ coverage／mutationは今回再採取していない。前回値は[`VALIDATION-
 
 次回の最初の実装単位はW0の残りである。FFmpegのactual source／recipe／binary hash、LGPL notice、source offerをcandidate evidenceへ結合し、独立review未完了なら必ずfail-closedにする。実在するapproval ticket／requester／reviewerが揃うまではW0 GreenやLegal承認済みと呼ばず、production media attachmentへ進まない。
 
+### 2.5 2026-07-16 desktop production録画checkpoint
+
+この節は2.4節より新しい。矛盾する場合は、本節と1節を優先する。
+
+今回までに追加した主な論理単位:
+
+| Commit | 完了した単位 |
+|---|---|
+| `b1a7eec` | actual Windows `h264_mf`＋AACの3秒fragmented MP4と別process oracle |
+| `3d1a99c` | Spout capture threadとencode threadが共有するD3D11 immediate contextのmultithread保護 |
+| `1a24950` | CFR frame PTSをmicrosecondではなくcodec tickとしてlibavcodecへ渡すtimestamp修正 |
+| `9aabe3f` | pending fileを検証し、成功後だけfinal pathへ原子的renameするpublication順序 |
+| `079b785` | audioがcontainer末尾を延長してもvideo timelineを期待録画長と照合するvalidator |
+
+実機で確認したproduction経路:
+
+- 公式Spout Windows OpenGL sender、640×360 BGRA8、NVIDIA GeForce RTX 5070 Ti上の実shared textureを使用した。
+- production `vrrecorder_native.dll`からSpout snapshot／frameを取得し、D3D11 video processor、owned NV12 readback、software `h264_mf`、AAC-LC、fragmented MP4までを同一recording sessionで通した。
+- default render endpointのWASAPI loopbackへ実音声を流し、video 117 packet、audio 193 packetを生成した。
+- pinned oracleはH.264 640×360／30 fps／3.900秒、AAC 48 kHz stereo／4.117秒、container 4.133秒を独立processで確認した。
+- `.recording.mp4`をoracleで検証してから`real-spout-3s.mp4`へrenameし、成功後にpending pathが残らないことを確認した。
+- validator／finalizer関連Integration test 12/12、実機release smoke、`git diff --check`がGreenである。
+
+未完了:
+
+- VRChat実sender、microphone、default device change、unplug、privacy denial、無音・underrun長時間試験。
+- NVENC／AMF／QSV、software fallback、part rollover。
+- production AppからのSteamVR overlay表示、controller input、move／pin、実HMD readability／STOP到達性。
+- full-production manifest v2以降のrelease staging、最終Hardware Validation Payload、Legal approval、MSIX。
+
+次の開始点はOpenVR production compositionである。既存のruntime owner、lifecycle、D3D11 texture presenter、event、pose、recenter、hapticを作り直さず、production Appから実SteamVRへ接続して最初の未接続点だけをTDDで直す。
+
 ## 3. 現在の実装とplaceholderの境界
 
-### 3.1 実装済みだがproduction未接続
+### 3.1 実装済みのproduction境界
 
 - portable audio／video capture、normalize、mix、CFR、encoding、mux、recording session state machine
 - 実FFmpeg 8.1.2 libavcodec AAC PortとAAC packet encoder
@@ -191,7 +227,7 @@ coverage／mutationは今回再採取していない。前回値は[`VALIDATION-
 - software `h264_mf(hw_encoding=0)`構成、system-memory NV12 frame、H.264 packet encoder、first-IDR／opened-context descriptor生成
 - bounded `PreHeaderCoordinator`、producer completion、H.264 first-descriptor packetとaudio／video muxing sinkのatomic cutover
 - Windows D3D11 video processor Port、owned NV12 frame、keyed-mutex surface、device／surface failure identity
-- structured encoder probe evidence、deterministic synthetic NV12、software FFmpeg probe session。production probe factoryには未接続
+- structured encoder probe evidence、deterministic synthetic NV12、software FFmpeg probe sessionとproduction probe factory
 - actual Windows production／test-only oracle FFmpeg SDKの再現builder、recipe、toolchain／artifact hash契約。Legal approval／Release stagingは未完了
 - 4 factory familyのconfigure-time exactly-one selectorと、native binaryに結合されたfactory-selection evidence
 - Windows用event-driven WASAPI source
@@ -205,20 +241,18 @@ coverage／mutationは今回再採取していない。前回値は[`VALIDATION-
 
 ただし、これは同一process内の構造契約である。別processのpinned demux／decode oracle、track/sample tableの解釈、AAC-LC／48 kHz／stereoのdemux結果、MP4上のpresented sample数は`7b72463`以降のoracle testで固定した。raw AAC decoder出力はAAC frame単位のpaddingを含み得るため、`final_packet_end_microseconds == 3'000'000`やraw decoded sample数だけをpresentation長の証拠として扱わない。ここをWork package CのA/V release gate完了と混同しない。
 
-### 3.2 明示的placeholder
+### 3.2 明示的なportable／fail-closed variant
 
-production DLLは現在も次のfactoryをplaceholderへ接続している。
+次の`UNAVAILABLE` factoryはportable buildと依存不足時のfail-closed variantとして残している。
 
 - `src/VRRecorder.Native/src/unavailable_media_backend.cpp`
 - `src/VRRecorder.Native/src/unavailable_spout_source_backend.cpp`
 - `src/VRRecorder.Native/src/unavailable_encoder_probe_backend.cpp`
 - `src/VRRecorder.Native/src/unavailable_steamvr_input_backend.cpp`
 
-いずれも意図的に`VRREC_STATUS_BACKEND_UNAVAILABLE`を返す。`VRRECORDER_ENABLE_FFMPEG_ADAPTERS=ON`はpinned SDKを検証・importするが、現時点の`src/VRRecorder.Native/CMakeLists.txt`は実AAC／libavformat sourceをproduction DLLへ追加しておらず、production compositionを成立させない。`ProductionMediaAacAttachment.cmake`は将来追加するexact 3 sourceとcanonical imported targetの構造を検証するread-only planであり、targetを変更しない。fixtureのimport targetが通ることはactual artifactのversion、location、provenanceを証明しない。
+いずれも意図的に`VRREC_STATUS_BACKEND_UNAVAILABLE`を返す。一方、`production_media_backend.cpp`、`production_encoder_probe_backend.cpp`、`spout2_source_backend.cpp`、`openvr_steamvr_input_backend.cpp`は実在し、full-production buildではpinned FFmpeg／Spout2／OpenVRのcanonical targetとともにactual DLLへlinkされる。media／Spout production variantは2.5節の実録画で動作確認済みである。
 
-factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが、将来の`production_media_backend.cpp`、`production_encoder_probe_backend.cpp`、`spout2_source_backend.cpp`、`openvr_steamvr_input_backend.cpp`はまだ存在しない。そのため`PRODUCTION`選択はsource欠落として意図的にconfigure失敗する。selection evidenceが証明するのは「どのsourceがactual binaryへlinkされたか」までであり、そのsourceが実packetを生成できることはcomposition testとHILで別に証明する。
-
-したがって、portable unit testや隔離した実FFmpeg testがGreenでも、実アプリの録画成功を意味しない。
+factory selection evidenceが証明するのはactual binaryへlinkされたvariantとbinary identityまでである。録画HILがGreenでも、OpenVR production App composition、VRChat、audio failure matrix、Legal／Release stagingまで自動的に証明されるわけではない。
 
 ### 3.3 OpenVR／Wristの現在地
 
@@ -280,18 +314,18 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | 段階 | Gate | 現在の証拠 | 閉じるまでできないこと |
 |---|---|---|---|
 | P0 | production AAC接続 | AAC sourceとcanonical FFmpeg targetはproduction variantへ接続済み。real encoder→実MOV、3秒presented sample、別process decode、full-production DLL linkはGreen。独立Legal admissionは未完了 | Release admission |
-| P0 | H.264 encoder／AVCC契約 | software `h264_mf`、NV12、AVCC、production attachment、90-frame Windows encode／別process decode、full-production DLL linkはGreen。実capture surface／GPU HILは未完了 | 実映像入力の証明 |
+| P0 | H.264 encoder／AVCC契約 | software `h264_mf`、NV12、AVCC、production attachment、90-frame synthetic encodeに加え、実Spout capture surfaceから117 packetを生成して別processでprobe済み | hardware encoder拡張 |
 | P0 | hardware encoder identity／probe | ADRのcodec identityに加え、structured evidence pipeline、deterministic NV12、software probe sessionはGreen。production probe factoryとNVENC／AMF／QSV実SDK／実機は未完了 | 正しいprobe／表示／fallback |
-| P0 | 実encoder→mux composition | Windows actual `h264_mf`＋AACによる3秒fragmented MP4と別process decodeはGreen。実Spout／WASAPI入力からのdesktop recordingは未完了 | 実device録画 |
+| P0 | 実encoder→mux composition | 実Spout／WASAPI入力からH.264 117 packet＋AAC 193 packetのfMP4を生成し、pending検証後だけfinal公開するdesktop recordingがGreen | VRChat／音声failure matrix |
 | P0 | approved runtime staging | strict v1 foundationに加えactual FFmpeg artifact hashは固定済み。independent Legal admission、full-production profile／declared length／Legal anchor、repository graph builder、CLI、post-publish sealerは未完了 | reproducible full Release payload |
-| P0 | Spout2 receiver | C ABIとpumpのみ、factory placeholder | VRChat frame取得 |
-| P0 | D3D11 processor | Windows video processor Port、owned NV12、keyed-mutex surfaceとfailure identityは実装・MSVC compile済み。Spout接続とWindows GPU HILは未完了 | RGBA shared texture→NV12 |
-| P0 | WASAPI Windows contract | 実sourceはあるがCOM注入・実機証拠なし | Windows音声release gate |
-| P0 | production media factory | full-production factory sourceのMSVC Release compile／linkはGreen。実Spout sender／WASAPI deviceを使うApp bring-upは未完了 | EXE実録画の証明 |
+| P0 | Spout2 receiver | production factoryから公式Spout senderのsnapshot／frameを取得し、recording sessionへ接続済み。VRChat senderは未検証 | VRChat frame取得 |
+| P0 | D3D11 processor | 実Spout shared textureをGPUでNV12変換・readbackし、共有immediate contextのmultithread保護を実GPU testと録画で確認済み | device lost／長時間HIL |
+| P0 | WASAPI Windows contract | default render loopbackから実AAC packetを生成済み。microphone、device change／unplug、privacy、長時間underrunは未検証 | Windows音声failure matrix |
+| P0 | production media factory | production DLLのSpout→D3D11→H.264、WASAPI→AAC、pre-header→fMP4、managed finalizationまで実録画Green。production App UI／VRChat／Legalは未完了 | product-level bring-up |
 | P1 | encoder fallback／part rollover | 現実装はterminal Abort | 基本設計§11.2適合 |
 | P1 | unpackaged hardware payload | promotion policyのみ | 実機証拠のidentity固定 |
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |
-| P1 | OpenVR input／overlay一式 | manifest／projectionのみ | Wrist操作・表示 |
+| P1 | OpenVR input／overlay一式 | runtime owner、native lifecycle／texture／event／pose／haptic、managed renderer／interaction／placement compositionは実装済み。production glyph、App表示接続、move／pin、実HMD HILが未完了 | Wrist操作・表示 |
 | P1 | first-run setup 7／8 | Port境界のみ | setup完走 |
 | P1 | coverage／mutation／UI Automation | 90%未達／未測定 | release quality gate |
 | P1 | final Legal Bundle／承認 | candidate台帳、承認済みnative 0 | 配布・署名 |
@@ -932,4 +966,4 @@ dotnet test tests/VRRecorder.Presentation.Tests/VRRecorder.Presentation.Tests.cs
 
 次回は次の依頼から始めればよい。
 
-> `docs/IMPLEMENTATION-HANDOFF.md`の「2.4 2026-07-15停止checkpoint」と`docs/WINDOWS-IMPLEMENTATION-HANDOFF.md`を正として、`b1e07eb`までを実装baselineにして再開して。Windows production FFmpeg 8.1.2 SDKと別rootのtest-only oracle SDK、portable H.264／software `h264_mf` Port、pre-header、D3D11 processor、structured software probeは作り直さないで。最初にactual FFmpegのsource／recipe／binary hash、LGPL notice、source offerをcandidate Legal evidenceへ結合し、実在するapproval ticket／requester／independent reviewerがない間はfail-closedを維持して。W0が本当にGreenになった後だけ、AAC 3 sourceとcanonical `FFmpeg::avcodec`／`avutil`／`swresample`をproduction media variantへliteralに接続して。次にsoftware H.264＋AACの3秒Windows fragmented MP4をoracleでdecodeし、full-production manifest v2はその後に始めて。t-wada式Red→最小Green→refactor／full regressionを守り、各論理単位で必ずcommitして。
+> `docs/IMPLEMENTATION-HANDOFF.md`の1節と「2.5 2026-07-16 desktop production録画checkpoint」を正として、`079b785`までを実装baselineにして再開して。FFmpeg／Spout2／WASAPI／D3D11のdesktop production録画、pending oracle検証、final publicationは作り直さないで。既存OpenVR runtime owner、lifecycle、texture、event、pose、recenter、hapticをproduction Appから実SteamVRへ直接接続し、最初に失敗する未接続点だけをRed→最小Greenにして。production glyph、move／pin、実HMD表示／左右入力／STOP到達性までを縦に完成させ、その後にVRChat／audio failure matrix、manifest v2以降のstaging、最終payload、Legal、MSIXへ進めて。Fast loopは変更対象だけ、commit gateは同subsystem、full regressionは縦切りの最後に1回とし、各論理単位で必ずcommitして。
