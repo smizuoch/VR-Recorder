@@ -18,11 +18,13 @@
         vrrec_steamvr_input_create_v1;
         vrrec_steamvr_input_destroy_v1;
         vrrec_steamvr_input_poll_v1;
+        vrrec_steamvr_overlay_clear_texture_v1;
         vrrec_steamvr_overlay_close_v1;
         vrrec_steamvr_overlay_create_v1;
         vrrec_steamvr_overlay_destroy_v1;
         vrrec_steamvr_overlay_hide_v1;
         vrrec_steamvr_overlay_show_v1;
+        vrrec_steamvr_overlay_update_bgra_v1;
     local:
         *;
 };

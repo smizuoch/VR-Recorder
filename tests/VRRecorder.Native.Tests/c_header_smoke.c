@@ -30,6 +30,9 @@ _Static_assert(
     sizeof(vrrec_steamvr_overlay_config_v1) == 40,
     "SteamVR overlay config ABI drift");
 _Static_assert(
+    sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40,
+    "SteamVR overlay BGRA frame ABI drift");
+_Static_assert(
     sizeof(vrrec_spout_source_config_v1) == 16,
     "Spout source config ABI drift");
 _Static_assert(

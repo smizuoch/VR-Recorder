@@ -155,6 +155,10 @@ int main(void)
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(vrrec_steamvr_overlay_close_v1(NULL) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(NULL, NULL) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_clear_texture_v1(NULL) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
     vrrec_steamvr_overlay_destroy_v1(NULL);
 
     vrrec_spout_source_config_v1 spout_config = {

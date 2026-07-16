@@ -38,6 +38,7 @@ static_assert(sizeof(vrrec_callbacks_v1) == 24);
 static_assert(sizeof(vrrec_steamvr_input_config_v1) == 32);
 static_assert(sizeof(vrrec_steamvr_digital_state_v1) == 12);
 static_assert(sizeof(vrrec_steamvr_overlay_config_v1) == 40);
+static_assert(sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40);
 static_assert(sizeof(vrrec_spout_source_config_v1) == 16);
 static_assert(sizeof(vrrec_spout_sender_snapshot_v1) == 24);
 static_assert(sizeof(vrrec_spout_frame_v1) == 80);
@@ -240,6 +241,21 @@ vrrec_steamvr_overlay_config_v1 ValidSteamVrOverlayConfig()
         "com.vrrecorder.desktop.wrist",
         "VR Recorder Wrist",
         0.22F,
+        0,
+    };
+}
+
+vrrec_steamvr_overlay_bgra_frame_v1 ValidSteamVrOverlayFrame(
+    const std::vector<std::uint8_t> &pixels)
+{
+    return vrrec_steamvr_overlay_bgra_frame_v1 {
+        sizeof(vrrec_steamvr_overlay_bgra_frame_v1),
+        VRREC_ABI_V1,
+        pixels.data(),
+        pixels.size(),
+        1024,
+        512,
+        4096,
         0,
     };
 }
@@ -2130,23 +2146,91 @@ bool RejectsInvalidSteamVrOverlayAbiInputs()
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(vrrec_steamvr_overlay_close_v1(nullptr) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(nullptr, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_clear_texture_v1(nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
     vrrec_steamvr_overlay_destroy_v1(nullptr);
     return true;
 }
 
 bool ControlsSteamVrOverlayThroughVersionedAbi()
 {
+    using vrrecorder::native::testing::SteamVrOverlayClearTextureCount;
+    using vrrecorder::native::testing::SteamVrOverlayTextureFirstByte;
+    using vrrecorder::native::testing::SteamVrOverlayTextureLastByte;
+    using vrrecorder::native::testing::SteamVrOverlayTextureUpdateCount;
+
+    vrrecorder::native::testing::ResetSteamVrOverlay();
     auto config = ValidSteamVrOverlayConfig();
     vrrec_steamvr_overlay_t *overlay = nullptr;
     CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
           VRREC_STATUS_OK);
     CHECK(overlay != nullptr);
+    std::vector<std::uint8_t> pixels(1024U * 512U * 4U, 0x4a);
+    pixels.back() = 0x7c;
+    auto frame = ValidSteamVrOverlayFrame(pixels);
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(overlay, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    auto invalid_frame = frame;
+    invalid_frame.struct_size -= 1;
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(
+              overlay,
+              &invalid_frame) == VRREC_STATUS_INVALID_ARGUMENT);
+    invalid_frame = frame;
+    invalid_frame.abi_version += 1;
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(
+              overlay,
+              &invalid_frame) == VRREC_STATUS_UNSUPPORTED_ABI);
+    for (const auto invalid_case : {
+             std::uint32_t {0},
+             std::uint32_t {1},
+             std::uint32_t {2},
+             std::uint32_t {3},
+             std::uint32_t {4},
+             std::uint32_t {5},
+         }) {
+        invalid_frame = frame;
+        if (invalid_case == 0) {
+            invalid_frame.pixel_bytes = nullptr;
+        } else if (invalid_case == 1) {
+            invalid_frame.pixel_bytes_size -= 1;
+        } else if (invalid_case == 2) {
+            invalid_frame.width -= 1;
+        } else if (invalid_case == 3) {
+            invalid_frame.height -= 1;
+        } else if (invalid_case == 4) {
+            invalid_frame.stride_bytes -= 1;
+        } else {
+            invalid_frame.reserved_v1 = 1;
+        }
+        CHECK(vrrec_steamvr_overlay_update_bgra_v1(
+                  overlay,
+                  &invalid_frame) == VRREC_STATUS_INVALID_ARGUMENT);
+    }
+    CHECK(SteamVrOverlayTextureUpdateCount() == 0);
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(overlay, &frame) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(overlay, &frame) ==
+          VRREC_STATUS_OK);
+    CHECK(SteamVrOverlayTextureUpdateCount() == 2);
+    CHECK(SteamVrOverlayTextureFirstByte() == 0x4a);
+    CHECK(SteamVrOverlayTextureLastByte() == 0x7c);
+    CHECK(vrrec_steamvr_overlay_clear_texture_v1(overlay) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_clear_texture_v1(overlay) ==
+          VRREC_STATUS_OK);
+    CHECK(SteamVrOverlayClearTextureCount() == 1);
     CHECK(vrrec_steamvr_overlay_show_v1(overlay) == VRREC_STATUS_OK);
     CHECK(vrrec_steamvr_overlay_show_v1(overlay) == VRREC_STATUS_OK);
     CHECK(vrrec_steamvr_overlay_hide_v1(overlay) == VRREC_STATUS_OK);
     CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
     CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
     CHECK(vrrec_steamvr_overlay_show_v1(overlay) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(vrrec_steamvr_overlay_update_bgra_v1(overlay, &frame) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(vrrec_steamvr_overlay_clear_texture_v1(overlay) ==
           VRREC_STATUS_INVALID_STATE);
     vrrec_steamvr_overlay_destroy_v1(overlay);
     return true;

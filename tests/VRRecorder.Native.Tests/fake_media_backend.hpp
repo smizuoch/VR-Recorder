@@ -137,6 +137,10 @@ std::uint32_t SteamVrOverlayShowCount();
 std::uint32_t SteamVrOverlayHideCount();
 std::uint32_t SteamVrOverlayCloseCount();
 std::uint32_t SteamVrOverlayDestroyCount();
+std::uint32_t SteamVrOverlayTextureUpdateCount();
+std::uint32_t SteamVrOverlayClearTextureCount();
+std::uint8_t SteamVrOverlayTextureFirstByte();
+std::uint8_t SteamVrOverlayTextureLastByte();
 struct TestSpoutSenderSnapshot {
     std::string sender_id;
     std::uint64_t latest_frame_generation;

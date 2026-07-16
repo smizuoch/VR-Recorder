@@ -7,7 +7,7 @@
 - [x] Show／Hideの成功後だけvisibilityをcommitし、同一操作をidempotentにする
 - [x] 初期化失敗をrollbackし、Close／destructorでHide後にDestroyをexactly once行う
 - [x] process-wide OpenVR ownerへlifecycle Portを接続し、実`IVROverlay` APIを呼ぶ
-- [x] versioned C ABIでstable key／name／manifest path／幅を検証し、lifecycleを所有・破棄する
+- [x] versioned C ABIでstable key／name／manifest path／幅と40-byte BGRA frameを検証し、lifecycle／textureを所有・破棄する
 - [x] managed SafeHandleでoverlayとnative DLLの寿命を揃え、Close／Disposeを冪等にする
 - [x] 1024×512座標、stable element ID、2倍density、RTL、最小target、disabled hit-testをpure layoutで固定する
 - [x] 解決済みtheme／raster assetだけを受け取るBGRA compositorをgolden hash、英日、200%、RTL、high contrast、missing assetで固定する
@@ -28,7 +28,7 @@
 - [x] Commit visibility only after successful Show/Hide and make repeated operations idempotent
 - [x] Roll back failed initialization and Hide then Destroy exactly once from Close/destruction
 - [x] Connect the lifecycle Port to the process-wide OpenVR owner and call the real `IVROverlay` API
-- [x] Validate the stable key, name, manifest path, and width at the versioned C ABI and own/destroy the lifecycle
+- [x] Validate the stable key, name, manifest path, width, and 40-byte BGRA frame at the versioned C ABI and own/destroy the lifecycle and texture
 - [x] Align overlay and native DLL lifetimes with a managed SafeHandle and make Close/Dispose idempotent
 - [x] Fix 1024x512 coordinates, stable element IDs, 2x density, RTL, minimum targets, and disabled hit-testing in a pure layout
 - [x] Fix the resolved-theme/raster-asset-only BGRA compositor with a golden hash, English/Japanese, 200%, RTL, high contrast, and missing-asset tests

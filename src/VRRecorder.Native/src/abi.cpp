@@ -768,6 +768,26 @@ struct vrrec_steamvr_overlay final {
         return backend_->Hide();
     }
 
+    vrrec_status_t UpdateBgraTexture(
+        const vrrec_steamvr_overlay_bgra_frame_v1 &frame) noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        return backend_->UpdateBgraTexture(
+            vrrecorder::native::OpenVrBgraTextureFrame {
+                frame.pixel_bytes,
+                static_cast<std::size_t>(frame.pixel_bytes_size),
+                frame.width,
+                frame.height,
+                frame.stride_bytes,
+            });
+    }
+
+    vrrec_status_t ClearTexture() noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        return backend_->ClearTexture();
+    }
+
     vrrec_status_t Close() noexcept
     {
         const std::lock_guard lock(operation_mutex_);
@@ -1295,6 +1315,28 @@ vrrec_status_t ValidateSteamVrOverlayCreateArguments(
         config->width_in_meters < 0.18F ||
         config->width_in_meters > 0.32F ||
         config->reserved_v1 != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    return VRREC_STATUS_OK;
+}
+
+vrrec_status_t ValidateSteamVrOverlayBgraFrame(
+    const vrrec_steamvr_overlay_bgra_frame_v1 *frame) noexcept
+{
+    constexpr auto required_bytes = std::uint64_t {2'097'152};
+    if (frame == nullptr ||
+        frame->struct_size < sizeof(vrrec_steamvr_overlay_bgra_frame_v1)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (frame->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    if (frame->pixel_bytes == nullptr ||
+        frame->pixel_bytes_size != required_bytes ||
+        frame->width != 1024 ||
+        frame->height != 512 ||
+        frame->stride_bytes != 4096 ||
+        frame->reserved_v1 != 0) {
         return VRREC_STATUS_INVALID_ARGUMENT;
     }
     return VRREC_STATUS_OK;
@@ -2049,6 +2091,39 @@ vrrec_steamvr_overlay_hide_v1(vrrec_steamvr_overlay_t *overlay)
     }
     try {
         return overlay->Hide();
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_update_bgra_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    const vrrec_steamvr_overlay_bgra_frame_v1 *frame)
+{
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto validation = ValidateSteamVrOverlayBgraFrame(frame);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    try {
+        return overlay->UpdateBgraTexture(*frame);
+    } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_clear_texture_v1(
+    vrrec_steamvr_overlay_t *overlay)
+{
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        return overlay->ClearTexture();
     } catch (...) {
         return VRREC_STATUS_INTERNAL_ERROR;
     }

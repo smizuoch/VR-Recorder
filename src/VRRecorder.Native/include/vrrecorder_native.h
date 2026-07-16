@@ -243,6 +243,17 @@ typedef struct vrrec_steamvr_overlay_config_v1 {
     uint32_t reserved_v1;
 } vrrec_steamvr_overlay_config_v1;
 
+typedef struct vrrec_steamvr_overlay_bgra_frame_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    const uint8_t *pixel_bytes;
+    uint64_t pixel_bytes_size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride_bytes;
+    uint32_t reserved_v1;
+} vrrec_steamvr_overlay_bgra_frame_v1;
+
 typedef struct vrrec_spout_source_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -376,6 +387,14 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_show_v1(
     vrrec_steamvr_overlay_t *overlay);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_hide_v1(
+    vrrec_steamvr_overlay_t *overlay);
+
+VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_update_bgra_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    const vrrec_steamvr_overlay_bgra_frame_v1 *frame);
+
+VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_clear_texture_v1(
     vrrec_steamvr_overlay_t *overlay);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_close_v1(

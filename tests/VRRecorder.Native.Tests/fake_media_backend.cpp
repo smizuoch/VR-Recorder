@@ -564,6 +564,11 @@ struct FakeSteamVrOverlayState {
     std::uint32_t hide_count = 0;
     std::uint32_t close_count = 0;
     std::uint32_t destroy_count = 0;
+    std::uint32_t texture_update_count = 0;
+    std::uint32_t clear_texture_count = 0;
+    std::uint8_t texture_first_byte = 0;
+    std::uint8_t texture_last_byte = 0;
+    bool texture_set = false;
 };
 
 FakeSteamVrOverlayState fake_steamvr_overlay;
@@ -621,25 +626,39 @@ public:
     vrrec_status_t UpdateBgraTexture(
         const OpenVrBgraTextureFrame &frame) noexcept override
     {
-        (void)frame;
         const std::lock_guard lock(fake_steamvr_overlay.mutex);
-        return fake_steamvr_overlay.closed
-            ? VRREC_STATUS_INVALID_STATE
-            : VRREC_STATUS_OK;
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        ++fake_steamvr_overlay.texture_update_count;
+        fake_steamvr_overlay.texture_first_byte = frame.pixel_bytes[0];
+        fake_steamvr_overlay.texture_last_byte =
+            frame.pixel_bytes[frame.pixel_bytes_size - 1];
+        fake_steamvr_overlay.texture_set = true;
+        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t ClearTexture() noexcept override
     {
         const std::lock_guard lock(fake_steamvr_overlay.mutex);
-        return fake_steamvr_overlay.closed
-            ? VRREC_STATUS_INVALID_STATE
-            : VRREC_STATUS_OK;
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (fake_steamvr_overlay.texture_set) {
+            fake_steamvr_overlay.texture_set = false;
+            ++fake_steamvr_overlay.clear_texture_count;
+        }
+        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t Close() noexcept override
     {
         const std::lock_guard lock(fake_steamvr_overlay.mutex);
         if (!fake_steamvr_overlay.closed) {
+            if (fake_steamvr_overlay.texture_set) {
+                fake_steamvr_overlay.texture_set = false;
+                ++fake_steamvr_overlay.clear_texture_count;
+            }
             if (fake_steamvr_overlay.visible) {
                 fake_steamvr_overlay.visible = false;
                 ++fake_steamvr_overlay.hide_count;
@@ -1115,6 +1134,11 @@ void ResetSteamVrOverlay()
     fake_steamvr_overlay.hide_count = 0;
     fake_steamvr_overlay.close_count = 0;
     fake_steamvr_overlay.destroy_count = 0;
+    fake_steamvr_overlay.texture_update_count = 0;
+    fake_steamvr_overlay.clear_texture_count = 0;
+    fake_steamvr_overlay.texture_first_byte = 0;
+    fake_steamvr_overlay.texture_last_byte = 0;
+    fake_steamvr_overlay.texture_set = false;
 }
 
 bool HasActiveSteamVrOverlay()
@@ -1175,6 +1199,30 @@ std::uint32_t SteamVrOverlayDestroyCount()
 {
     const std::lock_guard lock(fake_steamvr_overlay.mutex);
     return fake_steamvr_overlay.destroy_count;
+}
+
+std::uint32_t SteamVrOverlayTextureUpdateCount()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.texture_update_count;
+}
+
+std::uint32_t SteamVrOverlayClearTextureCount()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.clear_texture_count;
+}
+
+std::uint8_t SteamVrOverlayTextureFirstByte()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.texture_first_byte;
+}
+
+std::uint8_t SteamVrOverlayTextureLastByte()
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    return fake_steamvr_overlay.texture_last_byte;
 }
 
 void ResetSpoutSource()
