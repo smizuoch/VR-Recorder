@@ -16,7 +16,8 @@ public sealed class WristInputAdapterTests
                 Revision: 1,
                 State: RecorderState.Ready,
                 AvailableActions: RecorderAvailableActions.Start))
-            .Actions);
+            .Actions,
+            item => item.Command == UiCommandId.ToggleRecording);
         var commands = new CapturingUiCommandDispatcher();
         var adapter = new WristInputAdapter(commands);
 
@@ -64,7 +65,8 @@ public sealed class WristInputAdapterTests
         var layout = WristTextureLayoutEngine.Layout(
             snapshot,
             WristLayoutOptions.Default);
-        var target = Assert.Single(layout.HitTargets);
+        var target = Assert.Single(layout.HitTargets, item =>
+            item.Command == UiCommandId.ToggleRecording);
         var commands = new CapturingUiCommandDispatcher();
         var adapter = new WristInputAdapter(commands);
 
@@ -92,7 +94,8 @@ public sealed class WristInputAdapterTests
         var layout = WristTextureLayoutEngine.Layout(
             actionable,
             WristLayoutOptions.Default);
-        var target = Assert.Single(layout.HitTargets);
+        var target = Assert.Single(layout.HitTargets, item =>
+            item.Command == UiCommandId.ToggleRecording);
         var stale = projector.Project(new RecorderStatusSnapshot(
             Revision: 4,
             State: RecorderState.Recording,

@@ -39,6 +39,28 @@ public sealed class WindowsWristRasterAssetProvider
             ["camera.retry"] = new(
                 "retry.svg",
                 "346e99f9447c9ce850adc4b892df665fd7064dc9b8ca718c41d15b1904c76db6"),
+            ["overlay.move"] = new(
+                "drag-indicator.svg",
+                "064a5e0aab0df33a1f4f11c4c7d409410868c4e130c34cf432658f1a9f2699d5"),
+            ["overlay.nudge.up"] = new(
+                "arrow-up.svg",
+                "b13097ba84a1951f65afafcc3d67386f56642abfc2d9812769614a37abfbf8ec"),
+            ["overlay.nudge.down"] = new(
+                "arrow-down.svg",
+                "06225b24a2e9365d1cd88f5e472e733ec8918505f89e174976ea259c22769726"),
+            ["overlay.nudge.left"] = new(
+                "arrow-back.svg",
+                "bc1b08f9d7572132065ae688832368bdc17b609395bdf169c9558fe54d01c0a9"),
+            ["overlay.nudge.right"] = new(
+                "arrow-forward.svg",
+                "55ca246a23f5072843e8e2b3062c30fd03e8c1cbc90c95905c13b5a8cdb2b428"),
+            ["overlay.recenter"] = new(
+                "center-focus-strong.svg",
+                "600bae74e809ff62808d421106c9b65a8a081b226616352e40b159745df7bf85"),
+            ["common.back"] = new(
+                "arrow-back.svg",
+                "bc1b08f9d7572132065ae688832368bdc17b609395bdf169c9558fe54d01c0a9",
+                MirrorInRtl: true),
             ["system.booting"] = new(
                 "progress.svg",
                 "207d2e37e41feacc1baf2a31a4f6d459bfdeef22a267bbf0ad13d2086c422824"),

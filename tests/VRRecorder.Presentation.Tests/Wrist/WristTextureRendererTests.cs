@@ -44,7 +44,7 @@ public sealed class WristTextureRendererTests
         Assert.Contains(assets.TextRequests, request =>
             request.Text == "REC");
         Assert.Equal(
-            "F4C7A0D5BDD76AD082B5B6BB59FDDC33D2B859D48FF70B9351D8E449A673F2FA",
+            "10EB32FA1B49CF1982729B3F1416ED1C8E410870FEDC1D9875DEE5655BEA5875",
             first.Sha256Hex);
     }
 
@@ -98,6 +98,34 @@ public sealed class WristTextureRendererTests
             renderer.Render(snapshot, WristLayoutOptions.Default));
 
         Assert.Equal("recording.start", exception.AssetId);
+    }
+
+    [Fact]
+    public void RendersEveryPositioningControl()
+    {
+        var assets = new SyntheticRasterAssets();
+        var renderer = new WristTextureRenderer(
+            assets,
+            new WristTextureThemeSet(CreateTheme(10), CreateTheme(80)));
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(
+                new RecorderStatusSnapshot(
+                    Revision: 10,
+                    RecorderState.Ready,
+                    RecorderAvailableActions.Start),
+                WristPage.Positioning);
+
+        var frame = renderer.Render(snapshot, WristLayoutOptions.Default);
+
+        Assert.Equal(6, frame.Layout.HitTargets.Count);
+        Assert.Equal(
+            snapshot.Actions.Select(action => action.IconSemanticId),
+            assets.IconRequests
+                .Where(request => request.SemanticId.StartsWith(
+                    "overlay.",
+                    StringComparison.Ordinal) ||
+                    request.SemanticId == "common.back")
+                .Select(request => request.SemanticId));
     }
 
     private static WristTextureTheme CreateTheme(byte seed) => new(

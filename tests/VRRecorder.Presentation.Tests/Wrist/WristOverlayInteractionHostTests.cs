@@ -15,9 +15,11 @@ public sealed class WristOverlayInteractionHostTests
         var source = new FakePointerSource(calls);
         var commands = new CapturingCommands(calls);
         var snapshot = Snapshot(1);
-        var target = Assert.Single(WristTextureLayoutEngine.Layout(
-            snapshot,
-            WristLayoutOptions.Default).HitTargets);
+        var target = Assert.Single(
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default).HitTargets,
+            item => item.Command == UiCommandId.ToggleRecording);
         source.Events.Enqueue(new WristPointerEvent(
             WristPointerEventKind.ButtonDown,
             target.Bounds.Left + target.Bounds.Width / 2,
@@ -71,9 +73,11 @@ public sealed class WristOverlayInteractionHostTests
         var source = new FakePointerSource(calls);
         var commands = new CapturingCommands(calls);
         var snapshot = Snapshot(3);
-        var target = Assert.Single(WristTextureLayoutEngine.Layout(
-            snapshot,
-            WristLayoutOptions.Default).HitTargets);
+        var target = Assert.Single(
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default).HitTargets,
+            item => item.Command == UiCommandId.ToggleRecording);
         var down = new WristPointerEvent(
             WristPointerEventKind.ButtonDown,
             target.Bounds.Left + 1,

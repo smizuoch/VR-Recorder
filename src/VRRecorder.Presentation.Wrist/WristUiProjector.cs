@@ -39,14 +39,16 @@ public sealed class WristUiProjector : IWristUiSnapshotProjector
              status.State == RecorderState.SignalLost) &&
             status.AvailableActions.HasFlag(RecorderAvailableActions.Stop))
         {
-            actions = page == WristPage.Main &&
-                      status.AudioControlState is { } audioControlState
-                ?
-                [
-                    CreateStopAction(),
-                    CreateMicrophoneAction(audioControlState),
-                    CreateMuteAllAction(audioControlState),
-                ]
+            actions = page == WristPage.Main
+                ? status.AudioControlState is { } audioControlState
+                    ?
+                    [
+                        CreateStopAction(),
+                        CreateMicrophoneAction(audioControlState),
+                        CreateMuteAllAction(audioControlState),
+                        CreateMoveAction(),
+                    ]
+                    : [CreateStopAction(), CreateMoveAction()]
                 : [CreateStopAction()];
         }
         else if (status.State == RecorderState.NoSignal &&
@@ -57,7 +59,7 @@ public sealed class WristUiProjector : IWristUiSnapshotProjector
         else if (status.State == RecorderState.Ready &&
                  status.AvailableActions.HasFlag(RecorderAvailableActions.Start))
         {
-            actions = [CreateStartAction()];
+            actions = [CreateStartAction(), CreateMoveAction()];
         }
         else
         {
@@ -88,6 +90,11 @@ public sealed class WristUiProjector : IWristUiSnapshotProjector
             Tooltip: accessibleName,
             MinimumTargetDp: 56);
     }
+
+    private UiActionSnapshot CreateMoveAction() =>
+        CreatePositioningAction(
+            "overlay.move",
+            UiCommandId.OpenOverlayPositioning);
 
     private UiActionSnapshot[] CreatePositioningActions() =>
     [

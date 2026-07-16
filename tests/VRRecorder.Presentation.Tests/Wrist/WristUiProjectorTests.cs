@@ -82,7 +82,7 @@ public sealed class WristUiProjectorTests
     }
 
     [Fact]
-    public void RecordingMainProjectsStopMicrophoneAndMuteControls()
+    public void RecordingMainProjectsStopAudioAndPositioningControls()
     {
         var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
         var status = RecorderStatusSnapshot.Create(
@@ -93,7 +93,7 @@ public sealed class WristUiProjectorTests
 
         var snapshot = projector.Project(status, WristPage.Main);
 
-        Assert.Equal(3, snapshot.Actions.Count);
+        Assert.Equal(4, snapshot.Actions.Count);
         var stop = Assert.Single(snapshot.Actions, action =>
             action.Command == UiCommandId.ToggleRecording);
         Assert.True(stop.MinimumTargetDp >= 64);
@@ -119,6 +119,11 @@ public sealed class WristUiProjectorTests
             mute.AccessibleName.Value);
         Assert.Equal("Turn off all recorded audio", mute.Tooltip.Value);
         Assert.True(mute.MinimumTargetDp >= 56);
+        var move = Assert.Single(snapshot.Actions, action =>
+            action.Command == UiCommandId.OpenOverlayPositioning);
+        Assert.Equal("overlay.move", move.SemanticId);
+        Assert.Equal("Move overlay", move.AccessibleName.Value);
+        Assert.True(move.MinimumTargetDp >= 56);
     }
 
     [Fact]
@@ -274,7 +279,7 @@ public sealed class WristUiProjectorTests
     }
 
     [Fact]
-    public void ReadyProjectsOneEnabledAccessibleRecordAction()
+    public void ReadyProjectsAccessibleRecordAndPositioningActions()
     {
         var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
         var status = new RecorderStatusSnapshot(
@@ -297,6 +302,9 @@ public sealed class WristUiProjectorTests
         Assert.Equal("Start recording", action.AccessibleName.Value);
         Assert.Equal("Start recording", action.Tooltip.Value);
         Assert.True(action.MinimumTargetDp >= 56);
+        var move = Assert.Single(snapshot.Actions, item =>
+            item.Command == UiCommandId.OpenOverlayPositioning);
+        Assert.True(move.IsEnabled);
     }
 
     [Fact]

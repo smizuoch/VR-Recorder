@@ -91,6 +91,31 @@ public sealed class WindowsWristRasterAssetProviderTests
         Assert.Null(mask);
     }
 
+    [Theory]
+    [InlineData("overlay.move")]
+    [InlineData("overlay.nudge.up")]
+    [InlineData("overlay.nudge.down")]
+    [InlineData("overlay.nudge.left")]
+    [InlineData("overlay.nudge.right")]
+    [InlineData("overlay.recenter")]
+    [InlineData("common.back")]
+    public void RasterizesPositioningIcons(string semanticId)
+    {
+        var provider = new WindowsWristRasterAssetProvider(AssetRoot());
+
+        var found = provider.TryRasterizeIcon(
+            new WristIconRasterRequest(
+                semanticId,
+                PixelSize: 48,
+                IsSelected: false,
+                WristFlowDirection.LeftToRight),
+            out var mask);
+
+        Assert.True(found);
+        Assert.NotNull(mask);
+        Assert.Contains(mask.Alpha.Span.ToArray(), alpha => alpha != 0);
+    }
+
     [Fact]
     public void RejectsTamperedProductionIcon()
     {

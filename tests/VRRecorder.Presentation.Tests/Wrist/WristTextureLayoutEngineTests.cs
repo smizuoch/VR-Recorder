@@ -31,7 +31,7 @@ public sealed class WristTextureLayoutEngineTests
         Assert.Equal(2, first.PixelsPerDp);
         Assert.Equal(first.Elements, second.Elements);
         Assert.Equal(first.HitTargets, second.HitTargets);
-        Assert.Equal(3, first.HitTargets.Count);
+        Assert.Equal(4, first.HitTargets.Count);
         Assert.Equal(
             first.Elements.Count,
             first.Elements.Select(element => element.ElementId)
@@ -108,6 +108,44 @@ public sealed class WristTextureLayoutEngineTests
                 leftToRight.PixelWidth - ltr.Bounds.Right,
                 rtl.Bounds.Left);
             Assert.Equal(ltr.Bounds.Width, rtl.Bounds.Width);
+        }
+    }
+
+    [Fact]
+    public void PositioningGridFitsEveryControlInsideTheSafeArea()
+    {
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(
+                new RecorderStatusSnapshot(
+                    Revision: 44,
+                    RecorderState.Ready,
+                    RecorderAvailableActions.Start),
+                WristPage.Positioning);
+
+        var layout = WristTextureLayoutEngine.Layout(
+            snapshot,
+            WristLayoutOptions.Default);
+
+        Assert.Equal(6, layout.HitTargets.Count);
+        Assert.All(layout.HitTargets, target =>
+        {
+            Assert.Equal(WristElementKind.SecondaryAction, target.Kind);
+            Assert.True(target.Bounds.Width >= target.MinimumTargetDp * 2);
+            Assert.True(target.Bounds.Height >= target.MinimumTargetDp * 2);
+            Assert.InRange(target.Bounds.Left, 32, 992);
+            Assert.InRange(target.Bounds.Top, 128, 496);
+            Assert.True(target.Bounds.Right <= 992);
+            Assert.True(target.Bounds.Bottom <= 496);
+        });
+        for (var left = 0; left < layout.HitTargets.Count; left++)
+        {
+            for (var right = left + 1;
+                 right < layout.HitTargets.Count;
+                 right++)
+            {
+                Assert.False(layout.HitTargets[left].Bounds.Intersects(
+                    layout.HitTargets[right].Bounds));
+            }
         }
     }
 

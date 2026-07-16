@@ -56,6 +56,16 @@ public static class WristTextureLayoutEngine
         {
             return CreateLayout(options, elements, hitTargets);
         }
+        if (snapshot.Page == WristPage.Positioning)
+        {
+            AddPositioningActions(
+                actions,
+                options.FlowDirection,
+                elements,
+                hitTargets);
+            EnsureHitTargetsDoNotOverlap(hitTargets);
+            return CreateLayout(options, elements, hitTargets);
+        }
 
         var primary = SelectPrimary(actions);
         AddAction(
@@ -141,6 +151,65 @@ public static class WristTextureLayoutEngine
                 elements,
                 hitTargets);
             left = checked(left + widths[index] + gap);
+        }
+    }
+
+    private static void AddPositioningActions(
+        UiActionSnapshot[] actions,
+        WristFlowDirection direction,
+        ICollection<WristLayoutElement> elements,
+        ICollection<WristHitTarget> hitTargets)
+    {
+        const int top = 128;
+        const int bottom = PixelHeight - 16;
+        const int gap = 16;
+        const int maximumColumns = 4;
+        const int maximumRows = 2;
+        var columns = actions.Length <= 6 ? 3 : maximumColumns;
+        var rows = checked((actions.Length + columns - 1) / columns);
+        if (rows > maximumRows)
+        {
+            throw new InvalidOperationException(
+                "The positioning controls exceed the supported grid.");
+        }
+
+        var availableWidth = checked(
+            PixelWidth - SafeInset * 2 - gap * (columns - 1));
+        var availableHeight = checked(
+            bottom - top - gap * (rows - 1));
+        var cellWidth = availableWidth / columns;
+        var cellHeight = availableHeight / rows;
+        for (var index = 0; index < actions.Length; index++)
+        {
+            var row = index / columns;
+            var column = index % columns;
+            var left = checked(SafeInset + column * (cellWidth + gap));
+            var cellRight = column == columns - 1
+                ? PixelWidth - SafeInset
+                : checked(left + cellWidth);
+            var cellBottom = row == rows - 1
+                ? bottom
+                : checked(top + (row + 1) * cellHeight + row * gap);
+            var bounds = new WristPixelRect(
+                left,
+                checked(top + row * (cellHeight + gap)),
+                checked(cellRight - left),
+                checked(cellBottom -
+                        (top + row * (cellHeight + gap))));
+            var action = actions[index];
+            if (bounds.Width < action.MinimumTargetDp * PixelsPerDp ||
+                bounds.Height < action.MinimumTargetDp * PixelsPerDp)
+            {
+                throw new InvalidOperationException(
+                    "A positioning control does not meet its minimum target size.");
+            }
+            AddAction(
+                action,
+                WristElementKind.SecondaryAction,
+                MirrorIfRequired(bounds, direction),
+                zIndex: 20,
+                elements,
+                hitTargets);
         }
     }
 
