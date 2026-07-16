@@ -292,6 +292,7 @@ factory selection evidenceが証明するのはactual binaryへlinkされたvari
 - 40-byte haptic configと24-byte単発pulseを持つversioned C ABI。absolute action manifest、stable haptic action、left／right input source、reserved、duration／frequency／amplitudeをhandle生成／backend呼出し前に検証し、create／trigger／destroyとbackend error伝播を32-symbol export allowlistへ追加する
 - current installのaction manifestと選択handをC ABI configへ変換し、SafeHandleをnative DLLより先に破棄するmanaged haptic output。Application patternのpulse countをduration間隔の単発ABI callへ展開し、native statusを型付きmanaged例外へ変換する。left／right path、2 pulse、backend failure、Dispose後のnative handle破棄を実fixtureで固定する
 - recorder statusをsingle-reader queueへ順序保持して録画threadを塞がず、Recording成功でstart、Stopping後のReadyでstop、SignalLost／NoSignal／Faultedでfaultを発火するhaptic observer。App host Ready後にschema v3のenabled／frequency／amplitude／selected handを読み、実managed native outputへ接続する。output生成／trigger失敗はTrace診断だけへ隔離し、後続transitionと録画結果を壊さない
+- first-run setup 7の明示的なVERIFY操作から同じlazy native overlay lifecycleをShowし、保存済みmode／selected hand／tracking origin／poseと実readbackが一致した場合だけ完了するproduction verifier／router接続
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -299,13 +300,10 @@ factory selection evidenceが証明するのはactual binaryへlinkされたvari
 
 - OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
 - overlay表示／hapticのcontroller binding、mic／recenterを含む全actionの実runtime検証
-- production glyph／icon atlasを使うoverlay background hostのApp composition
-- production telemetryの採取・表示、production glyph／icon atlas
-- drag release、dock／pin commandでcontroller-relative／Standing absolute間を変換した確定poseをproduction placement coordinatorへ渡す経路
-- first-run routerの`WristOverlayPlacement` production route
-- 実SteamVR／HMD／controller試験
+- production telemetryの全項目採取・表示
+- 実controllerでのWrist Dock／左右ray／drag／再接続試験
 
-pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction coordinatorがあることと、製品AppからVR内へ表示・操作できることは別である。production glyph／icon asset、native lifecycle adapter、App composition、pose／haptic、実HMD証拠が揃うまでは実overlay完成と扱わない。
+pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction coordinatorに加え、production glyph／native lifecycle adapter／App composition／pose／haptic／first-run verifierとWorld Pinの実HMD表示までGreenである。実controllerを必要とするWrist Dock／左右ray／drag／再接続はcontroller standby中のため未完了として分離する。
 
 ## 4. 未完了release gateの実装段階
 
@@ -326,7 +324,7 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | P1 | unpackaged hardware payload | promotion policyのみ | 実機証拠のidentity固定 |
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |
 | P1 | OpenVR input／overlay一式 | runtime owner、native lifecycle／texture／event／pose／haptic、production glyph、App表示接続、Dock／Pin／nudge／recenter、drag release、World Pinでの実HMD表示はGreen。実controllerでのWrist Dock／drag／左右入力、再接続HILが未完了 | Wrist操作・表示 |
-| P1 | first-run setup 7／8 | Port境界のみ | setup完走 |
+| P1 | first-run setup 7／8 | setup 7はproduction overlayのShow＋mode／hand／origin／pose readbackでGreen。setup 8はPort境界のみ | setup完走 |
 | P1 | coverage／mutation／UI Automation | 90%未達／未測定 | release quality gate |
 | P1 | final Legal Bundle／承認 | candidate台帳、承認済みnative 0 | 配布・署名 |
 | P2 | MSIX／Store submission | policyのみ、packaging projectなし | Store提出 |
@@ -691,7 +689,7 @@ App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged 
 - saved transformのreadback完全一致。
 - STOPがdrag repeatより優先。
 - dragなしで全操作へ到達可能。
-- first-run routerに`WristOverlayPlacement` routeを登録し、fake evidenceではなく実overlay visibility／mode／pose readback＋user confirmationで完了する。
+- first-run routerの`WristOverlayPlacement` routeは、明示的なVERIFY操作をuser confirmationとし、同じlazy production lifecycleのShow成功とmode／selected hand／tracking origin／pose readback一致時だけsetup 7を完了する。
 
 settings schema v3へのmigration、pure pose contract、native pose Port、72-byte pose C ABI、managed adapter、runtime device-profile query、production placement coordinator、物理recenter routeはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、v2のdevice別配置も無損失に引き継ぎ、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。coordinatorは取得済みruntime identityからprofileを選び、Wrist Dock／World Pinを実OpenVRへApplyした後、mode／hand／origin／matrixが一致した場合だけprofileを保存する。small／large nudge、安全な既定Wrist Dockへのrecenter、親空間を再利用しないDock／Pin変換も同じ経路で永続化する。MOVEは16 px未満をPositioning pageへのtap、16 px以上をdragとして分離し、0.22 m／1024 pxでparent-space X／Yへ換算する。releaseでは既定Dockからの距離へ120／80 mm hysteresisを適用し、必要なcontroller-relative／Standing absolute変換後の確定poseだけを保存する。同じpointer drain内にSTOPがあればdrag確定よりSTOPを優先する。World Pinでの日本語Main／Positioning textureは実SteamVR／HMDへ表示済みだが、SteamVRが左右controllerを未接続として返したためWrist Dock、drag、左右ray、再接続の実機確認は残る。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作は引き続き分離する。
 

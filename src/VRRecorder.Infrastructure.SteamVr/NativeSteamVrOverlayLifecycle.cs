@@ -7,7 +7,9 @@ using VRRecorder.Infrastructure.SteamVr.Native;
 namespace VRRecorder.Infrastructure.SteamVr;
 
 public sealed class NativeSteamVrOverlayLifecycle
-    : IWristOverlayPlacementRuntime, IDisposable
+    : IWristOverlayPlacementRuntime,
+      IWristOverlayPlacementVerificationRuntime,
+      IDisposable
 {
     public const string StableOverlayKey =
         OpenVrApplicationManifest.StableAppKey + ".wrist";
@@ -309,7 +311,18 @@ public sealed class NativeSteamVrOverlayLifecycle
     WristOverlayPlacementReadback
         IWristOverlayPlacementRuntime.ReadPlacement()
     {
-        var readback = ReadPlacement();
+        return ToApplicationReadback(ReadPlacement());
+    }
+
+    WristOverlayPlacementReadback
+        IWristOverlayPlacementVerificationRuntime.ReadPlacement()
+    {
+        return ToApplicationReadback(ReadPlacement());
+    }
+
+    private static WristOverlayPlacementReadback ToApplicationReadback(
+        SteamVrOverlayPoseReadback readback)
+    {
         return new WristOverlayPlacementReadback(
             readback.PlacementMode,
             readback.DockHand,

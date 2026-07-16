@@ -56,6 +56,16 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         Assert.True(WristOverlayPoseContract.MatchesReadback(
             readback.Transform,
             applied.Transform));
+        IWristOverlayPlacementVerificationRuntime verification = overlay;
+        verification.Show();
+        var verifiedReadback = verification.ReadPlacement();
+        Assert.True(controls.IsVisible());
+        Assert.Equal(
+            OverlayPlacementMode.WorldPin,
+            verifiedReadback.PlacementMode);
+        Assert.True(WristOverlayPoseContract.MatchesReadback(
+            verifiedReadback.Transform,
+            applied.Transform));
     }
 
     [Fact]

@@ -175,6 +175,11 @@ public partial class App
                 [FirstRunSetupStep.SteamVrActionBinding] =
                     new SteamVrActionBindingFirstRunSetupProbe(
                         () => _steamVrInputRuntime.Value),
+                [FirstRunSetupStep.WristOverlayPlacement] =
+                    new WristOverlayPlacementFirstRunSetupProbe(
+                        settingsStore,
+                        new WristOverlayPlacementVerifier(
+                            () => _steamVrOverlayLifecycle.Value)),
                 [FirstRunSetupStep.LegalBundleVerification] =
                     new LegalBundleVerificationFirstRunSetupProbe(
                         settingsStore,

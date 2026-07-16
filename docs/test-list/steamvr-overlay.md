@@ -37,6 +37,7 @@
 - [x] managed haptic outputでcurrent install／selected handをC ABIへ渡し、pulse countを単発callへ展開してnative errorを型付き例外へ変換し、SafeHandleをDLLより先に破棄する
 - [x] MOVE tapと16 px以上のdragを分離し、0.22 m／1024 pxでm換算したrelease、120／80 mm hysteresis、Wrist Dock／World Pinの親空間変換、同tickのSTOP優先をproduction placement coordinatorへ接続する
 - [x] schema v3のenabled／frequency／amplitude／selected handを使い、録画開始／停止成功／signal・fault transitionから実managed native haptic pulseを実行する
+- [x] first-runの明示的な検証操作から同じlazy production lifecycleをShowし、保存済みmode／selected hand／tracking origin／poseの実readback一致時だけsetup 7を完了する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
 
 ## English
@@ -76,4 +77,5 @@
 - [x] Pass the current install/selected hand through the managed haptic output, expand pulse counts into single ABI calls, translate native errors to typed exceptions, and release the SafeHandle before the DLL
 - [x] Separate MOVE taps from drags of at least 16 px, convert release deltas at 0.22 m per 1024 px, apply 120/80 mm hysteresis and Wrist Dock/World Pin parent-space conversion, and give same-tick STOP priority through the production placement coordinator
 - [x] Use schema-v3 enabled/frequency/amplitude/selected-hand settings to emit real managed-native haptic pulses for recording start, successful stop, and signal/fault transitions
+- [x] From the explicit first-run verification action, Show the same lazy production lifecycle and complete setup step 7 only when the saved mode, selected hand, tracking origin, and pose match the live readback
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

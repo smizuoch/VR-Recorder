@@ -692,6 +692,11 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("TransientEncoderProbe", appCode);
         Assert.Contains("SteamVrActionBindingFirstRunSetupProbe", appCode);
         Assert.Contains("NativeSteamVrInputRuntime", appCode);
+        Assert.Contains(
+            "WristOverlayPlacementFirstRunSetupProbe",
+            appCode);
+        Assert.Contains("WristOverlayPlacementVerifier", appCode);
+        Assert.Contains("_steamVrOverlayLifecycle.Value", appCode);
         Assert.Contains("LegalBundleVerificationFirstRunSetupProbe", appCode);
         Assert.Contains("AuthenticatedLegalBundleOutputMirror", appCode);
         Assert.Contains("OfflineLegalAccessFirstRunSetupProbe", appCode);
