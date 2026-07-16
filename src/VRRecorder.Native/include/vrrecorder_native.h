@@ -305,6 +305,23 @@ typedef struct vrrec_steamvr_overlay_pose_v1 {
     float transform[12];
 } vrrec_steamvr_overlay_pose_v1;
 
+/*
+ * The three exact runtime identity strings are packed without terminators in
+ * utf8_buffer. Offsets and sizes are set only when the buffer is large enough.
+ */
+typedef struct vrrec_steamvr_device_profile_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    vrrec_steamvr_hand_t hand;
+    uint32_t reserved_v1;
+    uint32_t tracking_system_name_offset;
+    uint32_t tracking_system_name_size;
+    uint32_t hmd_model_number_offset;
+    uint32_t hmd_model_number_size;
+    uint32_t controller_input_profile_path_offset;
+    uint32_t controller_input_profile_path_size;
+} vrrec_steamvr_device_profile_v1;
+
 typedef struct vrrec_spout_source_config_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -460,6 +477,14 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_set_pose_v1(
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_get_pose_v1(
     vrrec_steamvr_overlay_t *overlay,
     vrrec_steamvr_overlay_pose_v1 *out_pose);
+
+VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_get_device_profile_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_device_profile_v1 *inout_profile,
+    char *utf8_buffer,
+    uint32_t utf8_capacity,
+    uint32_t *out_required_utf8_size);
 
 VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_close_v1(
     vrrec_steamvr_overlay_t *overlay);

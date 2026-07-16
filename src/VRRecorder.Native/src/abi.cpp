@@ -865,6 +865,14 @@ struct vrrec_steamvr_overlay final {
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t GetDeviceProfile(
+        vrrecorder::native::OpenVrHand hand,
+        vrrecorder::native::OpenVrDeviceProfile &profile) noexcept
+    {
+        const std::lock_guard lock(operation_mutex_);
+        return backend_->GetDeviceProfile(hand, profile);
+    }
+
     vrrec_status_t Close() noexcept
     {
         const std::lock_guard lock(operation_mutex_);
@@ -1444,6 +1452,64 @@ vrrec_status_t ValidateSteamVrOverlayPoseOutput(
     return pose->abi_version == VRREC_ABI_V1
         ? VRREC_STATUS_OK
         : VRREC_STATUS_UNSUPPORTED_ABI;
+}
+
+vrrec_status_t ValidateSteamVrDeviceProfileArguments(
+    const vrrec_steamvr_device_profile_v1 *profile,
+    const char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    const std::uint32_t *out_required_utf8_size) noexcept
+{
+    if (profile == nullptr || out_required_utf8_size == nullptr ||
+        profile->struct_size < sizeof(vrrec_steamvr_device_profile_v1) ||
+        profile->reserved_v1 != 0 ||
+        (utf8_buffer == nullptr && utf8_capacity != 0)) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    if (profile->abi_version != VRREC_ABI_V1) {
+        return VRREC_STATUS_UNSUPPORTED_ABI;
+    }
+    return profile->hand == VRREC_STEAMVR_HAND_LEFT ||
+            profile->hand == VRREC_STEAMVR_HAND_RIGHT
+        ? VRREC_STATUS_OK
+        : VRREC_STATUS_INVALID_ARGUMENT;
+}
+
+bool TryValidateSteamVrDeviceProfile(
+    const vrrecorder::native::OpenVrDeviceProfile &profile,
+    std::string_view &tracking_system,
+    std::string_view &hmd_model,
+    std::string_view &controller_profile,
+    std::uint32_t &required_utf8_size) noexcept
+{
+    required_utf8_size = 0;
+    constexpr auto maximum =
+        vrrecorder::native::MaximumOpenVrDeviceProfileTextBytes;
+    if (!TryValidateUtf8Text(
+            profile.tracking_system_name.c_str(),
+            maximum,
+            tracking_system) ||
+        tracking_system.size() != profile.tracking_system_name.size() ||
+        !TryValidateUtf8Text(
+            profile.hmd_model_number.c_str(),
+            maximum,
+            hmd_model) ||
+        hmd_model.size() != profile.hmd_model_number.size() ||
+        !TryValidateUtf8Text(
+            profile.controller_input_profile_path.c_str(),
+            maximum,
+            controller_profile) ||
+        controller_profile.size() !=
+            profile.controller_input_profile_path.size()) {
+        return false;
+    }
+    const auto total = tracking_system.size() + hmd_model.size() +
+        controller_profile.size();
+    if (total > std::numeric_limits<std::uint32_t>::max()) {
+        return false;
+    }
+    required_utf8_size = static_cast<std::uint32_t>(total);
+    return true;
 }
 
 bool IsValidSpoutBackendText(const std::string &text) noexcept
@@ -2304,6 +2370,95 @@ vrrec_steamvr_overlay_get_pose_v1(
     try {
         return overlay->GetPose(*out_pose);
     } catch (...) {
+        return VRREC_STATUS_INTERNAL_ERROR;
+    }
+}
+
+extern "C" VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_get_device_profile_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_device_profile_v1 *inout_profile,
+    char *utf8_buffer,
+    std::uint32_t utf8_capacity,
+    std::uint32_t *out_required_utf8_size)
+{
+    if (out_required_utf8_size == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    *out_required_utf8_size = 0;
+    if (inout_profile != nullptr &&
+        inout_profile->struct_size >=
+            sizeof(vrrec_steamvr_device_profile_v1)) {
+        inout_profile->tracking_system_name_offset = 0;
+        inout_profile->tracking_system_name_size = 0;
+        inout_profile->hmd_model_number_offset = 0;
+        inout_profile->hmd_model_number_size = 0;
+        inout_profile->controller_input_profile_path_offset = 0;
+        inout_profile->controller_input_profile_path_size = 0;
+    }
+    const auto validation = ValidateSteamVrDeviceProfileArguments(
+        inout_profile,
+        utf8_buffer,
+        utf8_capacity,
+        out_required_utf8_size);
+    if (validation != VRREC_STATUS_OK) {
+        return validation;
+    }
+    if (overlay == nullptr) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+    try {
+        auto profile = vrrecorder::native::OpenVrDeviceProfile {};
+        const auto status = overlay->GetDeviceProfile(
+            static_cast<vrrecorder::native::OpenVrHand>(
+                inout_profile->hand),
+            profile);
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        auto tracking_system = std::string_view {};
+        auto hmd_model = std::string_view {};
+        auto controller_profile = std::string_view {};
+        auto required_utf8_size = std::uint32_t {0};
+        if (!TryValidateSteamVrDeviceProfile(
+                profile,
+                tracking_system,
+                hmd_model,
+                controller_profile,
+                required_utf8_size)) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        *out_required_utf8_size = required_utf8_size;
+        if (utf8_capacity < required_utf8_size) {
+            return VRREC_STATUS_BUFFER_TOO_SMALL;
+        }
+        if (utf8_buffer == nullptr) {
+            *out_required_utf8_size = 0;
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        auto offset = std::uint32_t {0};
+        const auto copy = [&](std::string_view value) {
+            std::copy(value.begin(), value.end(), utf8_buffer + offset);
+            const auto result = offset;
+            offset += static_cast<std::uint32_t>(value.size());
+            return result;
+        };
+        inout_profile->tracking_system_name_offset = copy(tracking_system);
+        inout_profile->tracking_system_name_size =
+            static_cast<std::uint32_t>(tracking_system.size());
+        inout_profile->hmd_model_number_offset = copy(hmd_model);
+        inout_profile->hmd_model_number_size =
+            static_cast<std::uint32_t>(hmd_model.size());
+        inout_profile->controller_input_profile_path_offset =
+            copy(controller_profile);
+        inout_profile->controller_input_profile_path_size =
+            static_cast<std::uint32_t>(controller_profile.size());
+        return VRREC_STATUS_OK;
+    } catch (const std::bad_alloc &) {
+        *out_required_utf8_size = 0;
+        return VRREC_STATUS_OUT_OF_MEMORY;
+    } catch (...) {
+        *out_required_utf8_size = 0;
         return VRREC_STATUS_INTERNAL_ERROR;
     }
 }

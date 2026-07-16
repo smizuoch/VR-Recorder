@@ -42,6 +42,12 @@ public sealed class NativeSteamVrOverlayLifecycleTests
                 .ToOpenVrMatrix34(dockTransform)
                 .ToArray(),
             dock.Transform.ToArray());
+        Assert.Equal(
+            new VrDeviceProfile(
+                "lighthouse",
+                "Valve Index",
+                "{indexcontroller}/input/index_controller_profile.json"),
+            overlay.ReadDeviceProfile(VrHand.Right));
 
         var pinTransform = new OverlayTransform(
             [1.25, 1.5, -2],
@@ -75,6 +81,10 @@ public sealed class NativeSteamVrOverlayLifecycleTests
             overlay.ReadPlacement);
         Assert.Equal(3, readException.Status);
         Assert.Equal("get pose", readException.Operation);
+        var profileException = Assert.Throws<SteamVrOverlayException>(() =>
+            overlay.ReadDeviceProfile(VrHand.Right));
+        Assert.Equal(3, profileException.Status);
+        Assert.Equal("get device profile size", profileException.Operation);
     }
 
     [Fact]

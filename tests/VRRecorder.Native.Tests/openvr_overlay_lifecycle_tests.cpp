@@ -187,9 +187,25 @@ public:
         return get_status;
     }
 
+    vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept override
+    {
+        state_->calls.emplace_back(
+            "profile-get:" + std::to_string(static_cast<std::uint32_t>(hand)));
+        profile = current_profile;
+        return profile_status;
+    }
+
     OpenVrOverlayPose current_pose {};
+    OpenVrDeviceProfile current_profile {
+        "lighthouse",
+        "Valve Index",
+        "{indexcontroller}/input/index_controller_profile.json",
+    };
     vrrec_status_t set_status = VRREC_STATUS_OK;
     vrrec_status_t get_status = VRREC_STATUS_OK;
+    vrrec_status_t profile_status = VRREC_STATUS_OK;
 
 private:
     std::shared_ptr<FakeState> state_;
@@ -662,6 +678,42 @@ void AppliesAndReadsOnlyValidatedOverlayPoses()
     CHECK(readback == OpenVrOverlayPose {});
 }
 
+void ReadsOnlyValidatedDeviceProfilesForASelectedHand()
+{
+    auto state = std::make_shared<FakeState>();
+    auto pose_port = std::make_unique<FakePosePort>(state);
+    auto *raw_pose = pose_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        std::make_unique<FakeEventPort>(state),
+        std::move(pose_port),
+        status);
+
+    auto profile = OpenVrDeviceProfile {};
+    CHECK(overlay->GetDeviceProfile(OpenVrHand::Right, profile) ==
+          VRREC_STATUS_OK);
+    CHECK(profile == raw_pose->current_profile);
+    CHECK(state->calls.back() == "profile-get:2");
+
+    profile = raw_pose->current_profile;
+    CHECK(overlay->GetDeviceProfile(OpenVrHand::None, profile) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(profile == OpenVrDeviceProfile {});
+
+    raw_pose->current_profile.hmd_model_number.clear();
+    CHECK(overlay->GetDeviceProfile(OpenVrHand::Left, profile) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(profile == OpenVrDeviceProfile {});
+
+    CHECK(overlay->Close() == VRREC_STATUS_OK);
+    CHECK(overlay->GetDeviceProfile(OpenVrHand::Left, profile) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(profile == OpenVrDeviceProfile {});
+}
+
 }
 
 int main()
@@ -679,5 +731,6 @@ int main()
     RejectsInvalidPointerEventsReturnedByTheRuntime();
     PointerInputConfigurationFailureRollsBackTheOverlay();
     AppliesAndReadsOnlyValidatedOverlayPoses();
+    ReadsOnlyValidatedDeviceProfilesForASelectedHand();
     return 0;
 }

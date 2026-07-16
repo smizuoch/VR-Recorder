@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "vrrecorder_native.h"
 
@@ -40,6 +41,30 @@ struct OpenVrOverlayPose final {
 
     bool operator==(const OpenVrOverlayPose &) const = default;
 };
+
+inline constexpr auto MaximumOpenVrDeviceProfileTextBytes =
+    std::size_t {2048};
+
+struct OpenVrDeviceProfile final {
+    std::string tracking_system_name;
+    std::string hmd_model_number;
+    std::string controller_input_profile_path;
+
+    bool operator==(const OpenVrDeviceProfile &) const = default;
+};
+
+inline bool IsValidOpenVrDeviceProfile(
+    const OpenVrDeviceProfile &profile) noexcept
+{
+    const auto valid_text = [](const std::string &value) {
+        return !value.empty() &&
+            value.size() <= MaximumOpenVrDeviceProfileTextBytes &&
+            value.find('\0') == std::string::npos;
+    };
+    return valid_text(profile.tracking_system_name) &&
+        valid_text(profile.hmd_model_number) &&
+        valid_text(profile.controller_input_profile_path);
+}
 
 inline bool IsValidOpenVrOverlayPose(
     const OpenVrOverlayPose &pose) noexcept
@@ -105,6 +130,10 @@ public:
     virtual vrrec_status_t GetOverlayPose(
         std::uint64_t handle,
         OpenVrOverlayPose &pose) noexcept = 0;
+
+    virtual vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept = 0;
 };
 
 }

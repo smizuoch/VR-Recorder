@@ -11,6 +11,7 @@ internal enum NativeSteamVrStatus
     BackendUnavailable = 4,
     OutOfMemory = 5,
     InternalError = 6,
+    BufferTooSmall = 7,
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -93,4 +94,19 @@ internal struct NativeSteamVrOverlayPoseV1
     public float M21;
     public float M22;
     public float M23;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrDeviceProfileV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public uint Hand;
+    public uint ReservedV1;
+    public uint TrackingSystemNameOffset;
+    public uint TrackingSystemNameSize;
+    public uint HmdModelNumberOffset;
+    public uint HmdModelNumberSize;
+    public uint ControllerInputProfilePathOffset;
+    public uint ControllerInputProfilePathSize;
 }

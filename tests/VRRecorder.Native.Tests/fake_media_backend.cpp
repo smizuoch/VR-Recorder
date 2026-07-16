@@ -572,6 +572,10 @@ struct FakeSteamVrOverlayState {
     std::deque<testing::TestSteamVrOverlayPointerEvent> pointer_events;
     OpenVrOverlayPose pose {};
     bool pose_set = false;
+    std::string tracking_system_name = "lighthouse";
+    std::string hmd_model_number = "Valve Index";
+    std::string controller_input_profile_path =
+        "{indexcontroller}/input/index_controller_profile.json";
 };
 
 FakeSteamVrOverlayState fake_steamvr_overlay;
@@ -702,6 +706,26 @@ public:
             return VRREC_STATUS_INVALID_STATE;
         }
         pose = fake_steamvr_overlay.pose;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept override
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        profile = {};
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (hand != OpenVrHand::Left && hand != OpenVrHand::Right) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        profile = OpenVrDeviceProfile {
+            fake_steamvr_overlay.tracking_system_name,
+            fake_steamvr_overlay.hmd_model_number,
+            fake_steamvr_overlay.controller_input_profile_path,
+        };
         return VRREC_STATUS_OK;
     }
 
@@ -1196,6 +1220,10 @@ void ResetSteamVrOverlay()
     fake_steamvr_overlay.pointer_events.clear();
     fake_steamvr_overlay.pose = {};
     fake_steamvr_overlay.pose_set = false;
+    fake_steamvr_overlay.tracking_system_name = "lighthouse";
+    fake_steamvr_overlay.hmd_model_number = "Valve Index";
+    fake_steamvr_overlay.controller_input_profile_path =
+        "{indexcontroller}/input/index_controller_profile.json";
 }
 
 bool HasActiveSteamVrOverlay()
@@ -1286,6 +1314,19 @@ void PushSteamVrOverlayPointerEvent(TestSteamVrOverlayPointerEvent event)
 {
     const std::lock_guard lock(fake_steamvr_overlay.mutex);
     fake_steamvr_overlay.pointer_events.push_back(event);
+}
+
+void SetSteamVrOverlayDeviceProfile(
+    std::string tracking_system_name,
+    std::string hmd_model_number,
+    std::string controller_input_profile_path)
+{
+    const std::lock_guard lock(fake_steamvr_overlay.mutex);
+    fake_steamvr_overlay.tracking_system_name =
+        std::move(tracking_system_name);
+    fake_steamvr_overlay.hmd_model_number = std::move(hmd_model_number);
+    fake_steamvr_overlay.controller_input_profile_path =
+        std::move(controller_input_profile_path);
 }
 
 void ResetSpoutSource()

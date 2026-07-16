@@ -39,6 +39,9 @@ _Static_assert(
     sizeof(vrrec_steamvr_overlay_pose_v1) == 72,
     "SteamVR overlay pose ABI drift");
 _Static_assert(
+    sizeof(vrrec_steamvr_device_profile_v1) == 40,
+    "SteamVR device profile ABI drift");
+_Static_assert(
     VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK == 1,
     "SteamVR Wrist Dock ABI drift");
 _Static_assert(

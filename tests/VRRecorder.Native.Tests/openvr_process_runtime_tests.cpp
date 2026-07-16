@@ -42,6 +42,11 @@ struct RawState final {
     OpenVrOverlayPointerEvent overlay_pointer_event {};
     bool has_overlay_pointer_event = false;
     OpenVrOverlayPose overlay_pose {};
+    OpenVrDeviceProfile device_profile {
+        "lighthouse",
+        "Valve Index",
+        "{indexcontroller}/input/index_controller_profile.json",
+    };
 };
 
 class FakeRawApi final : public OpenVrRuntimePort {
@@ -175,6 +180,16 @@ public:
         state_->calls.emplace_back(
             "overlay-pose-get:" + std::to_string(handle));
         pose = state_->overlay_pose;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept override
+    {
+        state_->calls.emplace_back(
+            "profile-get:" + std::to_string(static_cast<std::uint32_t>(hand)));
+        profile = state_->device_profile;
         return VRREC_STATUS_OK;
     }
 
@@ -695,8 +710,13 @@ void RoutesOverlayPoseThroughTheSharedRuntimeGeneration()
     auto readback = OpenVrOverlayPose {};
     CHECK(overlay->GetPose(readback) == VRREC_STATUS_OK);
     CHECK(readback == pose);
-    CHECK(state->calls[state->calls.size() - 2] == "overlay-pose-set:91");
-    CHECK(state->calls.back() == "overlay-pose-get:91");
+    auto profile = OpenVrDeviceProfile {};
+    CHECK(overlay->GetDeviceProfile(OpenVrHand::Right, profile) ==
+          VRREC_STATUS_OK);
+    CHECK(profile == state->device_profile);
+    CHECK(state->calls[state->calls.size() - 3] == "overlay-pose-set:91");
+    CHECK(state->calls[state->calls.size() - 2] == "overlay-pose-get:91");
+    CHECK(state->calls.back() == "profile-get:2");
     overlay.reset();
     CHECK(state->shutdown_calls == 1);
     (void)raw;

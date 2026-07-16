@@ -17,6 +17,7 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private readonly PollOverlayPointerEventDelegate _pollOverlayPointerEvent;
     private readonly OverlayPoseDelegate _setOverlayPose;
     private readonly OverlayPoseDelegate _getOverlayPose;
+    private readonly GetOverlayDeviceProfileDelegate _getOverlayDeviceProfile;
     private readonly OverlayOperationDelegate _closeOverlay;
     private readonly DestroyOverlayDelegate _destroyOverlay;
     private int _disposed;
@@ -65,6 +66,8 @@ internal sealed class NativeSteamVrLibrary : IDisposable
                 "vrrec_steamvr_overlay_set_pose_v1");
             _getOverlayPose = Resolve<OverlayPoseDelegate>(
                 "vrrec_steamvr_overlay_get_pose_v1");
+            _getOverlayDeviceProfile = Resolve<GetOverlayDeviceProfileDelegate>(
+                "vrrec_steamvr_overlay_get_device_profile_v1");
             _closeOverlay = Resolve<OverlayOperationDelegate>(
                 "vrrec_steamvr_overlay_close_v1");
             _destroyOverlay = Resolve<DestroyOverlayDelegate>(
@@ -129,6 +132,19 @@ internal sealed class NativeSteamVrLibrary : IDisposable
         ref NativeSteamVrOverlayPoseV1 pose) =>
         _getOverlayPose(overlay, ref pose);
 
+    public NativeSteamVrStatus GetOverlayDeviceProfile(
+        nint overlay,
+        ref NativeSteamVrDeviceProfileV1 profile,
+        byte[]? utf8Buffer,
+        uint utf8Capacity,
+        out uint requiredUtf8Size) =>
+        _getOverlayDeviceProfile(
+            overlay,
+            ref profile,
+            utf8Buffer,
+            utf8Capacity,
+            out requiredUtf8Size);
+
     public NativeSteamVrStatus CloseOverlay(nint overlay) =>
         _closeOverlay(overlay);
 
@@ -185,6 +201,14 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private delegate NativeSteamVrStatus OverlayPoseDelegate(
         nint overlay,
         ref NativeSteamVrOverlayPoseV1 pose);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeSteamVrStatus GetOverlayDeviceProfileDelegate(
+        nint overlay,
+        ref NativeSteamVrDeviceProfileV1 profile,
+        [Out] byte[]? utf8Buffer,
+        uint utf8Capacity,
+        out uint requiredUtf8Size);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void DestroyOverlayDelegate(nint overlay);

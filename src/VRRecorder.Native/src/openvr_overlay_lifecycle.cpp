@@ -217,6 +217,29 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept override
+    {
+        profile = {};
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (hand != OpenVrHand::Left && hand != OpenVrHand::Right) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        const auto status = pose_port_->GetDeviceProfile(hand, profile);
+        if (status != VRREC_STATUS_OK) {
+            profile = {};
+            return status;
+        }
+        if (!IsValidOpenVrDeviceProfile(profile)) {
+            profile = {};
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t Close() noexcept override
     {
         if (closed_) {
@@ -315,6 +338,15 @@ public:
     {
         (void)handle;
         pose = {};
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+
+    vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept override
+    {
+        (void)hand;
+        profile = {};
         return VRREC_STATUS_BACKEND_UNAVAILABLE;
     }
 };

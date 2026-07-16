@@ -185,6 +185,27 @@ int main(void)
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(vrrec_steamvr_overlay_get_pose_v1(NULL, &pose) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_device_profile_v1 device_profile = {
+        sizeof(vrrec_steamvr_device_profile_v1),
+        VRREC_ABI_V1,
+        VRREC_STEAMVR_HAND_LEFT,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    };
+    uint32_t required_device_profile_utf8_size = UINT32_MAX;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              NULL,
+              &device_profile,
+              NULL,
+              0,
+              &required_device_profile_utf8_size) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(required_device_profile_utf8_size == 0);
     vrrec_steamvr_overlay_destroy_v1(NULL);
 
     vrrec_spout_source_config_v1 spout_config = {

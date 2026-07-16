@@ -31,6 +31,9 @@ public:
     virtual vrrec_status_t SetPose(
         const OpenVrOverlayPose &pose) noexcept = 0;
     virtual vrrec_status_t GetPose(OpenVrOverlayPose &pose) noexcept = 0;
+    virtual vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept = 0;
     virtual vrrec_status_t Close() noexcept = 0;
 };
 

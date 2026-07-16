@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using VRRecorder.Application.Settings;
 using VRRecorder.Infrastructure.SteamVr.Native;
 
@@ -16,6 +17,10 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
     public const int TexturePixelHeight = 512;
     public const int TextureStrideBytes = 4096;
     public const int TexturePixelBytesSize = 2_097_152;
+    private const int MaximumDeviceProfileUtf8Bytes = 6_144;
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
 
     private readonly object _lifetimeGate = new();
     private readonly NativeSteamVrLibrary _library;
@@ -203,6 +208,54 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
                     "get pose");
             }
             return readback;
+        }
+    }
+
+    public VrDeviceProfile ReadDeviceProfile(VrHand hand)
+    {
+        if (!Enum.IsDefined(hand))
+        {
+            throw new ArgumentOutOfRangeException(nameof(hand), hand, null);
+        }
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var profile = CreateNativeDeviceProfile(hand);
+            var status = _library.GetOverlayDeviceProfile(
+                _overlay.DangerousGetHandle(),
+                ref profile,
+                utf8Buffer: null,
+                utf8Capacity: 0,
+                out var requiredUtf8Size);
+            if (status != NativeSteamVrStatus.BufferTooSmall ||
+                requiredUtf8Size is 0 or > MaximumDeviceProfileUtf8Bytes)
+            {
+                throw Failure(
+                    status == NativeSteamVrStatus.BufferTooSmall
+                        ? NativeSteamVrStatus.InternalError
+                        : status,
+                    "get device profile size");
+            }
+
+            var utf8 = new byte[requiredUtf8Size];
+            profile = CreateNativeDeviceProfile(hand);
+            status = _library.GetOverlayDeviceProfile(
+                _overlay.DangerousGetHandle(),
+                ref profile,
+                utf8,
+                checked((uint)utf8.Length),
+                out var secondRequiredUtf8Size);
+            if (status != NativeSteamVrStatus.Ok ||
+                secondRequiredUtf8Size != requiredUtf8Size ||
+                !TryMapDeviceProfile(hand, profile, utf8, out var result))
+            {
+                throw Failure(
+                    status == NativeSteamVrStatus.Ok
+                        ? NativeSteamVrStatus.InternalError
+                        : status,
+                    "get device profile");
+            }
+            return result;
         }
     }
 
@@ -438,5 +491,88 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
             return true;
         }
         return false;
+    }
+
+    private static NativeSteamVrDeviceProfileV1 CreateNativeDeviceProfile(
+        VrHand hand) =>
+        new()
+        {
+            StructSize = checked((uint)Marshal.SizeOf<
+                NativeSteamVrDeviceProfileV1>()),
+            AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
+            Hand = hand == VrHand.Left ? 1u : 2u,
+        };
+
+    private static bool TryMapDeviceProfile(
+        VrHand hand,
+        NativeSteamVrDeviceProfileV1 profile,
+        byte[] utf8,
+        out VrDeviceProfile result)
+    {
+        result = null!;
+        var expectedHand = hand == VrHand.Left ? 1u : 2u;
+        var trackingEnd =
+            (ulong)profile.TrackingSystemNameOffset +
+            profile.TrackingSystemNameSize;
+        var hmdEnd =
+            (ulong)profile.HmdModelNumberOffset +
+            profile.HmdModelNumberSize;
+        var controllerEnd =
+            (ulong)profile.ControllerInputProfilePathOffset +
+            profile.ControllerInputProfilePathSize;
+        if (profile.ReservedV1 != 0 || profile.Hand != expectedHand ||
+            profile.TrackingSystemNameOffset != 0 ||
+            profile.HmdModelNumberOffset != trackingEnd ||
+            profile.ControllerInputProfilePathOffset != hmdEnd ||
+            controllerEnd != (ulong)utf8.Length)
+        {
+            return false;
+        }
+        try
+        {
+            var trackingSystem = DecodeProfileText(
+                utf8,
+                profile.TrackingSystemNameOffset,
+                profile.TrackingSystemNameSize);
+            var hmdModel = DecodeProfileText(
+                utf8,
+                profile.HmdModelNumberOffset,
+                profile.HmdModelNumberSize);
+            var controllerProfile = DecodeProfileText(
+                utf8,
+                profile.ControllerInputProfilePathOffset,
+                profile.ControllerInputProfilePathSize);
+            result = new VrDeviceProfile(
+                trackingSystem,
+                hmdModel,
+                controllerProfile);
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or DecoderFallbackException)
+        {
+            return false;
+        }
+    }
+
+    private static string DecodeProfileText(
+        byte[] utf8,
+        uint offset,
+        uint size)
+    {
+        var end = (ulong)offset + size;
+        if (size == 0 || end > (ulong)utf8.Length)
+        {
+            throw new ArgumentException("Invalid device profile UTF-8 range.");
+        }
+        var value = StrictUtf8.GetString(
+            utf8,
+            checked((int)offset),
+            checked((int)size));
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 512)
+        {
+            throw new ArgumentException("Invalid device profile identity.");
+        }
+        return value;
     }
 }

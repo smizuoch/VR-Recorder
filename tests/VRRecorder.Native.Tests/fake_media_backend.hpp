@@ -149,6 +149,10 @@ struct TestSteamVrOverlayPointerEvent {
     std::uint32_t cursor_index;
 };
 void PushSteamVrOverlayPointerEvent(TestSteamVrOverlayPointerEvent event);
+void SetSteamVrOverlayDeviceProfile(
+    std::string tracking_system_name,
+    std::string hmd_model_number,
+    std::string controller_input_profile_path);
 struct TestSpoutSenderSnapshot {
     std::string sender_id;
     std::uint64_t latest_frame_generation;

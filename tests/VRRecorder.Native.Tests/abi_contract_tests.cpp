@@ -42,6 +42,7 @@ static_assert(sizeof(vrrec_steamvr_overlay_config_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_bgra_frame_v1) == 40);
 static_assert(sizeof(vrrec_steamvr_overlay_pointer_event_v1) == 32);
 static_assert(sizeof(vrrec_steamvr_overlay_pose_v1) == 72);
+static_assert(sizeof(vrrec_steamvr_device_profile_v1) == 40);
 static_assert(VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK == 1);
 static_assert(VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN == 2);
 static_assert(VRREC_STEAMVR_HAND_LEFT == 1);
@@ -2429,6 +2430,124 @@ bool AppliesAndReadsSteamVrOverlayPoseThroughVersionedAbi()
     return true;
 }
 
+bool ReadsSteamVrDeviceProfileThroughSizedPackedUtf8Abi()
+{
+    constexpr auto tracking_system = std::string_view {"lighthouse"};
+    constexpr auto hmd_model = std::string_view {"Valve Index"};
+    constexpr auto controller_profile = std::string_view {
+        "{indexcontroller}/input/index_controller_profile.json"};
+    auto profile = vrrec_steamvr_device_profile_v1 {
+        sizeof(vrrec_steamvr_device_profile_v1),
+        VRREC_ABI_V1,
+        VRREC_STEAMVR_HAND_RIGHT,
+        0,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+    };
+    auto required_size = UINT32_MAX;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              nullptr,
+              &profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(required_size == 0);
+    CHECK(profile.tracking_system_name_size == 0);
+
+    vrrecorder::native::testing::ResetSteamVrOverlay();
+    auto config = ValidSteamVrOverlayConfig();
+    vrrec_steamvr_overlay_t *overlay = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_OK);
+    profile.hand = VRREC_STEAMVR_HAND_NONE;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    profile.hand = VRREC_STEAMVR_HAND_RIGHT;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(required_size ==
+          tracking_system.size() + hmd_model.size() +
+              controller_profile.size());
+
+    std::vector<char> short_utf8(required_size - 1, '#');
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              short_utf8.data(),
+              static_cast<std::uint32_t>(short_utf8.size()),
+              &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
+    CHECK(std::all_of(
+        short_utf8.begin(),
+        short_utf8.end(),
+        [](char value) { return value == '#'; }));
+    CHECK(profile.tracking_system_name_size == 0);
+
+    std::vector<char> utf8(required_size, '#');
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              utf8.data(),
+              static_cast<std::uint32_t>(utf8.size()),
+              &required_size) == VRREC_STATUS_OK);
+    CHECK(profile.tracking_system_name_offset == 0);
+    CHECK(profile.tracking_system_name_size == tracking_system.size());
+    CHECK(profile.hmd_model_number_offset == tracking_system.size());
+    CHECK(profile.hmd_model_number_size == hmd_model.size());
+    CHECK(profile.controller_input_profile_path_offset ==
+          tracking_system.size() + hmd_model.size());
+    CHECK(profile.controller_input_profile_path_size ==
+          controller_profile.size());
+    CHECK(std::string_view(
+              utf8.data() + profile.tracking_system_name_offset,
+              profile.tracking_system_name_size) == tracking_system);
+    CHECK(std::string_view(
+              utf8.data() + profile.hmd_model_number_offset,
+              profile.hmd_model_number_size) == hmd_model);
+    CHECK(std::string_view(
+              utf8.data() + profile.controller_input_profile_path_offset,
+              profile.controller_input_profile_path_size) ==
+          controller_profile);
+
+    vrrecorder::native::testing::SetSteamVrOverlayDeviceProfile(
+        std::string("\xC3\x28", 2),
+        std::string(hmd_model),
+        std::string(controller_profile));
+    required_size = UINT32_MAX;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(required_size == 0);
+    CHECK(profile.tracking_system_name_size == 0);
+
+    CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
+    required_size = UINT32_MAX;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              utf8.data(),
+              static_cast<std::uint32_t>(utf8.size()),
+              &required_size) == VRREC_STATUS_INVALID_STATE);
+    CHECK(required_size == 0);
+    CHECK(profile.tracking_system_name_size == 0);
+    vrrec_steamvr_overlay_destroy_v1(overlay);
+    return true;
+}
+
 bool RejectsInvalidSpoutSourceAbiInputs()
 {
     using vrrecorder::native::testing::ResetSpoutSource;
@@ -3517,6 +3636,7 @@ int main(int argc, char **argv)
         !ControlsSteamVrOverlayThroughVersionedAbi() ||
         !PollsSteamVrOverlayPointerEventsThroughVersionedAbi() ||
         !AppliesAndReadsSteamVrOverlayPoseThroughVersionedAbi() ||
+        !ReadsSteamVrDeviceProfileThroughSizedPackedUtf8Abi() ||
         !RejectsInvalidSpoutSourceAbiInputs() ||
         !SnapshotsPackedUtf8WithRequiredSizing() ||
         !PollsFrameWithoutConsumingOnBufferRetry() ||

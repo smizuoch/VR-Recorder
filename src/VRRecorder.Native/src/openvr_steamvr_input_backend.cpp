@@ -1,6 +1,7 @@
 #include "openvr_steamvr_input_backend_core.hpp"
 #include "openvr_overlay_backend.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cmath>
 #include <memory>
@@ -384,6 +385,51 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t GetDeviceProfile(
+        OpenVrHand hand,
+        OpenVrDeviceProfile &profile) noexcept override
+    {
+        profile = {};
+        if (!initialized_ || system_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (hand != OpenVrHand::Left && hand != OpenVrHand::Right) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        const auto role = hand == OpenVrHand::Left
+            ? vr::TrackedControllerRole_LeftHand
+            : vr::TrackedControllerRole_RightHand;
+        const auto controller =
+            system_->GetTrackedDeviceIndexForControllerRole(role);
+        if (controller == vr::k_unTrackedDeviceIndexInvalid) {
+            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        auto status = ReadTrackedDeviceString(
+            vr::k_unTrackedDeviceIndex_Hmd,
+            vr::Prop_TrackingSystemName_String,
+            profile.tracking_system_name);
+        if (status == VRREC_STATUS_OK) {
+            status = ReadTrackedDeviceString(
+                vr::k_unTrackedDeviceIndex_Hmd,
+                vr::Prop_ModelNumber_String,
+                profile.hmd_model_number);
+        }
+        if (status == VRREC_STATUS_OK) {
+            status = ReadTrackedDeviceString(
+                controller,
+                vr::Prop_InputProfilePath_String,
+                profile.controller_input_profile_path);
+        }
+        if (status != VRREC_STATUS_OK ||
+            !IsValidOpenVrDeviceProfile(profile)) {
+            profile = {};
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t AddApplicationManifest(
         std::string_view absolute_path,
         bool temporary) noexcept override
@@ -526,6 +572,41 @@ public:
     }
 
 private:
+    vrrec_status_t ReadTrackedDeviceString(
+        vr::TrackedDeviceIndex_t device,
+        vr::ETrackedDeviceProperty property,
+        std::string &value) noexcept
+    {
+        value.clear();
+        auto buffer = std::array<char, vr::k_unMaxPropertyStringSize> {};
+        auto error = vr::TrackedProp_Success;
+        const auto size = system_->GetStringTrackedDeviceProperty(
+            device,
+            property,
+            buffer.data(),
+            static_cast<std::uint32_t>(buffer.size()),
+            &error);
+        if (error != vr::TrackedProp_Success) {
+            return error == vr::TrackedProp_InvalidDevice ||
+                    error == vr::TrackedProp_CouldNotContactServer ||
+                    error == vr::TrackedProp_NotYetAvailable ||
+                    error == vr::TrackedProp_IPCReadFailure
+                ? VRREC_STATUS_BACKEND_UNAVAILABLE
+                : VRREC_STATUS_INTERNAL_ERROR;
+        }
+        if (size <= 1 || size > buffer.size() || buffer[size - 1] != '\0') {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        try {
+            value.assign(buffer.data(), size - 1);
+            return VRREC_STATUS_OK;
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+    }
+
     vr::IVRSystem *system_ = nullptr;
     vr::IVRApplications *applications_ = nullptr;
     vr::IVRInput *input_ = nullptr;
