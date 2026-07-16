@@ -515,6 +515,79 @@ public:
         }
     }
 
+    vrrec_status_t GetHapticActionHandle(
+        std::string_view action_path,
+        std::uint64_t &handle) noexcept override
+    {
+        handle = 0;
+        if (!initialized_ || input_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        try {
+            const std::string path(action_path);
+            auto openvr_handle = vr::VRActionHandle_t {
+                vr::k_ulInvalidActionHandle,
+            };
+            const auto status = MapInputError(
+                input_->GetActionHandle(path.c_str(), &openvr_handle));
+            if (status == VRREC_STATUS_OK) {
+                handle = openvr_handle;
+            }
+            return status;
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+    }
+
+    vrrec_status_t GetInputSourceHandle(
+        std::string_view input_source_path,
+        std::uint64_t &handle) noexcept override
+    {
+        handle = 0;
+        if (!initialized_ || input_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        try {
+            const std::string path(input_source_path);
+            auto openvr_handle = vr::VRInputValueHandle_t {
+                vr::k_ulInvalidInputValueHandle,
+            };
+            const auto status = MapInputError(
+                input_->GetInputSourceHandle(path.c_str(), &openvr_handle));
+            if (status == VRREC_STATUS_OK) {
+                handle = openvr_handle;
+            }
+            return status;
+        } catch (const std::bad_alloc &) {
+            return VRREC_STATUS_OUT_OF_MEMORY;
+        } catch (...) {
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+    }
+
+    vrrec_status_t TriggerHapticVibrationAction(
+        std::uint64_t action_handle,
+        std::uint64_t source_handle,
+        const OpenVrHapticPulse &pulse) noexcept override
+    {
+        if (!initialized_ || input_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (action_handle == 0 || source_handle == 0 ||
+            !IsValidOpenVrHapticPulse(pulse)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        return MapInputError(input_->TriggerHapticVibrationAction(
+            static_cast<vr::VRActionHandle_t>(action_handle),
+            0.0F,
+            pulse.duration_seconds,
+            pulse.frequency_hertz,
+            pulse.amplitude,
+            static_cast<vr::VRInputValueHandle_t>(source_handle)));
+    }
+
     vrrec_status_t UpdateActionState(
         std::uint64_t action_set_handle) noexcept override
     {

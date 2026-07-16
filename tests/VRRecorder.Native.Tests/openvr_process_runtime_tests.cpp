@@ -219,6 +219,38 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t GetHapticActionHandle(
+        std::string_view path,
+        std::uint64_t &handle) noexcept override
+    {
+        state_->calls.emplace_back("haptic-action:" + std::string(path));
+        handle = 44;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetInputSourceHandle(
+        std::string_view path,
+        std::uint64_t &handle) noexcept override
+    {
+        state_->calls.emplace_back("source:" + std::string(path));
+        handle = 55;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t TriggerHapticVibrationAction(
+        std::uint64_t action_handle,
+        std::uint64_t source_handle,
+        const OpenVrHapticPulse &pulse) noexcept override
+    {
+        state_->calls.emplace_back(
+            "haptic-trigger:" + std::to_string(action_handle) + ':' +
+            std::to_string(source_handle) + ':' +
+            std::to_string(pulse.duration_seconds) + ':' +
+            std::to_string(pulse.frequency_hertz) + ':' +
+            std::to_string(pulse.amplitude));
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t UpdateActionState(std::uint64_t handle) noexcept override
     {
         state_->calls.emplace_back("update:" + std::to_string(handle));
@@ -291,6 +323,109 @@ std::shared_ptr<OpenVrProcessRuntime> Runtime(
 
 std::unique_ptr<OpenVrInputPort> Client(
     const std::shared_ptr<OpenVrProcessRuntime> &runtime);
+
+std::unique_ptr<OpenVrHapticPort> HapticClient(
+    const std::shared_ptr<OpenVrProcessRuntime> &runtime)
+{
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto client = CreateOpenVrProcessHapticPort(runtime, status);
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(client != nullptr);
+    return client;
+}
+
+void RoutesHapticsThroughTheSharedRuntimeGeneration()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto input = Client(runtime);
+    auto haptic = HapticClient(runtime);
+
+    CHECK(input->Initialize() == VRREC_STATUS_OK);
+    CHECK(input->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    CHECK(input->SetActionManifestPath("C:/app/OpenVr/actions.json") ==
+          VRREC_STATUS_OK);
+    CHECK(haptic->Initialize() == VRREC_STATUS_OK);
+    CHECK(haptic->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_OK);
+    CHECK(haptic->SetActionManifestPath("C:/app/OpenVr/actions.json") ==
+          VRREC_STATUS_OK);
+
+    auto action = std::uint64_t {0};
+    auto source = std::uint64_t {0};
+    CHECK(haptic->GetHapticActionHandle(
+              "/actions/vrrecorder/out/haptic",
+              action) == VRREC_STATUS_OK);
+    CHECK(haptic->GetInputSourceHandle(
+              "/user/hand/right",
+              source) == VRREC_STATUS_OK);
+    CHECK(haptic->TriggerHapticVibrationAction(
+              action,
+              source,
+              OpenVrHapticPulse {0.03F, 120.0F, 0.65F}) ==
+          VRREC_STATUS_OK);
+
+    CHECK(state->initialize_calls == 1);
+    CHECK(state->application_manifest_calls == 1);
+    CHECK(state->manifest_calls == 1);
+    CHECK(state->calls[state->calls.size() - 3] ==
+          "haptic-action:/actions/vrrecorder/out/haptic");
+    CHECK(state->calls[state->calls.size() - 2] ==
+          "source:/user/hand/right");
+    CHECK(state->calls.back() ==
+          "haptic-trigger:44:55:0.030000:120.000000:0.650000");
+
+    input.reset();
+    CHECK(state->shutdown_calls == 0);
+    haptic.reset();
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
+void HapticPortRejectsInvalidPulseBeforeCallingTheRawApi()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto haptic = HapticClient(runtime);
+    const auto valid = OpenVrHapticPulse {0.03F, 120.0F, 0.65F};
+
+    CHECK(haptic->TriggerHapticVibrationAction(44, 55, valid) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(haptic->Initialize() == VRREC_STATUS_OK);
+    const auto before = state->calls.size();
+    CHECK(haptic->TriggerHapticVibrationAction(
+              0,
+              55,
+              valid) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(haptic->TriggerHapticVibrationAction(
+              44,
+              0,
+              valid) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(haptic->TriggerHapticVibrationAction(
+              44,
+              55,
+              OpenVrHapticPulse {0.0F, 120.0F, 0.65F}) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(haptic->TriggerHapticVibrationAction(
+              44,
+              55,
+              OpenVrHapticPulse {0.03F, -1.0F, 0.65F}) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(haptic->TriggerHapticVibrationAction(
+              44,
+              55,
+              OpenVrHapticPulse {0.03F, 120.0F, 1.01F}) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(state->calls.size() == before);
+    haptic.reset();
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
 
 void FansOutOneBackgroundPollRevisionToEveryActionClient()
 {
@@ -879,6 +1014,8 @@ void FailsClosedBeforeAcquiringAReference()
     CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(CreateOpenVrProcessInputPort(nullptr, status) == nullptr);
     CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(CreateOpenVrProcessHapticPort(nullptr, status) == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
 }
 
 }
@@ -897,6 +1034,8 @@ int main()
     RoutesOverlayTextureThroughTheSharedRuntimeGeneration();
     RoutesOverlayPointerEventsThroughTheSharedRuntimeGeneration();
     RoutesOverlayPoseThroughTheSharedRuntimeGeneration();
+    RoutesHapticsThroughTheSharedRuntimeGeneration();
+    HapticPortRejectsInvalidPulseBeforeCallingTheRawApi();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
     FailsClosedBeforeAcquiringAReference();
     return 0;

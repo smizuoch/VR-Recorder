@@ -226,6 +226,66 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t GetHapticActionHandle(
+        std::string_view action_path,
+        std::uint64_t &handle) noexcept
+    {
+        handle = 0;
+        const std::lock_guard lock(mutex_);
+        if (references_ == 0) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = api_->GetHapticActionHandle(
+            action_path,
+            handle);
+        if (status != VRREC_STATUS_OK || handle == 0) {
+            handle = 0;
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t GetInputSourceHandle(
+        std::string_view input_source_path,
+        std::uint64_t &handle) noexcept
+    {
+        handle = 0;
+        const std::lock_guard lock(mutex_);
+        if (references_ == 0) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = api_->GetInputSourceHandle(
+            input_source_path,
+            handle);
+        if (status != VRREC_STATUS_OK || handle == 0) {
+            handle = 0;
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
+        }
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t TriggerHapticVibrationAction(
+        std::uint64_t action_handle,
+        std::uint64_t source_handle,
+        const OpenVrHapticPulse &pulse) noexcept
+    {
+        if (action_handle == 0 || source_handle == 0 ||
+            !IsValidOpenVrHapticPulse(pulse)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->TriggerHapticVibrationAction(
+                action_handle,
+                source_handle,
+                pulse);
+    }
+
     vrrec_status_t CreateOverlay(
         std::string_view key,
         std::string_view name,
@@ -678,6 +738,93 @@ private:
     bool acquired_ = false;
 };
 
+class OpenVrProcessHapticPort final : public OpenVrHapticPort {
+public:
+    explicit OpenVrProcessHapticPort(
+        std::shared_ptr<OpenVrProcessRuntime> runtime) noexcept
+        : runtime_(std::move(runtime))
+    {
+    }
+
+    ~OpenVrProcessHapticPort() override
+    {
+        Shutdown();
+    }
+
+    vrrec_status_t Initialize() noexcept override
+    {
+        if (initialized_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = runtime_->Acquire();
+        if (status == VRREC_STATUS_OK) {
+            initialized_ = true;
+        }
+        return status;
+    }
+
+    vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept override
+    {
+        return initialized_
+            ? runtime_->AddApplicationManifest(absolute_path, temporary)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t SetActionManifestPath(
+        std::string_view absolute_path) noexcept override
+    {
+        return initialized_
+            ? runtime_->SetActionManifestPath(absolute_path)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t GetHapticActionHandle(
+        std::string_view action_path,
+        std::uint64_t &handle) noexcept override
+    {
+        return initialized_
+            ? runtime_->GetHapticActionHandle(action_path, handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t GetInputSourceHandle(
+        std::string_view input_source_path,
+        std::uint64_t &handle) noexcept override
+    {
+        return initialized_
+            ? runtime_->GetInputSourceHandle(input_source_path, handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t TriggerHapticVibrationAction(
+        std::uint64_t action_handle,
+        std::uint64_t source_handle,
+        const OpenVrHapticPulse &pulse) noexcept override
+    {
+        return initialized_
+            ? runtime_->TriggerHapticVibrationAction(
+                action_handle,
+                source_handle,
+                pulse)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    void Shutdown() noexcept override
+    {
+        if (!initialized_) {
+            return;
+        }
+        initialized_ = false;
+        runtime_->Release();
+    }
+
+private:
+    std::shared_ptr<OpenVrProcessRuntime> runtime_;
+    bool initialized_ = false;
+};
+
 class OpenVrProcessOverlayTexturePort final
     : public OpenVrOverlayTexturePort {
 public:
@@ -896,6 +1043,22 @@ std::unique_ptr<OpenVrInputPort> CreateOpenVrProcessInputPort(
         return nullptr;
     }
     status = VRREC_STATUS_OK;
+    return port;
+}
+
+std::unique_ptr<OpenVrHapticPort> CreateOpenVrProcessHapticPort(
+    std::shared_ptr<OpenVrProcessRuntime> runtime,
+    vrrec_status_t &status) noexcept
+{
+    if (!runtime) {
+        status = VRREC_STATUS_INVALID_ARGUMENT;
+        return nullptr;
+    }
+    auto port = std::unique_ptr<OpenVrHapticPort>(
+        new (std::nothrow) OpenVrProcessHapticPort(std::move(runtime)));
+    status = port
+        ? VRREC_STATUS_OK
+        : VRREC_STATUS_OUT_OF_MEMORY;
     return port;
 }
 

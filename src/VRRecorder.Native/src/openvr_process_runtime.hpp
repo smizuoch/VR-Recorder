@@ -21,6 +21,10 @@ std::unique_ptr<OpenVrInputPort> CreateOpenVrProcessInputPort(
     std::shared_ptr<OpenVrProcessRuntime> runtime,
     vrrec_status_t &status) noexcept;
 
+std::unique_ptr<OpenVrHapticPort> CreateOpenVrProcessHapticPort(
+    std::shared_ptr<OpenVrProcessRuntime> runtime,
+    vrrec_status_t &status) noexcept;
+
 std::unique_ptr<OpenVrOverlayLifecyclePort>
 CreateOpenVrProcessOverlayLifecyclePort(
     std::shared_ptr<OpenVrProcessRuntime> runtime,
