@@ -23,6 +23,7 @@
 - [x] managed lifecycleでpointer eventを型付き値へ変換し、no-eventは`null`、不正payloadはfail-closedにする
 - [x] 表示成功済みsnapshot／layoutだけでprimary downをdispatchし、cursor重複・同一revision重複・event floodをpure interaction hostで抑止する
 - [x] native lifecycleをWrist texture publisher／pointer sourceへ適合し、frame metadataと全pointer kind／buttonを型安全に変換する
+- [x] statusを最新revisionへ集約し、最大90 Hzのmonotonic one-shot background hostでcancel／fault時にunsubscribeする
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -50,6 +51,7 @@
 - [x] Convert pointer events to typed values in the managed lifecycle, return `null` on no-event, and fail closed on malformed payloads
 - [x] Dispatch primary-down only against the successfully published snapshot/layout and suppress cursor duplicates, same-revision duplicates, and event floods in a pure interaction host
 - [x] Adapt the native lifecycle to the wrist texture publisher/pointer source and map frame metadata plus every pointer kind/button with typed values
+- [x] Coalesce status to the latest revision and unsubscribe on cancellation/fault in a monotonic one-shot background host capped at 90 Hz
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

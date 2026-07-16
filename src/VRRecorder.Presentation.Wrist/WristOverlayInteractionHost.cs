@@ -5,7 +5,16 @@ public sealed record WristOverlayInteractionTickResult(
     int PointerEventsPolled,
     bool ActionDispatched);
 
+public interface IWristOverlayInteractionTicker
+{
+    Task<WristOverlayInteractionTickResult> TickAsync(
+        WristUiSnapshot snapshot,
+        TimeSpan now,
+        CancellationToken cancellationToken);
+}
+
 public sealed class WristOverlayInteractionHost
+    : IWristOverlayInteractionTicker
 {
     public const int MaxPointerEventsPerTick = 64;
 

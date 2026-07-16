@@ -251,6 +251,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - managed lifecycleの同期pointer event poll。no-eventを`null`、既知kind／button／1024×512範囲だけを型付き値へ変換し、Close／Dispose／不正payloadを既存のlifetime／例外規約へ収束させる
 - 表示成功済みsnapshot／layoutだけでpointer eventをhit-testするpure interaction host。primary down／upをcursor別に追跡し、duplicate downと同一revisionの二重commandを抑止し、1 tick最大64件に制限してmove floodから描画を保護する
 - native overlay lifecycleを`IWristTexturePublisher`／`IWristPointerEventSource`へ適合するmanaged adapter。rendererのframe metadataをそのままUpdateし、OpenVR Left／Right／Middleをpresentation Primary／Secondary／Middleへ変換し、lifecycleを単一所有・破棄する
+- recorder status subscriptionをatomicな最新1件へ畳み、初回即時かつ最大90 Hzでinteraction coordinatorを駆動するone-shot background host。遅いtick後はcatch-up連打せずmonotonic nowから再基準化し、cancel／fault時に必ずunsubscribeする
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -258,7 +259,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 
 - OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
 - mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
-- overlay interaction coordinatorのApp background host接続
+- production glyph／icon atlasを使うoverlay background hostのApp composition
 - production telemetryの採取・表示、production glyph／icon atlas
 - controller-relative Wrist Dock、absolute World Pin、pose readback
 - drag、nudge、recenter、dock／pin commandのruntime適用
