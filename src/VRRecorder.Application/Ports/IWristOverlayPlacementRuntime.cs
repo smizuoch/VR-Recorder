@@ -12,6 +12,10 @@ public interface IWristOverlayPlacementRuntime
         OverlayTransform transform);
 
     WristOverlayPlacementReadback ReadPlacement();
+
+    OpenVrMatrix34 ConvertPlacement(
+        VrHand hand,
+        OverlayPlacementMode placementMode);
 }
 
 public sealed record WristOverlayPlacementReadback(

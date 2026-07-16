@@ -127,6 +127,17 @@ public sealed class WristUiSessionTests
             return Task.FromResult(DefaultPlacement());
         }
 
+        public Task<VrOverlayPlacement> SetPlacementModeAsync(
+            OverlayPlacementMode placementMode,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(DefaultPlacement() with
+            {
+                PlacementMode = placementMode,
+            });
+        }
+
         private static VrOverlayPlacement DefaultPlacement() => new(
             OverlayPlacementMode.WristDock,
             WristOverlayPoseContract.CreateDefaultWristDockTransform());

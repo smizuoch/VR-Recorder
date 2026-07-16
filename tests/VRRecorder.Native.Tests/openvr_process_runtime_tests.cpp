@@ -183,6 +183,26 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-pose-convert:" + std::to_string(handle));
+        pose = state_->overlay_pose;
+        pose.placement_mode = target_mode;
+        pose.hand = target_mode == OpenVrOverlayPlacementMode::WristDock
+            ? hand
+            : OpenVrHand::None;
+        pose.tracking_origin =
+            target_mode == OpenVrOverlayPlacementMode::WristDock
+                ? OpenVrTrackingOrigin::None
+                : OpenVrTrackingOrigin::Standing;
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t GetDeviceProfile(
         OpenVrHand hand,
         OpenVrDeviceProfile &profile) noexcept override

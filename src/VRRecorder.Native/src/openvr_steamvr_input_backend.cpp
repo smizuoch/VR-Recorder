@@ -13,6 +13,7 @@
 
 #include "openvr.h"
 #include "openvr_overlay_texture_presenter.hpp"
+#include "openvr_overlay_pose_conversion.hpp"
 #include "openvr_process_runtime.hpp"
 #include "windows_openvr_overlay_texture_graphics_port.hpp"
 
@@ -384,6 +385,74 @@ public:
             }
         }
         return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        pose = {};
+        if (!initialized_ || system_ == nullptr || overlay_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if ((target_mode != OpenVrOverlayPlacementMode::WristDock &&
+             target_mode != OpenVrOverlayPlacementMode::WorldPin) ||
+            (hand != OpenVrHand::Left && hand != OpenVrHand::Right)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+
+        auto current = OpenVrOverlayPose {};
+        auto status = GetOverlayPose(handle, current);
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        if (current.placement_mode == target_mode) {
+            if (target_mode == OpenVrOverlayPlacementMode::WristDock &&
+                current.hand != hand) {
+                return VRREC_STATUS_INVALID_ARGUMENT;
+            }
+            pose = current;
+            return VRREC_STATUS_OK;
+        }
+
+        const auto role = hand == OpenVrHand::Left
+            ? vr::TrackedControllerRole_LeftHand
+            : vr::TrackedControllerRole_RightHand;
+        const auto device =
+            system_->GetTrackedDeviceIndexForControllerRole(role);
+        if (device == vr::k_unTrackedDeviceIndexInvalid) {
+            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        auto device_poses =
+            std::array<vr::TrackedDevicePose_t,
+                       vr::k_unMaxTrackedDeviceCount> {};
+        system_->GetDeviceToAbsoluteTrackingPose(
+            vr::TrackingUniverseStanding,
+            0,
+            device_poses.data(),
+            static_cast<std::uint32_t>(device_poses.size()));
+        const auto &controller_pose = device_poses[device];
+        if (!controller_pose.bDeviceIsConnected ||
+            !controller_pose.bPoseIsValid) {
+            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+
+        auto controller_absolute = OpenVrMatrix34 {};
+        for (auto row = std::size_t {0}; row < 3; ++row) {
+            for (auto column = std::size_t {0}; column < 4; ++column) {
+                controller_absolute.values[(row * 4) + column] =
+                    controller_pose.mDeviceToAbsoluteTracking
+                        .m[row][column];
+            }
+        }
+        return ConvertOpenVrOverlayPose(
+            current,
+            controller_absolute,
+            target_mode,
+            hand,
+            pose);
     }
 
     vrrec_status_t GetDeviceProfile(

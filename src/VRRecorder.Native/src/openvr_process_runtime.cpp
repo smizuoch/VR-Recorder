@@ -399,6 +399,24 @@ public:
         return api_->GetOverlayPose(handle, pose);
     }
 
+    vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        if (references_ == 0) {
+            pose = {};
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        return api_->ConvertOverlayPose(
+            handle,
+            target_mode,
+            hand,
+            pose);
+    }
+
     vrrec_status_t GetDeviceProfile(
         OpenVrHand hand,
         OpenVrDeviceProfile &profile) noexcept
@@ -981,6 +999,23 @@ public:
             return VRREC_STATUS_INVALID_STATE;
         }
         return runtime_->GetOverlayPose(handle, pose);
+    }
+
+    vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        if (!acquired_) {
+            pose = {};
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        return runtime_->ConvertOverlayPose(
+            handle,
+            target_mode,
+            hand,
+            pose);
     }
 
     vrrec_status_t GetDeviceProfile(

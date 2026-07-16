@@ -131,6 +131,12 @@ public:
         std::uint64_t handle,
         OpenVrOverlayPose &pose) noexcept = 0;
 
+    virtual vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept = 0;
+
     virtual vrrec_status_t GetDeviceProfile(
         OpenVrHand hand,
         OpenVrDeviceProfile &profile) noexcept = 0;

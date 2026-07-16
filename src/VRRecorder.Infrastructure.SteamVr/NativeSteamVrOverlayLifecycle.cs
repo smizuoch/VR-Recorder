@@ -213,6 +213,51 @@ public sealed class NativeSteamVrOverlayLifecycle
         }
     }
 
+    public OpenVrMatrix34 ConvertPlacement(
+        VrHand hand,
+        OverlayPlacementMode placementMode)
+    {
+        if (!Enum.IsDefined(hand))
+        {
+            throw new ArgumentOutOfRangeException(nameof(hand), hand, null);
+        }
+        if (!Enum.IsDefined(placementMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(placementMode),
+                placementMode,
+                null);
+        }
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var pose = new NativeSteamVrOverlayPoseV1
+            {
+                StructSize = checked((uint)Marshal.SizeOf<
+                    NativeSteamVrOverlayPoseV1>()),
+                AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
+            };
+            var status = _library.ConvertOverlayPose(
+                _overlay.DangerousGetHandle(),
+                placementMode == OverlayPlacementMode.WristDock ? 1u : 2u,
+                hand == VrHand.Left ? 1u : 2u,
+                ref pose);
+            if (status != NativeSteamVrStatus.Ok ||
+                !TryMapPose(pose, out var readback) ||
+                readback.PlacementMode != placementMode ||
+                (placementMode == OverlayPlacementMode.WristDock &&
+                 readback.DockHand != hand))
+            {
+                throw Failure(
+                    status == NativeSteamVrStatus.Ok
+                        ? NativeSteamVrStatus.InternalError
+                        : status,
+                    "convert pose");
+            }
+            return readback.Transform;
+        }
+    }
+
     public VrDeviceProfile ReadDeviceProfile(VrHand hand)
     {
         if (!Enum.IsDefined(hand))

@@ -217,6 +217,37 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t ConvertPose(
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        pose = {};
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if ((target_mode != OpenVrOverlayPlacementMode::WristDock &&
+             target_mode != OpenVrOverlayPlacementMode::WorldPin) ||
+            (hand != OpenVrHand::Left && hand != OpenVrHand::Right)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        const auto status = pose_port_->ConvertOverlayPose(
+            handle_,
+            target_mode,
+            hand,
+            pose);
+        if (status != VRREC_STATUS_OK) {
+            pose = {};
+            return status;
+        }
+        if (!IsValidOpenVrOverlayPose(pose) ||
+            pose.placement_mode != target_mode) {
+            pose = {};
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t GetDeviceProfile(
         OpenVrHand hand,
         OpenVrDeviceProfile &profile) noexcept override
@@ -337,6 +368,19 @@ public:
         OpenVrOverlayPose &pose) noexcept override
     {
         (void)handle;
+        pose = {};
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+
+    vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        (void)handle;
+        (void)target_mode;
+        (void)hand;
         pose = {};
         return VRREC_STATUS_BACKEND_UNAVAILABLE;
     }

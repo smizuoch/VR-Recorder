@@ -24,14 +24,16 @@ public sealed class WristOverlayPlacementCoordinator
 
     public Task<VrOverlayPlacement> ApplySavedAsync(
         CancellationToken cancellationToken) =>
-        ExecuteAsync(static placement => placement, cancellationToken);
+        ExecuteAsync(
+            static (placement, _) => placement,
+            cancellationToken);
 
     public Task<VrOverlayPlacement> NudgeAsync(
         WristOverlayNudgeDirection direction,
         WristOverlayNudgeSize size,
         CancellationToken cancellationToken) =>
         ExecuteAsync(
-            placement => placement with
+            (placement, _) => placement with
             {
                 Transform = WristOverlayPoseContract.Nudge(
                     placement.Transform,
@@ -43,10 +45,34 @@ public sealed class WristOverlayPlacementCoordinator
     public Task<VrOverlayPlacement> RecenterAsync(
         CancellationToken cancellationToken) =>
         ExecuteAsync(
-            static _ => new VrOverlayPlacement(
+            static (_, _) => new VrOverlayPlacement(
                 OverlayPlacementMode.WristDock,
                 WristOverlayPoseContract.CreateDefaultWristDockTransform()),
             cancellationToken);
+
+    public Task<VrOverlayPlacement> SetPlacementModeAsync(
+        OverlayPlacementMode placementMode,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(placementMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(placementMode),
+                placementMode,
+                null);
+        }
+        return ExecuteAsync(
+            (current, hand) =>
+                current.PlacementMode == placementMode
+                    ? current
+                    : new VrOverlayPlacement(
+                        placementMode,
+                        WristOverlayPoseContract.FromOpenVrMatrix34(
+                            _runtime.ConvertPlacement(
+                                hand,
+                                placementMode))),
+            cancellationToken);
+    }
 
     public void Dispose()
     {
@@ -60,7 +86,7 @@ public sealed class WristOverlayPlacementCoordinator
     }
 
     private async Task<VrOverlayPlacement> ExecuteAsync(
-        Func<VrOverlayPlacement, VrOverlayPlacement> selectPlacement,
+        Func<VrOverlayPlacement, VrHand, VrOverlayPlacement> selectPlacement,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -87,7 +113,7 @@ public sealed class WristOverlayPlacementCoordinator
                 settings.Vr,
                 device,
                 hand);
-            var selected = selectPlacement(current);
+            var selected = selectPlacement(current, hand);
             ValidatePlacement(selected);
 
             _runtime.ApplyPlacement(

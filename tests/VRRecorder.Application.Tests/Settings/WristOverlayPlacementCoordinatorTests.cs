@@ -148,6 +148,65 @@ public sealed class WristOverlayPlacementCoordinatorTests
     }
 
     [Theory]
+    [InlineData(
+        OverlayPlacementMode.WristDock,
+        OverlayPlacementMode.WorldPin)]
+    [InlineData(
+        OverlayPlacementMode.WorldPin,
+        OverlayPlacementMode.WristDock)]
+    public async Task PlacementModeSwitchUsesRuntimeParentSpaceConversion(
+        OverlayPlacementMode currentMode,
+        OverlayPlacementMode targetMode)
+    {
+        var device = Device();
+        var current = Placement(currentMode, [1, 2, 3]);
+        var converted = new OverlayTransform(
+            [7, 8, -9],
+            [15, 25, 35]);
+        var settings = VRRecorderSettings.CreateDefault() with
+        {
+            Vr = VRRecorderSettings.CreateDefault().Vr with
+            {
+                Hand = VrHand.Right,
+                PlacementProfiles =
+                [
+                    Profile(device, VrHand.Right, current),
+                ],
+            },
+        };
+        var store = new TrackingSettingsStore(settings);
+        var runtime = new TrackingRuntime(device)
+        {
+            ConvertedTransform = converted,
+        };
+        var coordinator = new WristOverlayPlacementCoordinator(store, runtime);
+
+        var selected = await coordinator.SetPlacementModeAsync(
+            targetMode,
+            CancellationToken.None);
+
+        Assert.Equal([(VrHand.Right, targetMode)], runtime.Conversions);
+        Assert.Equal(targetMode, selected.PlacementMode);
+        Assert.Equal(
+            converted.Position,
+            selected.Transform.Position,
+            DoublePrecisionComparer.Instance);
+        Assert.Equal(
+            converted.RotationEuler,
+            selected.Transform.RotationEuler,
+            DoublePrecisionComparer.Instance);
+        Assert.Equal(
+            [(VrHand.Right, targetMode, selected.Transform)],
+            runtime.Applied);
+        Assert.Equal(
+            selected,
+            VrOverlayPlacementProfiles.Resolve(
+                store.Current.Vr,
+                device,
+                VrHand.Right));
+    }
+
+    [Theory]
     [InlineData(ReadbackMismatch.Mode)]
     [InlineData(ReadbackMismatch.Hand)]
     [InlineData(ReadbackMismatch.TrackingOrigin)]
@@ -237,6 +296,12 @@ public sealed class WristOverlayPlacementCoordinatorTests
             OverlayTransform Transform)> Applied
         { get; } = [];
 
+        public List<(VrHand Hand, OverlayPlacementMode Mode)> Conversions
+        { get; } = [];
+
+        public OverlayTransform ConvertedTransform { get; init; } =
+            WristOverlayPoseContract.CreateDefaultWristDockTransform();
+
         public ReadbackMismatch Mismatch { get; init; }
 
         public VrDeviceProfile ReadDeviceProfile(VrHand hand) => device;
@@ -280,7 +345,26 @@ public sealed class WristOverlayPlacementCoordinatorTests
             _readback ?? throw new InvalidOperationException(
                 "No placement was applied.");
 
+        public OpenVrMatrix34 ConvertPlacement(
+            VrHand hand,
+            OverlayPlacementMode placementMode)
+        {
+            Conversions.Add((hand, placementMode));
+            return WristOverlayPoseContract.ToOpenVrMatrix34(
+                ConvertedTransform);
+        }
+
         private static VrHand Opposite(VrHand hand) =>
             hand == VrHand.Left ? VrHand.Right : VrHand.Left;
+    }
+
+    private sealed class DoublePrecisionComparer : IEqualityComparer<double>
+    {
+        public static DoublePrecisionComparer Instance { get; } = new();
+
+        public bool Equals(double x, double y) =>
+            Math.Abs(x - y) <= 0.000001;
+
+        public int GetHashCode(double value) => value.GetHashCode();
     }
 }

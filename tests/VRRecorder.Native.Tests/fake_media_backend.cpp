@@ -782,6 +782,36 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t ConvertPose(
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        pose = {};
+        if (fake_steamvr_overlay.closed) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (!fake_steamvr_overlay.pose_set) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if ((target_mode != OpenVrOverlayPlacementMode::WristDock &&
+             target_mode != OpenVrOverlayPlacementMode::WorldPin) ||
+            (hand != OpenVrHand::Left && hand != OpenVrHand::Right)) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        pose = fake_steamvr_overlay.pose;
+        pose.placement_mode = target_mode;
+        pose.hand = target_mode == OpenVrOverlayPlacementMode::WristDock
+            ? hand
+            : OpenVrHand::None;
+        pose.tracking_origin =
+            target_mode == OpenVrOverlayPlacementMode::WristDock
+                ? OpenVrTrackingOrigin::None
+                : OpenVrTrackingOrigin::Standing;
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t GetDeviceProfile(
         OpenVrHand hand,
         OpenVrDeviceProfile &profile) noexcept override

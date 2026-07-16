@@ -46,6 +46,35 @@ public static class WristOverlayPoseContract
             M23: ToFloat(transform.Position[2]));
     }
 
+    public static OverlayTransform FromOpenVrMatrix34(OpenVrMatrix34 matrix)
+    {
+        ValidateRuntimeMatrix(matrix);
+        var yaw = Math.Asin(Math.Clamp(-matrix.M20, -1, 1));
+        var cosYaw = Math.Cos(yaw);
+        double pitch;
+        double roll;
+        if (Math.Abs(cosYaw) > 0.000001)
+        {
+            pitch = Math.Atan2(matrix.M21, matrix.M22);
+            roll = Math.Atan2(matrix.M10, matrix.M00);
+        }
+        else
+        {
+            pitch = Math.Atan2(-matrix.M12, matrix.M11);
+            roll = 0;
+        }
+
+        var transform = new OverlayTransform(
+            [matrix.M03, matrix.M13, matrix.M23],
+            [
+                RadiansToDegrees(pitch),
+                RadiansToDegrees(yaw),
+                RadiansToDegrees(roll),
+            ]);
+        ValidateRuntimeTransform(transform);
+        return transform;
+    }
+
     public static OverlayTransform Nudge(
         OverlayTransform transform,
         WristOverlayNudgeDirection direction,
@@ -179,6 +208,55 @@ public static class WristOverlayPoseContract
         }
     }
 
+    private static void ValidateRuntimeMatrix(OpenVrMatrix34 matrix)
+    {
+        var values = matrix.ToArray();
+        if (values.Any(value => !float.IsFinite(value)))
+        {
+            throw new InvalidDataException(
+                "The OpenVR overlay matrix must contain finite values.");
+        }
+        if (Math.Abs(matrix.M03) > MaximumAbsolutePositionMeters ||
+            Math.Abs(matrix.M13) > MaximumAbsolutePositionMeters ||
+            Math.Abs(matrix.M23) > MaximumAbsolutePositionMeters)
+        {
+            throw new InvalidDataException(
+                "Overlay positions must be between -100 and 100 metres.");
+        }
+
+        const double tolerance = 0.002;
+        var row0 = new double[] { matrix.M00, matrix.M01, matrix.M02 };
+        var row1 = new double[] { matrix.M10, matrix.M11, matrix.M12 };
+        var row2 = new double[] { matrix.M20, matrix.M21, matrix.M22 };
+        if (Math.Abs(Dot(row0, row0) - 1) > tolerance ||
+            Math.Abs(Dot(row1, row1) - 1) > tolerance ||
+            Math.Abs(Dot(row2, row2) - 1) > tolerance ||
+            Math.Abs(Dot(row0, row1)) > tolerance ||
+            Math.Abs(Dot(row0, row2)) > tolerance ||
+            Math.Abs(Dot(row1, row2)) > tolerance)
+        {
+            throw new InvalidDataException(
+                "The OpenVR overlay rotation must be orthonormal.");
+        }
+        var determinant =
+            matrix.M00 * (matrix.M11 * matrix.M22 -
+                          matrix.M12 * matrix.M21) -
+            matrix.M01 * (matrix.M10 * matrix.M22 -
+                          matrix.M12 * matrix.M20) +
+            matrix.M02 * (matrix.M10 * matrix.M21 -
+                          matrix.M11 * matrix.M20);
+        if (Math.Abs(determinant - 1) > tolerance)
+        {
+            throw new InvalidDataException(
+                "The OpenVR overlay rotation must preserve handedness.");
+        }
+    }
+
+    private static double Dot(double[] left, double[] right) =>
+        left[0] * right[0] +
+        left[1] * right[1] +
+        left[2] * right[2];
+
     private static bool TryConvert(
         OverlayTransform transform,
         out OpenVrMatrix34 matrix)
@@ -220,6 +298,9 @@ public static class WristOverlayPoseContract
 
     private static double DegreesToRadians(double degrees) =>
         degrees * Math.PI / 180;
+
+    private static double RadiansToDegrees(double radians) =>
+        radians * 180 / Math.PI;
 
     private static float ToFloat(double value) => (float)value;
 }

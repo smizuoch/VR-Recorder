@@ -2568,6 +2568,96 @@ bool AppliesAndReadsSteamVrOverlayPoseThroughVersionedAbi()
     return true;
 }
 
+bool ConvertsSteamVrOverlayPoseThroughVersionedAbi()
+{
+    vrrecorder::native::testing::ResetSteamVrOverlay();
+    auto config = ValidSteamVrOverlayConfig();
+    vrrec_steamvr_overlay_t *overlay = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_OK);
+    auto pose = ValidSteamVrOverlayPose();
+    CHECK(vrrec_steamvr_overlay_set_pose_v1(overlay, &pose) ==
+          VRREC_STATUS_OK);
+
+    auto converted = vrrec_steamvr_overlay_pose_v1 {
+        sizeof(vrrec_steamvr_overlay_pose_v1),
+        VRREC_ABI_V1,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        UINT32_MAX,
+        {},
+    };
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              nullptr,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN,
+              VRREC_STEAMVR_HAND_LEFT,
+              &converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(converted.placement_mode == 0);
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN,
+              VRREC_STEAMVR_HAND_LEFT,
+              nullptr) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              0,
+              VRREC_STEAMVR_HAND_LEFT,
+              &converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN,
+              VRREC_STEAMVR_HAND_NONE,
+              &converted) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    converted.struct_size -= 1;
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN,
+              VRREC_STEAMVR_HAND_LEFT,
+              &converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    converted.struct_size = sizeof(vrrec_steamvr_overlay_pose_v1);
+    converted.abi_version += 1;
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN,
+              VRREC_STEAMVR_HAND_LEFT,
+              &converted) == VRREC_STATUS_UNSUPPORTED_ABI);
+    converted.abi_version = VRREC_ABI_V1;
+
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN,
+              VRREC_STEAMVR_HAND_LEFT,
+              &converted) == VRREC_STATUS_OK);
+    CHECK(converted.placement_mode ==
+          VRREC_STEAMVR_OVERLAY_PLACEMENT_WORLD_PIN);
+    CHECK(converted.hand == VRREC_STEAMVR_HAND_NONE);
+    CHECK(converted.tracking_origin ==
+          VRREC_STEAMVR_TRACKING_ORIGIN_STANDING);
+    CHECK(converted.reserved_v1 == 0);
+    CHECK(std::equal(
+        std::begin(converted.transform),
+        std::end(converted.transform),
+        std::begin(pose.transform)));
+
+    CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_convert_pose_v1(
+              overlay,
+              VRREC_STEAMVR_OVERLAY_PLACEMENT_WRIST_DOCK,
+              VRREC_STEAMVR_HAND_LEFT,
+              &converted) == VRREC_STATUS_INVALID_STATE);
+    CHECK(converted.placement_mode == 0);
+    CHECK(converted.hand == 0);
+    CHECK(converted.tracking_origin == 0);
+    CHECK(std::all_of(
+        std::begin(converted.transform),
+        std::end(converted.transform),
+        [](float value) { return value == 0; }));
+    vrrec_steamvr_overlay_destroy_v1(overlay);
+    return true;
+}
+
 bool ReadsSteamVrDeviceProfileThroughSizedPackedUtf8Abi()
 {
     constexpr auto tracking_system = std::string_view {"lighthouse"};
@@ -3776,6 +3866,7 @@ int main(int argc, char **argv)
         !ControlsSteamVrOverlayThroughVersionedAbi() ||
         !PollsSteamVrOverlayPointerEventsThroughVersionedAbi() ||
         !AppliesAndReadsSteamVrOverlayPoseThroughVersionedAbi() ||
+        !ConvertsSteamVrOverlayPoseThroughVersionedAbi() ||
         !ReadsSteamVrDeviceProfileThroughSizedPackedUtf8Abi() ||
         !RejectsInvalidSpoutSourceAbiInputs() ||
         !SnapshotsPackedUtf8WithRequiredSizing() ||

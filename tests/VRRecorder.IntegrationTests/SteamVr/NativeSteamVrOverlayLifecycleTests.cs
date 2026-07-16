@@ -97,6 +97,13 @@ public sealed class NativeSteamVrOverlayLifecycleTests
                 "Valve Index",
                 "{indexcontroller}/input/index_controller_profile.json"),
             overlay.ReadDeviceProfile(VrHand.Right));
+        Assert.Equal(
+            dock.Transform.ToArray(),
+            overlay
+                .ConvertPlacement(
+                    VrHand.Right,
+                    OverlayPlacementMode.WorldPin)
+                .ToArray());
 
         var pinTransform = new OverlayTransform(
             [1.25, 1.5, -2],
@@ -134,6 +141,12 @@ public sealed class NativeSteamVrOverlayLifecycleTests
             overlay.ReadDeviceProfile(VrHand.Right));
         Assert.Equal(3, profileException.Status);
         Assert.Equal("get device profile size", profileException.Operation);
+        var convertException = Assert.Throws<SteamVrOverlayException>(() =>
+            overlay.ConvertPlacement(
+                VrHand.Right,
+                OverlayPlacementMode.WorldPin));
+        Assert.Equal(3, convertException.Status);
+        Assert.Equal("convert pose", convertException.Operation);
     }
 
     [Fact]

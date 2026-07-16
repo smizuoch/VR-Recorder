@@ -509,6 +509,13 @@ VRREC_API vrrec_status_t VRREC_CALL vrrec_steamvr_overlay_get_pose_v1(
     vrrec_steamvr_overlay_pose_v1 *out_pose);
 
 VRREC_API vrrec_status_t VRREC_CALL
+vrrec_steamvr_overlay_convert_pose_v1(
+    vrrec_steamvr_overlay_t *overlay,
+    vrrec_steamvr_overlay_placement_mode_t target_placement_mode,
+    vrrec_steamvr_hand_t hand,
+    vrrec_steamvr_overlay_pose_v1 *out_pose);
+
+VRREC_API vrrec_status_t VRREC_CALL
 vrrec_steamvr_overlay_get_device_profile_v1(
     vrrec_steamvr_overlay_t *overlay,
     vrrec_steamvr_device_profile_v1 *inout_profile,

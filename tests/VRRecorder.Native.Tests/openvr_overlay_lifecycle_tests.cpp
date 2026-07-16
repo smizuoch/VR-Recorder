@@ -187,6 +187,20 @@ public:
         return get_status;
     }
 
+    vrrec_status_t ConvertOverlayPose(
+        std::uint64_t handle,
+        OpenVrOverlayPlacementMode target_mode,
+        OpenVrHand hand,
+        OpenVrOverlayPose &pose) noexcept override
+    {
+        state_->calls.emplace_back(
+            "pose-convert:" + std::to_string(handle));
+        pose = converted_pose;
+        converted_target_mode = target_mode;
+        converted_hand = hand;
+        return convert_status;
+    }
+
     vrrec_status_t GetDeviceProfile(
         OpenVrHand hand,
         OpenVrDeviceProfile &profile) noexcept override
@@ -198,6 +212,7 @@ public:
     }
 
     OpenVrOverlayPose current_pose {};
+    OpenVrOverlayPose converted_pose {};
     OpenVrDeviceProfile current_profile {
         "lighthouse",
         "Valve Index",
@@ -205,7 +220,10 @@ public:
     };
     vrrec_status_t set_status = VRREC_STATUS_OK;
     vrrec_status_t get_status = VRREC_STATUS_OK;
+    vrrec_status_t convert_status = VRREC_STATUS_OK;
     vrrec_status_t profile_status = VRREC_STATUS_OK;
+    OpenVrOverlayPlacementMode converted_target_mode {};
+    OpenVrHand converted_hand {};
 
 private:
     std::shared_ptr<FakeState> state_;
@@ -678,6 +696,70 @@ void AppliesAndReadsOnlyValidatedOverlayPoses()
     CHECK(readback == OpenVrOverlayPose {});
 }
 
+void ConvertsOnlyValidatedOverlayPosesForASelectedHand()
+{
+    auto state = std::make_shared<FakeState>();
+    auto pose_port = std::make_unique<FakePosePort>(state);
+    auto *raw_pose = pose_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        std::make_unique<FakeEventPort>(state),
+        std::move(pose_port),
+        status);
+
+    auto converted = OpenVrOverlayPose {};
+    CHECK(overlay->ConvertPose(
+              static_cast<OpenVrOverlayPlacementMode>(0),
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(overlay->ConvertPose(
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::None,
+              converted) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    raw_pose->converted_pose = WristPose();
+    raw_pose->converted_pose.placement_mode =
+        OpenVrOverlayPlacementMode::WorldPin;
+    raw_pose->converted_pose.hand = OpenVrHand::None;
+    raw_pose->converted_pose.tracking_origin =
+        OpenVrTrackingOrigin::Standing;
+    CHECK(overlay->ConvertPose(
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_OK);
+    CHECK(converted == raw_pose->converted_pose);
+    CHECK(raw_pose->converted_target_mode ==
+          OpenVrOverlayPlacementMode::WorldPin);
+    CHECK(raw_pose->converted_hand == OpenVrHand::Left);
+    CHECK(state->calls.back() == "pose-convert:73");
+
+    raw_pose->converted_pose.placement_mode =
+        OpenVrOverlayPlacementMode::WristDock;
+    converted = WristPose();
+    CHECK(overlay->ConvertPose(
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(converted == OpenVrOverlayPose {});
+
+    raw_pose->convert_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(overlay->ConvertPose(
+              OpenVrOverlayPlacementMode::WristDock,
+              OpenVrHand::Right,
+              converted) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(converted == OpenVrOverlayPose {});
+
+    CHECK(overlay->Close() == VRREC_STATUS_OK);
+    CHECK(overlay->ConvertPose(
+              OpenVrOverlayPlacementMode::WristDock,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_INVALID_STATE);
+    CHECK(converted == OpenVrOverlayPose {});
+}
+
 void ReadsOnlyValidatedDeviceProfilesForASelectedHand()
 {
     auto state = std::make_shared<FakeState>();
@@ -731,6 +813,7 @@ int main()
     RejectsInvalidPointerEventsReturnedByTheRuntime();
     PointerInputConfigurationFailureRollsBackTheOverlay();
     AppliesAndReadsOnlyValidatedOverlayPoses();
+    ConvertsOnlyValidatedOverlayPosesForASelectedHand();
     ReadsOnlyValidatedDeviceProfilesForASelectedHand();
     return 0;
 }

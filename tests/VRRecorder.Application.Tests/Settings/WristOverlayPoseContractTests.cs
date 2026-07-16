@@ -50,6 +50,25 @@ public sealed class WristOverlayPoseContractTests
             FloatPrecisionComparer.Instance);
     }
 
+    [Theory]
+    [MemberData(nameof(RoundTripTransforms))]
+    public void ConvertsValidatedOpenVrMatricesBackToStoredTransforms(
+        OverlayTransform expected)
+    {
+        var matrix = WristOverlayPoseContract.ToOpenVrMatrix34(expected);
+
+        var actual = WristOverlayPoseContract.FromOpenVrMatrix34(matrix);
+
+        Assert.Equal(
+            expected.Position,
+            actual.Position,
+            MatrixPrecisionComparer.Instance);
+        Assert.Equal(
+            expected.RotationEuler,
+            actual.RotationEuler,
+            new DegreePrecisionComparer());
+    }
+
     [Fact]
     public void SmallAndLargeNudgesMoveOnlyLocalRightAndUpAxes()
     {
@@ -165,6 +184,14 @@ public sealed class WristOverlayPoseContractTests
             },
         };
 
+    public static TheoryData<OverlayTransform> RoundTripTransforms =>
+        new()
+        {
+            new OverlayTransform([0.03, 0.05, -0.08], [25, 0, 10]),
+            new OverlayTransform([1.25, 1.5, -2], [-30, 45, 70]),
+            new OverlayTransform([-2, 3, 4], [90, 0, -90]),
+        };
+
     private sealed class FloatPrecisionComparer : IEqualityComparer<float>
     {
         public static FloatPrecisionComparer Instance { get; } = new();
@@ -179,6 +206,38 @@ public sealed class WristOverlayPoseContractTests
         public static DoublePrecisionComparer Instance { get; } = new();
 
         public bool Equals(double x, double y) => Math.Abs(x - y) <= 0.000000001;
+
+        public int GetHashCode(double value) => value.GetHashCode();
+    }
+
+    private sealed class DegreePrecisionComparer : IEqualityComparer<double>
+    {
+        public bool Equals(double x, double y) =>
+            Math.Abs(Normalize(x - y)) <= 0.0001;
+
+        public int GetHashCode(double value) => value.GetHashCode();
+
+        private static double Normalize(double value)
+        {
+            var normalized = value % 360;
+            if (normalized > 180)
+            {
+                normalized -= 360;
+            }
+            else if (normalized < -180)
+            {
+                normalized += 360;
+            }
+            return normalized;
+        }
+    }
+
+    private sealed class MatrixPrecisionComparer : IEqualityComparer<double>
+    {
+        public static MatrixPrecisionComparer Instance { get; } = new();
+
+        public bool Equals(double x, double y) =>
+            Math.Abs(x - y) <= 0.000001;
 
         public int GetHashCode(double value) => value.GetHashCode();
     }

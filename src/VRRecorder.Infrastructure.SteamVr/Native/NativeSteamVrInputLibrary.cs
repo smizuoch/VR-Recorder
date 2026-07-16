@@ -20,6 +20,7 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private readonly PollOverlayPointerEventDelegate _pollOverlayPointerEvent;
     private readonly OverlayPoseDelegate _setOverlayPose;
     private readonly OverlayPoseDelegate _getOverlayPose;
+    private readonly ConvertOverlayPoseDelegate _convertOverlayPose;
     private readonly GetOverlayDeviceProfileDelegate _getOverlayDeviceProfile;
     private readonly OverlayOperationDelegate _closeOverlay;
     private readonly DestroyOverlayDelegate _destroyOverlay;
@@ -75,6 +76,8 @@ internal sealed class NativeSteamVrLibrary : IDisposable
                 "vrrec_steamvr_overlay_set_pose_v1");
             _getOverlayPose = Resolve<OverlayPoseDelegate>(
                 "vrrec_steamvr_overlay_get_pose_v1");
+            _convertOverlayPose = Resolve<ConvertOverlayPoseDelegate>(
+                "vrrec_steamvr_overlay_convert_pose_v1");
             _getOverlayDeviceProfile = Resolve<GetOverlayDeviceProfileDelegate>(
                 "vrrec_steamvr_overlay_get_device_profile_v1");
             _closeOverlay = Resolve<OverlayOperationDelegate>(
@@ -152,6 +155,17 @@ internal sealed class NativeSteamVrLibrary : IDisposable
         nint overlay,
         ref NativeSteamVrOverlayPoseV1 pose) =>
         _getOverlayPose(overlay, ref pose);
+
+    public NativeSteamVrStatus ConvertOverlayPose(
+        nint overlay,
+        uint targetPlacementMode,
+        uint hand,
+        ref NativeSteamVrOverlayPoseV1 pose) =>
+        _convertOverlayPose(
+            overlay,
+            targetPlacementMode,
+            hand,
+            ref pose);
 
     public NativeSteamVrStatus GetOverlayDeviceProfile(
         nint overlay,
@@ -234,6 +248,13 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate NativeSteamVrStatus OverlayPoseDelegate(
         nint overlay,
+        ref NativeSteamVrOverlayPoseV1 pose);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeSteamVrStatus ConvertOverlayPoseDelegate(
+        nint overlay,
+        uint targetPlacementMode,
+        uint hand,
         ref NativeSteamVrOverlayPoseV1 pose);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

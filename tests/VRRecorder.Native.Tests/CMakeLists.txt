@@ -1736,6 +1736,23 @@ vrrecorder_enable_strict_warnings(
     vrrecorder_native_openvr_overlay_lifecycle)
 
 add_executable(
+    vrrecorder_native_openvr_overlay_pose_conversion
+    openvr_overlay_pose_conversion_tests.cpp
+    "${native_source_root}/src/openvr_overlay_pose_conversion.cpp")
+target_compile_features(
+    vrrecorder_native_openvr_overlay_pose_conversion PRIVATE cxx_std_20)
+target_include_directories(
+    vrrecorder_native_openvr_overlay_pose_conversion
+    PRIVATE
+        "${native_source_root}/include"
+        "${native_source_root}/src")
+set_target_properties(
+    vrrecorder_native_openvr_overlay_pose_conversion
+    PROPERTIES CXX_EXTENSIONS OFF)
+vrrecorder_enable_strict_warnings(
+    vrrecorder_native_openvr_overlay_pose_conversion)
+
+add_executable(
     vrrecorder_native_openvr_overlay_texture_presenter
     openvr_overlay_texture_presenter_tests.cpp
     "${native_source_root}/src/openvr_overlay_texture_presenter.cpp")
@@ -1993,6 +2010,8 @@ add_test(NAME vrrecorder_native_openvr_process_runtime
     COMMAND vrrecorder_native_openvr_process_runtime)
 add_test(NAME vrrecorder_native_openvr_overlay_lifecycle
     COMMAND vrrecorder_native_openvr_overlay_lifecycle)
+add_test(NAME vrrecorder_native_openvr_overlay_pose_conversion
+    COMMAND vrrecorder_native_openvr_overlay_pose_conversion)
 add_test(NAME vrrecorder_native_openvr_overlay_texture_presenter
     COMMAND vrrecorder_native_openvr_overlay_texture_presenter)
 add_test(NAME vrrecorder_native_spout_capture_worker

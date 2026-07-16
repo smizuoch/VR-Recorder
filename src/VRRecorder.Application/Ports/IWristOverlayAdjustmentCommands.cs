@@ -11,4 +11,8 @@ public interface IWristOverlayAdjustmentCommands
 
     Task<VrOverlayPlacement> RecenterAsync(
         CancellationToken cancellationToken);
+
+    Task<VrOverlayPlacement> SetPlacementModeAsync(
+        OverlayPlacementMode placementMode,
+        CancellationToken cancellationToken);
 }
