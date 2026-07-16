@@ -13,11 +13,18 @@ public sealed class NativeSteamVrWristOverlayAdapter
         string installRoot,
         float widthInMeters =
             NativeSteamVrOverlayLifecycle.DefaultWidthInMeters)
-    {
-        _lifecycle = new NativeSteamVrOverlayLifecycle(
+        : this(new NativeSteamVrOverlayLifecycle(
             libraryPath,
             installRoot,
-            widthInMeters);
+            widthInMeters))
+    {
+    }
+
+    public NativeSteamVrWristOverlayAdapter(
+        NativeSteamVrOverlayLifecycle lifecycle)
+    {
+        ArgumentNullException.ThrowIfNull(lifecycle);
+        _lifecycle = lifecycle;
     }
 
     public void Publish(WristTextureFrame frame)

@@ -213,6 +213,33 @@ public sealed class NativeSteamVrOverlayLifecycleTests
     }
 
     [Fact]
+    public void AdaptsAndOwnsAnExistingNativeLifecycle()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        var adapter = new NativeSteamVrWristOverlayAdapter(overlay);
+
+        adapter.Publish(RenderFrame(revision: 11));
+        adapter.Show();
+        adapter.Dispose();
+
+        Assert.Equal(1u, controls.TextureUpdateCount());
+        Assert.Equal(1u, controls.DestroyCount());
+        Assert.False(controls.IsActive());
+        Assert.Throws<ObjectDisposedException>(overlay.Show);
+    }
+
+    [Fact]
     public void PollsTypedPointerEventsOneAtATime()
     {
         if (!OperatingSystem.IsLinux())
