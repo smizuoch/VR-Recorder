@@ -22,6 +22,7 @@
     <ProjectReference Include="../VRRecorder.Infrastructure.Media/VRRecorder.Infrastructure.Media.csproj" />
     <ProjectReference Include="../VRRecorder.Infrastructure.Storage/VRRecorder.Infrastructure.Storage.csproj" />
     <ProjectReference Include="../VRRecorder.Infrastructure.SteamVr/VRRecorder.Infrastructure.SteamVr.csproj" />
+    <ProjectReference Include="../VRRecorder.Presentation.Wrist.Windows/VRRecorder.Presentation.Wrist.Windows.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(LegalBundleId)' != '' and '$(LegalManifestSha256)' != ''">

@@ -16,6 +16,8 @@ using VRRecorder.Infrastructure.Storage;
 using VRRecorder.Infrastructure.Media;
 using VRRecorder.Infrastructure.Osc;
 using VRRecorder.Infrastructure.SteamVr;
+using VRRecorder.Presentation.Wrist;
+using VRRecorder.Presentation.Wrist.Windows;
 
 namespace VRRecorder.App;
 
@@ -49,15 +51,21 @@ public partial class App
     private readonly Lazy<ISteamVrInputRuntime> _steamVrInputRuntime;
     private readonly Lazy<NativeSteamVrOverlayLifecycle>
         _steamVrOverlayLifecycle;
+    private readonly Lazy<NativeSteamVrWristOverlayAdapter>
+        _steamVrWristOverlay;
     private readonly Lazy<WristOverlayPlacementCoordinator>
         _wristOverlayPlacement;
     private Task? _steamVrInputTask;
+    private Task? _steamVrOverlayTask;
     private IDisposable? _trayNotificationSubscription;
     private IDisposable? _trayStatusSubscription;
     private System.Windows.Forms.ContextMenuStrip? _trayMenu;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private System.Windows.Forms.ToolStripMenuItem? _trayStatusMenuItem;
     private System.Windows.Forms.ToolStripMenuItem? _trayToggleMenuItem;
+    private IUiLocalizer _wristLocalizer = EnglishUiLocalizer.Instance;
+    private WristLayoutOptions _wristLayoutOptions =
+        WristLayoutOptions.Default;
     private bool _recordingRightsAuthorized;
     private bool _exitRequested;
     private int _disposeStarted;
@@ -129,6 +137,11 @@ public partial class App
                         AppContext.BaseDirectory,
                         NativeLibraryFileName),
                     AppContext.BaseDirectory),
+                LazyThreadSafetyMode.ExecutionAndPublication);
+        _steamVrWristOverlay =
+            new Lazy<NativeSteamVrWristOverlayAdapter>(
+                () => new NativeSteamVrWristOverlayAdapter(
+                    _steamVrOverlayLifecycle.Value),
                 LazyThreadSafetyMode.ExecutionAndPublication);
         _wristOverlayPlacement =
             new Lazy<WristOverlayPlacementCoordinator>(
@@ -339,17 +352,27 @@ public partial class App
             _trayMenu = null;
             _steamVrInputLifetime.Cancel();
             Task? steamVrInputTask;
+            Task? steamVrOverlayTask;
             lock (_steamVrInputGate)
             {
                 steamVrInputTask = _steamVrInputTask;
+                steamVrOverlayTask = _steamVrOverlayTask;
             }
 
-            steamVrInputTask?.GetAwaiter().GetResult();
+            Task.WhenAll(
+                    steamVrInputTask ?? Task.CompletedTask,
+                    steamVrOverlayTask ?? Task.CompletedTask)
+                .GetAwaiter()
+                .GetResult();
             if (_wristOverlayPlacement.IsValueCreated)
             {
                 _wristOverlayPlacement.Value.Dispose();
             }
-            if (_steamVrOverlayLifecycle.IsValueCreated)
+            if (_steamVrWristOverlay.IsValueCreated)
+            {
+                _steamVrWristOverlay.Value.Dispose();
+            }
+            else if (_steamVrOverlayLifecycle.IsValueCreated)
             {
                 _steamVrOverlayLifecycle.Value.Dispose();
             }
@@ -688,12 +711,41 @@ public partial class App
     {
         lock (_steamVrInputGate)
         {
-            if (_steamVrInputTask is not null)
-            {
-                return;
-            }
+            _steamVrInputTask ??= Task.Run(RunSteamVrInputAsync);
+            _steamVrOverlayTask ??= Task.Run(RunWristOverlayAsync);
+        }
+    }
 
-            _steamVrInputTask = Task.Run(RunSteamVrInputAsync);
+    private async Task RunWristOverlayAsync()
+    {
+        try
+        {
+            await _wristOverlayPlacement.Value
+                .ApplySavedAsync(_steamVrInputLifetime.Token)
+                .ConfigureAwait(false);
+            var overlay = _steamVrWristOverlay.Value;
+            var runtime = new WindowsWristOverlayRuntime(
+                _recordingHost,
+                _uiCommands,
+                overlay,
+                overlay,
+                _wristLocalizer,
+                _wristLayoutOptions,
+                new SystemMonotonicClock());
+            await runtime
+                .RunAsync(_steamVrInputLifetime.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            _steamVrInputLifetime.IsCancellationRequested)
+        {
+            // Normal application shutdown.
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "SteamVR wrist overlay is unavailable: {0}",
+                exception.Message);
         }
     }
 
@@ -880,17 +932,40 @@ public partial class App
 
     private void SelectLocalizedResources(string localeName)
     {
-        var (stringsPath, layoutPath) = localeName.ToLowerInvariant() switch
+        (
+            string stringsPath,
+            string layoutPath,
+            IUiLocalizer localizer,
+            WristFlowDirection flowDirection) =
+            localeName.ToLowerInvariant() switch
         {
             "qps-ploc" => (
                 "Resources/Strings.qps-ploc.xaml",
-                "Resources/Layout.ltr.xaml"),
+                "Resources/Layout.ltr.xaml",
+                (IUiLocalizer)EnglishUiLocalizer.Instance,
+                WristFlowDirection.LeftToRight),
             "qps-plocm" => (
                 "Resources/Strings.qps-plocm.xaml",
-                "Resources/Layout.rtl.xaml"),
+                "Resources/Layout.rtl.xaml",
+                (IUiLocalizer)EnglishUiLocalizer.Instance,
+                WristFlowDirection.RightToLeft),
             var name when name == "ja" || name.StartsWith("ja-", StringComparison.Ordinal) =>
-                ("Resources/Strings.ja-JP.xaml", "Resources/Layout.ltr.xaml"),
-            _ => ("Resources/Strings.en-US.xaml", "Resources/Layout.ltr.xaml"),
+                (
+                    "Resources/Strings.ja-JP.xaml",
+                    "Resources/Layout.ltr.xaml",
+                    (IUiLocalizer)JapaneseUiLocalizer.Instance,
+                    WristFlowDirection.LeftToRight),
+            _ => (
+                "Resources/Strings.en-US.xaml",
+                "Resources/Layout.ltr.xaml",
+                (IUiLocalizer)EnglishUiLocalizer.Instance,
+                WristFlowDirection.LeftToRight),
+        };
+        _wristLocalizer = localizer;
+        _wristLayoutOptions = WristLayoutOptions.Default with
+        {
+            FlowDirection = flowDirection,
+            HighContrast = System.Windows.SystemParameters.HighContrast,
         };
         ReplaceMergedResource("Strings.", stringsPath);
         ReplaceMergedResource("Layout.", layoutPath);

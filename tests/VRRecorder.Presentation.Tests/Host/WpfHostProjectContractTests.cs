@@ -52,6 +52,9 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains(
             "../VRRecorder.Infrastructure.SteamVr/VRRecorder.Infrastructure.SteamVr.csproj",
             references);
+        Assert.Contains(
+            "../VRRecorder.Presentation.Wrist.Windows/VRRecorder.Presentation.Wrist.Windows.csproj",
+            references);
 
         var steamVrProjectPath = Path.Combine(
             repositoryRoot,
@@ -984,6 +987,48 @@ public sealed class WpfHostProjectContractTests
         var start = appCode.IndexOf("StartSteamVrInput", readyCheck, StringComparison.Ordinal);
         Assert.True(readyCheck >= 0, "SteamVR input is missing the host-ready gate.");
         Assert.True(start > readyCheck, "SteamVR input must start after the host-ready gate.");
+    }
+
+    [Fact]
+    public void DesktopHostRunsTheProductionWristOverlayWithSteamVrInput()
+    {
+        var appCode = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.App",
+            "App.xaml.cs"));
+
+        Assert.Contains("NativeSteamVrWristOverlayAdapter", appCode);
+        Assert.Contains("WindowsWristOverlayRuntime", appCode);
+        Assert.Contains("RunWristOverlayAsync", appCode);
+        Assert.Contains("_steamVrOverlayTask", appCode);
+        Assert.Contains("EnglishUiLocalizer.Instance", appCode);
+        Assert.Contains("JapaneseUiLocalizer.Instance", appCode);
+        Assert.Contains("WristLayoutOptions", appCode);
+        Assert.Contains("SystemMonotonicClock", appCode);
+        Assert.Contains("_steamVrWristOverlay.Value.Dispose()", appCode);
+        Assert.Contains(
+            "new NativeSteamVrWristOverlayAdapter(",
+            appCode);
+        Assert.Contains(
+            "new WindowsWristOverlayRuntime(",
+            appCode);
+        Assert.Contains("_wristOverlayPlacement.Value", appCode);
+        Assert.Contains(".ApplySavedAsync(", appCode);
+
+        var readyCheck = appCode.IndexOf(
+            "activation.State == DesktopRecordingHostState.Ready",
+            StringComparison.Ordinal);
+        var start = appCode.IndexOf(
+            "StartSteamVrInput",
+            readyCheck,
+            StringComparison.Ordinal);
+        Assert.True(
+            readyCheck >= 0,
+            "The wrist overlay is missing the recording-host Ready gate.");
+        Assert.True(
+            start > readyCheck,
+            "The wrist overlay must start after the recording host is Ready.");
     }
 
     private static int CountOccurrences(string value, string expected)
