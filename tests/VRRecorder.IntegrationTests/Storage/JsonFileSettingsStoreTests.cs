@@ -38,7 +38,7 @@ public sealed class JsonFileSettingsStoreTests
     }
 
     [Fact]
-    public async Task DefaultsRoundTripAsDeterministicAtomicSchemaV2Json()
+    public async Task DefaultsRoundTripAsDeterministicAtomicSchemaV3Json()
     {
         using var directory = TemporaryDirectory.Create();
         var settingsPath = Path.Combine(directory.Path, "settings.json");
@@ -54,8 +54,14 @@ public sealed class JsonFileSettingsStoreTests
         Assert.Equivalent(expected, loaded, strict: true);
         Assert.Equal(firstBytes, secondBytes);
         var json = Encoding.UTF8.GetString(firstBytes);
-        Assert.Contains("\"schemaVersion\": 2", json, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": 3", json, StringComparison.Ordinal);
         Assert.Contains("\"placementProfiles\": []", json, StringComparison.Ordinal);
+        Assert.Contains("\"hapticsEnabled\": true", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"hapticFrequencyHertz\": 120",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains("\"hapticAmplitude\": 0.65", json, StringComparison.Ordinal);
         Assert.Contains(
             "\"outputFolder\": \"knownfolder:Downloads\"",
             json,
@@ -70,7 +76,7 @@ public sealed class JsonFileSettingsStoreTests
     }
 
     [Fact]
-    public async Task SchemaV1GlobalPlacementMigratesToSchemaV2Fallback()
+    public async Task SchemaV1GlobalPlacementMigratesToSchemaV3Fallback()
     {
         using var directory = TemporaryDirectory.Create();
         var settingsPath = Path.Combine(directory.Path, "settings.json");
@@ -118,12 +124,15 @@ public sealed class JsonFileSettingsStoreTests
 
         var migrated = await store.LoadAsync(CancellationToken.None);
 
-        Assert.Equal(2, migrated.SchemaVersion);
+        Assert.Equal(3, migrated.SchemaVersion);
         Assert.Equal(VrHand.Right, migrated.Vr.Hand);
         Assert.Equal(OverlayPlacementMode.WorldPin, migrated.Vr.PlacementMode);
         Assert.Equal([1d, 2d, 3d], migrated.Vr.Transform.Position);
         Assert.Equal([4d, 5d, 6d], migrated.Vr.Transform.RotationEuler);
         Assert.Empty(migrated.Vr.PlacementProfiles);
+        Assert.True(migrated.Vr.HapticsEnabled);
+        Assert.Equal(120f, migrated.Vr.HapticFrequencyHertz);
+        Assert.Equal(0.65f, migrated.Vr.HapticAmplitude);
         Assert.True(File.Exists(settingsPath));
         Assert.Empty(Directory.EnumerateFiles(
             directory.Path,
@@ -132,8 +141,70 @@ public sealed class JsonFileSettingsStoreTests
 
         await store.SaveAsync(migrated, CancellationToken.None);
         var persisted = await File.ReadAllTextAsync(settingsPath);
-        Assert.Contains("\"schemaVersion\": 2", persisted, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": 3", persisted, StringComparison.Ordinal);
         Assert.Contains("\"placementProfiles\": []", persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SchemaV2PlacementProfilesMigrateToSchemaV3HapticDefaults()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        var schemaV2 = """
+            {
+              "schemaVersion": 2,
+              "recording": {
+                "outputFolder": "knownfolder:Downloads",
+                "selfTimerSeconds": 0,
+                "autoStopSeconds": null,
+                "resolutionChangePolicy": "SingleFileFit"
+              },
+              "video": {
+                "frameRate": 30,
+                "encoder": "Auto",
+                "qualityPreset": "High",
+                "codec": "H264"
+              },
+              "audio": {
+                "routing": "Mixed",
+                "desktopEndpointId": "default-render",
+                "microphoneEndpointId": "default-capture",
+                "desktopGainDb": -6,
+                "microphoneGainDb": -6
+              },
+              "vr": {
+                "hand": "Left",
+                "placementMode": "WristDock",
+                "transform": {
+                  "position": [0.03, 0.05, -0.08],
+                  "rotationEuler": [25, 0, 10]
+                },
+                "placementProfiles": []
+              },
+              "osc": {
+                "autoDiscover": true,
+                "fallbackHost": "127.0.0.1",
+                "fallbackSendPort": 9000,
+                "fallbackReceivePort": 9001
+              },
+              "uiLocale": "Japanese"
+            }
+            """;
+        await File.WriteAllTextAsync(settingsPath, schemaV2);
+        var store = new JsonFileSettingsStore(settingsPath);
+
+        var migrated = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(3, migrated.SchemaVersion);
+        Assert.Equal(UiLocale.Japanese, migrated.UiLocale);
+        Assert.Empty(migrated.Vr.PlacementProfiles);
+        Assert.True(migrated.Vr.HapticsEnabled);
+        Assert.Equal(120f, migrated.Vr.HapticFrequencyHertz);
+        Assert.Equal(0.65f, migrated.Vr.HapticAmplitude);
+        Assert.Empty(Directory.EnumerateFiles(
+            directory.Path,
+            "*.corrupt-*",
+            SearchOption.TopDirectoryOnly));
     }
 
     [Fact]

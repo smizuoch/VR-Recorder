@@ -1,4 +1,5 @@
 using System.Net;
+using VRRecorder.Application.Haptics;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Timing;
 using VRRecorder.Domain.Video;
@@ -10,7 +11,7 @@ public static class VRRecorderSettingsContract
     public static void Validate(VRRecorderSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (settings.SchemaVersion != 2)
+        if (settings.SchemaVersion != VRRecorderSettings.CurrentSchemaVersion)
         {
             throw new InvalidDataException(
                 $"Settings schema {settings.SchemaVersion} is not supported.");
@@ -47,6 +48,10 @@ public static class VRRecorderSettingsContract
         EnsureDefined(settings.Vr.PlacementMode);
         WristOverlayPoseContract.ValidateStoredTransform(settings.Vr.Transform);
         ArgumentNullException.ThrowIfNull(settings.Vr.PlacementProfiles);
+        _ = new WristHapticFeedbackOptions(
+            settings.Vr.HapticsEnabled,
+            settings.Vr.HapticFrequencyHertz,
+            settings.Vr.HapticAmplitude);
         if (settings.Vr.PlacementProfiles.Count > 64)
         {
             throw new InvalidDataException(

@@ -252,7 +252,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - 表示成功済みsnapshot／layoutだけでpointer eventをhit-testするpure interaction host。primary down／upをcursor別に追跡し、duplicate downと同一revisionの二重commandを抑止し、1 tick最大64件に制限してmove floodから描画を保護する
 - native overlay lifecycleを`IWristTexturePublisher`／`IWristPointerEventSource`へ適合するmanaged adapter。rendererのframe metadataをそのままUpdateし、OpenVR Left／Right／Middleをpresentation Primary／Secondary／Middleへ変換し、lifecycleを単一所有・破棄する
 - recorder status subscriptionをatomicな最新1件へ畳み、初回即時かつ最大90 Hzでinteraction coordinatorを駆動するone-shot background host。遅いtick後はcatch-up連打せずmonotonic nowから再基準化し、cancel／fault時に必ずunsubscribeする
-- settings schema v2。旧v1のglobal hand／mode／transformを未知機器用fallbackとして無損失に移行し、OpenVRのtracking system name、HMD model number、controller input profile path、left／rightのexact keyごとに最大64件の配置を保存・選択・置換する。v1／v2 JSON Schemaは別identityで同梱し、v2保存値をprofile入りでoffline検証する
+- settings schema v3。旧v1のglobal hand／mode／transformとv2のdevice別配置を無損失に移行し、OpenVRのtracking system name、HMD model number、controller input profile path、left／rightのexact keyごとに最大64件の配置を保存・選択・置換する。haptics enabled、120 Hz、amplitude 0.65の初期product tokenを保持し、v1／v2／v3 JSON Schemaを別identityで同梱してv3保存値をoffline検証する
 - [`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)のpure pose contract。右手系+X右／+Y上／-Z前、m、pitch-X／yaw-Y／roll-Z degree、`Rz*Ry*Rx`、Standing World Pin、0.5 mm／0.1 degree readback許容差、5／20 mm nudge、120／80 mm detach／reattach hysteresisを固定し、初回setupのreadbackもEuler完全一致ではなく同じ行列許容差で判定する
 - lifecycle／texture／eventから分離したnative pose Portと72-byte versioned C ABI。Wrist Dockをleft／right tracked-device-relative、World PinをStanding absolute transformとして実`IVROverlay`へ適用・readbackし、mode／hand／origin、有限値、±100 m、右手系直交回転行列をABI境界とlifecycle境界でfail-closed検証する。同じprocess runtime generationへ接続し、managed lifecycleでは`OverlayTransform`と型付きreadbackへ変換する
 - selected handの実controllerとHMDからtracking system name／HMD model number／controller input profile pathを取得するdevice-profile query。同じprocess runtime generationで`GetStringTrackedDeviceProperty`を呼び、40-byte descriptor＋必要サイズ付きpacked UTF-8 C ABIからmanagedのexact `VrDeviceProfile`へ厳格decodeする
@@ -262,6 +262,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - input／overlayと同じprocess runtime generationを共有するnative haptic Portとproduction backend。`actions.json`から同階層のapplication manifestを一つの共通contractで導出し、temporary登録→action manifest→haptic action／controller input source handleの順で初期化する。正の有限duration、有限な非負frequency、0超1以下amplitudeの単発pulseだけを実`IVRInput::TriggerHapticVibrationAction`へ渡し、途中失敗は取得済みruntimeを解放する。trigger中はruntime lockで最終shutdownと直列化する
 - 40-byte haptic configと24-byte単発pulseを持つversioned C ABI。absolute action manifest、stable haptic action、left／right input source、reserved、duration／frequency／amplitudeをhandle生成／backend呼出し前に検証し、create／trigger／destroyとbackend error伝播を32-symbol export allowlistへ追加する
 - current installのaction manifestと選択handをC ABI configへ変換し、SafeHandleをnative DLLより先に破棄するmanaged haptic output。Application patternのpulse countをduration間隔の単発ABI callへ展開し、native statusを型付きmanaged例外へ変換する。left／right path、2 pulse、backend failure、Dispose後のnative handle破棄を実fixtureで固定する
+- recorder statusをsingle-reader queueへ順序保持して録画threadを塞がず、Recording成功でstart、Stopping後のReadyでstop、SignalLost／NoSignal／Faultedでfaultを発火するhaptic observer。App host Ready後にschema v3のenabled／frequency／amplitude／selected handを読み、実managed native outputへ接続する。output生成／trigger失敗はTrace診断だけへ隔離し、後続transitionと録画結果を壊さない
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -272,7 +273,6 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - production glyph／icon atlasを使うoverlay background hostのApp composition
 - production telemetryの採取・表示、production glyph／icon atlas
 - drag release、dock／pin commandでcontroller-relative／Standing absolute間を変換した確定poseをproduction placement coordinatorへ渡す経路
-- frequency／amplitude／enabled設定と、録画開始／停止／fault transitionからhaptic policy／managed outputへのcomposition
 - first-run routerの`WristOverlayPlacement` production route
 - 実SteamVR／HMD／controller試験
 
@@ -620,7 +620,7 @@ desktop録画が成立した後、次の順でproduction compositionへ接続す
 
 `actions.json`はOpenVR application manifestではない。unpackaged install rootを参照する`.vrmanifest`、stable application key、`IVRApplications`でのidempotent登録／更新／解除が別途必要である。temporary登録を起動ごとに行うかpersistent登録をinstall lifecycleで行うかをADR化し、SteamVR再起動、app upgradeでpath変更、uninstall後のstale manifestをRedにする。MSIXではpackage install locationへabsolute pathを再解決し、存在しない旧version pathを残さない。
 
-App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged runtimeを共有する。native process ownerは`VR_Init`／`VR_Shutdown`をruntime generation単位に集約し、最大90 Hzの一つのbackground pollで`UpdateActionState`と全登録digital actionを同じrevisionへ採取する。遅いconsumerは中間revisionをskipして最新snapshotを読むためpoll ownerを停止しない。native overlay lifecycle／event／poseとmanaged pose transportはownerへ接続済みで、production placement coordinatorも同じlifecycle Portへ接続した。hapticは未接続である。
+App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged runtimeを共有する。native process ownerは`VR_Init`／`VR_Shutdown`をruntime generation単位に集約し、最大90 Hzの一つのbackground pollで`UpdateActionState`と全登録digital actionを同じrevisionへ採取する。遅いconsumerは中間revisionをskipして最新snapshotを読むためpoll ownerを停止しない。native overlay lifecycle／event／poseとmanaged pose transportはownerへ接続済みで、production placement coordinatorとrecording-status haptic observerも同じprocess ownerのproduction Portへ接続した。
 
 ### 7.1 Input Red
 
@@ -664,7 +664,7 @@ App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged 
 - dragなしで全操作へ到達可能。
 - first-run routerに`WristOverlayPlacement` routeを登録し、fake evidenceではなく実overlay visibility／mode／pose readback＋user confirmationで完了する。
 
-settings schema v2へのmigration、pure pose contract、native pose Port、72-byte pose C ABI、managed adapter、runtime device-profile query、production placement coordinator、物理recenter routeはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。coordinatorは取得済みruntime identityからprofileを選び、Wrist Dock／World Pinを実OpenVRへApplyした後、mode／hand／origin／matrixが一致した場合だけprofileを保存する。small／large nudgeと安全な既定Wrist Dockへのrecenterも同じ経路で永続化し、Appでは`recenter_overlay` rising edgeがlazy lifecycleを介してこの経路へ到達する。次はdrag releaseとdock／pin commandでcontroller-relative／Standing absoluteの親空間を変換し、確定poseをcoordinatorへ渡す。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作を先に分ける。
+settings schema v3へのmigration、pure pose contract、native pose Port、72-byte pose C ABI、managed adapter、runtime device-profile query、production placement coordinator、物理recenter routeはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、v2のdevice別配置も無損失に引き継ぎ、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。coordinatorは取得済みruntime identityからprofileを選び、Wrist Dock／World Pinを実OpenVRへApplyした後、mode／hand／origin／matrixが一致した場合だけprofileを保存する。small／large nudgeと安全な既定Wrist Dockへのrecenterも同じ経路で永続化し、Appでは`recenter_overlay` rising edgeがlazy lifecycleを介してこの経路へ到達する。次はdrag releaseとdock／pin commandでcontroller-relative／Standing absoluteの親空間を変換し、確定poseをcoordinatorへ渡す。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作を先に分ける。
 
 ### 7.5 Haptics Red
 
@@ -674,9 +674,9 @@ settings schema v2へのmigration、pure pose contract、native pose Port、72-b
 - 同じrecording transition revisionを再配信してもpulseを二重発火しない。
 - pulse列の途中でcontroller disconnect／runtime shutdownしてもuse-after-free、self-join、録画Abortを起こさない。
 
-durationは基本設計にあるが、amplitude／frequency tokenと、左手／右手／設定中の手のどこへ送るかは未決定である。action handle取得前にpolicy型とcontract testで固定し、controller不在やtrigger errorは診断だけへ残して録画結果と分離する。
+durationに加えて初期product tokenを120 Hz／amplitude 0.65、出力先をsettingsで選択中のhandへ固定した。controller不在やtrigger errorは診断だけへ残して録画結果と分離する。実controller HILでtoken調整が必要になった場合もschema v3設定値の変更で対応し、pulse duration／count契約は変えない。
 
-Applicationのpure policyはRed→Green済みである。start／stop／faultのdurationと回数を固定し、有限な非負frequency、0超1以下のamplitude、正のduration／pulse countをPort境界で検証する。disabledと同一／旧revisionは出力せず、出力失敗を型付き結果として返して後続revisionを継続する。native側も同じprocess runtime generationへ独立haptic Portとproduction backendを追加し、application／action manifest設定、実OpenVR action／input source handle取得、単発trigger、値検証、初期化失敗cleanup、最終shutdownとの直列化を固定した。40-byte config／24-byte pulseのC ABIとexport allowlist、selected handとpulse列を渡すmanaged SafeHandle adapterもGreenである。frequency／amplitude／enabled設定とrecording transitionとのcompositionは後続の独立commitで閉じる。
+Applicationのpure policyとproduction compositionはRed→Green済みである。start／stop／faultのdurationと回数を固定し、有限な非負frequency、0超1以下のamplitude、正のduration／pulse countをPort境界で検証する。disabledと同一／旧revisionは出力せず、出力失敗を型付き結果として返して後続revisionを継続する。native側も同じprocess runtime generationへ独立haptic Portとproduction backendを追加し、application／action manifest設定、実OpenVR action／input source handle取得、単発trigger、値検証、初期化失敗cleanup、最終shutdownとの直列化を固定した。40-byte config／24-byte pulseのC ABIとexport allowlist、selected handとpulse列を渡すmanaged SafeHandle adapterもGreenである。schema v3はenabled／frequency／amplitudeを保持してv1／v2からmigrationし、Appのsingle-reader observerがRecording成功、停止成功、SignalLost／NoSignal／Faultedを実managed outputへ順序どおり渡す。生成／trigger失敗はTrace診断だけに隔離する。
 
 OpenVRの`IVROverlay`はoverlay作成、texture、transform、event、visibilityを別APIとして持つため、単一巨大adapterにしない。lifecycle、renderer、pose／transform、input、hapticをPortで分離する。
 

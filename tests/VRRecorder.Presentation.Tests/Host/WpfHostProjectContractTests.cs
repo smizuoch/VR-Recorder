@@ -969,6 +969,12 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("RecordingAudioCommand.ToggleMuteAll", appCode);
         Assert.Contains("RunOptionalSteamVrMicrophoneInputAsync", appCode);
         Assert.Contains("RunOptionalSteamVrRecenterInputAsync", appCode);
+        Assert.Contains("RunOptionalSteamVrHapticsAsync", appCode);
+        Assert.Contains("NativeSteamVrHapticOutput", appCode);
+        Assert.Contains("WristHapticStatusObserver", appCode);
+        Assert.Contains("settings.Vr.HapticsEnabled", appCode);
+        Assert.Contains("settings.Vr.HapticFrequencyHertz", appCode);
+        Assert.Contains("settings.Vr.HapticAmplitude", appCode);
         Assert.Contains("_steamVrInputLifetime.Cancel()", appCode);
         Assert.Contains("_steamVrInputTask", appCode);
 

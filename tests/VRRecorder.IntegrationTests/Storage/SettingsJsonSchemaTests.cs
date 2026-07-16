@@ -8,7 +8,7 @@ namespace VRRecorder.IntegrationTests.Storage;
 public sealed class SettingsJsonSchemaTests
 {
     [Fact]
-    public async Task PackagedV2SchemaValidatesPersistedDesignDefaults()
+    public async Task PackagedV3SchemaValidatesPersistedDesignDefaults()
     {
         using var directory = TemporaryDirectory.Create();
         var settingsPath = Path.Combine(directory.Path, "settings.json");
@@ -18,6 +18,9 @@ public sealed class SettingsJsonSchemaTests
         {
             Vr = defaults.Vr with
             {
+                HapticsEnabled = false,
+                HapticFrequencyHertz = 90,
+                HapticAmplitude = 0.4f,
                 PlacementProfiles =
                 [
                     new VrOverlayPlacementProfile(
@@ -37,34 +40,52 @@ public sealed class SettingsJsonSchemaTests
         var schemaPath = Path.Combine(
             AppContext.BaseDirectory,
             "Schemas",
-            "vr-recorder-settings-v2.schema.json");
-        var legacySchemaPath = Path.Combine(
+            "vr-recorder-settings-v3.schema.json");
+        var legacyV1SchemaPath = Path.Combine(
             AppContext.BaseDirectory,
             "Schemas",
             "vr-recorder-settings-v1.schema.json");
+        var legacyV2SchemaPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Schemas",
+            "vr-recorder-settings-v2.schema.json");
 
         Assert.True(
             File.Exists(schemaPath),
             $"The packaged settings schema was not found at {schemaPath}.");
         Assert.True(
-            File.Exists(legacySchemaPath),
-            $"The legacy settings schema was not found at {legacySchemaPath}.");
+            File.Exists(legacyV1SchemaPath),
+            $"The legacy settings schema was not found at {legacyV1SchemaPath}.");
+        Assert.True(
+            File.Exists(legacyV2SchemaPath),
+            $"The legacy settings schema was not found at {legacyV2SchemaPath}.");
         Assert.Contains(
             "VRRecorder.Settings.v1.schema.json",
             typeof(JsonFileSettingsStore).Assembly.GetManifestResourceNames());
         Assert.Contains(
             "VRRecorder.Settings.v2.schema.json",
             typeof(JsonFileSettingsStore).Assembly.GetManifestResourceNames());
+        Assert.Contains(
+            "VRRecorder.Settings.v3.schema.json",
+            typeof(JsonFileSettingsStore).Assembly.GetManifestResourceNames());
         using var schema = JsonDocument.Parse(
             await File.ReadAllBytesAsync(schemaPath));
         using var settings = JsonDocument.Parse(
             await File.ReadAllBytesAsync(settingsPath));
+        var persistedVr = settings.RootElement.GetProperty("vr");
+        Assert.False(persistedVr.GetProperty("hapticsEnabled").GetBoolean());
+        Assert.Equal(
+            90,
+            persistedVr.GetProperty("hapticFrequencyHertz").GetSingle());
+        Assert.Equal(
+            0.4f,
+            persistedVr.GetProperty("hapticAmplitude").GetSingle());
 
         Assert.Equal(
             "https://json-schema.org/draft/2020-12/schema",
             schema.RootElement.GetProperty("$schema").GetString());
         Assert.Equal(
-            2,
+            3,
             schema.RootElement
                 .GetProperty("properties")
                 .GetProperty("schemaVersion")
@@ -284,6 +305,14 @@ public sealed class SettingsJsonSchemaTests
                 number < minimum.GetDouble())
             {
                 errors.Add($"{path} is below its minimum.");
+            }
+
+            if (schema.TryGetProperty(
+                    "exclusiveMinimum",
+                    out var exclusiveMinimum) &&
+                number <= exclusiveMinimum.GetDouble())
+            {
+                errors.Add($"{path} is not above its exclusive minimum.");
             }
 
             if (schema.TryGetProperty("maximum", out var maximum) &&

@@ -4,6 +4,7 @@ using System.Net.Http;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Compliance;
 using VRRecorder.Application.Desktop;
+using VRRecorder.Application.Haptics;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
@@ -702,6 +703,7 @@ public partial class App
             .CreateLinkedTokenSource(_steamVrInputLifetime.Token);
         var microphoneInput = Task.CompletedTask;
         var recenterInput = Task.CompletedTask;
+        var hapticFeedback = Task.CompletedTask;
         try
         {
             var runtime = _steamVrInputRuntime.Value;
@@ -710,6 +712,8 @@ public partial class App
                 inputLifetime.Token);
             recenterInput = RunOptionalSteamVrRecenterInputAsync(
                 runtime,
+                inputLifetime.Token);
+            hapticFeedback = RunOptionalSteamVrHapticsAsync(
                 inputLifetime.Token);
             await new SteamVrRecordingInputAdapter(runtime, _recordingInputs)
                 .RunAsync(inputLifetime.Token)
@@ -735,7 +739,10 @@ public partial class App
         finally
         {
             await inputLifetime.CancelAsync().ConfigureAwait(false);
-            await Task.WhenAll(microphoneInput, recenterInput)
+            await Task.WhenAll(
+                    microphoneInput,
+                    recenterInput,
+                    hapticFeedback)
                 .ConfigureAwait(false);
         }
     }
@@ -798,6 +805,54 @@ public partial class App
         {
             System.Diagnostics.Trace.TraceWarning(
                 "SteamVR recenter input is unavailable: {0}",
+                exception.Message);
+        }
+    }
+
+    private async Task RunOptionalSteamVrHapticsAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var settings = await _settings
+                .LoadAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (!settings.Vr.HapticsEnabled)
+            {
+                return;
+            }
+
+            using var output = new NativeSteamVrHapticOutput(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    NativeLibraryFileName),
+                AppContext.BaseDirectory,
+                settings.Vr.Hand);
+            var feedback = new WristHapticFeedbackCoordinator(
+                output,
+                new WristHapticFeedbackOptions(
+                    settings.Vr.HapticsEnabled,
+                    settings.Vr.HapticFrequencyHertz,
+                    settings.Vr.HapticAmplitude));
+            await using var observer = new WristHapticStatusObserver(
+                _recordingHost,
+                feedback,
+                failure => System.Diagnostics.Trace.TraceWarning(
+                    "SteamVR haptic output failed: {0}",
+                    failure.Message));
+            await Task
+                .Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested)
+        {
+            // Normal haptic-output shutdown.
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "SteamVR haptic output is unavailable: {0}",
                 exception.Message);
         }
     }

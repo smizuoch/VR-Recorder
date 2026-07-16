@@ -129,27 +129,82 @@ public sealed class JsonFileSettingsStore : ISettingsStore
         var settings = document.RootElement
             .Deserialize<VRRecorderSettings>(SerializerOptions) ??
             throw new InvalidDataException("The settings document is empty.");
-        if (settings.SchemaVersion == 1)
+        if (settings.Vr is null)
         {
-            if (settings.Vr is null ||
-                document.RootElement
-                    .GetProperty("vr")
-                    .TryGetProperty("placementProfiles", out _))
-            {
-                throw new InvalidDataException(
-                    "The settings schema v1 document is malformed.");
-            }
+            throw new InvalidDataException(
+                "The settings document has no VR settings.");
+        }
 
-            settings = settings with
-            {
-                SchemaVersion = 2,
-                Vr = settings.Vr with { PlacementProfiles = [] },
-            };
+        var vr = document.RootElement.GetProperty("vr");
+        switch (settings.SchemaVersion)
+        {
+            case 1:
+                if (vr.TryGetProperty("placementProfiles", out _) ||
+                    HasHapticProperties(vr))
+                {
+                    throw new InvalidDataException(
+                        "The settings schema v1 document is malformed.");
+                }
+
+                settings = MigrateToCurrent(
+                    settings,
+                    placementProfiles: []);
+                break;
+            case 2:
+                if (!vr.TryGetProperty("placementProfiles", out _) ||
+                    HasHapticProperties(vr))
+                {
+                    throw new InvalidDataException(
+                        "The settings schema v2 document is malformed.");
+                }
+
+                settings = MigrateToCurrent(
+                    settings,
+                    settings.Vr.PlacementProfiles);
+                break;
+            case VRRecorderSettings.CurrentSchemaVersion:
+                if (!HasAllHapticProperties(vr))
+                {
+                    throw new InvalidDataException(
+                        "The settings schema v3 document is malformed.");
+                }
+
+                break;
+            default:
+                break;
         }
 
         VRRecorderSettingsContract.Validate(settings);
         return settings;
     }
+
+    private static VRRecorderSettings MigrateToCurrent(
+        VRRecorderSettings settings,
+        IReadOnlyList<VrOverlayPlacementProfile> placementProfiles)
+    {
+        var defaults = VRRecorderSettings.CreateDefault().Vr;
+        return settings with
+        {
+            SchemaVersion = VRRecorderSettings.CurrentSchemaVersion,
+            Vr = settings.Vr with
+            {
+                PlacementProfiles = placementProfiles,
+                HapticsEnabled = defaults.HapticsEnabled,
+                HapticFrequencyHertz = defaults.HapticFrequencyHertz,
+                HapticAmplitude = defaults.HapticAmplitude,
+            },
+        };
+    }
+
+    private static bool HasHapticProperties(JsonElement vr) =>
+        vr.TryGetProperty("hapticsEnabled", out _) ||
+        vr.TryGetProperty("hapticFrequencyHertz", out _) ||
+        vr.TryGetProperty("hapticAmplitude", out _);
+
+    private static bool HasAllHapticProperties(JsonElement vr) =>
+        vr.TryGetProperty("hapticsEnabled", out _) &&
+        vr.TryGetProperty("hapticFrequencyHertz", out _) &&
+        vr.TryGetProperty("hapticAmplitude", out _);
 
     private void BackupCorruptDocument()
     {

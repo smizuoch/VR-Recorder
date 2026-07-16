@@ -6,6 +6,41 @@ namespace VRRecorder.Application.Tests.Settings;
 public sealed class VRRecorderSettingsContractTests
 {
     [Fact]
+    public void DesignDefaultsUseCurrentSchemaAndEnabledHapticTokens()
+    {
+        var settings = VRRecorderSettings.CreateDefault();
+
+        Assert.Equal(3, settings.SchemaVersion);
+        Assert.True(settings.Vr.HapticsEnabled);
+        Assert.Equal(120f, settings.Vr.HapticFrequencyHertz);
+        Assert.Equal(0.65f, settings.Vr.HapticAmplitude);
+        VRRecorderSettingsContract.Validate(settings);
+    }
+
+    [Theory]
+    [InlineData(float.NaN, 0.65f)]
+    [InlineData(-1f, 0.65f)]
+    [InlineData(120f, 0f)]
+    [InlineData(120f, 1.01f)]
+    public void InvalidHapticTokensAreRejected(
+        float frequencyHertz,
+        float amplitude)
+    {
+        var settings = VRRecorderSettings.CreateDefault();
+        var invalid = settings with
+        {
+            Vr = settings.Vr with
+            {
+                HapticFrequencyHertz = frequencyHertz,
+                HapticAmplitude = amplitude,
+            },
+        };
+
+        Assert.ThrowsAny<ArgumentException>(() =>
+            VRRecorderSettingsContract.Validate(invalid));
+    }
+
+    [Fact]
     public void DuplicatePlacementProfileKeyIsRejected()
     {
         var defaults = VRRecorderSettings.CreateDefault();

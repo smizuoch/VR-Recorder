@@ -12,9 +12,14 @@ public sealed record VRRecorderSettings(
     OscSettings Osc,
     UiLocale UiLocale = UiLocale.System)
 {
+    public const int CurrentSchemaVersion = 3;
+    public const bool DefaultHapticsEnabled = true;
+    public const float DefaultHapticFrequencyHertz = 120f;
+    public const float DefaultHapticAmplitude = 0.65f;
+
     public static VRRecorderSettings CreateDefault() =>
         new(
-            SchemaVersion: 2,
+            SchemaVersion: CurrentSchemaVersion,
             Recording: new RecordingSettings(
                 OutputFolder: "knownfolder:Downloads",
                 SelfTimerSeconds: 0,
@@ -35,7 +40,10 @@ public sealed record VRRecorderSettings(
                 VrHand.Left,
                 OverlayPlacementMode.WristDock,
                 WristOverlayPoseContract.CreateDefaultWristDockTransform(),
-                PlacementProfiles: []),
+                PlacementProfiles: [],
+                HapticsEnabled: DefaultHapticsEnabled,
+                HapticFrequencyHertz: DefaultHapticFrequencyHertz,
+                HapticAmplitude: DefaultHapticAmplitude),
             Osc: new OscSettings(
                 AutoDiscover: true,
                 FallbackHost: "127.0.0.1",
@@ -67,7 +75,10 @@ public sealed record VrSettings(
     VrHand Hand,
     OverlayPlacementMode PlacementMode,
     OverlayTransform Transform,
-    IReadOnlyList<VrOverlayPlacementProfile> PlacementProfiles = null!);
+    IReadOnlyList<VrOverlayPlacementProfile> PlacementProfiles = null!,
+    bool HapticsEnabled = false,
+    float HapticFrequencyHertz = 0,
+    float HapticAmplitude = 0);
 
 public sealed record VrDeviceProfile(
     string TrackingSystemName,
