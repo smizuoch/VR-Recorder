@@ -42,6 +42,9 @@ public sealed class WristUiSessionTests
             UiCommandId.DockOverlayToWrist,
             UiActivationKind.WristRay,
             CancellationToken.None);
+        await session.ReleaseDragAsync(
+            new WristOverlayDragDelta(0.02, -0.01),
+            CancellationToken.None);
         await session.DispatchAsync(
             UiCommandId.RecenterOverlay,
             UiActivationKind.WristRay,
@@ -70,10 +73,13 @@ public sealed class WristUiSessionTests
                 OverlayPlacementMode.WristDock,
             ],
             placement.PlacementModes);
+        Assert.Equal(
+            [new WristOverlayDragDelta(0.02, -0.01)],
+            placement.DragReleases);
         Assert.Equal(2, nudged.PresentationRevision);
         Assert.Equal(1, placement.RecenterCount);
         Assert.Equal(WristPage.Main, returned.Page);
-        Assert.Equal(6, returned.PresentationRevision);
+        Assert.Equal(7, returned.PresentationRevision);
         Assert.Empty(application.Commands);
     }
 
@@ -125,6 +131,8 @@ public sealed class WristUiSessionTests
 
         public List<OverlayPlacementMode> PlacementModes { get; } = [];
 
+        public List<WristOverlayDragDelta> DragReleases { get; } = [];
+
         public Task<VrOverlayPlacement> NudgeAsync(
             WristOverlayNudgeDirection direction,
             WristOverlayNudgeSize size,
@@ -160,6 +168,7 @@ public sealed class WristUiSessionTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            DragReleases.Add(delta);
             return Task.FromResult(DefaultPlacement());
         }
 

@@ -6,7 +6,10 @@ using VRRecorder.DesignSystem;
 namespace VRRecorder.Presentation.Wrist;
 
 public sealed class WristUiSession
-    : IWristUiSnapshotProjector, IUiCommandDispatcher, IDisposable
+    : IWristUiSnapshotProjector,
+      IUiCommandDispatcher,
+      IWristOverlayDragDispatcher,
+      IDisposable
 {
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _commandGate = new(1, 1);
@@ -117,6 +120,28 @@ public sealed class WristUiSession
                         .ConfigureAwait(false);
                     break;
             }
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
+    }
+
+    public async Task ReleaseDragAsync(
+        WristOverlayDragDelta delta,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _commandGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            await _placement
+                .DragReleaseAsync(delta, cancellationToken)
+                .ConfigureAwait(false);
+            IncrementPresentationRevision();
         }
         finally
         {

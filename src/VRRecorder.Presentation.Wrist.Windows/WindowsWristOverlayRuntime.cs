@@ -41,6 +41,7 @@ public sealed class WindowsWristOverlayRuntime
             textures,
             layoutOptions,
             new WristInputAdapter(session),
+            session,
             pointerEvents);
         _background = new WristOverlayBackgroundHost(
             statuses,

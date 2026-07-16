@@ -1,4 +1,5 @@
 using VRRecorder.Application.Presentation;
+using VRRecorder.Application.Settings;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Presentation.Wrist;
@@ -176,10 +177,162 @@ public sealed class WristOverlayInteractionHostTests
         Assert.Empty(commands.Commands);
     }
 
+    [Fact]
+    public async Task MoveTapOpensPositioningOnlyAfterPrimaryRelease()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new CapturingCommands(calls);
+        var drags = new CapturingDragCommands();
+        var snapshot = Snapshot(6);
+        var target = Assert.Single(
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default).HitTargets,
+            item => item.Command == UiCommandId.OpenOverlayPositioning);
+        var x = target.Bounds.Left + target.Bounds.Width / 2;
+        var y = target.Bounds.Top + target.Bounds.Height / 2;
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            x,
+            y,
+            WristPointerButton.Primary,
+            CursorIndex: 11));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonUp,
+            x,
+            y,
+            WristPointerButton.Primary,
+            CursorIndex: 11));
+        var host = Host(publisher, source, commands, drags);
+
+        var result = await host.TickAsync(
+            snapshot,
+            TimeSpan.Zero,
+            CancellationToken.None);
+
+        Assert.True(result.ActionDispatched);
+        Assert.Equal(
+            [(UiCommandId.OpenOverlayPositioning,
+              UiActivationKind.WristRay)],
+            commands.Commands);
+        Assert.Empty(drags.Releases);
+    }
+
+    [Fact]
+    public async Task MoveDragReleasesMetricDeltaWithoutOpeningPositioning()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new CapturingCommands(calls);
+        var drags = new CapturingDragCommands();
+        var snapshot = Snapshot(7);
+        var target = Assert.Single(
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default).HitTargets,
+            item => item.Command == UiCommandId.OpenOverlayPositioning);
+        var startX = target.Bounds.Left + 1;
+        var startY = target.Bounds.Top + target.Bounds.Height / 2;
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            startX,
+            startY,
+            WristPointerButton.Primary,
+            CursorIndex: 12));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.Move,
+            startX + 560,
+            startY + 32,
+            WristPointerButton.None,
+            CursorIndex: 12));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonUp,
+            startX + 560,
+            startY + 32,
+            WristPointerButton.Primary,
+            CursorIndex: 12));
+        var host = Host(publisher, source, commands, drags);
+
+        var result = await host.TickAsync(
+            snapshot,
+            TimeSpan.Zero,
+            CancellationToken.None);
+
+        Assert.True(result.ActionDispatched);
+        var release = Assert.Single(drags.Releases);
+        Assert.Equal(0.1203125, release.RightMeters, precision: 9);
+        Assert.Equal(-0.006875, release.UpMeters, precision: 9);
+        Assert.Empty(commands.Commands);
+    }
+
+    [Fact]
+    public async Task StopDownWinsOverDragReleaseInTheSameTick()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new CapturingCommands(calls);
+        var drags = new CapturingDragCommands();
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(new RecorderStatusSnapshot(
+                Revision: 8,
+                RecorderState.Recording,
+                RecorderAvailableActions.Stop));
+        var layout = WristTextureLayoutEngine.Layout(
+            snapshot,
+            WristLayoutOptions.Default);
+        var move = Assert.Single(layout.HitTargets, item =>
+            item.Command == UiCommandId.OpenOverlayPositioning);
+        var stop = Assert.Single(layout.HitTargets, item =>
+            item.Command == UiCommandId.ToggleRecording);
+        var startX = move.Bounds.Left + 1;
+        var startY = move.Bounds.Top + 1;
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            startX,
+            startY,
+            WristPointerButton.Primary,
+            CursorIndex: 13));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.Move,
+            startX + 560,
+            startY,
+            WristPointerButton.None,
+            CursorIndex: 13));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonUp,
+            startX + 560,
+            startY,
+            WristPointerButton.Primary,
+            CursorIndex: 13));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            stop.Bounds.Left + 1,
+            stop.Bounds.Top + 1,
+            WristPointerButton.Primary,
+            CursorIndex: 14));
+        var host = Host(publisher, source, commands, drags);
+
+        var result = await host.TickAsync(
+            snapshot,
+            TimeSpan.Zero,
+            CancellationToken.None);
+
+        Assert.True(result.ActionDispatched);
+        Assert.Equal(
+            [(UiCommandId.ToggleRecording, UiActivationKind.WristRay)],
+            commands.Commands);
+        Assert.Empty(drags.Releases);
+    }
+
     private static WristOverlayInteractionHost Host(
         FakePublisher publisher,
         FakePointerSource source,
-        CapturingCommands commands) => new(
+        CapturingCommands commands,
+        CapturingDragCommands? drags = null) => new(
             new WristTextureUpdateHost(
                 new WristTextureRenderer(
                     new OnePixelAssets(),
@@ -188,6 +341,7 @@ public sealed class WristOverlayInteractionHostTests
                 publisher),
             WristLayoutOptions.Default,
             new WristInputAdapter(commands),
+            drags ?? new CapturingDragCommands(),
             source);
 
     private static WristUiSnapshot Snapshot(long revision) =>
@@ -289,6 +443,21 @@ public sealed class WristOverlayInteractionHostTests
             cancellationToken.ThrowIfCancellationRequested();
             calls.Add("dispatch");
             Commands.Add((command, activationKind));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingDragCommands
+        : IWristOverlayDragDispatcher
+    {
+        public List<WristOverlayDragDelta> Releases { get; } = [];
+
+        public Task ReleaseDragAsync(
+            WristOverlayDragDelta delta,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Releases.Add(delta);
             return Task.CompletedTask;
         }
     }

@@ -73,6 +73,12 @@ public sealed class WindowsWristOverlayRuntimeTests
             move.Bounds.Top + move.Bounds.Height / 2,
             WristPointerButton.Primary,
             CursorIndex: 1));
+        pointer.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonUp,
+            move.Bounds.Left + move.Bounds.Width / 2,
+            move.Bounds.Top + move.Bounds.Height / 2,
+            WristPointerButton.Primary,
+            CursorIndex: 1));
         var publisher = new SequencedPublisher();
         var clock = new SteppingClock();
         var runtime = new WindowsWristOverlayRuntime(
@@ -97,6 +103,72 @@ public sealed class WindowsWristOverlayRuntimeTests
         Assert.Equal(8, positioning.Revision);
         Assert.Equal(WristPage.Positioning, Page(positioning));
         Assert.Equal(8, positioning.Layout.HitTargets.Count);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+    }
+
+    [Fact]
+    public async Task MoveDragCommitsMetricDeltaAndKeepsTheMainPage()
+    {
+        var status = new RecorderStatusSnapshot(
+            Revision: 9,
+            RecorderState.Ready,
+            RecorderAvailableActions.Start);
+        var move = Assert.Single(
+            WristTextureLayoutEngine.Layout(
+                new WristUiProjector(EnglishUiLocalizer.Instance)
+                    .Project(status),
+                WristLayoutOptions.Default).HitTargets,
+            target =>
+                target.Command == UiCommandId.OpenOverlayPositioning);
+        var startX = move.Bounds.Left + 1;
+        var startY = move.Bounds.Top + move.Bounds.Height / 2;
+        var pointer = new QueuedPointerSource();
+        pointer.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            startX,
+            startY,
+            WristPointerButton.Primary,
+            CursorIndex: 2));
+        pointer.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.Move,
+            startX + 560,
+            startY,
+            WristPointerButton.None,
+            CursorIndex: 2));
+        pointer.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonUp,
+            startX + 560,
+            startY,
+            WristPointerButton.Primary,
+            CursorIndex: 2));
+        var placement = new CapturingPlacementCommands();
+        var publisher = new SequencedPublisher();
+        var clock = new SteppingClock();
+        var runtime = new WindowsWristOverlayRuntime(
+            new FixedStatusSource(status),
+            new NoOpCommands(),
+            placement,
+            publisher,
+            pointer,
+            EnglishUiLocalizer.Instance,
+            WristLayoutOptions.Default,
+            clock);
+        using var cancellation = new CancellationTokenSource();
+
+        var run = runtime.RunAsync(cancellation.Token);
+        var initial = await publisher.NextAsync();
+        var deadline = await clock.NextDeadlineAsync();
+        clock.AdvanceTo(deadline);
+        var dragged = await publisher.NextAsync();
+
+        Assert.Equal(WristPage.Main, Page(initial));
+        Assert.Equal(WristPage.Main, Page(dragged));
+        Assert.Equal(9, dragged.Revision);
+        var release = Assert.Single(placement.DragReleases);
+        Assert.Equal(0.1203125, release.RightMeters, precision: 9);
+        Assert.Equal(0, release.UpMeters);
 
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
@@ -197,6 +269,52 @@ public sealed class WindowsWristOverlayRuntimeTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(DefaultPlacement());
+        }
+
+        private static VrOverlayPlacement DefaultPlacement() => new(
+            OverlayPlacementMode.WristDock,
+            WristOverlayPoseContract.CreateDefaultWristDockTransform());
+    }
+
+    private sealed class CapturingPlacementCommands
+        : IWristOverlayAdjustmentCommands
+    {
+        public List<WristOverlayDragDelta> DragReleases { get; } = [];
+
+        public Task<VrOverlayPlacement> NudgeAsync(
+            WristOverlayNudgeDirection direction,
+            WristOverlayNudgeSize size,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(DefaultPlacement());
+        }
+
+        public Task<VrOverlayPlacement> RecenterAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(DefaultPlacement());
+        }
+
+        public Task<VrOverlayPlacement> SetPlacementModeAsync(
+            OverlayPlacementMode placementMode,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(DefaultPlacement() with
+            {
+                PlacementMode = placementMode,
+            });
+        }
+
+        public Task<VrOverlayPlacement> DragReleaseAsync(
+            WristOverlayDragDelta delta,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DragReleases.Add(delta);
             return Task.FromResult(DefaultPlacement());
         }
 
