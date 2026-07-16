@@ -39,14 +39,8 @@ public sealed class WristOverlayPlacementFirstRunSetupProbe
                evidence.IsReadableConfirmed &&
                evidence.IsInteractionUnobstructedConfirmed &&
                evidence.PlacementMode == settings.Vr.PlacementMode &&
-               SameTransform(evidence.AppliedTransform, settings.Vr.Transform);
+               WristOverlayPoseContract.MatchesReadback(
+                   evidence.AppliedTransform,
+                   settings.Vr.Transform);
     }
-
-    private static bool SameTransform(
-        OverlayTransform actual,
-        OverlayTransform expected) =>
-        actual is not null &&
-        expected is not null &&
-        actual.Position.AsSpan().SequenceEqual(expected.Position) &&
-        actual.RotationEuler.AsSpan().SequenceEqual(expected.RotationEuler);
 }

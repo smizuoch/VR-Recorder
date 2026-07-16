@@ -73,6 +73,27 @@ public sealed class WristOverlayPlacementFirstRunSetupProbeTests
             CancellationToken.None));
     }
 
+    [Fact]
+    public async Task RuntimeReadbackAllowsDocumentedOpenVrRoundingTolerance()
+    {
+        var settings = VRRecorderSettings.CreateDefault();
+        var rounded = new OverlayTransform(
+            [0.0302, 0.0498, -0.0801],
+            [25.04, -0.02, 10.03]);
+        var probe = new WristOverlayPlacementFirstRunSetupProbe(
+            new StubSettingsStore(settings),
+            new StubVerifier(new WristOverlayPlacementEvidence(
+                OverlayPlacementMode.WristDock,
+                rounded,
+                IsVisible: true,
+                IsReadableConfirmed: true,
+                IsInteractionUnobstructedConfirmed: true)));
+
+        Assert.True(await probe.VerifyAsync(
+            FirstRunSetupStep.WristOverlayPlacement,
+            CancellationToken.None));
+    }
+
     private sealed class StubVerifier(WristOverlayPlacementEvidence? evidence)
         : IWristOverlayPlacementVerifier
     {

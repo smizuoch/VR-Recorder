@@ -34,9 +34,7 @@ public sealed record VRRecorderSettings(
             Vr: new VrSettings(
                 VrHand.Left,
                 OverlayPlacementMode.WristDock,
-                new OverlayTransform(
-                    Position: [0.03, 0.05, -0.08],
-                    RotationEuler: [25, 0, 10]),
+                WristOverlayPoseContract.CreateDefaultWristDockTransform(),
                 PlacementProfiles: []),
             Osc: new OscSettings(
                 AutoDiscover: true,

@@ -45,9 +45,7 @@ public static class VRRecorderSettingsContract
         ArgumentNullException.ThrowIfNull(settings.Vr);
         EnsureDefined(settings.Vr.Hand);
         EnsureDefined(settings.Vr.PlacementMode);
-        ArgumentNullException.ThrowIfNull(settings.Vr.Transform);
-        EnsureVector(settings.Vr.Transform.Position, "position");
-        EnsureVector(settings.Vr.Transform.RotationEuler, "rotationEuler");
+        WristOverlayPoseContract.ValidateStoredTransform(settings.Vr.Transform);
         ArgumentNullException.ThrowIfNull(settings.Vr.PlacementProfiles);
         if (settings.Vr.PlacementProfiles.Count > 64)
         {
@@ -75,11 +73,7 @@ public static class VRRecorderSettingsContract
                 "controller input profile path");
             EnsureDefined(profile.Hand);
             EnsureDefined(profile.PlacementMode);
-            ArgumentNullException.ThrowIfNull(profile.Transform);
-            EnsureVector(profile.Transform.Position, "profile position");
-            EnsureVector(
-                profile.Transform.RotationEuler,
-                "profile rotationEuler");
+            WristOverlayPoseContract.ValidateStoredTransform(profile.Transform);
             if (!profileKeys.Add((
                     profile.Device.TrackingSystemName,
                     profile.Device.HmdModelNumber,
@@ -124,16 +118,6 @@ public static class VRRecorderSettingsContract
                 $"The {name} must be between " +
                 $"{RecordingMediaConfiguration.MinimumInputGainDb} and " +
                 $"{RecordingMediaConfiguration.MaximumInputGainDb} dB.");
-        }
-    }
-
-    private static void EnsureVector(double[] vector, string name)
-    {
-        ArgumentNullException.ThrowIfNull(vector);
-        if (vector.Length != 3 || vector.Any(value => !double.IsFinite(value)))
-        {
-            throw new InvalidDataException(
-                $"The overlay {name} must contain three finite values.");
         }
     }
 

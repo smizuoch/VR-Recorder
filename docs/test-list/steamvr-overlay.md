@@ -25,6 +25,7 @@
 - [x] native lifecycleをWrist texture publisher／pointer sourceへ適合し、frame metadataと全pointer kind／buttonを型安全に変換する
 - [x] statusを最新revisionへ集約し、最大90 Hzのmonotonic one-shot background hostでcancel／fault時にunsubscribeする
 - [x] settings v1のglobal配置をv2 fallbackへ移行し、tracking system／HMD／controller profile／左右のexact keyごとに配置を保存・選択・置換する
+- [x] OpenVRの右手系／m／Euler順／Standing origin、readback許容差、5・20 mm nudge、120・80 mm drag hysteresisをpure pose contractで固定する
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -54,6 +55,7 @@
 - [x] Adapt the native lifecycle to the wrist texture publisher/pointer source and map frame metadata plus every pointer kind/button with typed values
 - [x] Coalesce status to the latest revision and unsubscribe on cancellation/fault in a monotonic one-shot background host capped at 90 Hz
 - [x] Migrate the schema-v1 global placement to a schema-v2 fallback and persist, select, and replace placements by exact tracking-system/HMD/controller-profile/hand keys
+- [x] Fix OpenVR handedness, metres, Euler order, Standing origin, readback tolerances, 5/20 mm nudges, and 120/80 mm drag hysteresis in a pure pose contract
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

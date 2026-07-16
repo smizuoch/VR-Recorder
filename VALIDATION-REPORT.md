@@ -118,6 +118,7 @@ CMake／CTestは現在のnative graphに対して再実行済みです。FFmpeg 
 - `ole32.dll` COM解放call siteをWindowsSystem integrityとしてruntime-load manifestへ明示登録し、第三者配布物へ誤分類しないadmission
 - System／English／Japaneseのoptional schema v2 localeを同時更新へ三者マージし、CLI override優先で起動時に、保存成功後は即時にWPF string／layout resourceへ適用するsettings経路
 - schema v1のglobal VR配置をschema v2 fallbackへ無損失に移行し、tracking system／HMD model／controller input profile／左右のexact keyごとに配置を保存するsettings経路
+- OpenVR 2.15.6の右手系m座標をpitch／yaw／roll degreeから`Rz*Ry*Rx` 3x4行列へ変換し、Standing World Pin、行列readback許容差、5／20 mm nudge、120／80 mm drag hysteresisを固定するpure pose contract
 - VR hand／Wrist Dock・World PinとOSC auto discovery／loopback fallback host・portをlocalized／accessible settings controlへ投影し、overlay transformやportの同時更新を保持して個別保存する経路（OpenVR／fallback snapshot backendへのruntime適用は未実装）
 - 設計上の12初回setup項目をversion付き固定順序として扱い、厳格JSONをatomic保存して完了済みprefixから再開し、破損／順序外完了／旧versionの完了誤認をfail-safeで拒否するApp構成済み経路（画面／実機probeは未実装）
 - 初回setupの現在項目を12個の個別localized resource、1-origin step番号、全体件数、進捗率へ投影する英日／200% pseudo／high-contrast／accessible WPF画面。録画権利認可より先に未完了を表示し、閉じても録画を無効のまま保ち、画面自身には完了APIを持たせない（7・8番目のprobe接続は未実装）
