@@ -20,7 +20,8 @@ public sealed class WristUiProjector
 
     public WristUiSnapshot Project(
         RecorderStatusSnapshot status,
-        WristPage page)
+        WristPage page,
+        WristTelemetrySnapshot? telemetry = null)
     {
         ArgumentNullException.ThrowIfNull(status);
         UiActionSnapshot[] actions;
@@ -58,7 +59,8 @@ public sealed class WristUiProjector
             status.State,
             CreateStateCue(status.State),
             page,
-            actions);
+            actions,
+            telemetry);
     }
 
     private UiActionSnapshot CreateStartAction()

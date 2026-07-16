@@ -8,4 +8,5 @@ public sealed record WristUiSnapshot(
     RecorderState State,
     UiStateCue StateCue,
     WristPage Page,
-    IReadOnlyList<UiActionSnapshot> Actions);
+    IReadOnlyList<UiActionSnapshot> Actions,
+    WristTelemetrySnapshot? Telemetry = null);

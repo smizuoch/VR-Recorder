@@ -1,5 +1,6 @@
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Presentation;
+using VRRecorder.Application.Settings;
 using VRRecorder.DesignSystem;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Recording;
@@ -9,6 +10,77 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 
 public sealed class WristUiProjectorTests
 {
+    [Fact]
+    public void CarriesValidatedRecordingTelemetryIntoWristSnapshot()
+    {
+        var telemetry = new WristTelemetrySnapshot(
+            elapsedRecordingTime: TimeSpan.FromMinutes(1) +
+                                  TimeSpan.FromSeconds(2),
+            canvasWidth: 1920,
+            canvasHeight: 1080,
+            targetFramesPerSecond: 30,
+            actualFramesPerSecond: 29.97,
+            spoutSignal: WristSignalHealth.Available,
+            desktopAudioSignal: WristSignalHealth.Degraded,
+            microphoneSignal: WristSignalHealth.Unavailable,
+            encoderDisplayName: "NVENC",
+            placementMode: OverlayPlacementMode.WristDock,
+            alerts:
+            [
+                new WristAlertSnapshot(
+                    "audio.microphone.unavailable",
+                    WristAlertSeverity.Warning,
+                    new LocalizedText(
+                        "audio.microphone.unavailable",
+                        "Microphone unavailable")),
+            ]);
+        var status = RecorderStatusSnapshot.Create(
+            12,
+            RecorderState.Recording,
+            RecordingAudioControlState.FromRouting(AudioRouting.Mixed));
+
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(status, WristPage.Main, telemetry);
+
+        Assert.Same(telemetry, snapshot.Telemetry);
+        Assert.Equal("01:02", telemetry.ElapsedText);
+        Assert.Equal("1920×1080", telemetry.ResolutionText);
+        Assert.Equal("30 / 29.97 FPS", telemetry.FramesPerSecondText);
+        Assert.Equal(WristSignalHealth.Available, telemetry.SpoutSignal);
+        Assert.Equal(
+            WristSignalHealth.Degraded,
+            telemetry.DesktopAudioSignal);
+        Assert.Equal(
+            WristSignalHealth.Unavailable,
+            telemetry.MicrophoneSignal);
+        Assert.Equal(OverlayPlacementMode.WristDock, telemetry.PlacementMode);
+        Assert.Equal("NVENC", telemetry.EncoderDisplayName);
+        var alert = Assert.Single(telemetry.Alerts);
+        Assert.Equal(WristAlertSeverity.Warning, alert.Severity);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(1000.01)]
+    public void TelemetryRejectsInvalidTargetFramesPerSecond(double fps)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new WristTelemetrySnapshot(
+                TimeSpan.Zero,
+                1920,
+                1080,
+                fps,
+                0,
+                WristSignalHealth.Available,
+                WristSignalHealth.Available,
+                WristSignalHealth.Available,
+                "H.264",
+                OverlayPlacementMode.WristDock,
+                []));
+    }
+
     [Fact]
     public void RecordingMainProjectsStopMicrophoneAndMuteControls()
     {
