@@ -129,33 +129,6 @@ public partial class MainWindow : Window
         if (startup.State == RecorderState.Ready &&
             activation.State == DesktopRecordingHostState.Ready)
         {
-            try
-            {
-                var setup = await App.FirstRunSetupUi.LoadAsync(
-                    CancellationToken.None);
-                if (setup.RequiresSetup)
-                {
-                    var setupWindow = new FirstRunSetupWindow
-                    {
-                        Owner = this,
-                    };
-                    setupWindow.ShowDialog();
-                    setup = await App.FirstRunSetupUi.LoadAsync(
-                        CancellationToken.None);
-                    if (setup.RequiresSetup)
-                    {
-                        ApplySetupRequiredState(startup, activation);
-                        return;
-                    }
-                }
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
-            {
-                ApplySetupPersistenceError();
-                return;
-            }
-
             bool rightsAcknowledged;
             try
             {
@@ -193,6 +166,33 @@ public partial class MainWindow : Window
                     ApplyRightsPersistenceError();
                     return;
                 }
+            }
+
+            try
+            {
+                var setup = await App.FirstRunSetupUi.LoadAsync(
+                    CancellationToken.None);
+                if (setup.RequiresSetup)
+                {
+                    var setupWindow = new FirstRunSetupWindow
+                    {
+                        Owner = this,
+                    };
+                    setupWindow.ShowDialog();
+                    setup = await App.FirstRunSetupUi.LoadAsync(
+                        CancellationToken.None);
+                    if (setup.RequiresSetup)
+                    {
+                        ApplySetupRequiredState(startup, activation);
+                        return;
+                    }
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                ApplySetupPersistenceError();
+                return;
             }
 
             _recordingCommandsAuthorized = true;

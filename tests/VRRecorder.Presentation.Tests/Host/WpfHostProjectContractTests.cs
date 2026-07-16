@@ -635,8 +635,9 @@ public sealed class WpfHostProjectContractTests
             "App.IsRecordingRightsAcknowledgedAsync",
             StringComparison.Ordinal);
         Assert.True(
-            setupLoad >= 0 && setupLoad < rightsLoad,
-            "First-run setup must be evaluated before rights authorization.");
+            rightsLoad >= 0 && rightsLoad < setupLoad,
+            "Recording rights must be authorized before first-run setup can " +
+            "run its production test recording.");
     }
 
     [Fact]
@@ -697,6 +698,12 @@ public sealed class WpfHostProjectContractTests
             appCode);
         Assert.Contains("WristOverlayPlacementVerifier", appCode);
         Assert.Contains("_steamVrOverlayLifecycle.Value", appCode);
+        Assert.Contains(
+            "TestRecordingPlaybackFirstRunSetupProbe",
+            appCode);
+        Assert.Contains("TestRecordingPlaybackVerifier", appCode);
+        Assert.Contains("DesktopTestRecordingPlaybackRuntime", appCode);
+        Assert.Contains("WindowsRecordingPlaybackLauncher", appCode);
         Assert.Contains("LegalBundleVerificationFirstRunSetupProbe", appCode);
         Assert.Contains("AuthenticatedLegalBundleOutputMirror", appCode);
         Assert.Contains("OfflineLegalAccessFirstRunSetupProbe", appCode);

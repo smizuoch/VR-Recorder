@@ -8,7 +8,7 @@
 
 ## 1. 最初に読む結論
 
-desktop production録画の縦切りは完了した。次回はMSIX、staging foundationの再設計、FFmpeg SDK再構築から始めず、既存production App compositionへOpenVR overlayを接続して実SteamVRで最初に失敗するgateから直す。
+desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction routeは完了した。次回はMSIX、staging foundationの再設計、FFmpeg SDK再構築へ飛ばず、controllerが利用可能ならWrist Dock／左右ray／drag／再接続HILを先に閉じる。controller待ちと直列化せず、VRChat sender／audio failure matrixを次のproduction縦切りとする。
 
 2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。独立Legal review／canonical registry admission、VRChat sender、microphone／device change／privacy、SteamVR／HMD HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.5節を優先する。
 
@@ -293,6 +293,7 @@ factory selection evidenceが証明するのはactual binaryへlinkされたvari
 - current installのaction manifestと選択handをC ABI configへ変換し、SafeHandleをnative DLLより先に破棄するmanaged haptic output。Application patternのpulse countをduration間隔の単発ABI callへ展開し、native statusを型付きmanaged例外へ変換する。left／right path、2 pulse、backend failure、Dispose後のnative handle破棄を実fixtureで固定する
 - recorder statusをsingle-reader queueへ順序保持して録画threadを塞がず、Recording成功でstart、Stopping後のReadyでstop、SignalLost／NoSignal／Faultedでfaultを発火するhaptic observer。App host Ready後にschema v3のenabled／frequency／amplitude／selected handを読み、実managed native outputへ接続する。output生成／trigger失敗はTrace診断だけへ隔離し、後続transitionと録画結果を壊さない
 - first-run setup 7の明示的なVERIFY操作から同じlazy native overlay lifecycleをShowし、保存済みmode／selected hand／tracking origin／poseと実readbackが一致した場合だけ完了するproduction verifier／router接続
+- first-run setup 8を通常のproduction recording host／finalizationへ接続するverifier。host初期化後に録画権利確認を先行し、Ready→Recordingからmonotonic 3秒後にStopする。既存ffprobe検証とatomic publishを通ったSaved通知、Ready復帰、Windows既定player起動が揃った場合だけ完了し、cancel／失敗時はbest-effort Stopへ収束する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -324,7 +325,7 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | P1 | unpackaged hardware payload | promotion policyのみ | 実機証拠のidentity固定 |
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |
 | P1 | OpenVR input／overlay一式 | runtime owner、native lifecycle／texture／event／pose／haptic、production glyph、App表示接続、Dock／Pin／nudge／recenter、drag release、World Pinでの実HMD表示はGreen。実controllerでのWrist Dock／drag／左右入力、再接続HILが未完了 | Wrist操作・表示 |
-| P1 | first-run setup 7／8 | setup 7はproduction overlayのShow＋mode／hand／origin／pose readbackでGreen。setup 8はPort境界のみ | setup完走 |
+| P1 | first-run setup 7／8 | setup 7はproduction overlayのShow＋mode／hand／origin／pose readback、setup 8はproduction 3秒録画＋ffprobe済みSaved＋既定player起動までGreen。実VRChat／controllerを含む全行程HILは未完了 | setup完走 |
 | P1 | coverage／mutation／UI Automation | 90%未達／未測定 | release quality gate |
 | P1 | final Legal Bundle／承認 | candidate台帳、承認済みnative 0 | 配布・署名 |
 | P2 | MSIX／Store submission | policyのみ、packaging projectなし | Store提出 |

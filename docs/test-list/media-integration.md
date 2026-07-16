@@ -104,6 +104,7 @@
 - [x] Start／RequestStopの各blocking stream call後にAbortを再検査し、開始途中は開始済みstreamをAbort／Join、停止途中は残りのgraceful workをskipする。外部JoinAfterAbortはStart内rollback完了まで待ち、cleanup ownershipを取ったstreamへRequestAbortを再送する
 - [x] productionの同期drift callbackからfull session Abortする場合、callback stackではmuxと両workerへlogical RequestAbortだけを伝播し、prestarted cleanup workerが物理Abort／Joinを回収する。audio→video／video→audioの両方向を実worker graph＋subprocess watchdogで固定する
 - [x] inner audio／video pipelineでもblocking Start／routing／RequestStop／JoinとAbortを仲裁し、Start rollback完了までcleanupを待つ。通常Joinとcleanupで物理Abort ownershipを失わず、video captureのSenderLost／Failedが競合してもAbortをlogical winnerとしてFaultedを抑止し、capture Abortをexactly onceにする
+- [x] 録画権利確認後のfirst-run setup 8をproduction hostへ接続し、Ready→Recordingからmonotonic 3秒後にStopし、ffprobe済みSaved通知とReady復帰後だけfinal MP4をWindows既定playerへ渡す。cancel／失敗時は録画を停止へ収束させる
 
 ## English
 
@@ -213,3 +214,4 @@
 - [x] Recheck abort after every blocking stream call in Start/RequestStop, aborting and joining already-started streams during startup and skipping remaining graceful work during stop. Make external JoinAfterAbort wait for in-Start rollback and reissue RequestAbort for every stream claimed by cleanup
 - [x] Propagate only logical RequestAbort to the mux and both workers from a synchronous production drift callback, and let a prestarted cleanup worker reclaim physical Abort/Join outside the callback stack. Cover both audio-to-video and video-to-audio directions with the real worker graph and a subprocess watchdog
 - [x] Arbitrate Abort against blocking Start/routing/RequestStop/Join inside the audio/video pipelines, wait for startup rollback before cleanup returns, preserve one physical-abort owner across normal Join and cleanup, and, in video, make Abort win over concurrent SenderLost/Failed without Faulted while requesting capture abort exactly once
+- [x] Connect first-run setup step 8, after recording-rights acknowledgement, to the production host: Stop three monotonic seconds after Ready→Recording and pass the final MP4 to the Windows default player only after an ffprobe-validated Saved notification and return to Ready; converge cancellation/failure toward Stop

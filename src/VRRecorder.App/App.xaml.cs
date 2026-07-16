@@ -180,6 +180,14 @@ public partial class App
                         settingsStore,
                         new WristOverlayPlacementVerifier(
                             () => _steamVrOverlayLifecycle.Value)),
+                [FirstRunSetupStep.TestRecordingPlayback] =
+                    new TestRecordingPlaybackFirstRunSetupProbe(
+                        new TestRecordingPlaybackVerifier(
+                            new DesktopTestRecordingPlaybackRuntime(
+                                _recordingHost,
+                                _recordingNotifications),
+                            new SystemMonotonicClock(),
+                            new WindowsRecordingPlaybackLauncher())),
                 [FirstRunSetupStep.LegalBundleVerification] =
                     new LegalBundleVerificationFirstRunSetupProbe(
                         settingsStore,
