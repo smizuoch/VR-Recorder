@@ -75,7 +75,7 @@ public sealed class RecordingFileFinalizationIntegrationTests
         Directory.CreateDirectory(finalPath);
         var useCase = new RecordingFileFinalizationUseCase(
             new SameDirectoryAtomicRecordingFileFinalizer(),
-            new UnexpectedRecordingFileValidator(),
+            new AlwaysValidValidator(),
             new FileSystemRecordingRecoveryStore(),
             new UnexpectedSavedSink());
 
@@ -98,7 +98,7 @@ public sealed class RecordingFileFinalizationIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-018")]
-    public async Task InvalidFinalIsMovedToRecoveryAndNeverPublished()
+    public async Task InvalidPendingIsMovedToRecoveryAndNeverPublished()
     {
         using var directory = TemporaryDirectory.Create();
         var temporaryPath = Path.Combine(directory.Path, "take.recording.mp4");
@@ -106,7 +106,7 @@ public sealed class RecordingFileFinalizationIntegrationTests
         var recoveryPath = Path.Combine(
             directory.Path,
             "VR-Recorder-Recovery",
-            "take.mp4");
+            "take.recording.mp4");
         byte[] invalidContent = [0x00, 0x01, 0x02, 0x03];
         await File.WriteAllBytesAsync(temporaryPath, invalidContent);
         var useCase = new RecordingFileFinalizationUseCase(
@@ -150,7 +150,7 @@ public sealed class RecordingFileFinalizationIntegrationTests
         await File.WriteAllBytesAsync(temporaryPath, newContent);
         var useCase = new RecordingFileFinalizationUseCase(
             new SameDirectoryAtomicRecordingFileFinalizer(),
-            new UnexpectedRecordingFileValidator(),
+            new AlwaysValidValidator(),
             new FileSystemRecordingRecoveryStore(),
             new UnexpectedSavedSink());
 
@@ -172,7 +172,7 @@ public sealed class RecordingFileFinalizationIntegrationTests
 
     [Fact]
     [Trait("Scenario", "IT-022")]
-    public async Task ValidPendingFileIsMovedAndReopenedBeforeSaved()
+    public async Task ValidPendingIsProbedMovedAndReopenedBeforeSaved()
     {
         using var directory = TemporaryDirectory.Create();
         var temporaryPath = Path.Combine(directory.Path, "take.recording.mp4");
@@ -227,13 +227,12 @@ public sealed class RecordingFileFinalizationIntegrationTests
             Task.FromResult(RecordingFileValidation.Invalid);
     }
 
-    private sealed class UnexpectedRecordingFileValidator
-        : IRecordingFileValidator
+    private sealed class AlwaysValidValidator : IRecordingFileValidator
     {
         public Task<RecordingFileValidation> ValidateAsync(
             FinalizedRecording recording,
             CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Validation was not expected.");
+            Task.FromResult(RecordingFileValidation.Valid);
     }
 
     private sealed class ReopeningSavedSink : ISavedRecordingSink

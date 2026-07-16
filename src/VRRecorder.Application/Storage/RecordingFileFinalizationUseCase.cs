@@ -72,6 +72,31 @@ public sealed class RecordingFileFinalizationUseCase
     {
         ArgumentNullException.ThrowIfNull(recording);
 
+        var pending = new FinalizedRecording(recording.TemporaryPath);
+        var validation = mediaExpectation is null
+            ? await _validator
+                .ValidateAsync(pending, cancellationToken)
+                .ConfigureAwait(false)
+            : await _validator
+                .ValidateAsync(
+                    pending,
+                    mediaExpectation,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        if (validation == RecordingFileValidation.Invalid)
+        {
+            var quarantined = await _recovery
+                .QuarantineAsync(
+                    new RecoverableRecording(recording.TemporaryPath),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            PublishRecoveryBestEffort(
+                RecordingRecoveryReason.ValidationFailed);
+            return new RecordingFinalizationResult.RecoveryRequired(
+                RecordingRecoveryReason.ValidationFailed,
+                quarantined);
+        }
+
         FinalizedRecording finalized;
         try
         {
@@ -90,30 +115,6 @@ public sealed class RecordingFileFinalizationUseCase
                 RecordingRecoveryReason.FinalizationFailed);
             return new RecordingFinalizationResult.RecoveryRequired(
                 RecordingRecoveryReason.FinalizationFailed,
-                quarantined);
-        }
-
-        var validation = mediaExpectation is null
-            ? await _validator
-                .ValidateAsync(finalized, cancellationToken)
-                .ConfigureAwait(false)
-            : await _validator
-                .ValidateAsync(
-                    finalized,
-                    mediaExpectation,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        if (validation == RecordingFileValidation.Invalid)
-        {
-            var quarantined = await _recovery
-                .QuarantineAsync(
-                    new RecoverableRecording(finalized.FinalPath),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            PublishRecoveryBestEffort(
-                RecordingRecoveryReason.ValidationFailed);
-            return new RecordingFinalizationResult.RecoveryRequired(
-                RecordingRecoveryReason.ValidationFailed,
                 quarantined);
         }
 

@@ -133,7 +133,9 @@ public sealed class RecordingSessionStopCoordinatorTests
         await stopping;
 
         Assert.Equal(expectation, validator.Expectation);
-        Assert.Equal(finalized, validator.Recording);
+        Assert.Equal(
+            new FinalizedRecording(pending.TemporaryPath),
+            validator.Recording);
         Assert.False(validator.LegacyOverloadCalled);
     }
 

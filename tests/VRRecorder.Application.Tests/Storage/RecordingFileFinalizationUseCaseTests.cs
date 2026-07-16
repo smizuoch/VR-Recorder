@@ -7,13 +7,40 @@ namespace VRRecorder.Application.Tests.Storage;
 public sealed class RecordingFileFinalizationUseCaseTests
 {
     [Fact]
-    public async Task FinalizationFailureQuarantinesPendingWithoutValidationOrSaved()
+    public async Task PendingIsValidatedBeforeFinalNameIsPublished()
+    {
+        var calls = new List<string>();
+        var pending = new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "recording.mp4"));
+        var useCase = new RecordingFileFinalizationUseCase(
+            new OrderedRecordingFileFinalizer(calls),
+            new OrderedRecordingFileValidator(calls),
+            new FakeRecordingRecoveryStore(),
+            new OrderedSavedRecordingSink(calls));
+
+        var result = await useCase.ExecuteAsync(
+            pending,
+            CancellationToken.None);
+
+        Assert.IsType<RecordingFinalizationResult.Saved>(result);
+        Assert.Equal(
+            [
+                $"validate:{pending.TemporaryPath}",
+                $"finalize:{pending.TemporaryPath}",
+                $"saved:{pending.FinalPath}",
+            ],
+            calls);
+    }
+
+    [Fact]
+    public async Task FinalizationFailureAfterValidationQuarantinesWithoutSaved()
     {
         var recovery = new FakeRecordingRecoveryStore();
         var savedRecordings = new FakeSavedRecordingSink();
         var useCase = new RecordingFileFinalizationUseCase(
             new FailingRecordingFileFinalizer(),
-            new UnexpectedRecordingFileValidator(),
+            new StubRecordingFileValidator(RecordingFileValidation.Valid),
             recovery,
             savedRecordings);
         var pending = new PendingRecording(
@@ -73,13 +100,12 @@ public sealed class RecordingFileFinalizationUseCaseTests
     [Fact]
     public async Task InvalidMp4IsQuarantinedWithoutSavedNotification()
     {
-        var finalizer = new ControllableRecordingFileFinalizer();
         var validator = new StubRecordingFileValidator(
             RecordingFileValidation.Invalid);
         var recovery = new FakeRecordingRecoveryStore();
         var savedRecordings = new FakeSavedRecordingSink();
         var useCase = new RecordingFileFinalizationUseCase(
-            finalizer,
+            new UnexpectedRecordingFileFinalizer(),
             validator,
             recovery,
             savedRecordings);
@@ -88,9 +114,6 @@ public sealed class RecordingFileFinalizationUseCaseTests
             Path.Combine(Path.GetTempPath(), "recording.mp4"));
 
         var execution = useCase.ExecuteAsync(pending, CancellationToken.None);
-        await finalizer.WaitUntilRequestedAsync();
-        var finalized = new FinalizedRecording("recording.mp4");
-        finalizer.Complete(finalized);
 
         var result = await execution;
 
@@ -103,7 +126,7 @@ public sealed class RecordingFileFinalizationUseCaseTests
             recovery.QuarantinedRecording,
             recoveryRequired.Quarantine);
         Assert.Equal(
-            new RecoverableRecording(finalized.FinalPath),
+            new RecoverableRecording(pending.TemporaryPath),
             Assert.Single(recovery.Recordings));
         Assert.Empty(savedRecordings.Recordings);
     }
@@ -115,7 +138,7 @@ public sealed class RecordingFileFinalizationUseCaseTests
         var diagnostics = new ThrowingRecordingFinalizationEventSink();
         var useCase = new RecordingFileFinalizationUseCase(
             new FailingRecordingFileFinalizer(),
-            new UnexpectedRecordingFileValidator(),
+            new StubRecordingFileValidator(RecordingFileValidation.Valid),
             recovery,
             new FakeSavedRecordingSink(),
             diagnostics);
@@ -149,13 +172,49 @@ public sealed class RecordingFileFinalizationUseCaseTests
                     new IOException("Synthetic rename failure.")));
     }
 
-    private sealed class UnexpectedRecordingFileValidator
+    private sealed class UnexpectedRecordingFileFinalizer
+        : IRecordingFileFinalizer
+    {
+        public Task<FinalizedRecording> FinalizeAsync(
+            PendingRecording recording,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Finalization was not expected.");
+    }
+
+    private sealed class OrderedRecordingFileFinalizer(List<string> calls)
+        : IRecordingFileFinalizer
+    {
+        public Task<FinalizedRecording> FinalizeAsync(
+            PendingRecording recording,
+            CancellationToken cancellationToken)
+        {
+            calls.Add($"finalize:{recording.TemporaryPath}");
+            return Task.FromResult(new FinalizedRecording(recording.FinalPath));
+        }
+    }
+
+    private sealed class OrderedRecordingFileValidator(List<string> calls)
         : IRecordingFileValidator
     {
         public Task<RecordingFileValidation> ValidateAsync(
             FinalizedRecording recording,
-            CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Validation was not expected.");
+            CancellationToken cancellationToken)
+        {
+            calls.Add($"validate:{recording.FinalPath}");
+            return Task.FromResult(RecordingFileValidation.Valid);
+        }
+    }
+
+    private sealed class OrderedSavedRecordingSink(List<string> calls)
+        : ISavedRecordingSink
+    {
+        public Task PublishAsync(
+            FinalizedRecording recording,
+            CancellationToken cancellationToken)
+        {
+            calls.Add($"saved:{recording.FinalPath}");
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class ThrowingRecordingFinalizationEventSink
