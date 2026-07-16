@@ -30,6 +30,7 @@
 - [x] selected handのtracking system／HMD model／controller input profileを実OpenVRから取得し、必要サイズ付きpacked UTF-8 ABIからexact profile keyへ変換する
 - [x] production placement coordinatorでruntime identityからexact profile／global fallbackを選択し、Apply→mode／hand／origin／matrix readback成功後だけsettingsへ保存する
 - [x] production placement coordinatorからsmall／large nudgeと安全な既定Wrist Dockへのrecenterをruntime transformとexact profileへ適用する
+- [x] `recenter_overlay` actionのrising edgeをAppのlazy native overlay lifecycleとproduction placement coordinatorへ接続する
 - [ ] drag releaseとWrist Dock／World Pin commandから親空間を変換した確定poseをproduction placement coordinatorへ渡す
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -64,6 +65,7 @@
 - [x] Read the selected hand's tracking system, HMD model, and controller input profile from real OpenVR and convert the sized packed UTF-8 ABI into an exact profile key
 - [x] Select the exact profile or global fallback from runtime identity in the production placement coordinator and persist only after Apply plus mode/hand/origin/matrix readback succeeds
 - [x] Apply small/large nudges and recenter to the safe default Wrist Dock runtime transform and exact profile from the production placement coordinator
+- [x] Connect `recenter_overlay` rising edges to the App's lazy native overlay lifecycle and production placement coordinator
 - [ ] Convert parent space for drag release and Wrist Dock/World Pin commands, then pass the resolved pose to the production placement coordinator
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

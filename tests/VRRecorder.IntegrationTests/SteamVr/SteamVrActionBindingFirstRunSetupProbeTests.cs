@@ -22,6 +22,7 @@ public sealed class SteamVrActionBindingFirstRunSetupProbeTests
             [
                 RecordingInputContract.SteamVrToggleActionPath,
                 RecordingInputContract.SteamVrToggleMicrophoneActionPath,
+                WristOverlayInputContract.SteamVrRecenterActionPath,
             ],
             runtime.ActionPaths);
     }

@@ -230,11 +230,11 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 実装済み:
 
 - action manifestの録画、mic、overlay表示、recenter、haptic action定義
-- controller別recommended bindingのうち録画toggle。mic／overlay表示／recenter／hapticはmanifest定義済みだが、同梱bindingと実runtime検証は未完了
+- controller別recommended binding。録画toggleを左右primary button、micを左secondary／grip、recenterを右secondary／gripへ割り当て、System buttonを使わないmachine contractとfirst-runのrecord／mic／recenter active確認を固定した。overlay表示／hapticのbindingと全actionの実runtime検証は未完了
 - pinned OpenVR 2.15.6 SDK／runtime identity、candidate Legal evidence、production DLL link。独立Legal approvalとcanonical admissionは未完了
 - stable app keyを持つapplication `.vrmanifest`、current install contract、runtime generationごとのtemporary `IVRApplications`登録
 - OpenVR SDKを呼ぶnative `SteamVrInputBackend`のinit、action/application manifest、handle取得、`UpdateActionState`、digital polling
-- process-wide single runtime ownerと最大90 Hzのsingle poll thread。同じrevisionをrecord／mic actionへfan-outし、App／first-runは1つのlazy managed runtimeを共有する
+- process-wide single runtime ownerと最大90 Hzのsingle poll thread。同じrevisionをrecord／mic／recenter actionへfan-outし、App／first-runは1つのlazy managed runtimeを共有する
 - renderer／pose／input／hapticから分離したoverlay lifecycle Port。有限な0.18～0.32 m幅、hidden create、idempotent Show／Hide、失敗rollback、exactly-once Destroyを固定し、process ownerとpinned OpenVRの実`IVROverlay`へ接続済み
 - stable key／name、current installのapplication manifest path、有限幅と40-byte BGRA frame descriptorを検証し、Update／Clear／Show／Hide／Close／Destroyの所有権を固定するversioned native C ABI
 - current installを解決してC ABIを呼び、overlay SafeHandleをnative DLLより先に破棄するmanaged lifecycle wrapper
@@ -257,13 +257,14 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - lifecycle／texture／eventから分離したnative pose Portと72-byte versioned C ABI。Wrist Dockをleft／right tracked-device-relative、World PinをStanding absolute transformとして実`IVROverlay`へ適用・readbackし、mode／hand／origin、有限値、±100 m、右手系直交回転行列をABI境界とlifecycle境界でfail-closed検証する。同じprocess runtime generationへ接続し、managed lifecycleでは`OverlayTransform`と型付きreadbackへ変換する
 - selected handの実controllerとHMDからtracking system name／HMD model number／controller input profile pathを取得するdevice-profile query。同じprocess runtime generationで`GetStringTrackedDeviceProperty`を呼び、40-byte descriptor＋必要サイズ付きpacked UTF-8 C ABIからmanagedのexact `VrDeviceProfile`へ厳格decodeする
 - runtime identityからexact profileまたは旧global fallbackを選び、selected handへApplyした後にmode／hand／Standing origin／0.5 mm・0.1 degree matrix readbackを検証してからだけexact profileを保存するproduction placement coordinator。small／large nudgeは現在modeの親空間X／Yへ適用し、recenterは安全な既定Wrist Dockへ戻す。native lifecycleは同じprocess runtimeをこのApplication Portへ公開する
+- Appの録画host Ready後に起動する`recenter_overlay` observer。active rising edgeだけを同じlazy input runtimeからproduction placement commandへ渡し、lazy native overlay lifecycleを生成してApply／readback／settings保存まで通す。mic／recenter observerの片方が利用不能でもrecording inputを止めず、App終了時はobserver停止後にcoordinator／overlayを破棄する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
 未実装:
 
 - OpenVR candidateの独立Legal approval、canonical native registry admission、最終full-production staging
-- mic／overlay表示／recenter／hapticのcontroller bindingと実runtime検証
+- overlay表示／hapticのcontroller binding、mic／recenterを含む全actionの実runtime検証
 - production glyph／icon atlasを使うoverlay background hostのApp composition
 - production telemetryの採取・表示、production glyph／icon atlas
 - drag release、dock／pin commandでcontroller-relative／Standing absolute間を変換した確定poseをproduction placement coordinatorへ渡す経路
@@ -628,7 +629,7 @@ App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged 
 - Poll中shutdown、Abort、destroy。
 - callback／poll threadからのself-join禁止。
 
-現行controller bindingは`toggle_recording`しか割り当てていない。action manifestにはmic、overlay、recenter、hapticがあるがbindingがなく、`mute_all`とmove／pin／nudge commandはaction path自体がない。操作をoverlay ray eventで提供するかcontroller actionで提供するかを先に決め、全controllerでfirst-runが要求するrecord＋mic、haptic output、STOP到達性をmachine testする。
+現行controller bindingは`toggle_recording`に加えてmicとrecenterを全Index／Oculus Touch／Viveへ割り当て、first-runもrecord／mic／recenterのactive stateを要求する。overlay表示とhapticにはまだbindingがなく、`mute_all`とmove／pin／nudge commandはaction path自体がない。操作をoverlay ray eventで提供するかcontroller actionで提供するかを先に決め、全controllerでhaptic outputとSTOP到達性をmachine testする。button component pathは公式OpenVR資料とWindows上のSteamVR driver bindingで照合したが、実controllerでの誤操作性と再割当はHIL未完了である。
 
 ### 7.2 Overlay lifecycle Red
 
@@ -659,7 +660,7 @@ App host、録画、mic、first-run probeはthread-safe lazyな一つのmanaged 
 - dragなしで全操作へ到達可能。
 - first-run routerに`WristOverlayPlacement` routeを登録し、fake evidenceではなく実overlay visibility／mode／pose readback＋user confirmationで完了する。
 
-settings schema v2へのmigration、pure pose contract、native pose Port、72-byte pose C ABI、managed adapter、runtime device-profile query、production placement coordinatorはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。coordinatorは取得済みruntime identityからprofileを選び、Wrist Dock／World Pinを実OpenVRへApplyした後、mode／hand／origin／matrixが一致した場合だけprofileを保存する。small／large nudgeと安全な既定Wrist Dockへのrecenterも同じ経路で永続化する。次はdrag releaseとdock／pin commandでcontroller-relative／Standing absoluteの親空間を変換し、確定poseをcoordinatorへ渡す。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作を先に分ける。
+settings schema v2へのmigration、pure pose contract、native pose Port、72-byte pose C ABI、managed adapter、runtime device-profile query、production placement coordinator、物理recenter routeはRed→Green済みである。旧v1のglobal値は未知profile用fallbackとして保持し、tracking system／HMD model／controller input profile／left・rightのexact keyでprofileを分離した。軸、m／degree、Standing origin、行列順、readback許容差、drag hysteresis、small・large nudge量は[`ADR-0008`](adr/0008-openvr-overlay-pose-contract.md)で固定した。coordinatorは取得済みruntime identityからprofileを選び、Wrist Dock／World Pinを実OpenVRへApplyした後、mode／hand／origin／matrixが一致した場合だけprofileを保存する。small／large nudgeと安全な既定Wrist Dockへのrecenterも同じ経路で永続化し、Appでは`recenter_overlay` rising edgeがlazy lifecycleを介してこの経路へ到達する。次はdrag releaseとdock／pin commandでcontroller-relative／Standing absoluteの親空間を変換し、確定poseをcoordinatorへ渡す。move／pin／nudge用action pathは現manifestにないため、overlay rayだけで提供する操作と物理bindingへ割り当てる操作を先に分ける。
 
 ### 7.5 Haptics Red
 

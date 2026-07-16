@@ -957,6 +957,9 @@ public sealed class WpfHostProjectContractTests
             CountOccurrences(appCode, "new NativeSteamVrInputRuntime("));
         Assert.Contains("SteamVrRecordingInputAdapter", appCode);
         Assert.Contains("SteamVrMicrophoneInputAdapter", appCode);
+        Assert.Contains("SteamVrOverlayPlacementInputAdapter", appCode);
+        Assert.Contains("NativeSteamVrOverlayLifecycle", appCode);
+        Assert.Contains("WristOverlayPlacementCoordinator", appCode);
         Assert.Contains("DesktopRecordingHostState.Ready", appCode);
         Assert.Contains("StartSteamVrInput", appCode);
         Assert.Contains("AppContext.BaseDirectory", appCode);
@@ -965,6 +968,7 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains("RecordingAudioCommand.ToggleMicrophone", appCode);
         Assert.Contains("RecordingAudioCommand.ToggleMuteAll", appCode);
         Assert.Contains("RunOptionalSteamVrMicrophoneInputAsync", appCode);
+        Assert.Contains("RunOptionalSteamVrRecenterInputAsync", appCode);
         Assert.Contains("_steamVrInputLifetime.Cancel()", appCode);
         Assert.Contains("_steamVrInputTask", appCode);
 

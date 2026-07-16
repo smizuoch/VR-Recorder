@@ -46,6 +46,10 @@ public partial class App
     private readonly HttpMessageInvoker _setupOscHttp;
     private readonly CancellationTokenSource _steamVrInputLifetime = new();
     private readonly Lazy<ISteamVrInputRuntime> _steamVrInputRuntime;
+    private readonly Lazy<NativeSteamVrOverlayLifecycle>
+        _steamVrOverlayLifecycle;
+    private readonly Lazy<WristOverlayPlacementCoordinator>
+        _wristOverlayPlacement;
     private Task? _steamVrInputTask;
     private IDisposable? _trayNotificationSubscription;
     private IDisposable? _trayStatusSubscription;
@@ -117,6 +121,20 @@ public partial class App
                     NativeLibraryFileName),
                 AppContext.BaseDirectory),
             LazyThreadSafetyMode.ExecutionAndPublication);
+        _steamVrOverlayLifecycle =
+            new Lazy<NativeSteamVrOverlayLifecycle>(
+                () => new NativeSteamVrOverlayLifecycle(
+                    Path.Combine(
+                        AppContext.BaseDirectory,
+                        NativeLibraryFileName),
+                    AppContext.BaseDirectory),
+                LazyThreadSafetyMode.ExecutionAndPublication);
+        _wristOverlayPlacement =
+            new Lazy<WristOverlayPlacementCoordinator>(
+                () => new WristOverlayPlacementCoordinator(
+                    settingsStore,
+                    _steamVrOverlayLifecycle.Value),
+                LazyThreadSafetyMode.ExecutionAndPublication);
         var setupProbe = new FirstRunSetupProbeRouter(
             new Dictionary<FirstRunSetupStep, IFirstRunSetupProbe>
             {
@@ -326,6 +344,14 @@ public partial class App
             }
 
             steamVrInputTask?.GetAwaiter().GetResult();
+            if (_wristOverlayPlacement.IsValueCreated)
+            {
+                _wristOverlayPlacement.Value.Dispose();
+            }
+            if (_steamVrOverlayLifecycle.IsValueCreated)
+            {
+                _steamVrOverlayLifecycle.Value.Dispose();
+            }
         }
         finally
         {
@@ -675,10 +701,14 @@ public partial class App
         using var inputLifetime = CancellationTokenSource
             .CreateLinkedTokenSource(_steamVrInputLifetime.Token);
         var microphoneInput = Task.CompletedTask;
+        var recenterInput = Task.CompletedTask;
         try
         {
             var runtime = _steamVrInputRuntime.Value;
             microphoneInput = RunOptionalSteamVrMicrophoneInputAsync(
+                runtime,
+                inputLifetime.Token);
+            recenterInput = RunOptionalSteamVrRecenterInputAsync(
                 runtime,
                 inputLifetime.Token);
             await new SteamVrRecordingInputAdapter(runtime, _recordingInputs)
@@ -705,7 +735,8 @@ public partial class App
         finally
         {
             await inputLifetime.CancelAsync().ConfigureAwait(false);
-            await microphoneInput.ConfigureAwait(false);
+            await Task.WhenAll(microphoneInput, recenterInput)
+                .ConfigureAwait(false);
         }
     }
 
@@ -734,6 +765,39 @@ public partial class App
         {
             System.Diagnostics.Trace.TraceWarning(
                 "SteamVR microphone input is unavailable: {0}",
+                exception.Message);
+        }
+    }
+
+    private async Task RunOptionalSteamVrRecenterInputAsync(
+        ISteamVrInputRuntime runtime,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await new SteamVrOverlayPlacementInputAdapter(
+                    runtime,
+                    _wristOverlayPlacement.Value)
+                .RunAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            cancellationToken.IsCancellationRequested)
+        {
+            // Normal placement-input shutdown.
+        }
+        catch (Exception exception) when (
+            exception is SteamVrInputException or
+                SteamVrOverlayException or
+                FileNotFoundException or
+                DllNotFoundException or
+                BadImageFormatException or
+                InvalidDataException or
+                IOException or
+                UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "SteamVR recenter input is unavailable: {0}",
                 exception.Message);
         }
     }

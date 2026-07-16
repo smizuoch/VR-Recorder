@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using VRRecorder.Application.Ports;
+using VRRecorder.Application.Settings;
 using VRRecorder.DesignSystem;
 using VRRecorder.Infrastructure.SteamVr;
 
@@ -9,6 +11,60 @@ public sealed class SteamVrRecordingInputAdapterTests
 {
     private static readonly string[] ExpectedControllerTypes =
         ["knuckles", "oculus_touch", "vive_controller"];
+    private static readonly Dictionary<string,
+        (string Microphone, string Recenter)> ExpectedPlacementBindings =
+        new Dictionary<string, (string Microphone, string Recenter)>(
+            StringComparer.Ordinal)
+        {
+            ["knuckles"] = (
+                "/user/hand/left/input/b",
+                "/user/hand/right/input/b"),
+            ["oculus_touch"] = (
+                "/user/hand/left/input/y",
+                "/user/hand/right/input/b"),
+            ["vive_controller"] = (
+                "/user/hand/left/input/grip",
+                "/user/hand/right/input/grip"),
+        };
+
+    [Fact]
+    public async Task RecenterActionInvokesPlacementOnlyOnActiveRisingEdges()
+    {
+        var runtime = new ScriptedSteamVrInputRuntime(
+        [
+            new SteamVrDigitalActionState(
+                IsActive: false,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: false,
+                Changed: true),
+            new SteamVrDigitalActionState(
+                IsActive: true,
+                State: true,
+                Changed: true),
+        ]);
+        var placement = new CapturingPlacementCommands();
+        var adapter = new SteamVrOverlayPlacementInputAdapter(
+            runtime,
+            placement);
+
+        await adapter.RunAsync(CancellationToken.None);
+
+        Assert.Equal(
+            WristOverlayInputContract.SteamVrRecenterActionPath,
+            runtime.RequestedActionPath);
+        Assert.Equal(2, placement.RecenterCount);
+    }
 
     [Fact]
     public async Task MicrophoneActionDispatchesOnlyActiveRisingEdges()
@@ -250,6 +306,97 @@ public sealed class SteamVrRecordingInputAdapterTests
         }
     }
 
+    [Fact]
+    public void EveryControllerBindingIncludesMicrophoneAndRecenterActions()
+    {
+        var openVrDirectory = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "VRRecorder.Infrastructure.SteamVr",
+            "OpenVr");
+        using var manifest = JsonDocument.Parse(File.ReadAllBytes(
+            Path.Combine(openVrDirectory, "actions.json")));
+        var actionNames = manifest.RootElement
+            .GetProperty("actions")
+            .EnumerateArray()
+            .Select(action => action.GetProperty("name").GetString())
+            .ToArray();
+        Assert.Contains(
+            WristOverlayInputContract.SteamVrRecenterActionPath,
+            actionNames);
+
+        foreach (var binding in manifest.RootElement
+                     .GetProperty("default_bindings")
+                     .EnumerateArray())
+        {
+            var controllerType = binding
+                .GetProperty("controller_type")
+                .GetString()!;
+            var expected = ExpectedPlacementBindings[controllerType];
+            var bindingPath = Path.Combine(
+                openVrDirectory,
+                binding.GetProperty("binding_url").GetString()!);
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(bindingPath));
+            var sources = document.RootElement
+                .GetProperty("bindings")
+                .GetProperty(RecordingInputContract.SteamVrActionSetPath)
+                .GetProperty("sources")
+                .EnumerateArray()
+                .ToArray();
+            var outputs = sources
+                .Select(source => source.GetProperty("inputs")
+                    .GetProperty("click")
+                    .GetProperty("output")
+                    .GetString())
+                .ToArray();
+            Assert.Single(outputs, output => string.Equals(
+                output,
+                RecordingInputContract.SteamVrToggleMicrophoneActionPath,
+                StringComparison.Ordinal));
+            Assert.Single(outputs, output => string.Equals(
+                output,
+                WristOverlayInputContract.SteamVrRecenterActionPath,
+                StringComparison.Ordinal));
+            Assert.Contains(sources, source => SourceMatches(
+                source,
+                expected.Microphone,
+                RecordingInputContract
+                    .SteamVrToggleMicrophoneActionPath));
+            Assert.Contains(sources, source => SourceMatches(
+                source,
+                expected.Recenter,
+                WristOverlayInputContract.SteamVrRecenterActionPath));
+            Assert.Equal(
+                sources.Length,
+                sources.Select(source => source
+                        .GetProperty("path")
+                        .GetString())
+                    .Distinct(StringComparer.Ordinal)
+                    .Count());
+            Assert.DoesNotContain(sources, source => source
+                .GetProperty("path")
+                .GetString()?
+                .Contains("/input/system", StringComparison.Ordinal) == true);
+        }
+    }
+
+    private static bool SourceMatches(
+        JsonElement source,
+        string path,
+        string output) =>
+        string.Equals(
+            source.GetProperty("path").GetString(),
+            path,
+            StringComparison.Ordinal) &&
+        string.Equals(
+            source.GetProperty("inputs")
+                .GetProperty("click")
+                .GetProperty("output")
+                .GetString(),
+            output,
+            StringComparison.Ordinal);
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -353,6 +500,23 @@ public sealed class SteamVrRecordingInputAdapterTests
 
             Completed.Add((command, activationKind));
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingPlacementCommands
+        : IWristOverlayPlacementCommands
+    {
+        public int RecenterCount { get; private set; }
+
+        public Task<VrOverlayPlacement> RecenterAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RecenterCount++;
+            return Task.FromResult(new VrOverlayPlacement(
+                OverlayPlacementMode.WristDock,
+                WristOverlayPoseContract
+                    .CreateDefaultWristDockTransform()));
         }
     }
 }

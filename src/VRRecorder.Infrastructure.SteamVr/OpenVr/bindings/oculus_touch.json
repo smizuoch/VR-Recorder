@@ -20,11 +20,29 @@
           },
           "mode": "button",
           "path": "/user/hand/left/input/x"
+        },
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/toggle_microphone"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/left/input/y"
+        },
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/recenter_overlay"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/right/input/b"
         }
       ]
     }
   },
   "controller_type": "oculus_touch",
-  "description": "Recommended VR-Recorder recording toggle for Oculus Touch controllers through SteamVR",
+  "description": "Recommended VR-Recorder recording, microphone, and recenter bindings for Oculus Touch controllers through SteamVR",
   "name": "VR-Recorder Oculus Touch bindings"
 }

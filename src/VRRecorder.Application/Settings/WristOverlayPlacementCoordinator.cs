@@ -2,7 +2,8 @@ using VRRecorder.Application.Ports;
 
 namespace VRRecorder.Application.Settings;
 
-public sealed class WristOverlayPlacementCoordinator : IDisposable
+public sealed class WristOverlayPlacementCoordinator
+    : IWristOverlayPlacementCommands, IDisposable
 {
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly ISettingsStore _settings;

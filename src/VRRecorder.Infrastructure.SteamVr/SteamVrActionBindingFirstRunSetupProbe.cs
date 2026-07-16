@@ -11,6 +11,7 @@ public sealed class SteamVrActionBindingFirstRunSetupProbe
     [
         RecordingInputContract.SteamVrToggleActionPath,
         RecordingInputContract.SteamVrToggleMicrophoneActionPath,
+        WristOverlayInputContract.SteamVrRecenterActionPath,
     ];
     private readonly Func<ISteamVrInputRuntime> _createRuntime;
     private readonly TimeSpan _timeout;

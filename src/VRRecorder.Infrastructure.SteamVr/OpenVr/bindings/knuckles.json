@@ -20,11 +20,29 @@
           },
           "mode": "button",
           "path": "/user/hand/left/input/a"
+        },
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/toggle_microphone"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/left/input/b"
+        },
+        {
+          "inputs": {
+            "click": {
+              "output": "/actions/vrrecorder/in/recenter_overlay"
+            }
+          },
+          "mode": "button",
+          "path": "/user/hand/right/input/b"
         }
       ]
     }
   },
   "controller_type": "knuckles",
-  "description": "Recommended VR-Recorder recording toggle for Valve Index controllers",
+  "description": "Recommended VR-Recorder recording, microphone, and recenter bindings for Valve Index controllers",
   "name": "VR-Recorder Index bindings"
 }
