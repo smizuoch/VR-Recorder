@@ -9,4 +9,5 @@ public sealed record WristUiSnapshot(
     UiStateCue StateCue,
     WristPage Page,
     IReadOnlyList<UiActionSnapshot> Actions,
-    WristTelemetrySnapshot? Telemetry = null);
+    WristTelemetrySnapshot? Telemetry = null,
+    long PresentationRevision = 0);

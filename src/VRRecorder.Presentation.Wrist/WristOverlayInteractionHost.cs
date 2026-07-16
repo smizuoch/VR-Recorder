@@ -25,7 +25,7 @@ public sealed class WristOverlayInteractionHost
     private readonly HashSet<uint> _primaryButtonsDown = [];
     private WristUiSnapshot? _publishedSnapshot;
     private WristTextureLayout? _publishedLayout;
-    private long? _lastDispatchedRevision;
+    private (long Recorder, long Presentation)? _lastDispatchedRevision;
     private int _tickActive;
 
     public WristOverlayInteractionHost(
@@ -94,7 +94,10 @@ public sealed class WristOverlayInteractionHost
                     actionDispatched ||
                     _publishedSnapshot is null ||
                     _publishedLayout is null ||
-                    _lastDispatchedRevision == _publishedSnapshot.Revision)
+                    _lastDispatchedRevision ==
+                        (
+                            _publishedSnapshot.Revision,
+                            _publishedSnapshot.PresentationRevision))
                 {
                     continue;
                 }
@@ -109,7 +112,10 @@ public sealed class WristOverlayInteractionHost
                 if (handled)
                 {
                     actionDispatched = true;
-                    _lastDispatchedRevision = _publishedSnapshot.Revision;
+                    _lastDispatchedRevision =
+                        (
+                            _publishedSnapshot.Revision,
+                            _publishedSnapshot.PresentationRevision);
                 }
             }
 

@@ -92,6 +92,31 @@ public sealed class WristTextureUpdatePolicyTests
             retry.Reason);
     }
 
+    [Fact]
+    public void PresentationNavigationRendersWithoutARecorderRevisionChange()
+    {
+        var initial = Snapshot(8, RecorderState.Ready);
+        var committed = WristTextureUpdatePolicy.Evaluate(
+            previous: null,
+            initial,
+            TimeSpan.Zero).NextCursor;
+        var navigated = initial with
+        {
+            Page = WristPage.Positioning,
+            PresentationRevision = 1,
+        };
+
+        var decision = WristTextureUpdatePolicy.Evaluate(
+            committed,
+            navigated,
+            TimeSpan.FromMilliseconds(1));
+
+        Assert.True(decision.ShouldRender);
+        Assert.Equal(
+            WristTextureUpdateReason.PresentationChanged,
+            decision.Reason);
+    }
+
     [Theory]
     [InlineData(RecorderState.Recording)]
     [InlineData(RecorderState.SignalLost)]

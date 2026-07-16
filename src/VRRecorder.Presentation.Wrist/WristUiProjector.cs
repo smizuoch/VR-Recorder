@@ -5,7 +5,7 @@ using VRRecorder.Domain.Recording;
 
 namespace VRRecorder.Presentation.Wrist;
 
-public sealed class WristUiProjector
+public sealed class WristUiProjector : IWristUiSnapshotProjector
 {
     private readonly IUiLocalizer _localizer;
 
@@ -25,7 +25,17 @@ public sealed class WristUiProjector
     {
         ArgumentNullException.ThrowIfNull(status);
         UiActionSnapshot[] actions;
-        if ((status.State == RecorderState.Recording ||
+        if (page == WristPage.Positioning)
+        {
+            var positioningActions = CreatePositioningActions();
+            actions =
+                (status.State == RecorderState.Recording ||
+                 status.State == RecorderState.SignalLost) &&
+                status.AvailableActions.HasFlag(RecorderAvailableActions.Stop)
+                    ? [CreateStopAction(), .. positioningActions]
+                    : positioningActions;
+        }
+        else if ((status.State == RecorderState.Recording ||
              status.State == RecorderState.SignalLost) &&
             status.AvailableActions.HasFlag(RecorderAvailableActions.Stop))
         {
@@ -78,6 +88,43 @@ public sealed class WristUiProjector
             Tooltip: accessibleName,
             MinimumTargetDp: 56);
     }
+
+    private UiActionSnapshot[] CreatePositioningActions() =>
+    [
+        CreatePositioningAction(
+            "overlay.nudge.up",
+            UiCommandId.NudgeOverlayUp),
+        CreatePositioningAction(
+            "overlay.nudge.down",
+            UiCommandId.NudgeOverlayDown),
+        CreatePositioningAction(
+            "overlay.nudge.left",
+            UiCommandId.NudgeOverlayLeft),
+        CreatePositioningAction(
+            "overlay.nudge.right",
+            UiCommandId.NudgeOverlayRight),
+        CreatePositioningAction(
+            "overlay.recenter",
+            UiCommandId.RecenterOverlay),
+        CreatePositioningAction(
+            "common.back",
+            UiCommandId.CloseOverlayPositioning),
+    ];
+
+    private UiActionSnapshot CreatePositioningAction(
+        string semanticId,
+        UiCommandId command) =>
+        new(
+            SemanticId: semanticId,
+            Command: command,
+            IconSemanticId: semanticId,
+            ComponentRole: UiComponentRole.FilledTonalButton,
+            ColorRole: UiColorRole.Surface,
+            IsEnabled: true,
+            VisibleLabel: _localizer.Resolve($"{semanticId}.short"),
+            AccessibleName: _localizer.Resolve($"{semanticId}.accessible"),
+            Tooltip: _localizer.Resolve($"{semanticId}.tooltip"),
+            MinimumTargetDp: 56);
 
     private UiActionSnapshot CreateStopAction()
     {

@@ -7,4 +7,11 @@ public enum UiCommandId
     ToggleMuteAll,
     Cancel,
     Retry,
+    OpenOverlayPositioning,
+    CloseOverlayPositioning,
+    NudgeOverlayUp,
+    NudgeOverlayDown,
+    NudgeOverlayLeft,
+    NudgeOverlayRight,
+    RecenterOverlay,
 }

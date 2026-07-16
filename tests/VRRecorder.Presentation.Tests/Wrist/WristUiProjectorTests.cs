@@ -243,6 +243,37 @@ public sealed class WristUiProjectorTests
     }
 
     [Fact]
+    public void PositioningPageExposesNudgeRecenterAndBackActions()
+    {
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(
+                new RecorderStatusSnapshot(
+                    Revision: 3,
+                    RecorderState.Ready,
+                    RecorderAvailableActions.Start),
+                WristPage.Positioning);
+
+        Assert.Equal(
+            [
+                UiCommandId.NudgeOverlayUp,
+                UiCommandId.NudgeOverlayDown,
+                UiCommandId.NudgeOverlayLeft,
+                UiCommandId.NudgeOverlayRight,
+                UiCommandId.RecenterOverlay,
+                UiCommandId.CloseOverlayPositioning,
+            ],
+            snapshot.Actions.Select(action => action.Command));
+        Assert.All(snapshot.Actions, action =>
+        {
+            Assert.True(action.IsEnabled);
+            Assert.True(action.MinimumTargetDp >= 56);
+            Assert.False(string.IsNullOrWhiteSpace(
+                action.AccessibleName.Value));
+            Assert.False(string.IsNullOrWhiteSpace(action.Tooltip.Value));
+        });
+    }
+
+    [Fact]
     public void ReadyProjectsOneEnabledAccessibleRecordAction()
     {
         var projector = new WristUiProjector(EnglishUiLocalizer.Instance);

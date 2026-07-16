@@ -112,13 +112,26 @@ public sealed class WristOverlayInteractionHostTests
             Kind = WristPointerEventKind.ButtonUp,
         });
         source.Events.Enqueue(down);
-        var nextRevision = await host.TickAsync(
-            Snapshot(4),
+        var nextPresentation = await host.TickAsync(
+            snapshot with { PresentationRevision = 1 },
             TimeSpan.FromMilliseconds(2),
             CancellationToken.None);
 
-        Assert.True(nextRevision.ActionDispatched);
+        Assert.True(nextPresentation.ActionDispatched);
         Assert.Equal(2, commands.Commands.Count);
+
+        source.Events.Enqueue(down with
+        {
+            Kind = WristPointerEventKind.ButtonUp,
+        });
+        source.Events.Enqueue(down);
+        var nextRevision = await host.TickAsync(
+            Snapshot(4),
+            TimeSpan.FromMilliseconds(3),
+            CancellationToken.None);
+
+        Assert.True(nextRevision.ActionDispatched);
+        Assert.Equal(3, commands.Commands.Count);
     }
 
     [Fact]

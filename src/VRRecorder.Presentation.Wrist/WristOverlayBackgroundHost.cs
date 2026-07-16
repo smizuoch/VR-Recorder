@@ -9,14 +9,14 @@ public sealed class WristOverlayBackgroundHost
         (TimeSpan.TicksPerSecond + 89) / 90);
 
     private readonly IRecorderStatusSource _statuses;
-    private readonly WristUiProjector _projector;
+    private readonly IWristUiSnapshotProjector _projector;
     private readonly IWristOverlayInteractionTicker _ticker;
     private readonly IMonotonicClock _clock;
     private int _runStarted;
 
     public WristOverlayBackgroundHost(
         IRecorderStatusSource statuses,
-        WristUiProjector projector,
+        IWristUiSnapshotProjector projector,
         IWristOverlayInteractionTicker ticker,
         IMonotonicClock clock)
     {

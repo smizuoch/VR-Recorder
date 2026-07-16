@@ -7,11 +7,13 @@ public enum WristTextureUpdateReason
     None,
     InitialFrame,
     RevisionChanged,
+    PresentationChanged,
     RecordingHeartbeat,
 }
 
 public sealed record WristTextureUpdateCursor(
     long Revision,
+    long PresentationRevision,
     RecorderState State,
     TimeSpan RenderedAt);
 
@@ -32,6 +34,8 @@ public static class WristTextureUpdatePolicy
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentOutOfRangeException.ThrowIfNegative(snapshot.Revision);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            snapshot.PresentationRevision);
         if (now < TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(
@@ -54,6 +58,13 @@ public static class WristTextureUpdatePolicy
                 snapshot,
                 now,
                 WristTextureUpdateReason.RevisionChanged);
+        }
+        if (snapshot.PresentationRevision > previous.PresentationRevision)
+        {
+            return Render(
+                snapshot,
+                now,
+                WristTextureUpdateReason.PresentationChanged);
         }
 
         var recordingLike = snapshot.State is
@@ -82,6 +93,7 @@ public static class WristTextureUpdatePolicy
             reason,
             new WristTextureUpdateCursor(
                 snapshot.Revision,
+                snapshot.PresentationRevision,
                 snapshot.State,
                 now));
 
@@ -91,6 +103,8 @@ public static class WristTextureUpdatePolicy
         TimeSpan now)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(previous.Revision);
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            previous.PresentationRevision);
         if (!Enum.IsDefined(previous.State))
         {
             throw new ArgumentOutOfRangeException(
@@ -110,6 +124,12 @@ public static class WristTextureUpdatePolicy
         {
             throw new InvalidOperationException(
                 "A stale wrist snapshot cannot replace a rendered revision.");
+        }
+        if (snapshot.Revision == previous.Revision &&
+            snapshot.PresentationRevision < previous.PresentationRevision)
+        {
+            throw new InvalidOperationException(
+                "A stale wrist presentation cannot replace a rendered presentation.");
         }
         if (snapshot.Revision == previous.Revision &&
             snapshot.State != previous.State)
