@@ -353,7 +353,7 @@ void MapsScheduledFramesIntoTheSystemMemoryH264Encoder()
     CHECK(mapper.map_calls == 1);
     CHECK(mapper.observed_tick == 3);
     CHECK(mapper.mapping_destruction_count == 1);
-    CHECK(observed->observed_pts == 100'000);
+    CHECK(observed->observed_pts == 3);
     CHECK(observed->observed_y == 0x31);
 
     adapter.Abort();

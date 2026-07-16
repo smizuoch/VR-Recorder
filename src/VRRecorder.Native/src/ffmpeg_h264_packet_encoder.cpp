@@ -273,15 +273,9 @@ FfmpegH264SystemMemoryPacketEncoderAdapter::Encode(
 {
     if (aborted_.load() || finished_.load() ||
         frames_per_second_ == 0 ||
-        frame.output_tick >
-            std::numeric_limits<std::uint64_t>::max() / 1'000'000U) {
-        return {VRREC_STATUS_INVALID_STATE, 0, {}};
-    }
-    const auto timestamp =
-        frame.output_tick * 1'000'000U / frames_per_second_;
-    if (timestamp > static_cast<std::uint64_t>(
+        frame.output_tick > static_cast<std::uint64_t>(
             std::numeric_limits<std::int64_t>::max())) {
-        return {VRREC_STATUS_INVALID_ARGUMENT, 0, {}};
+        return {VRREC_STATUS_INVALID_STATE, 0, {}};
     }
 
     auto mapped = mapper_.Map(frame);
@@ -298,7 +292,9 @@ FfmpegH264SystemMemoryPacketEncoderAdapter::Encode(
         };
     }
     auto view = mapped.mapping->View();
-    view.pts = static_cast<std::int64_t>(timestamp);
+    // AVFrame timestamps are expressed in the codec context time base
+    // (1 / frames_per_second), so a CFR output tick is already the exact PTS.
+    view.pts = static_cast<std::int64_t>(frame.output_tick);
 
     const auto started = std::chrono::steady_clock::now();
     auto encoded = encoder_.EncodeNv12(view);
