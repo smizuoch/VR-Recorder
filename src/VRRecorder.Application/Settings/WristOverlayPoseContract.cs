@@ -136,6 +136,45 @@ public static class WristOverlayPoseContract
         };
     }
 
+    public static OverlayTransform ApplyDragDelta(
+        OverlayTransform transform,
+        WristOverlayDragDelta delta)
+    {
+        ValidateRuntimeTransform(transform);
+        if (!double.IsFinite(delta.RightMeters) ||
+            !double.IsFinite(delta.UpMeters))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                delta,
+                "The drag delta must contain finite metre values.");
+        }
+
+        var moved = new OverlayTransform(
+            [
+                transform.Position[0] + delta.RightMeters,
+                transform.Position[1] + delta.UpMeters,
+                transform.Position[2],
+            ],
+            (double[])transform.RotationEuler.Clone());
+        ValidateRuntimeTransform(moved);
+        return moved;
+    }
+
+    public static double DistanceFromDefaultDock(
+        OverlayTransform dockSpaceTransform)
+    {
+        ValidateRuntimeTransform(dockSpaceTransform);
+        var origin = CreateDefaultWristDockTransform().Position;
+        var deltaX = dockSpaceTransform.Position[0] - origin[0];
+        var deltaY = dockSpaceTransform.Position[1] - origin[1];
+        var deltaZ = dockSpaceTransform.Position[2] - origin[2];
+        return Math.Sqrt(
+            deltaX * deltaX +
+            deltaY * deltaY +
+            deltaZ * deltaZ);
+    }
+
     public static bool MatchesReadback(
         OverlayTransform actual,
         OverlayTransform expected)
@@ -352,3 +391,7 @@ public enum WristOverlayNudgeSize
     Small,
     Large,
 }
+
+public readonly record struct WristOverlayDragDelta(
+    double RightMeters,
+    double UpMeters);

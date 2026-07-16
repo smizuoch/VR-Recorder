@@ -155,6 +155,14 @@ public sealed class WristUiSessionTests
             });
         }
 
+        public Task<VrOverlayPlacement> DragReleaseAsync(
+            WristOverlayDragDelta delta,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(DefaultPlacement());
+        }
+
         private static VrOverlayPlacement DefaultPlacement() => new(
             OverlayPlacementMode.WristDock,
             WristOverlayPoseContract.CreateDefaultWristDockTransform());

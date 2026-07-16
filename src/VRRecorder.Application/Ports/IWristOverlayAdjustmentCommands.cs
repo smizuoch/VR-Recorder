@@ -15,4 +15,8 @@ public interface IWristOverlayAdjustmentCommands
     Task<VrOverlayPlacement> SetPlacementModeAsync(
         OverlayPlacementMode placementMode,
         CancellationToken cancellationToken);
+
+    Task<VrOverlayPlacement> DragReleaseAsync(
+        WristOverlayDragDelta delta,
+        CancellationToken cancellationToken);
 }

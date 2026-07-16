@@ -74,6 +74,13 @@ public sealed class WristOverlayPlacementCoordinator
             cancellationToken);
     }
 
+    public Task<VrOverlayPlacement> DragReleaseAsync(
+        WristOverlayDragDelta delta,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            (current, hand) => ResolveDragRelease(current, hand, delta),
+            cancellationToken);
+
     public void Dispose()
     {
         if (_disposed)
@@ -157,6 +164,66 @@ public sealed class WristOverlayPlacementCoordinator
         }
 
         _ = WristOverlayPoseContract.ToOpenVrMatrix34(placement.Transform);
+    }
+
+    private VrOverlayPlacement ResolveDragRelease(
+        VrOverlayPlacement current,
+        VrHand hand,
+        WristOverlayDragDelta delta)
+    {
+        var dockSpace = current.PlacementMode ==
+                OverlayPlacementMode.WristDock
+            ? current.Transform
+            : WristOverlayPoseContract.FromOpenVrMatrix34(
+                _runtime.ConvertPlacement(
+                    hand,
+                    OverlayPlacementMode.WristDock));
+        var movedDock = WristOverlayPoseContract.ApplyDragDelta(
+            dockSpace,
+            delta);
+        var targetMode = WristOverlayPoseContract.ResolveDragReleaseMode(
+            current.PlacementMode,
+            WristOverlayPoseContract.DistanceFromDefaultDock(movedDock));
+        if (targetMode == OverlayPlacementMode.WristDock)
+        {
+            return new VrOverlayPlacement(targetMode, movedDock);
+        }
+
+        _runtime.ApplyPlacement(
+            hand,
+            OverlayPlacementMode.WristDock,
+            movedDock);
+        try
+        {
+            return new VrOverlayPlacement(
+                OverlayPlacementMode.WorldPin,
+                WristOverlayPoseContract.FromOpenVrMatrix34(
+                    _runtime.ConvertPlacement(
+                        hand,
+                        OverlayPlacementMode.WorldPin)));
+        }
+        catch
+        {
+            TryRestorePlacement(hand, current);
+            throw;
+        }
+    }
+
+    private void TryRestorePlacement(
+        VrHand hand,
+        VrOverlayPlacement placement)
+    {
+        try
+        {
+            _runtime.ApplyPlacement(
+                hand,
+                placement.PlacementMode,
+                placement.Transform);
+        }
+        catch
+        {
+            // Preserve the conversion failure; runtime recovery is best effort.
+        }
     }
 
     private static bool MatchesReadback(

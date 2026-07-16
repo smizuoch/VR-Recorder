@@ -203,7 +203,171 @@ public sealed class WristOverlayPlacementCoordinatorTests
             VrOverlayPlacementProfiles.Resolve(
                 store.Current.Vr,
                 device,
+            VrHand.Right));
+    }
+
+    [Fact]
+    public async Task DragReleaseDetachesThroughAConvertedWorldPose()
+    {
+        var device = Device();
+        var dock = new VrOverlayPlacement(
+            OverlayPlacementMode.WristDock,
+            WristOverlayPoseContract.CreateDefaultWristDockTransform());
+        var settings = VRRecorderSettings.CreateDefault() with
+        {
+            Vr = VRRecorderSettings.CreateDefault().Vr with
+            {
+                Hand = VrHand.Right,
+                PlacementProfiles =
+                [
+                    Profile(device, VrHand.Right, dock),
+                ],
+            },
+        };
+        var world = new OverlayTransform(
+            [1.25, 1.5, -2],
+            [5, 10, 15]);
+        var store = new TrackingSettingsStore(settings);
+        var runtime = new TrackingRuntime(device)
+        {
+            ConvertedTransform = world,
+        };
+        var coordinator = new WristOverlayPlacementCoordinator(store, runtime);
+
+        var selected = await coordinator.DragReleaseAsync(
+            new WristOverlayDragDelta(0.12, 0),
+            CancellationToken.None);
+
+        Assert.Equal(OverlayPlacementMode.WorldPin, selected.PlacementMode);
+        Assert.Equal(
+            world.Position,
+            selected.Transform.Position,
+            DoublePrecisionComparer.Instance);
+        Assert.Equal(
+            world.RotationEuler,
+            selected.Transform.RotationEuler,
+            DoublePrecisionComparer.Instance);
+        Assert.Equal(
+            [(VrHand.Right, OverlayPlacementMode.WorldPin)],
+            runtime.Conversions);
+        Assert.Equal(2, runtime.Applied.Count);
+        Assert.Equal(
+            OverlayPlacementMode.WristDock,
+            runtime.Applied[0].Mode);
+        Assert.Equal(
+            0.15,
+            runtime.Applied[0].Transform.Position[0],
+            precision: 9);
+        Assert.Equal(VrHand.Right, runtime.Applied[1].Hand);
+        Assert.Equal(
+            OverlayPlacementMode.WorldPin,
+            runtime.Applied[1].Mode);
+        Assert.Equal(
+            world.Position,
+            runtime.Applied[1].Transform.Position,
+            DoublePrecisionComparer.Instance);
+        Assert.Equal(
+            selected,
+            VrOverlayPlacementProfiles.Resolve(
+                store.Current.Vr,
+                device,
                 VrHand.Right));
+    }
+
+    [Fact]
+    public async Task DragReleaseReattachesPinnedPoseInsideHysteresis()
+    {
+        var device = Device();
+        var pin = Placement(OverlayPlacementMode.WorldPin, [1, 2, 3]);
+        var settings = VRRecorderSettings.CreateDefault() with
+        {
+            Vr = VRRecorderSettings.CreateDefault().Vr with
+            {
+                Hand = VrHand.Left,
+                PlacementProfiles =
+                [
+                    Profile(device, VrHand.Left, pin),
+                ],
+            },
+        };
+        var defaultDock = WristOverlayPoseContract
+            .CreateDefaultWristDockTransform();
+        var nearDock = defaultDock with
+        {
+            Position =
+            [
+                defaultDock.Position[0] + 0.081,
+                defaultDock.Position[1],
+                defaultDock.Position[2],
+            ],
+        };
+        var store = new TrackingSettingsStore(settings);
+        var runtime = new TrackingRuntime(device)
+        {
+            ConvertedTransform = nearDock,
+        };
+        var coordinator = new WristOverlayPlacementCoordinator(store, runtime);
+
+        var selected = await coordinator.DragReleaseAsync(
+            new WristOverlayDragDelta(-0.0011, 0),
+            CancellationToken.None);
+
+        Assert.Equal(OverlayPlacementMode.WristDock, selected.PlacementMode);
+        Assert.Equal(
+            defaultDock.Position[0] + 0.0799,
+            selected.Transform.Position[0],
+            precision: 6);
+        Assert.Equal(
+            [(VrHand.Left, OverlayPlacementMode.WristDock)],
+            runtime.Conversions);
+        Assert.Single(runtime.Applied);
+        Assert.Equal(
+            selected,
+            VrOverlayPlacementProfiles.Resolve(
+                store.Current.Vr,
+                device,
+            VrHand.Left));
+    }
+
+    [Fact]
+    public async Task FailedDragConversionRestoresThePreviouslyAppliedPose()
+    {
+        var device = Device();
+        var dock = new VrOverlayPlacement(
+            OverlayPlacementMode.WristDock,
+            WristOverlayPoseContract.CreateDefaultWristDockTransform());
+        var settings = VRRecorderSettings.CreateDefault() with
+        {
+            Vr = VRRecorderSettings.CreateDefault().Vr with
+            {
+                PlacementProfiles =
+                [
+                    Profile(device, VrHand.Left, dock),
+                ],
+            },
+        };
+        var store = new TrackingSettingsStore(settings);
+        var runtime = new TrackingRuntime(device)
+        {
+            ConversionException = new InvalidOperationException(
+                "controller disconnected"),
+        };
+        var coordinator = new WristOverlayPlacementCoordinator(store, runtime);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.DragReleaseAsync(
+                new WristOverlayDragDelta(0.12, 0),
+                CancellationToken.None));
+
+        Assert.Equal(2, runtime.Applied.Count);
+        Assert.Equal(
+            OverlayPlacementMode.WristDock,
+            runtime.Applied[0].Mode);
+        Assert.Equal(
+            dock.Transform.Position,
+            runtime.Applied[1].Transform.Position);
+        Assert.Equal(0, store.SaveCount);
+        Assert.Same(settings, store.Current);
     }
 
     [Theory]
@@ -302,6 +466,10 @@ public sealed class WristOverlayPlacementCoordinatorTests
         public OverlayTransform ConvertedTransform { get; init; } =
             WristOverlayPoseContract.CreateDefaultWristDockTransform();
 
+        public Queue<OverlayTransform> ConvertedTransforms { get; } = [];
+
+        public Exception? ConversionException { get; init; }
+
         public ReadbackMismatch Mismatch { get; init; }
 
         public VrDeviceProfile ReadDeviceProfile(VrHand hand) => device;
@@ -350,8 +518,14 @@ public sealed class WristOverlayPlacementCoordinatorTests
             OverlayPlacementMode placementMode)
         {
             Conversions.Add((hand, placementMode));
+            if (ConversionException is not null)
+            {
+                throw ConversionException;
+            }
             return WristOverlayPoseContract.ToOpenVrMatrix34(
-                ConvertedTransform);
+                ConvertedTransforms.Count == 0
+                    ? ConvertedTransform
+                    : ConvertedTransforms.Dequeue());
         }
 
         private static VrHand Opposite(VrHand hand) =>

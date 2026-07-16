@@ -107,6 +107,29 @@ public sealed class WristOverlayPoseContractTests
     }
 
     [Fact]
+    public void DragDeltaMovesInParentSpaceAndMeasuresFromDefaultDock()
+    {
+        var start = WristOverlayPoseContract
+            .CreateDefaultWristDockTransform();
+
+        var moved = WristOverlayPoseContract.ApplyDragDelta(
+            start,
+            new WristOverlayDragDelta(
+                RightMeters: 0.12,
+                UpMeters: -0.03));
+
+        Assert.Equal(
+            [0.15, 0.02, -0.08],
+            moved.Position,
+            DoublePrecisionComparer.Instance);
+        Assert.Equal(start.RotationEuler, moved.RotationEuler);
+        Assert.Equal(
+            Math.Sqrt(0.12 * 0.12 + 0.03 * 0.03),
+            WristOverlayPoseContract.DistanceFromDefaultDock(moved),
+            precision: 9);
+    }
+
+    [Fact]
     public void ReadbackComparisonAllowsOnlySubMillimetreAndSubDegreeRounding()
     {
         var expected = new OverlayTransform(
