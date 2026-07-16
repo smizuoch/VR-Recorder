@@ -1573,6 +1573,7 @@ if(WIN32)
         "${native_source_root}/src/d3d11_video_frame_processor.cpp"
         "${native_source_root}/src/d3d11_nv12_frame_mapper.cpp"
         "${native_source_root}/src/keyed_mutex_video_surface.cpp"
+        "${native_source_root}/src/windows_d3d11_multithread_protection.cpp"
         "${native_source_root}/src/windows_d3d11_video_processor_port.cpp"
         "${native_source_root}/src/windows_d3d11_nv12_readback_port.cpp"
         "${native_source_root}/src/windows_d3d11_keyed_mutex_surface.cpp"

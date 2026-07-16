@@ -2,9 +2,11 @@
 #include "d3d11_nv12_frame_mapper.hpp"
 #include "windows_d3d11_video_processor_port.hpp"
 #include "windows_d3d11_keyed_mutex_surface.hpp"
+#include "windows_d3d11_multithread_protection.hpp"
 #include "windows_d3d11_nv12_readback_port.hpp"
 
 #include <d3d11.h>
+#include <d3d11_4.h>
 #include <dxgi1_2.h>
 
 #include <chrono>
@@ -160,6 +162,23 @@ HardwareDevice CreateHardwareVideoDevice()
 
     std::cerr << "no hardware D3D11 video processor adapter is available\n";
     std::abort();
+}
+
+void EnablesProtectionBeforeSharingAnImmediateContextAcrossThreads()
+{
+    const auto hardware = CreateHardwareVideoDevice();
+    ComOwner<ID3D11Multithread> multithread;
+    CHECK(SUCCEEDED(hardware.context.Get()->QueryInterface(
+        __uuidof(ID3D11Multithread),
+        reinterpret_cast<void **>(multithread.Put()))));
+    multithread.Get()->SetMultithreadProtected(FALSE);
+    CHECK(!multithread.Get()->GetMultithreadProtected());
+
+    CHECK(EnableWindowsD3d11MultithreadProtection(
+              hardware.context.Get()) == VRREC_STATUS_OK);
+    CHECK(multithread.Get()->GetMultithreadProtected());
+    CHECK(EnableWindowsD3d11MultithreadProtection(nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
 }
 
 class TextureSurface final : public VideoSurface {
@@ -683,6 +702,7 @@ void RejectsNonKeyedAndMismatchedTextures()
 
 int main()
 {
+    EnablesProtectionBeforeSharingAnImmediateContextAcrossThreads();
     ConvertsOddBgraToOwnedNv12AndPadsBeforeFit();
     PreservesLogicalRedAcrossBgraAndRgbaChannelOrder();
     BindsLazilyAndRebindsToANewDeviceOnTheSameAdapter();

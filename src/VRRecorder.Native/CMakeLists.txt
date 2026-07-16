@@ -204,6 +204,7 @@ if(WIN32)
     target_sources(
         vrrecorder_native
         PRIVATE
+            src/windows_d3d11_multithread_protection.cpp
             src/windows_d3d11_video_processor_port.cpp
             src/windows_d3d11_nv12_readback_port.cpp
             src/windows_d3d11_keyed_mutex_surface.cpp

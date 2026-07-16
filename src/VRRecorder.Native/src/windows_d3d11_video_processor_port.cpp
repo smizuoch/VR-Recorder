@@ -15,6 +15,8 @@
 #include <new>
 #include <utility>
 
+#include "windows_d3d11_multithread_protection.hpp"
+
 namespace vrrecorder::native {
 namespace {
 
@@ -142,6 +144,11 @@ public:
         device_.Get()->GetImmediateContext(context_.Put());
         if (!context_) {
             return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        const auto multithread_status =
+            EnableWindowsD3d11MultithreadProtection(context_.Get());
+        if (multithread_status != VRREC_STATUS_OK) {
+            return multithread_status;
         }
 
         auto result = device_.Get()->QueryInterface(

@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "windows_d3d11_owned_video_surface.hpp"
+#include "windows_d3d11_multithread_protection.hpp"
 
 namespace vrrecorder::native {
 namespace {
@@ -327,6 +328,11 @@ public:
         auto *context = receiver->second.receiver->GetDX11Context();
         if (source_texture == nullptr || device == nullptr || context == nullptr) {
             return VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        const auto multithread_status =
+            EnableWindowsD3d11MultithreadProtection(context);
+        if (multithread_status != VRREC_STATUS_OK) {
+            return multithread_status;
         }
         D3D11_TEXTURE2D_DESC source_descriptor {};
         source_texture->GetDesc(&source_descriptor);
