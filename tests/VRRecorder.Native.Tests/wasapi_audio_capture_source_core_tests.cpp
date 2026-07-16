@@ -306,6 +306,40 @@ void PreservesSilentDiscontinuityAndTimestampSemantics()
           (std::vector<std::uint32_t> {2, 2, 2}));
 }
 
+void SkipsAReleasedDiscontinuityPacketThatPredatesTheSession()
+{
+    auto state = std::make_shared<PortState>();
+    state->steps.push_back({
+        WasapiCapturePortResult::Ok,
+        100,
+        999'000,
+        2,
+        FloatBytes({0.25F, -0.25F, 0.5F, -0.5F}),
+        false,
+        true,
+        false,
+    });
+    state->steps.push_back({
+        WasapiCapturePortResult::Ok,
+        102,
+        1'010'000,
+        2,
+        FloatBytes({0.75F, -0.75F, 1.0F, -1.0F}),
+    });
+    auto source = Source(state);
+    CHECK(source->Start(Config()) == VRREC_STATUS_OK);
+
+    const auto read = source->Read();
+
+    CHECK(read.result == AudioCaptureReadResult::Packet);
+    CHECK(read.packet.start_frame_48k == 48);
+    CHECK(read.packet.device_position == 102);
+    CHECK(read.packet.frame_count_48k == 2);
+    CHECK(state->acquire_calls == 2);
+    CHECK(state->released_frames ==
+          (std::vector<std::uint32_t> {2, 2}));
+}
+
 void MapsAcquireAndReleaseFailures()
 {
     {
@@ -419,6 +453,7 @@ int main()
 {
     ReleasesEverySuccessfullyAcquiredBuffer();
     PreservesSilentDiscontinuityAndTimestampSemantics();
+    SkipsAReleasedDiscontinuityPacketThatPredatesTheSession();
     MapsAcquireAndReleaseFailures();
     RejectsCrossThreadReadAndCleansUpOnTheCaptureThread();
     AbortWakesAcquireAndCleanupRemainsOnTheCaptureThread();

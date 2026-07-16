@@ -25,11 +25,15 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         return CaptureNormalizationResult::InvalidFormat;
     }
 
-    const auto reset_epoch = !initialized_ || packet.discontinuity;
+    const auto followup_device_position_gap =
+        initialized_ && !packet.discontinuity &&
+        allow_followup_device_position_gap_ &&
+        SameFormat(format_, format) &&
+        packet.device_position > expected_device_position_;
+    const auto reset_epoch = !initialized_ || packet.discontinuity ||
+        followup_device_position_gap;
     if (packet.frame_count == 0 || session_start_qpc_100ns_ < 0 ||
-        (!packet.timestamp_error &&
-         (packet.qpc_100ns < 0 ||
-          packet.qpc_100ns < session_start_qpc_100ns_)) ||
+        (!packet.timestamp_error && packet.qpc_100ns < 0) ||
         (reset_epoch && packet.timestamp_error) ||
         packet.frame_count >
             std::numeric_limits<std::uint64_t>::max()) {
@@ -49,7 +53,18 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
         return CaptureNormalizationResult::InvalidPacket;
     }
 
+    if (!initialized_ && !packet.timestamp_error &&
+        packet.qpc_100ns < session_start_qpc_100ns_) {
+        return CaptureNormalizationResult::BeforeSessionEpoch;
+    }
+
+    if (!packet.timestamp_error &&
+        packet.qpc_100ns < session_start_qpc_100ns_) {
+        return CaptureNormalizationResult::InvalidPacket;
+    }
+
     if (initialized_ && !packet.discontinuity &&
+        !followup_device_position_gap &&
         (!SameFormat(format_, format) ||
          packet.device_position != expected_device_position_)) {
         return CaptureNormalizationResult::InvalidPacket;
@@ -116,6 +131,26 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
                     output_frames_,
                     previous_end_frame_48k)) {
                 return CaptureNormalizationResult::InvalidPacket;
+            }
+
+            if (followup_device_position_gap) {
+                const auto missing_input_frames =
+                    packet.device_position - expected_device_position_;
+                std::uint64_t missing_output_frames = 0;
+                std::uint64_t first_frame_after_gap = 0;
+                if (!TryScaleRound(
+                        missing_input_frames,
+                        OutputSampleRate,
+                        format.sample_rate_hz,
+                        missing_output_frames) ||
+                    !TryAdd(
+                        previous_end_frame_48k,
+                        missing_output_frames,
+                        first_frame_after_gap)) {
+                    return CaptureNormalizationResult::InvalidPacket;
+                }
+
+                previous_end_frame_48k = first_frame_after_gap;
             }
 
             start_frame_48k = std::max(
@@ -251,6 +286,7 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
     input_frames_ = new_input_frames;
     output_frames_ = new_output_frames;
     expected_device_position_ = new_expected_device_position;
+    allow_followup_device_position_gap_ = packet.discontinuity;
     normalized = CapturedStereoPacket48k {
         start_frame_48k,
         packet.device_position,
@@ -260,7 +296,7 @@ CaptureNormalizationResult StereoCaptureNormalizer48k::Normalize(
             ? std::span<const float> {}
             : std::span<const float>(normalized_samples_),
         packet.silent,
-        packet.discontinuity,
+        packet.discontinuity || followup_device_position_gap,
     };
     return CaptureNormalizationResult::Ready;
 }

@@ -37,6 +37,7 @@ struct RawCapturePacket final {
 
 enum class CaptureNormalizationResult {
     Ready,
+    BeforeSessionEpoch,
     InvalidFormat,
     InvalidPacket,
     Discontinuity,
@@ -88,6 +89,7 @@ private:
     std::uint64_t input_frames_ = 0;
     std::uint64_t output_frames_ = 0;
     std::uint64_t expected_device_position_ = 0;
+    bool allow_followup_device_position_gap_ = false;
     bool initialized_ = false;
 };
 

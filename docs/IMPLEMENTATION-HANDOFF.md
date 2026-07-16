@@ -2,15 +2,15 @@
 
 - 更新日: 2026-07-16
 - 対象branch: `main`
-- 実装基準commit: `079b785`（実Spout／WASAPI録画のoracle検証後publication）
+- 実装基準commit: `7d1f1d9`（first-run test recording production verifier）
 - 現在の判定: desktop production録画checkpoint。配布製品でもrelease候補でもない
 - 配布方針: unpackaged self-contained `win-x64` payloadで実機検証し、同一payloadの合格後だけMicrosoft Store MSIX候補へ進める
 
 ## 1. 最初に読む結論
 
-desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction routeは完了した。次回はMSIX、staging foundationの再設計、FFmpeg SDK再構築へ飛ばず、controllerが利用可能ならWrist Dock／左右ray／drag／再接続HILを先に閉じる。controller待ちと直列化せず、VRChat sender／audio failure matrixを次のproduction縦切りとする。
+desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect production WASAPI captureは完了した。次回はMSIX、staging foundationの再設計、FFmpeg SDK再構築へ飛ばず、controllerが利用可能ならWrist Dock／左右ray／drag／再接続HILを先に閉じる。controller待ちと直列化せず、VRChat sender／audio default切替・抜去・privacy failure matrixを次のproduction縦切りとする。
 
-2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。独立Legal review／canonical registry admission、VRChat sender、microphone／device change／privacy、SteamVR／HMD HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.5節を優先する。
+2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。PICO `default-capture`のdirect production WASAPI HILでは、session前packetとshort discontinuity後のdevice-position gapを修正し、3秒／48 kHz captureを500 ms間隔で10回連続成功させた。独立Legal review／canonical registry admission、VRChat sender、microphoneを含むfull mux／oracle、device change／privacy、controller HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.5節を優先する。
 
 推奨順は次のとおり。
 
@@ -201,13 +201,14 @@ coverage／mutationは今回再採取していない。前回値は[`VALIDATION-
 - 公式Spout Windows OpenGL sender、640×360 BGRA8、NVIDIA GeForce RTX 5070 Ti上の実shared textureを使用した。
 - production `vrrecorder_native.dll`からSpout snapshot／frameを取得し、D3D11 video processor、owned NV12 readback、software `h264_mf`、AAC-LC、fragmented MP4までを同一recording sessionで通した。
 - default render endpointのWASAPI loopbackへ実音声を流し、video 117 packet、audio 193 packetを生成した。
+- PICO `default-capture`では、session開始前の初回packetをRelease後に読み飛ばし、discontinuity付き96-frame packet直後の384 device-frame gapを無音欠損区間として保持した。production WASAPI sourceから3秒／48 kHzを500 ms間隔で10回連続captureした。
 - pinned oracleはH.264 640×360／30 fps／3.900秒、AAC 48 kHz stereo／4.117秒、container 4.133秒を独立processで確認した。
 - `.recording.mp4`をoracleで検証してから`real-spout-3s.mp4`へrenameし、成功後にpending pathが残らないことを確認した。
 - validator／finalizer関連Integration test 12/12、実機release smoke、`git diff --check`がGreenである。
 
 未完了:
 
-- VRChat実sender、microphone、default device change、unplug、privacy denial、無音・underrun長時間試験。
+- VRChat実sender、microphoneを含むfull mux／oracle、default device change、unplug、privacy denial、無音・underrun長時間試験。
 - NVENC／AMF／QSV、software fallback、part rollover。
 - production AppからのSteamVR overlay表示、controller input、move／pin、実HMD readability／STOP到達性。
 - full-production manifest v2以降のrelease staging、最終Hardware Validation Payload、Legal approval、MSIX。
@@ -319,7 +320,7 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | P0 | approved runtime staging | strict v1 foundationに加えactual FFmpeg artifact hashは固定済み。independent Legal admission、full-production profile／declared length／Legal anchor、repository graph builder、CLI、post-publish sealerは未完了 | reproducible full Release payload |
 | P0 | Spout2 receiver | production factoryから公式Spout senderのsnapshot／frameを取得し、recording sessionへ接続済み。VRChat senderは未検証 | VRChat frame取得 |
 | P0 | D3D11 processor | 実Spout shared textureをGPUでNV12変換・readbackし、共有immediate contextのmultithread保護を実GPU testと録画で確認済み | device lost／長時間HIL |
-| P0 | WASAPI Windows contract | default render loopbackから実AAC packetを生成済み。microphone、device change／unplug、privacy、長時間underrunは未検証 | Windows音声failure matrix |
+| P0 | WASAPI Windows contract | default render loopbackから実AAC packetを生成済み。PICO `default-capture`のdirect sourceはstartup discontinuityを含む3秒captureを10回連続で通過。microphone full mux／oracle、device change／unplug、privacy、長時間underrunは未検証 | Windows音声failure matrix |
 | P0 | production media factory | production DLLのSpout→D3D11→H.264、WASAPI→AAC、pre-header→fMP4、managed finalizationまで実録画Green。production App UI／VRChat／Legalは未完了 | product-level bring-up |
 | P1 | encoder fallback／part rollover | 現実装はterminal Abort | 基本設計§11.2適合 |
 | P1 | unpackaged hardware payload | promotion policyのみ | 実機証拠のidentity固定 |

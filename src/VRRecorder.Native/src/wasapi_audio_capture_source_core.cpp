@@ -107,6 +107,10 @@ AudioCaptureRead WasapiAudioCaptureSourceCore::Read() noexcept
         if (release_result != WasapiCapturePortResult::Ok) {
             return MapReleaseResult(release_result);
         }
+        if (normalization ==
+            CaptureNormalizationResult::BeforeSessionEpoch) {
+            continue;
+        }
         if (normalization != CaptureNormalizationResult::Ready ||
             normalized.start_frame_48k >
                 std::numeric_limits<std::uint64_t>::max() -

@@ -412,6 +412,195 @@ void RetainsThePacketAfterADevicePositionDiscontinuity()
     }
 }
 
+void LeavesTheEpochUninitializedForAValidPreSessionPacket()
+{
+    constexpr std::int64_t session_start_qpc_100ns = 8'500'000;
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        4,
+        0x0000'0004,
+    };
+    const std::vector<float> samples(2, 0.25F);
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(
+        session_start_qpc_100ns);
+    vrrecorder::native::CapturedStereoPacket48k normalized {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  100,
+                  session_start_qpc_100ns - 1'000,
+                  samples.size(),
+                  std::as_bytes(std::span<const float>(samples)),
+                  false,
+                  true,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::
+              BeforeSessionEpoch);
+    CHECK(normalized.frame_count_48k == 0);
+    CHECK(normalized.interleaved_samples.empty());
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  102,
+                  session_start_qpc_100ns + 10'000,
+                  samples.size(),
+                  std::as_bytes(std::span<const float>(samples)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(normalized.start_frame_48k == 48);
+    CHECK(normalized.device_position == 102);
+    CHECK(normalized.frame_count_48k == 2);
+}
+
+void PreservesAForwardGapAfterAShortDiscontinuityPacket()
+{
+    constexpr std::int64_t session_start_qpc_100ns = 8'750'000;
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        4,
+        0x0000'0004,
+    };
+    const std::vector<float> short_samples(96, 0.25F);
+    const std::vector<float> next_samples(480, 0.5F);
+    vrrecorder::native::StereoCaptureNormalizer48k normalizer(
+        session_start_qpc_100ns);
+    vrrecorder::native::CapturedStereoPacket48k short_packet {};
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  100,
+                  session_start_qpc_100ns,
+                  short_samples.size(),
+                  std::as_bytes(
+                      std::span<const float>(short_samples)),
+                  false,
+                  true,
+                  false,
+              },
+              short_packet) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    vrrecorder::native::CapturedStereoPacket48k after_gap {};
+
+    CHECK(normalizer.Normalize(
+              format,
+              {
+                  580,
+                  session_start_qpc_100ns + 20'000,
+                  next_samples.size(),
+                  std::as_bytes(std::span<const float>(next_samples)),
+                  false,
+                  false,
+                  false,
+              },
+              after_gap) ==
+          vrrecorder::native::CaptureNormalizationResult::Ready);
+    CHECK(short_packet.start_frame_48k == 0);
+    CHECK(short_packet.frame_count_48k == 96);
+    CHECK(after_gap.start_frame_48k == 480);
+    CHECK(after_gap.device_position == 580);
+    CHECK(after_gap.frame_count_48k == 480);
+    CHECK(after_gap.discontinuity);
+}
+
+void RejectsPositionGapsOutsideTheDiscontinuityFollowup()
+{
+    constexpr std::int64_t session_start_qpc_100ns = 8'900'000;
+    const vrrecorder::native::CapturePcmFormat format {
+        48'000,
+        1,
+        vrrecorder::native::CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        4,
+        0x0000'0004,
+    };
+    const std::vector<float> samples(96, 0.25F);
+
+    {
+        vrrecorder::native::StereoCaptureNormalizer48k normalizer(
+            session_start_qpc_100ns);
+        vrrecorder::native::CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(
+                  format,
+                  {
+                      100,
+                      session_start_qpc_100ns,
+                      samples.size(),
+                      std::as_bytes(std::span<const float>(samples)),
+                      false,
+                      false,
+                      false,
+                  },
+                  normalized) ==
+              vrrecorder::native::CaptureNormalizationResult::Ready);
+
+        CHECK(normalizer.Normalize(
+                  format,
+                  {
+                      580,
+                      session_start_qpc_100ns + 20'000,
+                      samples.size(),
+                      std::as_bytes(std::span<const float>(samples)),
+                      false,
+                      false,
+                      false,
+                  },
+                  normalized) ==
+              vrrecorder::native::CaptureNormalizationResult::
+                  InvalidPacket);
+    }
+
+    {
+        vrrecorder::native::StereoCaptureNormalizer48k normalizer(
+            session_start_qpc_100ns);
+        vrrecorder::native::CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(
+                  format,
+                  {
+                      580,
+                      session_start_qpc_100ns,
+                      samples.size(),
+                      std::as_bytes(std::span<const float>(samples)),
+                      false,
+                      true,
+                      false,
+                  },
+                  normalized) ==
+              vrrecorder::native::CaptureNormalizationResult::Ready);
+
+        CHECK(normalizer.Normalize(
+                  format,
+                  {
+                      100,
+                      session_start_qpc_100ns + 20'000,
+                      samples.size(),
+                      std::as_bytes(std::span<const float>(samples)),
+                      false,
+                      false,
+                      false,
+                  },
+                  normalized) ==
+              vrrecorder::native::CaptureNormalizationResult::
+                  InvalidPacket);
+    }
+}
+
 void RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics()
 {
     const std::vector<float> center_and_lfe {0.25F, 0.5F};
@@ -541,6 +730,9 @@ int main()
     ConvertsPackedPcm24WithSignExtension();
     ConvertsPcm24StoredInA32BitContainer();
     RetainsThePacketAfterADevicePositionDiscontinuity();
+    LeavesTheEpochUninitializedForAValidPreSessionPacket();
+    PreservesAForwardGapAfterAShortDiscontinuityPacket();
+    RejectsPositionGapsOutsideTheDiscontinuityFollowup();
     RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics();
     RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits();
     ClearsThePreviousNormalizedPacketWhenAContractCheckFails();
