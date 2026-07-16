@@ -28,7 +28,9 @@
 - [x] OpenVRの右手系／m／Euler順／Standing origin、readback許容差、5・20 mm nudge、120・80 mm drag hysteresisをpure pose contractで固定する
 - [x] 72-byte C ABIとmanaged lifecycleを介し、Wrist Dockをtracked-device-relative、World PinをStanding absolute runtime transformへ適用・readbackする
 - [x] selected handのtracking system／HMD model／controller input profileを実OpenVRから取得し、必要サイズ付きpacked UTF-8 ABIからexact profile keyへ変換する
-- [ ] profile選択、drag、nudge、recenterをproduction placement coordinatorからruntime transformとsettingsへ適用する
+- [x] production placement coordinatorでruntime identityからexact profile／global fallbackを選択し、Apply→mode／hand／origin／matrix readback成功後だけsettingsへ保存する
+- [x] production placement coordinatorからsmall／large nudgeと安全な既定Wrist Dockへのrecenterをruntime transformとexact profileへ適用する
+- [ ] drag releaseとWrist Dock／World Pin commandから親空間を変換した確定poseをproduction placement coordinatorへ渡す
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
 
@@ -60,6 +62,8 @@
 - [x] Fix OpenVR handedness, metres, Euler order, Standing origin, readback tolerances, 5/20 mm nudges, and 120/80 mm drag hysteresis in a pure pose contract
 - [x] Apply/read back Wrist Dock as a tracked-device-relative transform and World Pin as a Standing absolute transform through the 72-byte C ABI and managed lifecycle
 - [x] Read the selected hand's tracking system, HMD model, and controller input profile from real OpenVR and convert the sized packed UTF-8 ABI into an exact profile key
-- [ ] Apply profile selection, drag, nudge, and recenter to runtime transforms and settings from the production placement coordinator
+- [x] Select the exact profile or global fallback from runtime identity in the production placement coordinator and persist only after Apply plus mode/hand/origin/matrix readback succeeds
+- [x] Apply small/large nudges and recenter to the safe default Wrist Dock runtime transform and exact profile from the production placement coordinator
+- [ ] Convert parent space for drag release and Wrist Dock/World Pin commands, then pass the resolved pose to the production placement coordinator
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

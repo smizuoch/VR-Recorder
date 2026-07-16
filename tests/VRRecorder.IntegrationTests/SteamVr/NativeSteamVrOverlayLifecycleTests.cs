@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Recording;
@@ -9,6 +10,54 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
+    [Fact]
+    public async Task ProductionLifecycleDrivesPlacementCoordinatorPort()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        IWristOverlayPlacementRuntime runtime = overlay;
+        var settings = VRRecorderSettings.CreateDefault() with
+        {
+            Vr = VRRecorderSettings.CreateDefault().Vr with
+            {
+                Hand = VrHand.Right,
+                PlacementMode = OverlayPlacementMode.WorldPin,
+                Transform = new OverlayTransform(
+                    [1.25, 1.5, -2],
+                    [0, 45, 0]),
+            },
+        };
+        var store = new TrackingSettingsStore(settings);
+        using var coordinator = new WristOverlayPlacementCoordinator(
+            store,
+            runtime);
+
+        var applied = await coordinator.ApplySavedAsync(
+            CancellationToken.None);
+
+        Assert.Equal(OverlayPlacementMode.WorldPin, applied.PlacementMode);
+        var profile = Assert.Single(store.Current.Vr.PlacementProfiles);
+        Assert.Equal(VrHand.Right, profile.Hand);
+        Assert.Equal(
+            "{indexcontroller}/input/index_controller_profile.json",
+            profile.Device.ControllerInputProfilePath);
+        var readback = overlay.ReadPlacement();
+        Assert.Equal(OverlayPlacementMode.WorldPin, readback.PlacementMode);
+        Assert.True(WristOverlayPoseContract.MatchesReadback(
+            readback.Transform,
+            applied.Transform));
+    }
+
     [Fact]
     public void AppliesAndReadsTypedWristDockAndWorldPinPoses()
     {
@@ -370,6 +419,28 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         {
             mask = new WristAlphaMask(1, 1, [byte.MaxValue]);
             return true;
+        }
+    }
+
+    private sealed class TrackingSettingsStore(VRRecorderSettings initial)
+        : ISettingsStore
+    {
+        public VRRecorderSettings Current { get; private set; } = initial;
+
+        public Task<VRRecorderSettings> LoadAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Current);
+        }
+
+        public Task SaveAsync(
+            VRRecorderSettings settings,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Current = settings;
+            return Task.CompletedTask;
         }
     }
 

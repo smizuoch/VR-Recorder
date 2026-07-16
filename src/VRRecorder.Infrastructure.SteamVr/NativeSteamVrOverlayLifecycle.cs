@@ -1,11 +1,13 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
 using VRRecorder.Infrastructure.SteamVr.Native;
 
 namespace VRRecorder.Infrastructure.SteamVr;
 
-public sealed class NativeSteamVrOverlayLifecycle : IDisposable
+public sealed class NativeSteamVrOverlayLifecycle
+    : IWristOverlayPlacementRuntime, IDisposable
 {
     public const string StableOverlayKey =
         OpenVrApplicationManifest.StableAppKey + ".wrist";
@@ -257,6 +259,17 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
             }
             return result;
         }
+    }
+
+    WristOverlayPlacementReadback
+        IWristOverlayPlacementRuntime.ReadPlacement()
+    {
+        var readback = ReadPlacement();
+        return new WristOverlayPlacementReadback(
+            readback.PlacementMode,
+            readback.DockHand,
+            readback.TrackingOrigin,
+            readback.Transform);
     }
 
     public SteamVrOverlayPointerEvent? PollPointerEvent()
