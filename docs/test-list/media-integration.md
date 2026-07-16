@@ -26,7 +26,7 @@
 - [x] AAC encoding windowをmux descriptorの`frame_size`だけから導出し、別のcaller値とのsplit-brainを禁止する。実AAC encoder→muxing sink→audio sessionを安全な所有順で合成し、factory OOM／未知failure point、未開始／active破棄、最初のzero packet、Stop時Finish packet、`RecordingSubmission` fakeが`Written`として受理したpacket数との統計一致を検証する（実mux write件数は未検証）
 - [x] nonzero AAC packetとFinish packetを実fragmented MOVへ書き、別processのpinned oracleでAAC-LC／48 kHz／stereo／packet count／bitrate metadataをdemux検証する
 - [x] 48 kHz入力frameに対するAAC presented sample count完全一致を別processのpinned oracleで検証し、MP4上の末尾paddingを残さない
-- [ ] production media variantだけへAAC composition sourceとexact pinned FFmpeg import targetを接続し、portable `UNAVAILABLE` variant、ambient FFmpeg、test-only SDKへのfallbackを拒否する
+- [x] production media variantだけへAAC composition sourceとexact pinned FFmpeg import targetを接続し、portable `UNAVAILABLE` variant、ambient FFmpeg、test-only SDKへのfallbackを拒否する
 - [x] AACのSkipSamples side dataをaudio-only／exact 10-byteのtyped・owned値としてmuxまで保持し、side-data-only／unknown／wrong-size／duplicate／video side dataをfail-closedにする
 - [x] AACの`frame_size`／`initial_padding_samples`をdescriptorへ保持し、bounded negative priming PTS／DTSをmuxへ維持しながらpresentation 0未満をA/V drift観測だけから除外する
 - [x] portable mux seamでheader後のvideo／audio実time baseをreadbackし、canonical packetを変更せずrescale portへ渡し、fake rescale後のsentinel／end overflow／duration 0／DTS衝突をinterleaved write前に拒否する
@@ -129,7 +129,7 @@
 - [x] Derive the AAC encoding window only from the mux descriptor's `frame_size`, preventing split-brain caller values; compose the real AAC encoder, muxing sink, and audio session in safe ownership order; and verify factory OOM/unknown failure points, never-started/active destruction, initial zero-packet buffering, Finish packets on Stop, and agreement with the packet count accepted as `Written` by a `RecordingSubmission` fake (real-mux write counts remain unverified)
 - [x] Write nonzero AAC and Finish packets into a real fragmented MOV and use a separately pinned process oracle to demux-check AAC-LC, 48 kHz, stereo, packet count, and bitrate metadata
 - [x] Verify exact AAC presented-sample-count equality for 48 kHz input frames with the separately pinned process oracle, leaving no MP4-level tail padding
-- [ ] Attach the AAC composition sources and exact pinned FFmpeg import targets only to the production media variant, rejecting the portable `UNAVAILABLE` variant, ambient FFmpeg, and test-only-SDK fallback
+- [x] Attach the AAC composition sources and exact pinned FFmpeg import targets only to the production media variant, rejecting the portable `UNAVAILABLE` variant, ambient FFmpeg, and test-only-SDK fallback
 - [x] Carry AAC SkipSamples as audio-only, exactly 10-byte typed owned data through muxing while failing closed on side-data-only, unknown, wrong-size, duplicate, or video side data
 - [x] Carry AAC `frame_size`/`initial_padding_samples`, preserve the bounded negative priming PTS/DTS for muxing, and exclude pre-presentation-zero packets only from A/V drift observation
 - [x] In the portable mux seam, read back actual video/audio time bases after the header, pass immutable canonical packets into the rescale port, and reject fake-rescale sentinels, end-time overflow, zero duration, or DTS collisions before interleaved write

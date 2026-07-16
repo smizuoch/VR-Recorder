@@ -380,6 +380,12 @@ FfmpegCodecIoResult LibavcodecEncoderPort::ReceivePacket(
         destination.size = static_cast<int>(source.size);
     }
 
+    // Media Foundation H.264 can omit output-sample duration even for a
+    // configured CFR stream. One encoded video packet represents one frame.
+    if (impl_->context->codec_type == AVMEDIA_TYPE_VIDEO &&
+        impl_->received_packet->duration == 0) {
+        impl_->received_packet->duration = 1;
+    }
     av_packet_rescale_ts(
         impl_->received_packet,
         impl_->context->time_base,

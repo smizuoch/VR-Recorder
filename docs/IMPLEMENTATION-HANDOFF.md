@@ -1,6 +1,6 @@
 # VR-Recorder 実装引き継ぎ書
 
-- 更新日: 2026-07-15
+- 更新日: 2026-07-16
 - 対象branch: `main`
 - 実装基準commit: `b1e07eb`（Windows production／test-only oracle FFmpeg SDKの再現・hash契約）
 - 現在の判定: 実装checkpoint。録画可能な配布製品でも、release候補でもない
@@ -8,25 +8,20 @@
 
 ## 1. 最初に読む結論
 
-次回はMSIXやOpenVR overlayから始めない。strict runtime stagingの基盤は今回完了したため作り直さず、最初にproduction録画経路を成立させる。
+次回はMSIXやOpenVR overlayから始めない。strict runtime stagingの基盤は作り直さず、実行可能なrelease smokeで最初に失敗するproduction gateから直す。
 
-2026-07-15 checkpointでは、FFmpeg 8.1.2のWindows production SDKと別rootのtest-only oracle SDKを実際にMSVCで再現buildし、source／recipe／toolchain／artifact identityを固定するところまで完了した。portable H.264、software `h264_mf` Port、pre-header coordinator、D3D11 processor Port、structured encoder probeの下位単位も実装済みである。ただし、FFmpegの独立Legal reviewとcanonical registry admission、production media factoryへのAAC／H.264 attachment、3秒のWindows実A/V MP4は未完了である。詳細と再開地点は「2.4 2026-07-15停止checkpoint」を優先して読む。
+2026-07-16 checkpointでは、証跡付きのFFmpeg／Spout2／OpenVR SDKを使うfull-production configureと`vrrecorder_native.dll`のMSVC Release compile／linkが成功した。実`h264_mf`へ90枚のNV12 frame、AACへ3秒の48 kHz stereo PCMを渡してfragmented MP4を生成し、別root・別processのpinned oracleでH.264／AACをdecodeするWindows testもGreenである。`h264_mf`がpacket durationを0で返す場合はvideoだけを1 codec tickへ補完し、CFR input frameにも1 tickのdurationを明示した。FFmpegの独立Legal review／canonical registry admission、実Spout sender／WASAPI deviceを使うdesktop録画、Windows GPU／SteamVR／HMD HILは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「3秒A/V未完了」という記述より本段落を優先する。
 
 推奨順は次のとおり。
 
-1. actual FFmpeg source／recipe／binary hash、LGPL notice、source offerをcandidate Legal evidenceへ結合し、実在するticket／requester／independent reviewerからだけapprovalを導出する。
-2. Legal admissionがGreenになった後、AAC 3 sourceとcanonical `FFmpeg::avcodec`／`avutil`／`swresample`をproduction media variantへliteralに接続する。
-3. 実装済みsoftware `h264_mf` PortとH.264 attachment planをproduction variantへ接続する。
-4. software H.264とAACのA/V packetを実装済み`PreHeaderCoordinator`からfragmented MP4 muxerへ接続し、3秒scratch fileをWindows oracleでdecodeする。
-5. `production_media_backend.cpp`を実装し、既存WASAPIをWindows COM failure seamと実device試験で閉じる。
-6. privateなunpackaged `win-x64` directoryでdesktop操作による3秒録画をbring-upする。この段階はまだpromotion用の実機合格証拠にしない。
-7. 3秒production MP4成立後にmanifest v2／declared length／Legal anchor、PE admission、repository-derived graph builder、staging CLI、post-publish sealerをRedから追加する。full-production role closureのGreenは全dependency取得後まで保留する。
-8. 実Spout2 receiverを実装し、実装済みD3D11 processor／keyed-mutex経路へ接続してWindows GPU HILを通す。
-9. D3D11 processor成立後にNVENC／AMF／QSVのsame-adapter経路とproduction structured probe factoryを実装する。
-10. OpenVR input／overlay／renderer／haptics／move・pinを実装する。
-11. full-production staging profileとtwo-phase Release publishを全actual artifactで通す。
-12. 全機能を含むunpackaged directoryを再生成・再identity化し、Windows／GPU／VRChat／SteamVR／HMDの最終Hardware Validation Payloadとして合格させる。
-13. その合格payloadだけを別projectでMSIXへ包む。
+1. 既存のfull-production build directoryとSDKを再利用し、実Spout sender／WASAPI deviceからdesktop操作で3秒MP4を作る。
+2. その実行で最初に失敗したgateだけをRed→最小Greenにし、対象test／subsystem gate後に1コミットする。
+3. 実録画のpending fileをpinned oracleでprobe／decodeし、成功後だけfinal pathへ公開する。
+4. manifest v2／declared length／Legal anchor、PE admission、repository-derived graph builder、staging CLI、post-publish sealerを縦切りで追加する。
+5. OpenVR overlayへproduction glyph／renderer／App composition／move・pinを接続する。既に実装済みのinput／pose／recenter／hapticsは作り直さない。
+6. full-production staging profileとtwo-phase Release publishを全actual artifactで通す。
+7. 全機能を含むunpackaged directoryを再生成・再identity化し、Windows／GPU／VRChat／SteamVR／HMDの最終Hardware Validation Payloadとして合格させる。
+8. 実在するticket／requester／independent reviewerからLegal approvalを取得し、合格payloadだけを別projectでMSIXへ包む。
 
 この順序は「OpenVRを後回しにしてよい」という意味ではない。OpenVR overlay、Wrist renderer、haptics、move／pinは明確な未実装release gateである。ただし、録画backendとoverlay backendを同時に立ち上げると、Windows／GPU／SteamVRの失敗原因が混ざる。まずdesktop操作で3秒MP4を確定できる状態を作り、その同じ状態機械へOpenVRを接続する。
 
@@ -284,15 +279,15 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 
 | 段階 | Gate | 現在の証拠 | 閉じるまでできないこと |
 |---|---|---|---|
-| P0 | production AAC接続 | real encoder→sink→実MOV、Stop drain／trailer、pinned demux／decode oracle、3秒presented sampleはGreen。Windows actual SDKも再現済み。Legal admission／main DLL link／production factoryは未完了 | 実録画backend |
-| P0 | H.264 encoder／AVCC契約 | portable converter／SPS crop、software `h264_mf` Port、NV12 frame、packet／descriptor、production attachment planはGreen。main DLL attachmentとWindows encode／decodeは未完了 | MP4 video stream |
+| P0 | production AAC接続 | AAC sourceとcanonical FFmpeg targetはproduction variantへ接続済み。real encoder→実MOV、3秒presented sample、別process decode、full-production DLL linkはGreen。独立Legal admissionは未完了 | Release admission |
+| P0 | H.264 encoder／AVCC契約 | software `h264_mf`、NV12、AVCC、production attachment、90-frame Windows encode／別process decode、full-production DLL linkはGreen。実capture surface／GPU HILは未完了 | 実映像入力の証明 |
 | P0 | hardware encoder identity／probe | ADRのcodec identityに加え、structured evidence pipeline、deterministic NV12、software probe sessionはGreen。production probe factoryとNVENC／AMF／QSV実SDK／実機は未完了 | 正しいprobe／表示／fallback |
-| P0 | 実encoder→mux composition | AAC実MOVとpre-header／H.264 sink compositionはGreen。Windows actual H.264＋AAC packetによる3秒A/V fileと別process decodeは未完了 | 3秒A/V MP4のdecode証明 |
+| P0 | 実encoder→mux composition | Windows actual `h264_mf`＋AACによる3秒fragmented MP4と別process decodeはGreen。実Spout／WASAPI入力からのdesktop recordingは未完了 | 実device録画 |
 | P0 | approved runtime staging | strict v1 foundationに加えactual FFmpeg artifact hashは固定済み。independent Legal admission、full-production profile／declared length／Legal anchor、repository graph builder、CLI、post-publish sealerは未完了 | reproducible full Release payload |
 | P0 | Spout2 receiver | C ABIとpumpのみ、factory placeholder | VRChat frame取得 |
 | P0 | D3D11 processor | Windows video processor Port、owned NV12、keyed-mutex surfaceとfailure identityは実装・MSVC compile済み。Spout接続とWindows GPU HILは未完了 | RGBA shared texture→NV12 |
 | P0 | WASAPI Windows contract | 実sourceはあるがCOM注入・実機証拠なし | Windows音声release gate |
-| P0 | production media factory | `CreateMediaBackend`がplaceholder | EXEで録画 |
+| P0 | production media factory | full-production factory sourceのMSVC Release compile／linkはGreen。実Spout sender／WASAPI deviceを使うApp bring-upは未完了 | EXE実録画の証明 |
 | P1 | encoder fallback／part rollover | 現実装はterminal Abort | 基本設計§11.2適合 |
 | P1 | unpackaged hardware payload | promotion policyのみ | 実機証拠のidentity固定 |
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |

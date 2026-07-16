@@ -179,6 +179,7 @@ FfmpegH264PacketEncoderWrite FfmpegH264PacketEncoder::EncodeNv12(
     }
     auto status = CopySystemMemoryNv12FrameToFfmpeg(frame, *impl_->frame);
     if (status == VRREC_STATUS_OK) {
+        impl_->frame->duration = 1;
         status = impl_->session->PrepareFrame(*impl_->frame);
     }
     if (status != VRREC_STATUS_OK) {

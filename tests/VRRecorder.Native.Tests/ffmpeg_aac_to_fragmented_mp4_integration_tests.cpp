@@ -326,7 +326,8 @@ std::string ShellQuote(const std::filesystem::path &path)
 FILE *OpenProcessPipe(const std::string &command)
 {
 #if defined(_WIN32)
-    return _popen(command.c_str(), "r");
+    const auto quoted_command = '"' + command + '"';
+    return _popen(quoted_command.c_str(), "r");
 #else
     return popen(command.c_str(), "r");
 #endif

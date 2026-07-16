@@ -99,6 +99,7 @@ public:
     {
         ++prepare_calls;
         observed_pts = frame.pts;
+        observed_duration = frame.duration;
         observed_y = frame.data[0][0];
         return prepare_status;
     }
@@ -139,6 +140,7 @@ public:
     std::size_t finish_calls = 0;
     std::size_t abort_calls = 0;
     std::int64_t observed_pts = -1;
+    std::int64_t observed_duration = -1;
     std::uint8_t observed_y = 0;
 };
 
@@ -237,6 +239,7 @@ void UsesOpenTimeExtradataAndEncodesOwnedNv12()
     CHECK(observed->prepare_calls == 1);
     CHECK(observed->encode_calls == 1);
     CHECK(observed->observed_pts == 7);
+    CHECK(observed->observed_duration == 1);
     CHECK(observed->observed_y == 0x23);
 
     auto next_session = std::make_unique<FakeCodecSession>();
