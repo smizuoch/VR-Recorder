@@ -153,6 +153,26 @@ public:
                 static_cast<vr::VROverlayHandle_t>(handle)));
     }
 
+    vrrec_status_t SetOverlayBgraTexture(
+        std::uint64_t handle,
+        const OpenVrBgraTextureFrame &frame) noexcept override
+    {
+        (void)handle;
+        (void)frame;
+        return initialized_
+            ? VRREC_STATUS_BACKEND_UNAVAILABLE
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t ClearOverlayTexture(
+        std::uint64_t handle) noexcept override
+    {
+        (void)handle;
+        return initialized_
+            ? VRREC_STATUS_BACKEND_UNAVAILABLE
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
     vrrec_status_t AddApplicationManifest(
         std::string_view absolute_path,
         bool temporary) noexcept override

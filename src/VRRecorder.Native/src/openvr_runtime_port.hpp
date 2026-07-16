@@ -3,12 +3,14 @@
 
 #include "openvr_input_port.hpp"
 #include "openvr_overlay_lifecycle_port.hpp"
+#include "openvr_overlay_texture_port.hpp"
 
 namespace vrrecorder::native {
 
 class OpenVrRuntimePort
     : public OpenVrInputPort,
-      public OpenVrOverlayLifecyclePort {
+      public OpenVrOverlayLifecyclePort,
+      public OpenVrOverlayTexturePort {
 public:
     ~OpenVrRuntimePort() override = default;
 };

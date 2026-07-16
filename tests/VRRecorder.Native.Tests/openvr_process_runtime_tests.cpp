@@ -109,6 +109,27 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t SetOverlayBgraTexture(
+        std::uint64_t handle,
+        const OpenVrBgraTextureFrame &frame) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-texture:" + std::to_string(handle) + ':' +
+            std::to_string(frame.width) + 'x' +
+            std::to_string(frame.height) + ':' +
+            std::to_string(frame.stride_bytes) + ':' +
+            std::to_string(frame.pixel_bytes_size));
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t ClearOverlayTexture(
+        std::uint64_t handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-clear:" + std::to_string(handle));
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t SetActionManifestPath(
         std::string_view path) noexcept override
     {
@@ -502,6 +523,52 @@ void RegistersTheApplicationBeforeComposingAnOverlay()
     (void)raw;
 }
 
+void RoutesOverlayTextureThroughTheSharedRuntimeGeneration()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrProcessOverlayLifecycle(
+        runtime,
+        "C:/app/OpenVr/steamvr.vrmanifest",
+        config,
+        status);
+    std::vector<std::uint8_t> pixels(1024U * 512U * 4U, 0x5a);
+    const auto frame = OpenVrBgraTextureFrame {
+        pixels.data(),
+        pixels.size(),
+        1024,
+        512,
+        4096,
+    };
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_OK);
+    CHECK(overlay->Show() == VRREC_STATUS_OK);
+    overlay.reset();
+
+    CHECK((state->calls == std::vector<std::string> {
+        "initialize",
+        "application:C:/app/OpenVr/steamvr.vrmanifest:temporary",
+        "overlay-create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
+        "overlay-width:91:0.220000",
+        "overlay-texture:91:1024x512:4096:2097152",
+        "overlay-show:91",
+        "overlay-clear:91",
+        "overlay-hide:91",
+        "overlay-destroy:91",
+        "shutdown",
+    }));
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
 void ApplicationRegistrationFailureDoesNotCreateAnOverlay()
 {
     auto state = std::make_shared<RawState>();
@@ -674,6 +741,7 @@ int main()
     SlowConsumerSkipsToTheLatestRevisionWithoutBlockingTheOwner();
     SharesOneRuntimeGenerationWithOverlayLifecycleClients();
     RegistersTheApplicationBeforeComposingAnOverlay();
+    RoutesOverlayTextureThroughTheSharedRuntimeGeneration();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
     FailsClosedBeforeAcquiringAReference();
     return 0;

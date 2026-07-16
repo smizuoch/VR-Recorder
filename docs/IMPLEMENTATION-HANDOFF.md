@@ -242,7 +242,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - 解決済みthemeとallowlist済みraster providerだけを入力にするopaque BGRA compositor。英日、200% text scale、RTL、high contrast、missing asset fail-closed、synthetic golden SHA-256を固定済み
 - elapsed、canvas resolution、target／actual FPS、Spout／desktop audio／mic health、warning／fault、placement modeとInvariant表示文字列を保持する検証済みWrist telemetry snapshot
 - 初回／revision変化は即時、Recording／SignalLost中だけ100 ms周期とし、publish成功後だけnext cursorを採用できるpure texture update policy
-- lifecycle Portと分離したnative texture Port。1024×512 BGRA／stride／bufferを検証し、成功後だけtexture-set、Clear冪等、CloseでClear→Hide→Destroy、Clear失敗時も後段cleanup継続を固定済み
+- lifecycle Portと分離したnative texture Port。1024×512 BGRA／stride／bufferを検証し、成功後だけtexture-set、Clear冪等、CloseでClear→Hide→Destroy、Clear失敗時も後段cleanup継続を固定し、input／lifecycleと同じprocess-wide OpenVR ownerのruntime generationへ接続済み
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 

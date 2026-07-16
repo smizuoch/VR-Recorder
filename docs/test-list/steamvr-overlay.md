@@ -13,7 +13,7 @@
 - [x] 解決済みtheme／raster assetだけを受け取るBGRA compositorをgolden hash、英日、200%、RTL、high contrast、missing assetで固定する
 - [x] elapsed／resolution／target・actual FPS／Spout・audio・mic health／alert／placementを検証済みWrist snapshotへ保持する
 - [x] 初回／revision変化を即時、Recording／SignalLostだけを100 ms周期にするpure update policyを固定する
-- [x] BGRA frame検証、texture-set commit、冪等Clear、Clear→Hide→Destroyを独立native texture Portで固定する
+- [x] BGRA frame検証、texture-set commit、冪等Clear、Clear→Hide→Destroyを独立native texture Portで固定し、process-wide OpenVR ownerへ接続する
 - [ ] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新する
 - [ ] mouse／ray eventをhit-testして共通application commandへdispatchする
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
@@ -33,7 +33,7 @@
 - [x] Fix the resolved-theme/raster-asset-only BGRA compositor with a golden hash, English/Japanese, 200%, RTL, high contrast, and missing-asset tests
 - [x] Carry elapsed time, resolution, target/actual FPS, Spout/audio/mic health, alerts, and placement in a validated wrist snapshot
 - [x] Fix a pure update policy that renders first/new revisions immediately and only Recording/SignalLost at 100 ms intervals
-- [x] Fix BGRA validation, texture-set commit, idempotent Clear, and Clear→Hide→Destroy in an independent native texture Port
+- [x] Fix BGRA validation, texture-set commit, idempotent Clear, and Clear→Hide→Destroy in an independent native texture Port connected to the process-wide OpenVR owner
 - [ ] Update a 1024×512 BGRA texture on state changes and at 10 Hz while recording
 - [ ] Hit-test mouse/ray events and dispatch shared application commands
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms

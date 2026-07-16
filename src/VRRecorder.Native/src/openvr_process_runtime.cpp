@@ -271,6 +271,24 @@ public:
             : api_->DestroyOverlay(handle);
     }
 
+    vrrec_status_t SetOverlayBgraTexture(
+        std::uint64_t handle,
+        const OpenVrBgraTextureFrame &frame) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->SetOverlayBgraTexture(handle, frame);
+    }
+
+    vrrec_status_t ClearOverlayTexture(std::uint64_t handle) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->ClearOverlayTexture(handle);
+    }
+
     void Release() noexcept
     {
         std::thread poll_thread;
@@ -598,6 +616,56 @@ private:
     bool acquired_ = false;
 };
 
+class OpenVrProcessOverlayTexturePort final
+    : public OpenVrOverlayTexturePort {
+public:
+    explicit OpenVrProcessOverlayTexturePort(
+        std::shared_ptr<OpenVrProcessRuntime> runtime) noexcept
+        : runtime_(std::move(runtime))
+    {
+    }
+
+    ~OpenVrProcessOverlayTexturePort() override
+    {
+        if (acquired_) {
+            runtime_->Release();
+        }
+    }
+
+    vrrec_status_t Acquire() noexcept
+    {
+        if (acquired_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = runtime_->Acquire();
+        if (status == VRREC_STATUS_OK) {
+            acquired_ = true;
+        }
+        return status;
+    }
+
+    vrrec_status_t SetOverlayBgraTexture(
+        std::uint64_t handle,
+        const OpenVrBgraTextureFrame &frame) noexcept override
+    {
+        return acquired_
+            ? runtime_->SetOverlayBgraTexture(handle, frame)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t ClearOverlayTexture(
+        std::uint64_t handle) noexcept override
+    {
+        return acquired_
+            ? runtime_->ClearOverlayTexture(handle)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+private:
+    std::shared_ptr<OpenVrProcessRuntime> runtime_;
+    bool acquired_ = false;
+};
+
 }
 
 std::shared_ptr<OpenVrProcessRuntime> CreateOpenVrProcessRuntime(
@@ -696,14 +764,27 @@ CreateOpenVrProcessOverlayLifecycle(
     }
 
     auto overlay_port = CreateOpenVrProcessOverlayLifecyclePort(
-        std::move(runtime),
+        runtime,
         status);
     if (!overlay_port) {
+        return nullptr;
+    }
+
+    auto texture_port = std::unique_ptr<OpenVrProcessOverlayTexturePort>(
+        new (std::nothrow) OpenVrProcessOverlayTexturePort(
+            std::move(runtime)));
+    if (!texture_port) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    status = texture_port->Acquire();
+    if (status != VRREC_STATUS_OK) {
         return nullptr;
     }
     return CreateOpenVrOverlayLifecycle(
         config,
         std::move(overlay_port),
+        std::move(texture_port),
         status);
 }
 
