@@ -1,4 +1,5 @@
 #include "steamvr_input_backend.hpp"
+#include "steamvr_haptic_backend.hpp"
 #include "openvr_overlay_backend.hpp"
 
 namespace vrrecorder::native {
@@ -6,6 +7,15 @@ namespace vrrecorder::native {
 std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
     const vrrec_steamvr_input_config_v1 &config,
     vrrec_status_t &status)
+{
+    (void)config;
+    status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    return nullptr;
+}
+
+std::unique_ptr<SteamVrHapticBackend> CreateSteamVrHapticBackend(
+    const SteamVrHapticConfig &config,
+    vrrec_status_t &status) noexcept
 {
     (void)config;
     status = VRREC_STATUS_BACKEND_UNAVAILABLE;

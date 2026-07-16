@@ -1684,6 +1684,7 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_openvr_steamvr_input_backend_core
     openvr_steamvr_input_backend_core_tests.cpp
+    "${native_source_root}/src/openvr_steamvr_haptic_backend_core.cpp"
     "${native_source_root}/src/openvr_steamvr_input_backend_core.cpp")
 target_compile_features(
     vrrecorder_native_openvr_steamvr_input_backend_core PRIVATE cxx_std_20)

@@ -1,4 +1,5 @@
 #include "openvr_steamvr_input_backend_core.hpp"
+#include "openvr_steamvr_haptic_backend_core.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -112,6 +113,88 @@ private:
     std::shared_ptr<FakePortState> state_;
 };
 
+class FakeHapticPort final : public OpenVrHapticPort {
+public:
+    explicit FakeHapticPort(std::shared_ptr<FakePortState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    vrrec_status_t Initialize() noexcept override
+    {
+        state_->calls.emplace_back("haptic-initialize");
+        return initialize_status;
+    }
+
+    vrrec_status_t AddApplicationManifest(
+        std::string_view absolute_path,
+        bool temporary) noexcept override
+    {
+        state_->calls.emplace_back(
+            "haptic-application:" + std::string(absolute_path) +
+            (temporary ? ":temporary" : ":persistent"));
+        return application_manifest_status;
+    }
+
+    vrrec_status_t SetActionManifestPath(
+        std::string_view absolute_path) noexcept override
+    {
+        state_->calls.emplace_back(
+            "haptic-manifest:" + std::string(absolute_path));
+        return manifest_status;
+    }
+
+    vrrec_status_t GetHapticActionHandle(
+        std::string_view action_path,
+        std::uint64_t &handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "haptic-action:" + std::string(action_path));
+        handle = action_handle;
+        return action_status;
+    }
+
+    vrrec_status_t GetInputSourceHandle(
+        std::string_view input_source_path,
+        std::uint64_t &handle) noexcept override
+    {
+        state_->calls.emplace_back(
+            "haptic-source:" + std::string(input_source_path));
+        handle = source_handle;
+        return source_status;
+    }
+
+    vrrec_status_t TriggerHapticVibrationAction(
+        std::uint64_t action,
+        std::uint64_t source,
+        const OpenVrHapticPulse &pulse) noexcept override
+    {
+        state_->calls.emplace_back(
+            "haptic-trigger:" + std::to_string(action) + ':' +
+            std::to_string(source) + ':' +
+            std::to_string(pulse.duration_seconds));
+        return trigger_status;
+    }
+
+    void Shutdown() noexcept override
+    {
+        state_->calls.emplace_back("haptic-shutdown");
+        ++state_->shutdown_calls;
+    }
+
+    vrrec_status_t initialize_status = VRREC_STATUS_OK;
+    vrrec_status_t application_manifest_status = VRREC_STATUS_OK;
+    vrrec_status_t manifest_status = VRREC_STATUS_OK;
+    vrrec_status_t action_status = VRREC_STATUS_OK;
+    vrrec_status_t source_status = VRREC_STATUS_OK;
+    vrrec_status_t trigger_status = VRREC_STATUS_OK;
+    std::uint64_t action_handle = 303;
+    std::uint64_t source_handle = 404;
+
+private:
+    std::shared_ptr<FakePortState> state_;
+};
+
 vrrec_steamvr_input_config_v1 Config()
 {
     return vrrec_steamvr_input_config_v1 {
@@ -131,6 +214,109 @@ std::unique_ptr<SteamVrInputBackend> CreateBackend(
         Config(),
         std::move(port),
         status);
+}
+
+SteamVrHapticConfig HapticConfig()
+{
+    return SteamVrHapticConfig {
+        "/install/OpenVr/actions.json",
+        "/actions/vrrecorder/out/haptic",
+        "/user/hand/right",
+    };
+}
+
+void InitializesHapticBackendAndRoutesPulse()
+{
+    auto state = std::make_shared<FakePortState>();
+    auto port = std::make_unique<FakeHapticPort>(state);
+    auto *borrowed = port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto backend = CreateOpenVrSteamVrHapticBackend(
+        HapticConfig(),
+        std::move(port),
+        status);
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(backend != nullptr);
+    CHECK((state->calls == std::vector<std::string> {
+        "haptic-initialize",
+        "haptic-application:/install/OpenVr/steamvr.vrmanifest:temporary",
+        "haptic-manifest:/install/OpenVr/actions.json",
+        "haptic-action:/actions/vrrecorder/out/haptic",
+        "haptic-source:/user/hand/right",
+    }));
+    CHECK(backend->Trigger(OpenVrHapticPulse {0.03F, 120.0F, 0.65F}) ==
+          VRREC_STATUS_OK);
+    CHECK(state->calls.back() == "haptic-trigger:303:404:0.030000");
+
+    borrowed->trigger_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(backend->Trigger(OpenVrHapticPulse {0.08F, 120.0F, 0.65F}) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    backend.reset();
+    CHECK(state->shutdown_calls == 1);
+    CHECK(state->calls.back() == "haptic-shutdown");
+}
+
+void HapticInitializationFailureReleasesAcquiredRuntime()
+{
+    for (std::size_t failure = 0; failure != 5; ++failure) {
+        auto state = std::make_shared<FakePortState>();
+        auto port = std::make_unique<FakeHapticPort>(state);
+        if (failure == 0) {
+            port->initialize_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        } else if (failure == 1) {
+            port->application_manifest_status = VRREC_STATUS_INTERNAL_ERROR;
+        } else if (failure == 2) {
+            port->manifest_status = VRREC_STATUS_INTERNAL_ERROR;
+        } else if (failure == 3) {
+            port->action_status = VRREC_STATUS_INTERNAL_ERROR;
+        } else {
+            port->source_status = VRREC_STATUS_INTERNAL_ERROR;
+        }
+        auto status = VRREC_STATUS_OK;
+        auto backend = CreateOpenVrSteamVrHapticBackend(
+            HapticConfig(),
+            std::move(port),
+            status);
+
+        CHECK(backend == nullptr);
+        CHECK(status == (failure == 0
+            ? VRREC_STATUS_BACKEND_UNAVAILABLE
+            : VRREC_STATUS_INTERNAL_ERROR));
+        CHECK(state->shutdown_calls == (failure == 0 ? 0 : 1));
+    }
+}
+
+void RejectsInvalidHapticCompositionInputs()
+{
+    auto state = std::make_shared<FakePortState>();
+    auto invalid = HapticConfig();
+    invalid.action_manifest_path = "/install/OpenVr/not-actions.json";
+    auto status = VRREC_STATUS_OK;
+    auto backend = CreateOpenVrSteamVrHapticBackend(
+        invalid,
+        std::make_unique<FakeHapticPort>(state),
+        status);
+    CHECK(backend == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(state->calls.empty());
+
+    invalid = HapticConfig();
+    invalid.input_source_path = {};
+    backend = CreateOpenVrSteamVrHapticBackend(
+        invalid,
+        std::make_unique<FakeHapticPort>(state),
+        status);
+    CHECK(backend == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(state->calls.empty());
+
+    backend = CreateOpenVrSteamVrHapticBackend(
+        HapticConfig(),
+        nullptr,
+        status);
+    CHECK(backend == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
 }
 
 void InitializesInRequiredOrderAndCanonicalizesDigitalState()
@@ -290,6 +476,9 @@ void PollFailurePublishesOnlyAZeroState()
 
 int main()
 {
+    InitializesHapticBackendAndRoutesPulse();
+    HapticInitializationFailureReleasesAcquiredRuntime();
+    RejectsInvalidHapticCompositionInputs();
     InitializesInRequiredOrderAndCanonicalizesDigitalState();
     FailsClosedAtEachInitializationBoundary();
     RejectsZeroHandlesAndInvalidCompositionInputs();

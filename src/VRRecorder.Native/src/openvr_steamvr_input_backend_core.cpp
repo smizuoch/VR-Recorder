@@ -7,6 +7,8 @@
 #include <string_view>
 #include <utility>
 
+#include "steamvr_manifest_paths.hpp"
+
 namespace vrrecorder::native {
 namespace {
 
@@ -21,27 +23,6 @@ void Reset(vrrec_steamvr_digital_state_v1 &state) noexcept
     state.state = 0;
     state.changed = 0;
     state.reserved = 0;
-}
-
-vrrec_status_t ResolveApplicationManifestPath(
-    std::string_view action_manifest_path,
-    std::string &application_manifest_path) noexcept
-{
-    const auto separator = action_manifest_path.find_last_of("/\\");
-    if (separator == std::string_view::npos ||
-        action_manifest_path.substr(separator + 1) != "actions.json") {
-        return VRREC_STATUS_INVALID_ARGUMENT;
-    }
-    try {
-        application_manifest_path.assign(
-            action_manifest_path.substr(0, separator + 1));
-        application_manifest_path.append("steamvr.vrmanifest");
-        return VRREC_STATUS_OK;
-    } catch (const std::bad_alloc &) {
-        return VRREC_STATUS_OUT_OF_MEMORY;
-    } catch (...) {
-        return VRREC_STATUS_INTERNAL_ERROR;
-    }
 }
 
 class OpenVrSteamVrInputBackend final : public SteamVrInputBackend {
@@ -103,7 +84,7 @@ std::unique_ptr<SteamVrInputBackend> CreateOpenVrSteamVrInputBackend(
     }
 
     std::string application_manifest_path;
-    status = ResolveApplicationManifestPath(
+    status = ResolveSteamVrApplicationManifestPath(
         config.action_manifest_path_utf8,
         application_manifest_path);
     if (status != VRREC_STATUS_OK) {

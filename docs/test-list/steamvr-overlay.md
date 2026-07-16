@@ -32,7 +32,7 @@
 - [x] production placement coordinatorからsmall／large nudgeと安全な既定Wrist Dockへのrecenterをruntime transformとexact profileへ適用する
 - [x] `recenter_overlay` actionのrising edgeをAppのlazy native overlay lifecycleとproduction placement coordinatorへ接続する
 - [x] start 30 ms×1、stop 20 ms×2、fault 80 ms×1のpure haptic policy、値検証、disabled、revision重複排除、output失敗隔離を固定する
-- [x] native haptic Portをprocess-wide OpenVR generationへ接続し、action／input source handle取得、単発pulse検証、実`TriggerHapticVibrationAction`呼び出しを固定する
+- [x] native haptic Port／production backendをprocess-wide OpenVR generationへ接続し、application／action manifest設定、action／input source handle取得、単発pulse検証、失敗cleanup、実`TriggerHapticVibrationAction`呼び出しを固定する
 - [ ] drag releaseとWrist Dock／World Pin commandから親空間を変換した確定poseをproduction placement coordinatorへ渡す
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -69,7 +69,7 @@
 - [x] Apply small/large nudges and recenter to the safe default Wrist Dock runtime transform and exact profile from the production placement coordinator
 - [x] Connect `recenter_overlay` rising edges to the App's lazy native overlay lifecycle and production placement coordinator
 - [x] Fix the pure start 30 ms×1, stop 20 ms×2, and fault 80 ms×1 haptic policy with value validation, disabled behavior, revision deduplication, and output-failure isolation
-- [x] Connect a native haptic Port to the process-wide OpenVR generation and fix action/input-source handle lookup, single-pulse validation, and the real `TriggerHapticVibrationAction` call
+- [x] Connect the native haptic Port/production backend to the process-wide OpenVR generation and fix application/action manifest setup, action/input-source handle lookup, single-pulse validation, failure cleanup, and the real `TriggerHapticVibrationAction` call
 - [ ] Convert parent space for drag release and Wrist Dock/World Pin commands, then pass the resolved pose to the production placement coordinator
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

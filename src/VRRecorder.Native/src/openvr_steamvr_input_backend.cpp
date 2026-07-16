@@ -1,4 +1,5 @@
 #include "openvr_steamvr_input_backend_core.hpp"
+#include "openvr_steamvr_haptic_backend_core.hpp"
 #include "openvr_overlay_backend.hpp"
 
 #include <array>
@@ -727,6 +728,25 @@ std::unique_ptr<SteamVrInputBackend> CreateSteamVrInputBackend(
         return nullptr;
     }
     return CreateOpenVrSteamVrInputBackend(
+        config,
+        std::move(port),
+        status);
+}
+
+std::unique_ptr<SteamVrHapticBackend> CreateSteamVrHapticBackend(
+    const SteamVrHapticConfig &config,
+    vrrec_status_t &status) noexcept
+{
+    const auto &process = GetProcessRuntime();
+    if (!process.runtime) {
+        status = process.status;
+        return nullptr;
+    }
+    auto port = CreateOpenVrProcessHapticPort(process.runtime, status);
+    if (!port) {
+        return nullptr;
+    }
+    return CreateOpenVrSteamVrHapticBackend(
         config,
         std::move(port),
         status);
