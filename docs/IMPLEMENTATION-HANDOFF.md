@@ -249,6 +249,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - Wrist pixel座標をz-order済みstable semantic targetへhit-testし、current snapshotのenabled actionとsemantic ID／commandが一致するときだけ既存`IUiCommandDispatcher`へ`WristRay`としてdispatchする入力adapter。miss／stale／重複targetは副作用なく無視する
 - lifecycle／textureと分離したnative overlay event Port。input／lifecycle／textureと同じprocess runtime generationへ接続し、実`SetOverlayInputMethod(Mouse)`／1024×512 mouse scale／`PollNextOverlayEvent`を呼ぶ。OpenVRのGL左下座標をtop-left pixelへ上下反転し、Move／ButtonDown／ButtonUpだけをbutton／bounds検証後に返す。configure失敗はDestroy rollback、不正runtime eventはゼロ化してfail-closedにし、32-byte versioned C ABIから1件ずつ公開する
 - managed lifecycleの同期pointer event poll。no-eventを`null`、既知kind／button／1024×512範囲だけを型付き値へ変換し、Close／Dispose／不正payloadを既存のlifetime／例外規約へ収束させる
+- 表示成功済みsnapshot／layoutだけでpointer eventをhit-testするpure interaction host。primary down／upをcursor別に追跡し、duplicate downと同一revisionの二重commandを抑止し、1 tick最大64件に制限してmove floodから描画を保護する
 - native digital-state ABIとmanaged async stream
 - Wrist状態／Legal UIのViewModel相当projection
 
@@ -264,7 +265,7 @@ factory selectorは既に`UNAVAILABLE`／`PRODUCTION`をfamily別に選べるが
 - first-run routerの`WristOverlayPlacement` production route
 - 実SteamVR／HMD／controller試験
 
-`Presentation.Wrist`があることと、VR内に描画できることは別である。現在はprojection contractまでであり、renderer／OpenVR resource ownershipは存在しない。
+pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction coordinatorがあることと、製品AppからVR内へ表示・操作できることは別である。production glyph／icon asset、native lifecycle adapter、App composition、pose／haptic、実HMD証拠が揃うまでは実overlay完成と扱わない。
 
 ## 4. 未完了release gateの実装段階
 

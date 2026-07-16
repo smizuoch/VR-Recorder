@@ -21,6 +21,7 @@
 - [x] overlay作成transactionで1024×512 pointer inputを構成し、event Portをprocess ownerと実`PollNextOverlayEvent`へ接続してGL座標をtop-left pixelへ変換・検証する
 - [x] 32-byte versioned C ABIでpointer eventを1件ずつ返し、no-event／error時はpayloadをゼロ化する
 - [x] managed lifecycleでpointer eventを型付き値へ変換し、no-eventは`null`、不正payloadはfail-closedにする
+- [x] 表示成功済みsnapshot／layoutだけでprimary downをdispatchし、cursor重複・同一revision重複・event floodをpure interaction hostで抑止する
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -46,6 +47,7 @@
 - [x] Configure 1024×512 pointer input in the overlay creation transaction, connect the event Port to the process owner and real `PollNextOverlayEvent`, and convert GL coordinates to validated top-left pixels
 - [x] Return one pointer event at a time through a 32-byte versioned C ABI and zero the payload on no-event or error
 - [x] Convert pointer events to typed values in the managed lifecycle, return `null` on no-event, and fail closed on malformed payloads
+- [x] Dispatch primary-down only against the successfully published snapshot/layout and suppress cursor duplicates, same-revision duplicates, and event floods in a pure interaction host
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers
