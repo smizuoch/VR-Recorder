@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "openvr_overlay_lifecycle_port.hpp"
+#include "openvr_overlay_event_port.hpp"
 #include "openvr_overlay_texture_port.hpp"
 
 namespace vrrecorder::native {
@@ -23,12 +24,22 @@ public:
     virtual vrrec_status_t UpdateBgraTexture(
         const OpenVrBgraTextureFrame &frame) noexcept = 0;
     virtual vrrec_status_t ClearTexture() noexcept = 0;
+    virtual vrrec_status_t PollPointerEvent(
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept = 0;
     virtual vrrec_status_t Close() noexcept = 0;
 };
 
 std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
     const OpenVrOverlayLifecycleConfig &config,
     std::unique_ptr<OpenVrOverlayLifecyclePort> port,
+    vrrec_status_t &status) noexcept;
+
+std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
+    const OpenVrOverlayLifecycleConfig &config,
+    std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
+    std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
+    std::unique_ptr<OpenVrOverlayEventPort> event_port,
     vrrec_status_t &status) noexcept;
 
 std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(

@@ -122,6 +122,45 @@ private:
     std::shared_ptr<FakeState> state_;
 };
 
+class FakeEventPort final : public OpenVrOverlayEventPort {
+public:
+    explicit FakeEventPort(std::shared_ptr<FakeState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t handle,
+        std::uint32_t pixel_width,
+        std::uint32_t pixel_height) noexcept override
+    {
+        state_->calls.emplace_back(
+            "input:" + std::to_string(handle) + ':' +
+            std::to_string(pixel_width) + 'x' +
+            std::to_string(pixel_height));
+        return configure_status;
+    }
+
+    vrrec_status_t PollNextOverlayPointerEvent(
+        std::uint64_t handle,
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        state_->calls.emplace_back("poll:" + std::to_string(handle));
+        event = next_event;
+        has_event = publish_event;
+        return poll_status;
+    }
+
+    vrrec_status_t configure_status = VRREC_STATUS_OK;
+    vrrec_status_t poll_status = VRREC_STATUS_OK;
+    OpenVrOverlayPointerEvent next_event {};
+    bool publish_event = false;
+
+private:
+    std::shared_ptr<FakeState> state_;
+};
+
 OpenVrOverlayLifecycleConfig Config()
 {
     return OpenVrOverlayLifecycleConfig {
@@ -432,6 +471,109 @@ void ClearFailureDoesNotSkipHideOrDestroy()
     CHECK(raw_texture->clear_calls == 1);
 }
 
+void ConfiguresAndPollsTopLeftPixelPointerEvents()
+{
+    auto state = std::make_shared<FakeState>();
+    auto event_port = std::make_unique<FakeEventPort>(state);
+    auto *raw_event = event_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        std::move(event_port),
+        status);
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(state->calls.back() == "input:73:1024x512");
+    raw_event->next_event = OpenVrOverlayPointerEvent {
+        OpenVrOverlayPointerEventKind::ButtonDown,
+        511,
+        255,
+        1,
+        9,
+    };
+    raw_event->publish_event = true;
+    auto event = OpenVrOverlayPointerEvent {};
+    auto has_event = false;
+    CHECK(overlay->PollPointerEvent(event, has_event) == VRREC_STATUS_OK);
+    CHECK(has_event);
+    CHECK(event.kind == OpenVrOverlayPointerEventKind::ButtonDown);
+    CHECK(event.pixel_x == 511);
+    CHECK(event.pixel_y == 255);
+    CHECK(event.button == 1);
+    CHECK(event.cursor_index == 9);
+
+    raw_event->publish_event = false;
+    event = raw_event->next_event;
+    has_event = true;
+    CHECK(overlay->PollPointerEvent(event, has_event) == VRREC_STATUS_OK);
+    CHECK(!has_event);
+    CHECK(event == OpenVrOverlayPointerEvent {});
+}
+
+void RejectsInvalidPointerEventsReturnedByTheRuntime()
+{
+    auto state = std::make_shared<FakeState>();
+    auto event_port = std::make_unique<FakeEventPort>(state);
+    auto *raw_event = event_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        std::move(event_port),
+        status);
+    raw_event->publish_event = true;
+    auto event = OpenVrOverlayPointerEvent {};
+    auto has_event = true;
+
+    for (const auto invalid : {
+             OpenVrOverlayPointerEvent {
+                 static_cast<OpenVrOverlayPointerEventKind>(99),
+                 1, 1, 0, 0},
+             OpenVrOverlayPointerEvent {
+                 OpenVrOverlayPointerEventKind::Move,
+                 1024, 1, 0, 0},
+             OpenVrOverlayPointerEvent {
+                 OpenVrOverlayPointerEventKind::Move,
+                 1, 512, 0, 0},
+             OpenVrOverlayPointerEvent {
+                 OpenVrOverlayPointerEventKind::ButtonDown,
+                 1, 1, 0, 0},
+         }) {
+        raw_event->next_event = invalid;
+        CHECK(overlay->PollPointerEvent(event, has_event) ==
+              VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(!has_event);
+        CHECK(event == OpenVrOverlayPointerEvent {});
+    }
+}
+
+void PointerInputConfigurationFailureRollsBackTheOverlay()
+{
+    auto state = std::make_shared<FakeState>();
+    auto event_port = std::make_unique<FakeEventPort>(state);
+    event_port->configure_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    auto status = VRREC_STATUS_OK;
+
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::make_unique<FakePort>(state),
+        std::make_unique<FakeTexturePort>(state),
+        std::move(event_port),
+        status);
+
+    CHECK(overlay == nullptr);
+    CHECK(status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK((state->calls == std::vector<std::string> {
+        "create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
+        "width:73:0.220000",
+        "input:73:1024x512",
+        "destroy:73",
+    }));
+}
+
 }
 
 int main()
@@ -445,5 +587,8 @@ int main()
     OwnsBgraTextureAndClearsItBeforeOverlayDestruction();
     RejectsInvalidBgraFramesBeforeCallingTexturePort();
     ClearFailureDoesNotSkipHideOrDestroy();
+    ConfiguresAndPollsTopLeftPixelPointerEvents();
+    RejectsInvalidPointerEventsReturnedByTheRuntime();
+    PointerInputConfigurationFailureRollsBackTheOverlay();
     return 0;
 }

@@ -651,6 +651,18 @@ public:
         return VRREC_STATUS_OK;
     }
 
+    vrrec_status_t PollPointerEvent(
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        const std::lock_guard lock(fake_steamvr_overlay.mutex);
+        event = {};
+        has_event = false;
+        return fake_steamvr_overlay.closed
+            ? VRREC_STATUS_INVALID_STATE
+            : VRREC_STATUS_OK;
+    }
+
     vrrec_status_t Close() noexcept override
     {
         const std::lock_guard lock(fake_steamvr_overlay.mutex);

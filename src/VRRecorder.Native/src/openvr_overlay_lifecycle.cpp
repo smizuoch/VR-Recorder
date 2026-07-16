@@ -25,9 +25,11 @@ class OpenVrOverlayLifecycleCore final : public OpenVrOverlayLifecycle {
 public:
     OpenVrOverlayLifecycleCore(
         std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
-        std::unique_ptr<OpenVrOverlayTexturePort> texture_port) noexcept
+        std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
+        std::unique_ptr<OpenVrOverlayEventPort> event_port) noexcept
         : lifecycle_port_(std::move(lifecycle_port)),
-          texture_port_(std::move(texture_port))
+          texture_port_(std::move(texture_port)),
+          event_port_(std::move(event_port))
     {
     }
 
@@ -49,6 +51,15 @@ public:
         status = lifecycle_port_->SetOverlayWidthInMeters(
             handle,
             config.width_in_meters);
+        if (status != VRREC_STATUS_OK) {
+            static_cast<void>(lifecycle_port_->DestroyOverlay(handle));
+            return status;
+        }
+
+        status = event_port_->ConfigureOverlayPointerInput(
+            handle,
+            TextureWidth,
+            TextureHeight);
         if (status != VRREC_STATUS_OK) {
             static_cast<void>(lifecycle_port_->DestroyOverlay(handle));
             return status;
@@ -131,6 +142,49 @@ public:
         return status;
     }
 
+    vrrec_status_t PollPointerEvent(
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        event = {};
+        has_event = false;
+        if (closed_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = event_port_->PollNextOverlayPointerEvent(
+            handle_,
+            event,
+            has_event);
+        if (status != VRREC_STATUS_OK) {
+            event = {};
+            has_event = false;
+            return status;
+        }
+        if (!has_event) {
+            event = {};
+            return VRREC_STATUS_OK;
+        }
+
+        const auto known_kind =
+            event.kind == OpenVrOverlayPointerEventKind::Move ||
+            event.kind == OpenVrOverlayPointerEventKind::ButtonDown ||
+            event.kind == OpenVrOverlayPointerEventKind::ButtonUp;
+        const auto known_button = event.button == 1 ||
+            event.button == 2 || event.button == 4;
+        const auto valid_button =
+            event.kind == OpenVrOverlayPointerEventKind::Move
+                ? event.button == 0
+                : known_button;
+        if (!known_kind || !valid_button ||
+            event.pixel_x >= TextureWidth ||
+            event.pixel_y >= TextureHeight) {
+            event = {};
+            has_event = false;
+            return VRREC_STATUS_INTERNAL_ERROR;
+        }
+        return VRREC_STATUS_OK;
+    }
+
     vrrec_status_t Close() noexcept override
     {
         if (closed_) {
@@ -158,6 +212,7 @@ public:
 private:
     std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port_;
     std::unique_ptr<OpenVrOverlayTexturePort> texture_port_;
+    std::unique_ptr<OpenVrOverlayEventPort> event_port_;
     std::uint64_t handle_ = 0;
     bool visible_ = false;
     bool texture_set_ = false;
@@ -181,6 +236,31 @@ public:
         std::uint64_t handle) noexcept override
     {
         (void)handle;
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+};
+
+class NoopOpenVrOverlayEventPort final : public OpenVrOverlayEventPort {
+public:
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t handle,
+        std::uint32_t pixel_width,
+        std::uint32_t pixel_height) noexcept override
+    {
+        (void)handle;
+        (void)pixel_width;
+        (void)pixel_height;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t PollNextOverlayPointerEvent(
+        std::uint64_t handle,
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        (void)handle;
+        event = {};
+        has_event = false;
         return VRREC_STATUS_BACKEND_UNAVAILABLE;
     }
 };
@@ -211,8 +291,29 @@ std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
     std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
     vrrec_status_t &status) noexcept
 {
+    auto event_port = std::unique_ptr<OpenVrOverlayEventPort>(
+        new (std::nothrow) NoopOpenVrOverlayEventPort());
+    if (!event_port) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    return CreateOpenVrOverlayLifecycle(
+        config,
+        std::move(lifecycle_port),
+        std::move(texture_port),
+        std::move(event_port),
+        status);
+}
+
+std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
+    const OpenVrOverlayLifecycleConfig &config,
+    std::unique_ptr<OpenVrOverlayLifecyclePort> lifecycle_port,
+    std::unique_ptr<OpenVrOverlayTexturePort> texture_port,
+    std::unique_ptr<OpenVrOverlayEventPort> event_port,
+    vrrec_status_t &status) noexcept
+{
     status = VRREC_STATUS_INVALID_ARGUMENT;
-    if (!lifecycle_port || !texture_port ||
+    if (!lifecycle_port || !texture_port || !event_port ||
         !IsPresent(config.overlay_key_utf8) ||
         !IsPresent(config.overlay_name_utf8) ||
         !std::isfinite(config.width_in_meters) ||
@@ -224,7 +325,8 @@ std::unique_ptr<OpenVrOverlayLifecycle> CreateOpenVrOverlayLifecycle(
     auto concrete = std::unique_ptr<OpenVrOverlayLifecycleCore>(
         new (std::nothrow) OpenVrOverlayLifecycleCore(
             std::move(lifecycle_port),
-            std::move(texture_port)));
+            std::move(texture_port),
+            std::move(event_port)));
     if (!concrete) {
         status = VRREC_STATUS_OUT_OF_MEMORY;
         return nullptr;
