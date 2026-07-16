@@ -289,6 +289,34 @@ public:
             : api_->ClearOverlayTexture(handle);
     }
 
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t handle,
+        std::uint32_t pixel_width,
+        std::uint32_t pixel_height) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        return references_ == 0
+            ? VRREC_STATUS_INVALID_STATE
+            : api_->ConfigureOverlayPointerInput(
+                handle,
+                pixel_width,
+                pixel_height);
+    }
+
+    vrrec_status_t PollNextOverlayPointerEvent(
+        std::uint64_t handle,
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept
+    {
+        const std::lock_guard lock(mutex_);
+        if (references_ == 0) {
+            event = {};
+            has_event = false;
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        return api_->PollNextOverlayPointerEvent(handle, event, has_event);
+    }
+
     void Release() noexcept
     {
         std::thread poll_thread;
@@ -666,6 +694,67 @@ private:
     bool acquired_ = false;
 };
 
+class OpenVrProcessOverlayEventPort final : public OpenVrOverlayEventPort {
+public:
+    explicit OpenVrProcessOverlayEventPort(
+        std::shared_ptr<OpenVrProcessRuntime> runtime) noexcept
+        : runtime_(std::move(runtime))
+    {
+    }
+
+    ~OpenVrProcessOverlayEventPort() override
+    {
+        if (acquired_) {
+            runtime_->Release();
+        }
+    }
+
+    vrrec_status_t Acquire() noexcept
+    {
+        if (acquired_) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        const auto status = runtime_->Acquire();
+        if (status == VRREC_STATUS_OK) {
+            acquired_ = true;
+        }
+        return status;
+    }
+
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t handle,
+        std::uint32_t pixel_width,
+        std::uint32_t pixel_height) noexcept override
+    {
+        return acquired_
+            ? runtime_->ConfigureOverlayPointerInput(
+                handle,
+                pixel_width,
+                pixel_height)
+            : VRREC_STATUS_INVALID_STATE;
+    }
+
+    vrrec_status_t PollNextOverlayPointerEvent(
+        std::uint64_t handle,
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        if (!acquired_) {
+            event = {};
+            has_event = false;
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        return runtime_->PollNextOverlayPointerEvent(
+            handle,
+            event,
+            has_event);
+    }
+
+private:
+    std::shared_ptr<OpenVrProcessRuntime> runtime_;
+    bool acquired_ = false;
+};
+
 }
 
 std::shared_ptr<OpenVrProcessRuntime> CreateOpenVrProcessRuntime(
@@ -772,7 +861,7 @@ CreateOpenVrProcessOverlayLifecycle(
 
     auto texture_port = std::unique_ptr<OpenVrProcessOverlayTexturePort>(
         new (std::nothrow) OpenVrProcessOverlayTexturePort(
-            std::move(runtime)));
+            runtime));
     if (!texture_port) {
         status = VRREC_STATUS_OUT_OF_MEMORY;
         return nullptr;
@@ -781,10 +870,23 @@ CreateOpenVrProcessOverlayLifecycle(
     if (status != VRREC_STATUS_OK) {
         return nullptr;
     }
+
+    auto event_port = std::unique_ptr<OpenVrProcessOverlayEventPort>(
+        new (std::nothrow) OpenVrProcessOverlayEventPort(
+            std::move(runtime)));
+    if (!event_port) {
+        status = VRREC_STATUS_OUT_OF_MEMORY;
+        return nullptr;
+    }
+    status = event_port->Acquire();
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
     return CreateOpenVrOverlayLifecycle(
         config,
         std::move(overlay_port),
         std::move(texture_port),
+        std::move(event_port),
         status);
 }
 

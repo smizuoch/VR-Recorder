@@ -2,6 +2,7 @@
 #include "openvr_overlay_backend.hpp"
 
 #include <cstdint>
+#include <cmath>
 #include <memory>
 #include <new>
 #include <string>
@@ -190,6 +191,94 @@ public:
         return !initialized_ || !texture_presenter_
             ? VRREC_STATUS_INVALID_STATE
             : texture_presenter_->ClearOverlayTexture(handle);
+    }
+
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t handle,
+        std::uint32_t pixel_width,
+        std::uint32_t pixel_height) noexcept override
+    {
+        if (!initialized_ || overlay_ == nullptr) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+        if (pixel_width != 1024 || pixel_height != 512) {
+            return VRREC_STATUS_INVALID_ARGUMENT;
+        }
+        const auto openvr_handle =
+            static_cast<vr::VROverlayHandle_t>(handle);
+        auto status = MapOverlayError(overlay_->SetOverlayInputMethod(
+            openvr_handle,
+            vr::VROverlayInputMethod_Mouse));
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        const auto mouse_scale = vr::HmdVector2_t {
+            {static_cast<float>(pixel_width),
+             static_cast<float>(pixel_height)},
+        };
+        status = MapOverlayError(overlay_->SetOverlayMouseScale(
+            openvr_handle,
+            &mouse_scale));
+        if (status != VRREC_STATUS_OK) {
+            static_cast<void>(overlay_->SetOverlayInputMethod(
+                openvr_handle,
+                vr::VROverlayInputMethod_None));
+        }
+        return status;
+    }
+
+    vrrec_status_t PollNextOverlayPointerEvent(
+        std::uint64_t handle,
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        event = {};
+        has_event = false;
+        if (!initialized_ || overlay_ == nullptr || handle == 0) {
+            return VRREC_STATUS_INVALID_STATE;
+        }
+
+        auto openvr_event = vr::VREvent_t {};
+        while (overlay_->PollNextOverlayEvent(
+            static_cast<vr::VROverlayHandle_t>(handle),
+            &openvr_event,
+            sizeof(openvr_event))) {
+            auto kind = OpenVrOverlayPointerEventKind {};
+            switch (openvr_event.eventType) {
+                case vr::VREvent_MouseMove:
+                    kind = OpenVrOverlayPointerEventKind::Move;
+                    break;
+                case vr::VREvent_MouseButtonDown:
+                    kind = OpenVrOverlayPointerEventKind::ButtonDown;
+                    break;
+                case vr::VREvent_MouseButtonUp:
+                    kind = OpenVrOverlayPointerEventKind::ButtonUp;
+                    break;
+                default:
+                    openvr_event = {};
+                    continue;
+            }
+
+            const auto x = openvr_event.data.mouse.x;
+            const auto y = openvr_event.data.mouse.y;
+            if (!std::isfinite(x) || !std::isfinite(y) ||
+                x < 0.0F || x >= 1024.0F ||
+                y < 0.0F || y >= 512.0F) {
+                return VRREC_STATUS_INTERNAL_ERROR;
+            }
+            event = OpenVrOverlayPointerEvent {
+                kind,
+                static_cast<std::uint32_t>(std::floor(x)),
+                511U - static_cast<std::uint32_t>(std::floor(y)),
+                kind == OpenVrOverlayPointerEventKind::Move
+                    ? 0U
+                    : openvr_event.data.mouse.button,
+                openvr_event.data.mouse.cursorIndex,
+            };
+            has_event = true;
+            return VRREC_STATUS_OK;
+        }
+        return VRREC_STATUS_OK;
     }
 
     vrrec_status_t AddApplicationManifest(

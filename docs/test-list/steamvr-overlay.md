@@ -18,7 +18,7 @@
 - [x] HMDのDXGI adapter上でD3D11 BGRA textureを所有・再利用し、実RowPitchでuploadして`SetOverlayTexture(TextureType_DirectX)`へ渡す
 - [x] 1024×512 BGRA textureをstate change時と録画中10 Hzで更新し、初回publish成功後だけShowするhostを固定する
 - [x] mouse／ray座標をstable semantic targetへhit-testし、current snapshotと一致するenabled actionだけを共通application commandへdispatchする
-- [x] overlay作成transactionで1024×512 pointer inputを構成し、top-left pixel eventの種別／button／boundsを独立native event Portで検証する
+- [x] overlay作成transactionで1024×512 pointer inputを構成し、event Portをprocess ownerと実`PollNextOverlayEvent`へ接続してGL座標をtop-left pixelへ変換・検証する
 - [ ] Wrist Dock／World Pin／drag／nudge／recenterをruntime transformへ適用する
 - [ ] 録画開始／停止／fault haptic pulseを実行する
 - [ ] 実SteamVR／HMD／controllerでlifecycle、visibility、再接続を検証する
@@ -41,7 +41,7 @@
 - [x] Own and reuse a D3D11 BGRA texture on the HMD DXGI adapter, upload with the actual row pitch, and pass it to `SetOverlayTexture(TextureType_DirectX)`
 - [x] Fix a host that updates the 1024×512 BGRA texture on state changes and at 10 Hz while recording, and Shows only after the first successful publish
 - [x] Hit-test mouse/ray coordinates to stable semantic targets and dispatch shared application commands only for enabled actions matching the current snapshot
-- [x] Configure 1024×512 pointer input in the overlay creation transaction and validate top-left pixel event kind, button, and bounds in an independent native event Port
+- [x] Configure 1024×512 pointer input in the overlay creation transaction, connect the event Port to the process owner and real `PollNextOverlayEvent`, and convert GL coordinates to validated top-left pixels
 - [ ] Apply Wrist Dock, World Pin, drag, nudge, and recenter to runtime transforms
 - [ ] Emit recording-start, recording-stop, and fault haptic pulses
 - [ ] Verify lifecycle, visibility, and reconnection with real SteamVR, HMD, and controllers

@@ -39,6 +39,8 @@ struct RawState final {
     std::uint64_t failing_digital_handle = 0;
     vrrec_status_t update_status = VRREC_STATUS_OK;
     std::vector<std::thread::id> polling_threads;
+    OpenVrOverlayPointerEvent overlay_pointer_event {};
+    bool has_overlay_pointer_event = false;
 };
 
 class FakeRawApi final : public OpenVrRuntimePort {
@@ -127,6 +129,31 @@ public:
     {
         state_->calls.emplace_back(
             "overlay-clear:" + std::to_string(handle));
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t handle,
+        std::uint32_t pixel_width,
+        std::uint32_t pixel_height) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-input:" + std::to_string(handle) + ':' +
+            std::to_string(pixel_width) + 'x' +
+            std::to_string(pixel_height));
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t PollNextOverlayPointerEvent(
+        std::uint64_t handle,
+        OpenVrOverlayPointerEvent &event,
+        bool &has_event) noexcept override
+    {
+        state_->calls.emplace_back(
+            "overlay-poll:" + std::to_string(handle));
+        event = state_->overlay_pointer_event;
+        has_event = state_->has_overlay_pointer_event;
+        state_->has_overlay_pointer_event = false;
         return VRREC_STATUS_OK;
     }
 
@@ -513,6 +540,7 @@ void RegistersTheApplicationBeforeComposingAnOverlay()
         "application:C:/app/OpenVr/steamvr.vrmanifest:temporary",
         "overlay-create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
         "overlay-width:91:0.220000",
+        "overlay-input:91:1024x512",
     }));
     CHECK(overlay->Show() == VRREC_STATUS_OK);
     overlay.reset();
@@ -558,6 +586,7 @@ void RoutesOverlayTextureThroughTheSharedRuntimeGeneration()
         "application:C:/app/OpenVr/steamvr.vrmanifest:temporary",
         "overlay-create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
         "overlay-width:91:0.220000",
+        "overlay-input:91:1024x512",
         "overlay-texture:91:1024x512:4096:2097152",
         "overlay-show:91",
         "overlay-clear:91",
@@ -565,6 +594,50 @@ void RoutesOverlayTextureThroughTheSharedRuntimeGeneration()
         "overlay-destroy:91",
         "shutdown",
     }));
+    CHECK(state->shutdown_calls == 1);
+    (void)raw;
+}
+
+void RoutesOverlayPointerEventsThroughTheSharedRuntimeGeneration()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrProcessOverlayLifecycle(
+        runtime,
+        "C:/app/OpenVr/steamvr.vrmanifest",
+        config,
+        status);
+    state->overlay_pointer_event = OpenVrOverlayPointerEvent {
+        OpenVrOverlayPointerEventKind::ButtonDown,
+        700,
+        300,
+        1,
+        4,
+    };
+    state->has_overlay_pointer_event = true;
+    auto event = OpenVrOverlayPointerEvent {};
+    auto has_event = false;
+
+    CHECK(status == VRREC_STATUS_OK);
+    CHECK(overlay->PollPointerEvent(event, has_event) == VRREC_STATUS_OK);
+    CHECK(has_event);
+    CHECK(event == state->overlay_pointer_event);
+    CHECK((state->calls == std::vector<std::string> {
+        "initialize",
+        "application:C:/app/OpenVr/steamvr.vrmanifest:temporary",
+        "overlay-create:com.vrrecorder.desktop.wrist:VR Recorder Wrist",
+        "overlay-width:91:0.220000",
+        "overlay-input:91:1024x512",
+        "overlay-poll:91",
+    }));
+    overlay.reset();
     CHECK(state->shutdown_calls == 1);
     (void)raw;
 }
@@ -742,6 +815,7 @@ int main()
     SharesOneRuntimeGenerationWithOverlayLifecycleClients();
     RegistersTheApplicationBeforeComposingAnOverlay();
     RoutesOverlayTextureThroughTheSharedRuntimeGeneration();
+    RoutesOverlayPointerEventsThroughTheSharedRuntimeGeneration();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
     FailsClosedBeforeAcquiringAReference();
     return 0;
