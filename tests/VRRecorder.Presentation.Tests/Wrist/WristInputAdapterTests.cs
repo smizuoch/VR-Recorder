@@ -53,6 +53,68 @@ public sealed class WristInputAdapterTests
         Assert.Empty(commands.Commands);
     }
 
+    [Fact]
+    public async Task HitTestsRayCoordinatesAndDispatchesTheSnapshotAction()
+    {
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(new RecorderStatusSnapshot(
+                Revision: 2,
+                State: RecorderState.Ready,
+                AvailableActions: RecorderAvailableActions.Start));
+        var layout = WristTextureLayoutEngine.Layout(
+            snapshot,
+            WristLayoutOptions.Default);
+        var target = Assert.Single(layout.HitTargets);
+        var commands = new CapturingUiCommandDispatcher();
+        var adapter = new WristInputAdapter(commands);
+
+        var handled = await adapter.ActivateAtAsync(
+            snapshot,
+            layout,
+            target.Bounds.Left + target.Bounds.Width / 2,
+            target.Bounds.Top + target.Bounds.Height / 2,
+            CancellationToken.None);
+
+        Assert.True(handled);
+        var dispatched = Assert.Single(commands.Commands);
+        Assert.Equal(UiCommandId.ToggleRecording, dispatched.Command);
+        Assert.Equal(UiActivationKind.WristRay, dispatched.ActivationKind);
+    }
+
+    [Fact]
+    public async Task IgnoresMissesAndTargetsFromAStaleSnapshot()
+    {
+        var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
+        var actionable = projector.Project(new RecorderStatusSnapshot(
+            Revision: 3,
+            State: RecorderState.Ready,
+            AvailableActions: RecorderAvailableActions.Start));
+        var layout = WristTextureLayoutEngine.Layout(
+            actionable,
+            WristLayoutOptions.Default);
+        var target = Assert.Single(layout.HitTargets);
+        var stale = projector.Project(new RecorderStatusSnapshot(
+            Revision: 4,
+            State: RecorderState.Recording,
+            AvailableActions: RecorderAvailableActions.Stop));
+        var commands = new CapturingUiCommandDispatcher();
+        var adapter = new WristInputAdapter(commands);
+
+        Assert.False(await adapter.ActivateAtAsync(
+            actionable,
+            layout,
+            0,
+            0,
+            CancellationToken.None));
+        Assert.False(await adapter.ActivateAtAsync(
+            stale,
+            layout,
+            target.Bounds.Left + target.Bounds.Width / 2,
+            target.Bounds.Top + target.Bounds.Height / 2,
+            CancellationToken.None));
+        Assert.Empty(commands.Commands);
+    }
+
     private sealed class CapturingUiCommandDispatcher : IUiCommandDispatcher
     {
         public List<(UiCommandId Command, UiActivationKind ActivationKind)>

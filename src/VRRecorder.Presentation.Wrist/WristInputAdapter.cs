@@ -34,4 +34,49 @@ public sealed class WristInputAdapter
                 UiActivationKind.WristRay,
                 cancellationToken);
     }
+
+    public async Task<bool> ActivateAtAsync(
+        WristUiSnapshot snapshot,
+        WristTextureLayout layout,
+        int pixelX,
+        int pixelY,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(layout);
+        cancellationToken.ThrowIfCancellationRequested();
+        var target = layout.HitTest(pixelX, pixelY);
+        if (target is null)
+        {
+            return false;
+        }
+
+        UiActionSnapshot? matchedAction = null;
+        foreach (var action in snapshot.Actions)
+        {
+            if (!StringComparer.Ordinal.Equals(
+                    action.SemanticId,
+                    target.SemanticId))
+            {
+                continue;
+            }
+
+            if (matchedAction is not null)
+            {
+                return false;
+            }
+            matchedAction = action;
+        }
+
+        if (matchedAction is null ||
+            !matchedAction.IsEnabled ||
+            matchedAction.Command != target.Command)
+        {
+            return false;
+        }
+
+        await ActivateAsync(matchedAction, cancellationToken)
+            .ConfigureAwait(false);
+        return true;
+    }
 }
