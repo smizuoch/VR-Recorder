@@ -261,7 +261,8 @@ public sealed class WristOverlayInteractionHostTests
         : IUiCommandDispatcher
     {
         public List<(UiCommandId Command, UiActivationKind Activation)>
-            Commands { get; } = [];
+            Commands
+        { get; } = [];
 
         public Task DispatchAsync(
             UiCommandId command,
