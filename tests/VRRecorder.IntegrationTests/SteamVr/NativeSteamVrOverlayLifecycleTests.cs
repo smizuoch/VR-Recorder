@@ -6,6 +6,64 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
     [Fact]
+    public void PollsTypedPointerEventsOneAtATime()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+
+        Assert.Null(overlay.PollPointerEvent());
+        controls.PushPointerEvent(
+            kind: 1,
+            pixelX: 10,
+            pixelY: 20,
+            button: 1,
+            cursorIndex: 0);
+        var malformedException = Assert.Throws<SteamVrOverlayException>(() =>
+            overlay.PollPointerEvent());
+        Assert.Equal(6, malformedException.Status);
+        Assert.Equal("poll pointer event", malformedException.Operation);
+
+        controls.PushPointerEvent(
+            kind: 2,
+            pixelX: 123,
+            pixelY: 45,
+            button: 1,
+            cursorIndex: 7);
+        var pointerEvent = overlay.PollPointerEvent();
+        Assert.True(pointerEvent.HasValue);
+        Assert.Equal(
+            SteamVrOverlayPointerEventKind.ButtonDown,
+            pointerEvent.Value.Kind);
+        Assert.Equal(123, pointerEvent.Value.PixelX);
+        Assert.Equal(45, pointerEvent.Value.PixelY);
+        Assert.Equal(
+            SteamVrOverlayPointerButton.Left,
+            pointerEvent.Value.Button);
+        Assert.Equal(7u, pointerEvent.Value.CursorIndex);
+        Assert.Null(overlay.PollPointerEvent());
+
+        overlay.Close();
+        var exception = Assert.Throws<SteamVrOverlayException>(() =>
+            overlay.PollPointerEvent());
+        Assert.Equal(3, exception.Status);
+        Assert.Equal("poll pointer event", exception.Operation);
+
+        overlay.Dispose();
+        Assert.Throws<ObjectDisposedException>(() =>
+            overlay.PollPointerEvent());
+    }
+
+    [Fact]
     public void OwnsVersionedNativeOverlayUntilDisposed()
     {
         if (!OperatingSystem.IsLinux())
@@ -139,6 +197,7 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         private readonly UInt32ResultDelegate _clearTextureCount;
         private readonly ByteResultDelegate _textureFirstByte;
         private readonly ByteResultDelegate _textureLastByte;
+        private readonly PushPointerEventDelegate _pushPointerEvent;
 
         public NativeSteamVrOverlayFixtureControls(string path)
         {
@@ -172,6 +231,8 @@ public sealed class NativeSteamVrOverlayLifecycleTests
                 "vrrec_test_steamvr_overlay_texture_first_byte");
             _textureLastByte = Resolve<ByteResultDelegate>(
                 "vrrec_test_steamvr_overlay_texture_last_byte");
+            _pushPointerEvent = Resolve<PushPointerEventDelegate>(
+                "vrrec_test_steamvr_overlay_push_pointer_event");
         }
 
         public void Reset() => _reset();
@@ -204,6 +265,18 @@ public sealed class NativeSteamVrOverlayLifecycleTests
 
         public byte TextureLastByte() => _textureLastByte();
 
+        public void PushPointerEvent(
+            uint kind,
+            uint pixelX,
+            uint pixelY,
+            uint button,
+            uint cursorIndex) => _pushPointerEvent(
+                kind,
+                pixelX,
+                pixelY,
+                button,
+                cursorIndex);
+
         public void Dispose() => NativeLibrary.Free(_library);
 
         private TDelegate Resolve<TDelegate>(string exportName)
@@ -228,6 +301,14 @@ public sealed class NativeSteamVrOverlayLifecycleTests
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint UInt32ResultDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void PushPointerEventDelegate(
+            uint kind,
+            uint pixelX,
+            uint pixelY,
+            uint button,
+            uint cursorIndex);
     }
 
     private sealed class TemporaryInstall : IDisposable

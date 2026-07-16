@@ -58,3 +58,16 @@ internal struct NativeSteamVrOverlayBgraFrameV1
     public uint StrideBytes;
     public uint ReservedV1;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeSteamVrOverlayPointerEventV1
+{
+    public uint StructSize;
+    public uint AbiVersion;
+    public uint HasEvent;
+    public uint Kind;
+    public uint PixelX;
+    public uint PixelY;
+    public uint Button;
+    public uint CursorIndex;
+}

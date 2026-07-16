@@ -14,6 +14,7 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private readonly OverlayOperationDelegate _hideOverlay;
     private readonly UpdateOverlayBgraDelegate _updateOverlayBgra;
     private readonly OverlayOperationDelegate _clearOverlayTexture;
+    private readonly PollOverlayPointerEventDelegate _pollOverlayPointerEvent;
     private readonly OverlayOperationDelegate _closeOverlay;
     private readonly DestroyOverlayDelegate _destroyOverlay;
     private int _disposed;
@@ -56,6 +57,8 @@ internal sealed class NativeSteamVrLibrary : IDisposable
                 "vrrec_steamvr_overlay_update_bgra_v1");
             _clearOverlayTexture = Resolve<OverlayOperationDelegate>(
                 "vrrec_steamvr_overlay_clear_texture_v1");
+            _pollOverlayPointerEvent = Resolve<PollOverlayPointerEventDelegate>(
+                "vrrec_steamvr_overlay_poll_pointer_event_v1");
             _closeOverlay = Resolve<OverlayOperationDelegate>(
                 "vrrec_steamvr_overlay_close_v1");
             _destroyOverlay = Resolve<DestroyOverlayDelegate>(
@@ -105,6 +108,11 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     public NativeSteamVrStatus ClearOverlayTexture(nint overlay) =>
         _clearOverlayTexture(overlay);
 
+    public NativeSteamVrStatus PollOverlayPointerEvent(
+        nint overlay,
+        ref NativeSteamVrOverlayPointerEventV1 pointerEvent) =>
+        _pollOverlayPointerEvent(overlay, ref pointerEvent);
+
     public NativeSteamVrStatus CloseOverlay(nint overlay) =>
         _closeOverlay(overlay);
 
@@ -151,6 +159,11 @@ internal sealed class NativeSteamVrLibrary : IDisposable
     private delegate NativeSteamVrStatus UpdateOverlayBgraDelegate(
         nint overlay,
         ref NativeSteamVrOverlayBgraFrameV1 frame);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate NativeSteamVrStatus PollOverlayPointerEventDelegate(
+        nint overlay,
+        ref NativeSteamVrOverlayPointerEventV1 pointerEvent);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void DestroyOverlayDelegate(nint overlay);

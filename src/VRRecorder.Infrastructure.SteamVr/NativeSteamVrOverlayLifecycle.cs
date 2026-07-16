@@ -147,6 +147,41 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
         static (library, overlay) => library.ClearOverlayTexture(overlay),
         "clear texture");
 
+    public SteamVrOverlayPointerEvent? PollPointerEvent()
+    {
+        lock (_lifetimeGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var nativeEvent = new NativeSteamVrOverlayPointerEventV1
+            {
+                StructSize = checked((uint)Marshal.SizeOf<
+                    NativeSteamVrOverlayPointerEventV1>()),
+                AbiVersion = NativeSteamVrLibrary.SupportedAbiVersion,
+            };
+            var status = _library.PollOverlayPointerEvent(
+                _overlay.DangerousGetHandle(),
+                ref nativeEvent);
+            if (status != NativeSteamVrStatus.Ok)
+            {
+                throw Failure(status, "poll pointer event");
+            }
+            if (nativeEvent.HasEvent == 0)
+            {
+                return null;
+            }
+            if (nativeEvent.HasEvent != 1 ||
+                nativeEvent.PixelX >= TexturePixelWidth ||
+                nativeEvent.PixelY >= TexturePixelHeight ||
+                !TryMapPointerEvent(nativeEvent, out var pointerEvent))
+            {
+                throw Failure(
+                    NativeSteamVrStatus.InternalError,
+                    "poll pointer event");
+            }
+            return pointerEvent;
+        }
+    }
+
     public void Close() => Operate(
         static (library, overlay) => library.CloseOverlay(overlay),
         "close");
@@ -233,4 +268,36 @@ public sealed class NativeSteamVrOverlayLifecycle : IDisposable
     private static SteamVrOverlayException Failure(
         NativeSteamVrStatus status,
         string operation) => new((int)status, operation);
+
+    private static bool TryMapPointerEvent(
+        NativeSteamVrOverlayPointerEventV1 nativeEvent,
+        out SteamVrOverlayPointerEvent pointerEvent)
+    {
+        pointerEvent = default;
+        if (!Enum.IsDefined(typeof(SteamVrOverlayPointerEventKind),
+                nativeEvent.Kind) ||
+            !Enum.IsDefined(typeof(SteamVrOverlayPointerButton),
+                nativeEvent.Button))
+        {
+            return false;
+        }
+
+        var kind = (SteamVrOverlayPointerEventKind)nativeEvent.Kind;
+        var button = (SteamVrOverlayPointerButton)nativeEvent.Button;
+        var validButton = kind == SteamVrOverlayPointerEventKind.Move
+            ? button == SteamVrOverlayPointerButton.None
+            : button != SteamVrOverlayPointerButton.None;
+        if (!validButton)
+        {
+            return false;
+        }
+
+        pointerEvent = new SteamVrOverlayPointerEvent(
+            kind,
+            checked((int)nativeEvent.PixelX),
+            checked((int)nativeEvent.PixelY),
+            button,
+            nativeEvent.CursorIndex);
+        return true;
+    }
 }

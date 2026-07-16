@@ -448,6 +448,24 @@ vrrec_test_steamvr_overlay_texture_last_byte(void)
     return vrrecorder::native::testing::SteamVrOverlayTextureLastByte();
 }
 
+extern "C" VRREC_TEST_API void
+vrrec_test_steamvr_overlay_push_pointer_event(
+    std::uint32_t kind,
+    std::uint32_t pixel_x,
+    std::uint32_t pixel_y,
+    std::uint32_t button,
+    std::uint32_t cursor_index)
+{
+    vrrecorder::native::testing::PushSteamVrOverlayPointerEvent(
+        vrrecorder::native::testing::TestSteamVrOverlayPointerEvent {
+            kind,
+            pixel_x,
+            pixel_y,
+            button,
+            cursor_index,
+        });
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_spout_reset(void)
 {
     vrrecorder::native::testing::ResetSpoutSource();
