@@ -297,6 +297,41 @@ void RejectsAProcessorOutputFromAnotherSurfaceGeneration()
     CHECK(encoder.frames.empty());
 }
 
+void RejectsEveryInvalidProcessorOutputBoundary()
+{
+    const auto source = Surface(
+        1'920,
+        1'080,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        9);
+    const auto rejects = [&](std::shared_ptr<VideoSurface> candidate) {
+        RecordingProcessor processor;
+        processor.next_output = std::move(candidate);
+        RecordingEncoder encoder;
+        ProcessingVideoEncoderSink sink(
+            processor, encoder, 1'920, 1'080);
+        const auto prepared = sink.Prepare({0, 1, 0, 0, false, source});
+        CHECK(prepared.status == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(!prepared.frame.surface);
+        CHECK(encoder.frames.empty());
+    };
+
+    rejects(nullptr);
+    auto no_handle = Surface(
+        1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_NV12, 9);
+    no_handle->native_handle = nullptr;
+    rejects(no_handle);
+    auto wrong_adapter = Surface(
+        1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_NV12, 9);
+    wrong_adapter = std::make_shared<FakeSurface>(VideoSurfaceDescriptor {
+        43, 1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_NV12, 9});
+    rejects(wrong_adapter);
+    rejects(Surface(1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_NV12, 8));
+    rejects(Surface(1'280, 1'080, VRREC_SOURCE_PIXEL_FORMAT_NV12, 9));
+    rejects(Surface(1'920, 720, VRREC_SOURCE_PIXEL_FORMAT_NV12, 9));
+    rejects(Surface(1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_RGBA8, 9));
+}
+
 void RejectsAnInputSurfaceWithoutANativeHandleBeforeProcessing()
 {
     RecordingProcessor processor;
@@ -337,6 +372,51 @@ void DelegatesFinishAndAbortsProcessorBeforeEncoder()
     CHECK(order == std::vector<int>({1, 2}));
     CHECK(sink.UpdateVideoLayout(PortraitLayout()) ==
           VRREC_STATUS_INVALID_STATE);
+}
+
+void ValidatesPreparationWriteAndFinishLifecycleBoundaries()
+{
+    const auto source = Surface(
+        1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_BGRA8, 1);
+    RecordingProcessor processor;
+    processor.next_output = Surface(
+        1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_NV12, 1);
+    RecordingEncoder encoder;
+    encoder.write = {
+        VRREC_STATUS_INTERNAL_ERROR,
+        0,
+        0,
+        VideoEncoderFailureStage::None,
+    };
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+
+    CHECK(sink.Prepare({}).status == VRREC_STATUS_INVALID_STATE);
+    const auto prepared = sink.Prepare({0, 1, 0, 0, false, source});
+    CHECK(prepared.status == VRREC_STATUS_OK);
+    const auto failed_write = sink.WritePrepared(prepared.frame);
+    CHECK(failed_write.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(failed_write.failure_stage == VideoEncoderFailureStage::Encoding);
+
+    encoder.write.failure_stage = VideoEncoderFailureStage::Muxing;
+    const auto classified = sink.WritePrepared(prepared.frame);
+    CHECK(classified.failure_stage == VideoEncoderFailureStage::Muxing);
+
+    CHECK(sink.Finish().status == VRREC_STATUS_OK);
+    CHECK(sink.Finish().status == VRREC_STATUS_INVALID_STATE);
+    CHECK(sink.Prepare({0, 1, 0, 0, false, source}).status ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(sink.WritePrepared(prepared.frame).status ==
+          VRREC_STATUS_INVALID_STATE);
+
+    RecordingProcessor aborted_processor;
+    RecordingEncoder aborted_encoder;
+    ProcessingVideoEncoderSink aborted(
+        aborted_processor, aborted_encoder, 1'920, 1'080);
+    aborted.Abort();
+    CHECK(aborted.Prepare({0, 1, 0, 0, false, source}).status ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(aborted.WritePrepared({}).status == VRREC_STATUS_INVALID_STATE);
+    CHECK(aborted.Finish().status == VRREC_STATUS_INVALID_STATE);
 }
 
 vrrec_video_layout_v1 PortraitLayout()
@@ -484,6 +564,68 @@ void RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout()
     CHECK(processor.last_plan.destination_width == 608);
 }
 
+void RejectsEveryInvalidLiveLayoutBoundary()
+{
+    RecordingProcessor processor;
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'920, 1'080);
+    const auto valid = PortraitLayout();
+    const auto rejects = [&](const auto mutate) {
+        auto layout = valid;
+        mutate(layout);
+        CHECK(sink.UpdateVideoLayout(layout) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    };
+
+    rejects([](auto &value) { --value.struct_size; });
+    rejects([](auto &value) { ++value.abi_version; });
+    rejects([](auto &value) { value.source_width = 0; });
+    rejects([](auto &value) { value.source_height = 0; });
+    rejects([](auto &value) { --value.canvas_width; });
+    rejects([](auto &value) { --value.canvas_height; });
+    rejects([](auto &value) { value.destination_width = 0; });
+    rejects([](auto &value) { value.destination_height = 0; });
+    rejects([](auto &value) { --value.destination_width; });
+    rejects([](auto &value) { --value.destination_height; });
+    rejects([](auto &value) {
+        value.destination_x = value.canvas_width + 1;
+    });
+    rejects([](auto &value) {
+        value.destination_y = value.canvas_height + 1;
+    });
+    rejects([](auto &value) {
+        value.destination_width = value.canvas_width;
+    });
+    rejects([](auto &value) {
+        value.destination_height = value.canvas_height + 2;
+    });
+    rejects([](auto &value) {
+        value.canvas_background =
+            static_cast<vrrec_canvas_background_t>(99);
+    });
+    rejects([](auto &value) {
+        value.rotation = static_cast<vrrec_video_rotation_t>(99);
+    });
+    CHECK(sink.UpdateVideoLayout(valid) == VRREC_STATUS_OK);
+}
+
+void RejectsAFrameWhenNoProcessingPlanCanBeCreated()
+{
+    RecordingProcessor processor;
+    RecordingEncoder encoder;
+    ProcessingVideoEncoderSink sink(processor, encoder, 1'919, 1'080);
+    const auto preparation = sink.Prepare({
+        0,
+        1,
+        0,
+        0,
+        false,
+        Surface(1'920, 1'080, VRREC_SOURCE_PIXEL_FORMAT_BGRA8, 1),
+    });
+    CHECK(preparation.status == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(processor.process_calls == 0);
+}
+
 }
 
 int main()
@@ -493,12 +635,16 @@ int main()
     ClassifiesProcessorFailureAndSkipsTheEncoder();
     RejectsAnInvalidProcessorOutputSurface();
     RejectsAProcessorOutputFromAnotherSurfaceGeneration();
+    RejectsEveryInvalidProcessorOutputBoundary();
     RejectsAnInputSurfaceWithoutANativeHandleBeforeProcessing();
     DelegatesFinishAndAbortsProcessorBeforeEncoder();
+    ValidatesPreparationWriteAndFinishLifecycleBoundaries();
     AppliesValidatedLiveLayoutToTheNextFrame();
     FinishTerminalizesFrameProcessingAndLayoutUpdates();
     AbortPreventsAnInFlightProcessedFrameFromReachingTheEncoder();
     FinishPreventsAnInFlightProcessedFrameFromReachingTheEncoder();
     RejectsInvalidUpdatesAndMismatchedFramesWithoutLosingTheLastLayout();
+    RejectsEveryInvalidLiveLayoutBoundary();
+    RejectsAFrameWhenNoProcessingPlanCanBeCreated();
     return 0;
 }
