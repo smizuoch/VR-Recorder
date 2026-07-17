@@ -253,6 +253,83 @@ void RejectsDescriptorMetadataWithoutTheAtomicPort()
     CHECK(encoder.abort_calls == 1);
 }
 
+void RejectsEveryDescriptorMetadataInconsistency()
+{
+    int encoder_identity = 0;
+    const auto descriptor = VideoDescriptor();
+    struct Case final {
+        bool became_ready;
+        const void *identity;
+        const H264StreamDescriptor *descriptor;
+        bool include_packet;
+    };
+    const Case cases[] {
+        {true, nullptr, &descriptor, true},
+        {true, &encoder_identity, nullptr, true},
+        {true, &encoder_identity, &descriptor, false},
+        {false, &encoder_identity, nullptr, true},
+        {false, nullptr, &descriptor, true},
+    };
+
+    for (const auto &test_case : cases) {
+        ScriptedPacketEncoder encoder;
+        encoder.encode = {
+            VRREC_STATUS_OK,
+            250,
+            test_case.include_packet
+                ? std::vector<EncodedMediaPacket> {VideoPacket(0)}
+                : std::vector<EncodedMediaPacket> {},
+            test_case.became_ready,
+            test_case.identity,
+            test_case.descriptor,
+        };
+        RecordingPacketSubmissionPort mux;
+        RecordingH264DescriptorSubmissionPort descriptor_mux;
+        MuxingVideoEncoderSink sink(encoder, mux, descriptor_mux);
+
+        const auto write = sink.Write({});
+
+        CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(write.failure_stage == VideoEncoderFailureStage::Muxing);
+        CHECK(write.muxed_packet_count == 0);
+        CHECK(mux.submit_calls == 0);
+        CHECK(descriptor_mux.submit_calls == 0);
+        CHECK(encoder.abort_calls == 1);
+        CHECK(mux.failed_streams ==
+              std::vector<MediaStreamKind> {MediaStreamKind::Video});
+    }
+}
+
+void DescriptorPacketSubmissionFailureAbortsBothSides()
+{
+    ScriptedPacketEncoder encoder;
+    int encoder_identity = 0;
+    const auto descriptor = VideoDescriptor();
+    encoder.encode = {
+        VRREC_STATUS_OK,
+        250,
+        {VideoPacket(0)},
+        true,
+        &encoder_identity,
+        &descriptor,
+    };
+    RecordingPacketSubmissionPort mux;
+    RecordingH264DescriptorSubmissionPort descriptor_mux;
+    descriptor_mux.result = Mp4MuxResult::MuxFailed;
+    MuxingVideoEncoderSink sink(encoder, mux, descriptor_mux);
+
+    const auto write = sink.Write({});
+
+    CHECK(write.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(write.failure_stage == VideoEncoderFailureStage::Muxing);
+    CHECK(write.muxed_packet_count == 0);
+    CHECK(mux.submit_calls == 0);
+    CHECK(descriptor_mux.submit_calls == 1);
+    CHECK(encoder.abort_calls == 1);
+    CHECK(mux.failed_streams ==
+          std::vector<MediaStreamKind> {MediaStreamKind::Video});
+}
+
 void AbortsBothSidesWhenMuxingFails()
 {
     ScriptedPacketEncoder encoder;
@@ -638,6 +715,8 @@ int main()
     KeepsEncoderBufferingAsAZeroPacketSuccess();
     SubmitsTheFirstDescriptorPacketThroughTheAtomicPort();
     RejectsDescriptorMetadataWithoutTheAtomicPort();
+    RejectsEveryDescriptorMetadataInconsistency();
+    DescriptorPacketSubmissionFailureAbortsBothSides();
     AbortsBothSidesWhenMuxingFails();
     FlushesEncoderPacketsWithoutFinalizingTheSharedMuxer();
     SuccessfulFinishTerminalizesTheVideoEncoderSink();
