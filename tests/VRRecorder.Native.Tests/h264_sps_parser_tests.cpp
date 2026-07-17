@@ -80,6 +80,54 @@ void ParsesMainProfileWithoutExtendedSyntax()
     CHECK(result.frame_mbs_only);
 }
 
+void ParsesEveryExtendedProfileVariant()
+{
+    constexpr std::array<std::uint8_t, 14> profiles {
+        44, 83, 86, 100, 110, 118, 122,
+        128, 134, 135, 138, 139, 144, 244,
+    };
+    for (const auto profile : profiles) {
+        SpsSettings settings;
+        settings.profile_idc = profile;
+        H264SpsInfo result {};
+        CHECK(ParseH264Sps(MakeSps(settings), result) == VRREC_STATUS_OK);
+        CHECK(result.profile_idc == profile);
+    }
+}
+
+void ParsesChromaPocScalingAndInterlacedVariants()
+{
+    for (const auto chroma_format : {0U, 1U, 2U, 3U}) {
+        SpsSettings settings;
+        settings.chroma_format_idc = chroma_format;
+        settings.separate_colour_plane = chroma_format == 3U;
+        H264SpsInfo result {};
+        CHECK(ParseH264Sps(MakeSps(settings), result) == VRREC_STATUS_OK);
+        CHECK(result.chroma_format_idc == chroma_format);
+    }
+
+    SpsSettings interlaced;
+    interlaced.frame_mbs_only = false;
+    H264SpsInfo result {};
+    CHECK(ParseH264Sps(MakeSps(interlaced), result) == VRREC_STATUS_OK);
+    CHECK(!result.frame_mbs_only);
+    CHECK(result.height == 32);
+
+    SpsSettings poc_type_two;
+    poc_type_two.pic_order_count_type = 2;
+    CHECK(ParseH264Sps(MakeSps(poc_type_two), result) == VRREC_STATUS_OK);
+
+    SpsSettings poc_type_one;
+    poc_type_one.pic_order_count_type = 1;
+    poc_type_one.pic_order_cycle_length = 2;
+    CHECK(ParseH264Sps(MakeSps(poc_type_one), result) == VRREC_STATUS_OK);
+
+    SpsSettings scaling_matrix;
+    scaling_matrix.scaling_matrix_present = true;
+    CHECK(ParseH264Sps(MakeSps(scaling_matrix), result) ==
+          VRREC_STATUS_OK);
+}
+
 void ParsesEncoderSpsWithEmulationPreventionBytesAndVui()
 {
     constexpr std::array<std::byte, 23> sps {
@@ -107,6 +155,9 @@ void RejectsMalformedOrImpossibleSps()
     CHECK(ParseH264Sps(
               std::vector<std::byte> {std::byte {0x68}, std::byte {0x80}},
               result) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ParseH264Sps(
+              std::vector<std::byte> {std::byte {0xe7}, std::byte {0x80}},
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
 
     auto truncated = MakeSps(SpsSettings {});
     truncated.resize(4);
@@ -129,6 +180,12 @@ void RejectsMalformedOrImpossibleSps()
     };
     CHECK(ParseH264Sps(dangling_emulation_prevention, result) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    const std::vector<std::byte> unescaped_start_code {
+        std::byte {0x67}, std::byte {100}, std::byte {0}, std::byte {0},
+        std::byte {0}, std::byte {1},
+    };
+    CHECK(ParseH264Sps(unescaped_start_code, result) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
 
     SpsSettings overflowing_width;
     overflowing_width.pic_width_in_mbs_minus1 =
@@ -137,12 +194,57 @@ void RejectsMalformedOrImpossibleSps()
           VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void RejectsEverySpsSyntaxLimit()
+{
+    H264SpsInfo result {};
+    const auto rejects = [&](const auto mutate) {
+        SpsSettings settings;
+        mutate(settings);
+        CHECK(ParseH264Sps(MakeSps(settings), result) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(result.width == 0);
+        CHECK(result.height == 0);
+    };
+
+    rejects([](auto &value) { value.sequence_parameter_set_id = 32; });
+    rejects([](auto &value) { value.chroma_format_idc = 4; });
+    rejects([](auto &value) { value.bit_depth_luma_minus8 = 7; });
+    rejects([](auto &value) { value.bit_depth_chroma_minus8 = 7; });
+    rejects([](auto &value) { value.log2_max_frame_num_minus4 = 13; });
+    rejects([](auto &value) {
+        value.log2_max_pic_order_count_lsb_minus4 = 13;
+    });
+    rejects([](auto &value) { value.pic_order_count_type = 3; });
+    rejects([](auto &value) {
+        value.pic_order_count_type = 1;
+        value.pic_order_cycle_length = 256;
+    });
+    rejects([](auto &value) {
+        value.crop = true;
+        value.crop_top = 8;
+    });
+    rejects([](auto &value) {
+        value.crop = true;
+        value.crop_right = 8;
+    });
+    rejects([](auto &value) {
+        value.pic_height_in_map_units_minus1 =
+            std::numeric_limits<std::uint32_t>::max();
+    });
+}
+
 void RejectsMalformedOrOutOfRangePpsIdentifiers()
 {
     H264PpsInfo result {};
     CHECK(ParseH264Pps({}, result) == VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(ParseH264Pps(
               std::vector<std::byte> {std::byte {0x67}, std::byte {0x80}},
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ParseH264Pps(
+              std::vector<std::byte> {std::byte {0xe8}, std::byte {0x80}},
+              result) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ParseH264Pps(
+              std::vector<std::byte> {std::byte {0x68}, std::byte {0x80}},
               result) == VRREC_STATUS_INVALID_ARGUMENT);
 
     PpsSettings picture_id_too_large;
@@ -163,8 +265,11 @@ int main()
     ParsesCroppedHighProfileDisplayGeometry();
     ParsesPictureParameterSetIdentifiers();
     ParsesMainProfileWithoutExtendedSyntax();
+    ParsesEveryExtendedProfileVariant();
+    ParsesChromaPocScalingAndInterlacedVariants();
     ParsesEncoderSpsWithEmulationPreventionBytesAndVui();
     RejectsMalformedOrImpossibleSps();
+    RejectsEverySpsSyntaxLimit();
     RejectsMalformedOrOutOfRangePpsIdentifiers();
     return 0;
 }

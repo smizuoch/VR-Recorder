@@ -42,6 +42,15 @@ public:
         }
     }
 
+    void SignedExpGolomb(std::int32_t value)
+    {
+        const auto signed_value = static_cast<std::int64_t>(value);
+        const auto encoded = signed_value <= 0
+            ? static_cast<std::uint64_t>(-signed_value) * 2U
+            : static_cast<std::uint64_t>(signed_value) * 2U - 1U;
+        UnsignedExpGolomb(static_cast<std::uint32_t>(encoded));
+    }
+
     std::vector<std::uint8_t> FinishRbsp()
     {
         Bit(1);
@@ -63,7 +72,13 @@ struct SpsSettings final {
     std::uint32_t chroma_format_idc = 1;
     std::uint32_t bit_depth_luma_minus8 = 0;
     std::uint32_t bit_depth_chroma_minus8 = 0;
+    bool separate_colour_plane = false;
+    bool scaling_matrix_present = false;
     std::uint32_t sequence_parameter_set_id = 0;
+    std::uint32_t log2_max_frame_num_minus4 = 0;
+    std::uint32_t pic_order_count_type = 0;
+    std::uint32_t log2_max_pic_order_count_lsb_minus4 = 0;
+    std::uint32_t pic_order_cycle_length = 0;
     std::uint32_t pic_width_in_mbs_minus1 = 0;
     std::uint32_t pic_height_in_map_units_minus1 = 0;
     bool frame_mbs_only = true;
@@ -81,8 +96,25 @@ struct PpsSettings final {
 
 inline bool HasExtendedProfileSyntax(std::uint8_t profile_idc)
 {
-    return profile_idc == 100 || profile_idc == 110 || profile_idc == 122 ||
-           profile_idc == 244;
+    switch (profile_idc) {
+    case 44:
+    case 83:
+    case 86:
+    case 100:
+    case 110:
+    case 118:
+    case 122:
+    case 128:
+    case 134:
+    case 135:
+    case 138:
+    case 139:
+    case 144:
+    case 244:
+        return true;
+    default:
+        return false;
+    }
 }
 
 inline std::vector<std::byte> EscapeRbsp(
@@ -113,17 +145,41 @@ inline std::vector<std::byte> MakeSps(const SpsSettings &settings)
     if (HasExtendedProfileSyntax(settings.profile_idc)) {
         writer.UnsignedExpGolomb(settings.chroma_format_idc);
         if (settings.chroma_format_idc == 3) {
-            writer.Bit(0); // separate_colour_plane_flag
+            writer.Bit(settings.separate_colour_plane ? 1U : 0U);
         }
         writer.UnsignedExpGolomb(settings.bit_depth_luma_minus8);
         writer.UnsignedExpGolomb(settings.bit_depth_chroma_minus8);
         writer.Bit(0); // qpprime_y_zero_transform_bypass_flag
-        writer.Bit(0); // seq_scaling_matrix_present_flag
+        writer.Bit(settings.scaling_matrix_present ? 1U : 0U);
+        if (settings.scaling_matrix_present) {
+            const auto list_count = settings.chroma_format_idc == 3 ? 12U : 8U;
+            for (std::uint32_t list = 0; list < list_count; ++list) {
+                writer.Bit(list == 0 ? 1U : 0U);
+                if (list == 0) {
+                    for (std::uint32_t index = 0; index < 16U; ++index) {
+                        writer.SignedExpGolomb(0);
+                    }
+                }
+            }
+        }
     }
 
-    writer.UnsignedExpGolomb(0); // log2_max_frame_num_minus4
-    writer.UnsignedExpGolomb(0); // pic_order_cnt_type
-    writer.UnsignedExpGolomb(0); // log2_max_pic_order_cnt_lsb_minus4
+    writer.UnsignedExpGolomb(settings.log2_max_frame_num_minus4);
+    writer.UnsignedExpGolomb(settings.pic_order_count_type);
+    if (settings.pic_order_count_type == 0) {
+        writer.UnsignedExpGolomb(
+            settings.log2_max_pic_order_count_lsb_minus4);
+    } else if (settings.pic_order_count_type == 1) {
+        writer.Bit(0); // delta_pic_order_always_zero_flag
+        writer.SignedExpGolomb(0); // offset_for_non_ref_pic
+        writer.SignedExpGolomb(0); // offset_for_top_to_bottom_field
+        writer.UnsignedExpGolomb(settings.pic_order_cycle_length);
+        for (std::uint32_t index = 0;
+             index < settings.pic_order_cycle_length;
+             ++index) {
+            writer.SignedExpGolomb(0);
+        }
+    }
     writer.UnsignedExpGolomb(1); // max_num_ref_frames
     writer.Bit(0); // gaps_in_frame_num_value_allowed_flag
     writer.UnsignedExpGolomb(settings.pic_width_in_mbs_minus1);
