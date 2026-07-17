@@ -1513,6 +1513,84 @@ void HeaderConfigurationAllocationFailureIsTerminal()
     CHECK(downstream.abort_calls == 1);
 }
 
+void CancellationSignalClosesEveryPreHeaderEntryPoint()
+{
+    int encoder_identity = 0;
+    const std::vector packets {
+        Packet(MediaStreamKind::Video, 0, std::byte {1})};
+
+    {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        coordinator.RequestAbort();
+        coordinator.RequestAbort();
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_INVALID_STATE);
+        CHECK(coordinator.State() == PreHeaderState::Aborted);
+        CHECK(downstream.request_abort_calls == 1);
+        CHECK(downstream.abort_calls == 1);
+    }
+
+    {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+        coordinator.RequestAbort();
+        CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+              VRREC_STATUS_INVALID_STATE);
+        CHECK(coordinator.State() == PreHeaderState::Aborted);
+        CHECK(downstream.start_calls == 0);
+        CHECK(downstream.submit_calls == 0);
+    }
+
+    {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+        coordinator.RequestAbort();
+        CHECK(coordinator.PublishVideoDescriptor(
+                  &encoder_identity,
+                  VideoDescriptor()) == VRREC_STATUS_INVALID_STATE);
+        CHECK(coordinator.State() == PreHeaderState::Aborted);
+        CHECK(downstream.start_calls == 0);
+        CHECK(downstream.submit_calls == 0);
+    }
+
+    {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+        coordinator.RequestAbort();
+        CHECK(coordinator.SubmitBatch(MediaStreamKind::Video, packets) ==
+              Mp4MuxResult::MuxFailed);
+        CHECK(coordinator.SubmitVideoDescriptorBatch(
+                  &encoder_identity,
+                  VideoDescriptor(),
+                  packets) == Mp4MuxResult::MuxFailed);
+        CHECK(downstream.start_calls == 0);
+        CHECK(downstream.submit_calls == 0);
+    }
+}
+
 }
 
 int main()
@@ -1547,5 +1625,6 @@ int main()
     DescriptorPublicationAllocationFailureIsTerminal();
     QueueOwnershipAllocationFailureIsTerminal();
     HeaderConfigurationAllocationFailureIsTerminal();
+    CancellationSignalClosesEveryPreHeaderEntryPoint();
     return 0;
 }
