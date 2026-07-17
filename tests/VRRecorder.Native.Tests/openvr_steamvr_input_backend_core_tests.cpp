@@ -1,5 +1,8 @@
 #include "openvr_steamvr_input_backend_core.hpp"
 #include "openvr_steamvr_haptic_backend_core.hpp"
+#include "steamvr_manifest_paths.hpp"
+
+#include "allocation_failure_test_support.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -319,6 +322,25 @@ void RejectsInvalidHapticCompositionInputs()
     CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void ResolvesSteamVrApplicationManifestPathBoundaries()
+{
+    std::string output;
+    CHECK(ResolveSteamVrApplicationManifestPath("actions.json", output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ResolveSteamVrApplicationManifestPath(
+              "C:\\app\\actions.json",
+              output) == VRREC_STATUS_OK);
+    CHECK(output == "C:\\app\\steamvr.vrmanifest");
+
+    const std::string long_path =
+        "C:\\" + std::string(1'024, 'a') + "\\actions.json";
+    allocation_failure::fail_on_allocation = 1;
+    const auto status =
+        ResolveSteamVrApplicationManifestPath(long_path, output);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+}
+
 void InitializesInRequiredOrderAndCanonicalizesDigitalState()
 {
     auto state = std::make_shared<FakePortState>();
@@ -479,6 +501,7 @@ int main()
     InitializesHapticBackendAndRoutesPulse();
     HapticInitializationFailureReleasesAcquiredRuntime();
     RejectsInvalidHapticCompositionInputs();
+    ResolvesSteamVrApplicationManifestPathBoundaries();
     InitializesInRequiredOrderAndCanonicalizesDigitalState();
     FailsClosedAtEachInitializationBoundary();
     RejectsZeroHandlesAndInvalidCompositionInputs();
