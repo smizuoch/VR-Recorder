@@ -109,6 +109,7 @@ desktop production録画、production OpenVR overlay、first-run setup 7／8のp
 - post-publish sealerはexisting canonical root、normalized root-relative GUI AMD64 PE entrypoint、全fileのcanonical path／length／SHA-256／kind、Windows case-fold duplicate、reparse／ADS semanticsを再scanする。propsに固定した各runtimeのhash／length／kindとpublish結果を照合し、stagingとpublishを同時に改変した場合も拒否する。`VRRecorder.App.dll`をloadせずmanaged PE metadataからrepository source revision／RID／pinned product versionを読み、authenticated Legal catalogのproduct versionと一致した後だけinventory／EXE／build／Legal identityを発行する。全publish PEのimport再照合は次の単位に残る。
 - official publish scriptはclean repositoryの`HEAD`をsource revisionとしてAppへ埋め、staging CLIが返したexact propsだけでpublishする。publish後に同じReleaseToolのsealer commandを実行し、payload外へschema v1の決定的identity JSONをCreateNew発行する。callerからproduct version／source revision／手書きprops／identity文字列は受け取らない。
 - identity readerはschema v1のunknown／duplicate field、version／revision／RID／Legal anchor、canonical file path／sort／Windows case-fold重複、entrypoint membership／hash／kindをstrictに検証し、全fileからinventory digestを再計算する。report validatorはこのreaderが発行したinternal identityだけを入力にする。
+- Hardware Validation report schema v1とreaderはpayload identity document hash、run ID／runner ID／UTC timestamp、Windows build、GPU／driver、encoder mode／API／実名、SteamVR／HMD／左右controller、case status、artifact path／length／hash／kindだけを受理する。unknown／duplicate field、unknown status、duplicate run／case／artifactを拒否し、serialized `Passed` propertyはschemaに存在しない。必須matrixとartifact実bytesからの合否導出は次の単位で行う。
 - `Directory.Move`成功をcommit pointにしているが、power-loss durabilityや既存非空directoryのatomic replacementは主張しない。既存directoryは置換せずcontent-addressedに並置する。
 - Windows ADS実テストはWindows上でだけ有効であり、今回のLinux runではP/Invoke callsite registrationとportable injection境界までの証拠である。
 
@@ -333,7 +334,7 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | P0 | WASAPI Windows contract | default render loopbackから実AAC packetを生成済み。PICO `default-capture`のdirect sourceはstartup discontinuityを含む3秒captureを10回連続で通過し、MicOnly full production muxも179 AAC packet／182,272 decoded sampleをpinned oracleで確認済み。device change／unplug／privacy／長時間underrunは未検証 | Windows音声failure matrix |
 | P0 | production media factory | production DLLのSpout→D3D11→H.264、WASAPI→AAC、pre-header→fMP4、managed finalizationまで実録画Green。production App UI／VRChat／Legalは未完了 | product-level bring-up |
 | P1 | encoder fallback／part rollover | failure前part保持、hardware failure後のsoftware rollover、hardware開始失敗時のclean software file retryは自動test Green。実hardware HILは最終batchへ保留 | 基本設計§11.2の実機適合 |
-| P1 | unpackaged hardware payload | promotion policyのみ | 実機証拠のidentity固定 |
+| P1 | unpackaged hardware payload | canonical identity発行／strict再読込とversioned report schema／readerはGreen。required matrix／artifact実bytes validatorは未完了 | 実機証拠の合否固定 |
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |
 | P1 | OpenVR input／overlay一式 | runtime owner、native lifecycle／texture／event／pose／haptic、production glyph、App表示接続、Dock／Pin／nudge／recenter、drag release、World Pinでの実HMD表示はGreen。実controllerでのWrist Dock／drag／左右入力、再接続HILが未完了 | Wrist操作・表示 |
 | P1 | first-run setup 7／8 | setup 7はproduction overlayのShow＋mode／hand／origin／pose readback、setup 8はproduction 3秒録画＋ffprobe済みSaved＋既定player起動までGreen。実VRChat／controllerを含む全行程HILは未完了 | setup完走 |

@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vr-recorder.invalid/schemas/windows-hardware-validation-report-v1.schema.json",
+  "title": "VR Recorder Windows Hardware Validation Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "matrixProfile",
+    "payloadIdentitySha256",
+    "runs"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "matrixProfile": {
+      "const": "full-production-hardware-validation-v1"
+    },
+    "payloadIdentitySha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/run"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[ -~]+$"
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "runnerId",
+        "capturedAtUtc",
+        "environment",
+        "cases"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "runnerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,7})?Z$"
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/case"
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "gpu",
+        "encoder",
+        "steamVr"
+      ],
+      "properties": {
+        "os": {
+          "$ref": "#/$defs/os"
+        },
+        "gpu": {
+          "$ref": "#/$defs/gpu"
+        },
+        "encoder": {
+          "$ref": "#/$defs/encoder"
+        },
+        "steamVr": {
+          "$ref": "#/$defs/steamVr"
+        }
+      }
+    },
+    "os": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "build",
+        "architecture"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "windows-10-22h2",
+            "windows-11"
+          ]
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[0-9][0-9A-Za-z._+-]*$"
+        },
+        "architecture": {
+          "const": "x64"
+        }
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vendor",
+        "deviceId",
+        "driverVersion"
+      ],
+      "properties": {
+        "vendor": {
+          "enum": [
+            "nvidia",
+            "amd",
+            "intel"
+          ]
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[0-9A-Za-z._:&-]+$"
+        },
+        "driverVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[0-9][0-9A-Za-z._+-]*$"
+        }
+      }
+    },
+    "encoder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "api",
+        "name"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "hardware",
+            "software"
+          ]
+        },
+        "api": {
+          "enum": [
+            "nvenc",
+            "amf",
+            "qsv",
+            "media-foundation"
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/safeText"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "software"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "api": {
+                "const": "media-foundation"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "hardware"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "api": {
+                "enum": [
+                  "nvenc",
+                  "amf",
+                  "qsv"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "steamVr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeVersion",
+        "hmdModel",
+        "leftController",
+        "rightController"
+      ],
+      "properties": {
+        "runtimeVersion": {
+          "$ref": "#/$defs/safeText"
+        },
+        "hmdModel": {
+          "$ref": "#/$defs/safeText"
+        },
+        "leftController": {
+          "$ref": "#/$defs/safeText"
+        },
+        "rightController": {
+          "$ref": "#/$defs/safeText"
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "artifacts"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "skip"
+          ]
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "length",
+        "sha256",
+        "kind"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\\\/:*?\"<>|]+(?:/[^\\\\/:*?\"<>|]+)*$"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "kind": {
+          "enum": [
+            "diagnostic",
+            "media",
+            "screenshot",
+            "oracle",
+            "log"
+          ]
+        }
+      }
+    }
+  }
+}
