@@ -23,6 +23,7 @@ EXPORTS
     vrrec_steamvr_input_poll_v1
     vrrec_steamvr_overlay_clear_texture_v1
     vrrec_steamvr_overlay_close_v1
+    vrrec_steamvr_overlay_convert_pose_v1
     vrrec_steamvr_overlay_create_v1
     vrrec_steamvr_overlay_destroy_v1
     vrrec_steamvr_overlay_get_device_profile_v1
