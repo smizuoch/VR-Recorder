@@ -221,4 +221,136 @@ public sealed class WristTextureLayoutEngineTests
             actionElement.Bounds.Left + actionElement.Bounds.Width / 2,
             actionElement.Bounds.Top + actionElement.Bounds.Height / 2));
     }
+
+    [Fact]
+    public void LayoutRejectsMissingInputsAndInvalidOptions()
+    {
+        var snapshot = Snapshot(Action("action.one"));
+
+        Assert.Throws<ArgumentNullException>(() =>
+            WristTextureLayoutEngine.Layout(null!, WristLayoutOptions.Default));
+        Assert.Throws<ArgumentNullException>(() =>
+            WristTextureLayoutEngine.Layout(snapshot, null!));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default with
+                {
+                    FlowDirection = (WristFlowDirection)int.MaxValue,
+                }));
+
+        foreach (var textScale in new[]
+                 {
+                     double.NaN,
+                     double.NegativeInfinity,
+                     0.99,
+                     2.01,
+                 })
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                WristTextureLayoutEngine.Layout(
+                    snapshot,
+                    WristLayoutOptions.Default with
+                    {
+                        TextScale = textScale,
+                    }));
+        }
+    }
+
+    [Fact]
+    public void LayoutRejectsInvalidActionIdentityAndTargetSize()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureLayoutEngine.Layout(
+                Snapshot(Action(" ")),
+                WristLayoutOptions.Default));
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureLayoutEngine.Layout(
+                Snapshot(Action("duplicate"), Action("duplicate")),
+                WristLayoutOptions.Default));
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureLayoutEngine.Layout(
+                Snapshot(Action("too-small", minimumTargetDp: 47)),
+                WristLayoutOptions.Default));
+    }
+
+    [Fact]
+    public void MainLayoutRejectsSecondaryTargetsThatExceedSafeArea()
+    {
+        var snapshot = Snapshot(
+            Action("primary", UiComponentRole.LargeFilledIconButton),
+            Action("secondary.one", minimumTargetDp: 300),
+            Action("secondary.two", minimumTargetDp: 300));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default));
+
+        Assert.Contains("safe area", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PositioningLayoutRejectsUnsupportedGridAndUndersizedCells()
+    {
+        var tooMany = Enumerable.Range(0, 11)
+            .Select(index => Action($"position.{index}"))
+            .ToArray();
+        var oversized = Snapshot(
+            WristPage.Positioning,
+            Action("position.large", minimumTargetDp: 200));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureLayoutEngine.Layout(
+                Snapshot(WristPage.Positioning, tooMany),
+                WristLayoutOptions.Default));
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureLayoutEngine.Layout(
+                oversized,
+                WristLayoutOptions.Default));
+    }
+
+    [Fact]
+    public void FirstOrdinaryActionBecomesPrimaryWhenNoPreferredActionExists()
+    {
+        var layout = WristTextureLayoutEngine.Layout(
+            Snapshot(Action("ordinary.one"), Action("ordinary.two")),
+            WristLayoutOptions.Default);
+
+        var primary = Assert.Single(layout.Elements, element =>
+            element.Kind == WristElementKind.PrimaryAction);
+        Assert.Equal("ordinary.one", primary.SemanticId);
+    }
+
+    private static WristUiSnapshot Snapshot(params UiActionSnapshot[] actions) =>
+        Snapshot(WristPage.Main, actions);
+
+    private static WristUiSnapshot Snapshot(
+        WristPage page,
+        params UiActionSnapshot[] actions) =>
+        new(
+            1,
+            RecorderState.Ready,
+            new UiStateCue(
+                UiColorRole.Surface,
+                "state.ready",
+                new LocalizedText("state.ready", "READY")),
+            page,
+            actions);
+
+    private static UiActionSnapshot Action(
+        string semanticId,
+        UiComponentRole componentRole = UiComponentRole.FilledTonalButton,
+        int minimumTargetDp = 48) =>
+        new(
+            semanticId,
+            UiCommandId.Retry,
+            "action.icon",
+            componentRole,
+            UiColorRole.Surface,
+            true,
+            new LocalizedText("action.label", "Action"),
+            new LocalizedText("action.accessible", "Action"),
+            new LocalizedText("action.tooltip", "Action"),
+            minimumTargetDp);
 }
