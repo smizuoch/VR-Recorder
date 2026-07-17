@@ -429,6 +429,32 @@ public sealed class PInvokeEncoderProbeTests
             probe.ProbeAsync(Request(), CancellationToken.None));
     }
 
+    [Fact]
+    public void NativeProbeLibraryRejectsInvalidPathsAndMissingExports()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        Assert.Throws<ArgumentException>(() =>
+            new NativeEncoderProbeLibrary("relative-probe-library.so"));
+        var missing = Path.Combine(
+            Path.GetTempPath(),
+            $"missing-probe-{Guid.NewGuid():N}.so");
+        var missingException = Assert.Throws<FileNotFoundException>(() =>
+            new NativeEncoderProbeLibrary(missing));
+        Assert.Equal(Path.GetFullPath(missing), missingException.FileName);
+
+        Assert.Throws<EntryPointNotFoundException>(() =>
+            new NativeEncoderProbeLibrary(
+                "/lib/x86_64-linux-gnu/libc.so.6"));
+
+        var library = new NativeEncoderProbeLibrary(FixturePath());
+        library.Dispose();
+        library.Dispose();
+    }
+
     public enum EvidenceMismatch
     {
         StructSize,
