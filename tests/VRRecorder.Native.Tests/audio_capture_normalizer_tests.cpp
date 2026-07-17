@@ -665,6 +665,200 @@ void RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits()
     CHECK(normalized.interleaved_samples.empty());
 }
 
+void RejectsEveryUnsupportedCaptureFormat()
+{
+    using namespace vrrecorder::native;
+    const auto rejects = [](const auto mutate) {
+        auto format = CapturePcmFormat {
+            48'000,
+            2,
+            CaptureSampleEncoding::IeeeFloat,
+            32,
+            32,
+            8,
+            0x0000'0003,
+        };
+        mutate(format);
+        const std::vector<float> samples {0.25F, -0.25F};
+        StereoCaptureNormalizer48k normalizer(1'000'000);
+        CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(
+                  format,
+                  {
+                      0,
+                      1'000'000,
+                      1,
+                      std::as_bytes(std::span<const float>(samples)),
+                      false,
+                      false,
+                      false,
+                  },
+                  normalized) == CaptureNormalizationResult::InvalidFormat);
+    };
+
+    rejects([](auto &value) { value.sample_rate_hz = 0; });
+    rejects([](auto &value) { value.channel_count = 0; });
+    rejects([](auto &value) { value.channel_count = 9; });
+    rejects([](auto &value) {
+        value.channel_count = 1;
+        value.block_align = 4;
+        value.speaker_mask = 0x0000'0001;
+    });
+    rejects([](auto &value) { value.speaker_mask = 0x0000'000c; });
+    rejects([](auto &value) {
+        value.channel_count = 3;
+        value.block_align = 12;
+        value.speaker_mask = 0x0000'0003;
+    });
+    rejects([](auto &value) { value.container_bits = 16; });
+    rejects([](auto &value) { value.valid_bits = 16; });
+    rejects([](auto &value) {
+        value.encoding = CaptureSampleEncoding::PcmSignedInteger;
+        value.container_bits = 16;
+        value.valid_bits = 15;
+        value.block_align = 4;
+    });
+    rejects([](auto &value) {
+        value.encoding = CaptureSampleEncoding::PcmSignedInteger;
+        value.container_bits = 24;
+        value.valid_bits = 23;
+        value.block_align = 6;
+    });
+    rejects([](auto &value) {
+        value.encoding = CaptureSampleEncoding::PcmSignedInteger;
+        value.valid_bits = 16;
+    });
+    rejects([](auto &value) { value.block_align = 9; });
+}
+
+void AcceptsAlternateLayoutsAndPcm32()
+{
+    using namespace vrrecorder::native;
+    const auto accepts = [](const CapturePcmFormat &format,
+                            std::span<const std::byte> bytes) {
+        StereoCaptureNormalizer48k normalizer(2'000'000);
+        CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(
+                  format,
+                  {0, 2'000'000, 1, bytes, false, false, false},
+                  normalized) == CaptureNormalizationResult::Ready);
+        CHECK(normalized.frame_count_48k == 1);
+    };
+
+    const std::vector<float> mono {0.25F};
+    accepts(
+        {48'000, 1, CaptureSampleEncoding::IeeeFloat, 32, 32, 4, 0},
+        std::as_bytes(std::span<const float>(mono)));
+    const std::vector<float> stereo {0.25F, -0.25F};
+    accepts(
+        {48'000, 2, CaptureSampleEncoding::IeeeFloat, 32, 32, 8, 0},
+        std::as_bytes(std::span<const float>(stereo)));
+    const std::vector<std::int32_t> pcm32 {
+        std::numeric_limits<std::int32_t>::min(),
+        std::numeric_limits<std::int32_t>::max(),
+    };
+    accepts(
+        {48'000, 2, CaptureSampleEncoding::PcmSignedInteger,
+         32, 32, 8, 0x0000'0003},
+        std::as_bytes(std::span<const std::int32_t>(pcm32)));
+}
+
+void RejectsMalformedPacketMetadataAndPayloads()
+{
+    using namespace vrrecorder::native;
+    const CapturePcmFormat format {
+        48'000,
+        2,
+        CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        8,
+        0x0000'0003,
+    };
+    const std::vector<float> stereo {0.25F, -0.25F};
+    const auto bytes = std::as_bytes(std::span<const float>(stereo));
+    const auto rejects = [&](const RawCapturePacket &packet) {
+        StereoCaptureNormalizer48k normalizer(3'000'000);
+        CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(format, packet, normalized) ==
+              CaptureNormalizationResult::InvalidPacket);
+    };
+
+    rejects({0, 3'000'000, 0, {}, false, false, false});
+    rejects({0, -1, 1, bytes, false, false, false});
+    rejects({0, 0, 1, bytes, false, false, true});
+    rejects({0, 3'000'000, 1, bytes.first(4), false, false, false});
+    rejects({0, 3'000'000, 1, bytes.first(4), true, false, false});
+
+    StereoCaptureNormalizer48k invalid_epoch(-1);
+    CapturedStereoPacket48k normalized {};
+    CHECK(invalid_epoch.Normalize(
+              format,
+              {0, 0, 1, bytes, false, false, false},
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+
+    const std::vector<float> not_finite {
+        std::numeric_limits<float>::quiet_NaN(),
+        0.0F,
+    };
+    StereoCaptureNormalizer48k non_finite(3'000'000);
+    CHECK(non_finite.Normalize(
+              format,
+              {
+                  0,
+                  3'000'000,
+                  1,
+                  std::as_bytes(std::span<const float>(not_finite)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+
+    StereoCaptureNormalizer48k stateful(3'000'000);
+    CHECK(stateful.Normalize(
+              format,
+              {100, 3'000'000, 1, bytes, false, false, false},
+              normalized) == CaptureNormalizationResult::Ready);
+    CHECK(stateful.Normalize(
+              format,
+              {101, 2'999'999, 1, bytes, false, false, false},
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+    auto changed_format = format;
+    changed_format.sample_rate_hz = 44'100;
+    CHECK(stateful.Normalize(
+              changed_format,
+              {101, 3'000'100, 1, bytes, false, false, false},
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+}
+
+void AcceptsSilentPacketsWithEitherPayloadRepresentation()
+{
+    using namespace vrrecorder::native;
+    const CapturePcmFormat format {
+        48'000,
+        2,
+        CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        8,
+        0x0000'0003,
+    };
+    const std::vector<float> ignored {0.25F, -0.25F};
+    const auto accepts = [&](std::span<const std::byte> bytes) {
+        StereoCaptureNormalizer48k normalizer(4'000'000);
+        CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(
+                  format,
+                  {0, 4'000'000, 1, bytes, true, false, false},
+                  normalized) == CaptureNormalizationResult::Ready);
+        CHECK(normalized.silent);
+        CHECK(normalized.interleaved_samples.empty());
+    };
+    accepts({});
+    accepts(std::as_bytes(std::span<const float>(ignored)));
+}
+
 void ClearsThePreviousNormalizedPacketWhenAContractCheckFails()
 {
     const std::vector<float> stereo {0.25F, -0.25F};
@@ -735,6 +929,10 @@ int main()
     RejectsPositionGapsOutsideTheDiscontinuityFollowup();
     RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics();
     RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits();
+    RejectsEveryUnsupportedCaptureFormat();
+    AcceptsAlternateLayoutsAndPcm32();
+    RejectsMalformedPacketMetadataAndPayloads();
+    AcceptsSilentPacketsWithEitherPayloadRepresentation();
     ClearsThePreviousNormalizedPacketWhenAContractCheckFails();
     return 0;
 }
