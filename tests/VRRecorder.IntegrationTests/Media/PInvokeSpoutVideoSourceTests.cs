@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Media;
+using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.IntegrationTests.Media;
 
@@ -162,6 +164,239 @@ public sealed class PInvokeSpoutVideoSourceTests
         Assert.Equal("shared-library-sender", sender.SenderId);
         Assert.Equal(7ul, sender.LatestFrameSequence);
         Assert.Equal(1u, controls.ActiveSourceCount());
+    }
+
+    [Fact]
+    public async Task EmptySnapshotAndDisposedUseAreDeterministic()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeSpoutFixtureControls(FixturePath());
+        controls.Reset();
+        var source = new PInvokeSpoutVideoSource(FixturePath());
+
+        Assert.Empty(await source.SnapshotAsync(CancellationToken.None));
+
+        source.Dispose();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            source.SnapshotAsync(CancellationToken.None));
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            source.SnapshotAsync(cancellation.Token));
+    }
+
+    [Fact]
+    public void RejectsPollSliceOutsideNativeContract()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PInvokeSpoutVideoSource(FixturePath(), TimeSpan.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PInvokeSpoutVideoSource(
+                FixturePath(),
+                TimeSpan.FromMilliseconds(1_001)));
+    }
+
+    [Fact]
+    public void SnapshotDecoderAcceptsPackedSenders()
+    {
+        var first = Encoding.UTF8.GetBytes("sender-a");
+        var second = Encoding.UTF8.GetBytes("sender-b");
+        var utf8 = first.Concat(second).ToArray();
+        var entries = PInvokeSpoutVideoSource.CreateSnapshotEntries(2);
+        entries[0].SenderIdOffset = 0;
+        entries[0].SenderIdSize = checked((uint)first.Length);
+        entries[0].LatestFrameGeneration = 10;
+        entries[1].SenderIdOffset = checked((uint)first.Length);
+        entries[1].SenderIdSize = checked((uint)second.Length);
+        entries[1].LatestFrameGeneration = 20;
+
+        var decoded = PInvokeSpoutVideoSource.DecodeSnapshot(
+            entries,
+            utf8,
+            entryCount: 2);
+
+        Assert.Collection(
+            decoded,
+            sender =>
+            {
+                Assert.Equal("sender-a", sender.SenderId);
+                Assert.Equal(10ul, sender.LatestFrameSequence);
+            },
+            sender =>
+            {
+                Assert.Equal("sender-b", sender.SenderId);
+                Assert.Equal(20ul, sender.LatestFrameSequence);
+            });
+    }
+
+    [Fact]
+    public void FrameDecoderAcceptsEveryGpuVendorAndPixelFormat()
+    {
+        var sender = Encoding.UTF8.GetBytes("sender");
+        var gpu = Encoding.UTF8.GetBytes("gpu-identity");
+        var utf8 = sender.Concat(gpu).ToArray();
+        foreach (var vendor in Enum.GetValues<NativeGpuVendor>())
+        {
+            foreach (var pixelFormat in Enum.GetValues<NativeSourcePixelFormat>())
+            {
+                var frame = PInvokeSpoutVideoSource.CreateFrameOutput();
+                frame.SenderIdOffset = 0;
+                frame.SenderIdSize = checked((uint)sender.Length);
+                frame.GpuIdentityOffset = checked((uint)sender.Length);
+                frame.GpuIdentitySize = checked((uint)gpu.Length);
+                frame.AdapterLuid = 42;
+                frame.GpuVendor = vendor;
+                frame.Width = 1920;
+                frame.Height = 1080;
+                frame.PixelFormat = pixelFormat;
+                frame.EstimatedSourceFramesPerSecond = 59.94;
+                frame.FrameSequence = 7;
+                frame.MonotonicTimestampMicroseconds = 1_000;
+
+                var decoded = PInvokeSpoutVideoSource.DecodeFrame(frame, utf8);
+
+                Assert.Equal("sender", decoded.Signal.SenderId);
+                Assert.Equal("gpu-identity", decoded.Signal.GpuIdentity);
+                Assert.Equal(7ul, decoded.FrameSequence);
+            }
+        }
+    }
+
+    [Fact]
+    public void FrameDecoderRejectsReservedAndUnknownNativeValues()
+    {
+        var utf8 = Encoding.UTF8.GetBytes("sendergpu");
+        var frame = PInvokeSpoutVideoSource.CreateFrameOutput();
+        frame.SenderIdSize = 6;
+        frame.GpuIdentityOffset = 6;
+        frame.GpuIdentitySize = 3;
+        frame.GpuVendor = NativeGpuVendor.Nvidia;
+        frame.Width = 1;
+        frame.Height = 1;
+        frame.PixelFormat = NativeSourcePixelFormat.Bgra8;
+        frame.EstimatedSourceFramesPerSecond = 1;
+        frame.Reserved = 1;
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.DecodeFrame(frame, utf8));
+
+        frame.Reserved = 0;
+        frame.GpuVendor = (NativeGpuVendor)999;
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.DecodeFrame(frame, utf8));
+        frame.GpuVendor = NativeGpuVendor.Nvidia;
+        frame.PixelFormat = (NativeSourcePixelFormat)999;
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.DecodeFrame(frame, utf8));
+    }
+
+    [Theory]
+    [InlineData(SpoutTextFailure.ZeroSize)]
+    [InlineData(SpoutTextFailure.RangeBeyondBuffer)]
+    [InlineData(SpoutTextFailure.InvalidUtf8)]
+    [InlineData(SpoutTextFailure.Whitespace)]
+    [InlineData(SpoutTextFailure.ControlCharacter)]
+    public void Utf8DecoderRejectsInvalidNativeText(SpoutTextFailure failure)
+    {
+        var bytes = failure switch
+        {
+            SpoutTextFailure.InvalidUtf8 => new byte[] { 0xff },
+            SpoutTextFailure.Whitespace => " "u8.ToArray(),
+            SpoutTextFailure.ControlCharacter => "a\n"u8.ToArray(),
+            _ => "x"u8.ToArray(),
+        };
+        var size = failure == SpoutTextFailure.ZeroSize
+            ? 0u
+            : checked((uint)bytes.Length);
+        var offset = failure == SpoutTextFailure.RangeBeyondBuffer
+            ? checked((uint)bytes.Length)
+            : 0u;
+
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.DecodeUtf8(
+                bytes,
+                offset,
+                size,
+                "test field"));
+    }
+
+    [Fact]
+    public void NativeLayoutAndCapacityValidatorsFailClosed()
+    {
+        PInvokeSpoutVideoSource.ValidateOutputHeader(
+            structSize: 24,
+            abiVersion: NativeSpoutSourceLibrary.SupportedAbiVersion,
+            expectedSize: 24,
+            "valid");
+        PInvokeSpoutVideoSource.ValidateRequiredSizes(1, 1, "valid");
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.ValidateOutputHeader(
+                structSize: 23,
+                abiVersion: NativeSpoutSourceLibrary.SupportedAbiVersion,
+                expectedSize: 24,
+                "small"));
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.ValidateOutputHeader(
+                structSize: 24,
+                abiVersion: 999,
+                expectedSize: 24,
+                "ABI"));
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.ValidateRequiredSizes(
+                NativeSpoutSourceLibrary.MaximumSnapshotEntries + 1,
+                1,
+                "entries"));
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.ValidateRequiredSizes(
+                1,
+                NativeSpoutSourceLibrary.MaximumUtf8BufferSize + 1,
+                "UTF-8"));
+    }
+
+    [Fact]
+    public void NativeMappingsCoverEveryValueAndRejectUnknowns()
+    {
+        Assert.Equal(
+            GpuVendor.Unknown,
+            PInvokeSpoutVideoSource.ConvertGpuVendor(NativeGpuVendor.Unknown));
+        Assert.Equal(
+            GpuVendor.Nvidia,
+            PInvokeSpoutVideoSource.ConvertGpuVendor(NativeGpuVendor.Nvidia));
+        Assert.Equal(
+            GpuVendor.Amd,
+            PInvokeSpoutVideoSource.ConvertGpuVendor(NativeGpuVendor.Amd));
+        Assert.Equal(
+            GpuVendor.Intel,
+            PInvokeSpoutVideoSource.ConvertGpuVendor(NativeGpuVendor.Intel));
+        Assert.Equal(
+            VideoPixelFormat.Bgra8,
+            PInvokeSpoutVideoSource.ConvertPixelFormat(
+                NativeSourcePixelFormat.Bgra8));
+        Assert.Equal(
+            VideoPixelFormat.Rgba8,
+            PInvokeSpoutVideoSource.ConvertPixelFormat(
+                NativeSourcePixelFormat.Rgba8));
+        Assert.Equal(
+            VideoPixelFormat.Nv12,
+            PInvokeSpoutVideoSource.ConvertPixelFormat(
+                NativeSourcePixelFormat.Nv12));
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.ConvertGpuVendor((NativeGpuVendor)999));
+        Assert.Throws<NativeSpoutSourceException>(() =>
+            PInvokeSpoutVideoSource.ConvertPixelFormat(
+                (NativeSourcePixelFormat)999));
+    }
+
+    public enum SpoutTextFailure
+    {
+        ZeroSize,
+        RangeBeyondBuffer,
+        InvalidUtf8,
+        Whitespace,
+        ControlCharacter,
     }
 
     private static string FixturePath() => Path.GetFullPath(Path.Combine(

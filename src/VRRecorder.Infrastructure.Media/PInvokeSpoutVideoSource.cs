@@ -247,7 +247,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
         return DecodeFrame(nativeFrame, utf8);
     }
 
-    private static NativeSpoutSenderSnapshotV1[] CreateSnapshotEntries(
+    internal static NativeSpoutSenderSnapshotV1[] CreateSnapshotEntries(
         uint entryCount)
     {
         var entries = new NativeSpoutSenderSnapshotV1[entryCount];
@@ -263,13 +263,13 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
         return entries;
     }
 
-    private static NativeSpoutFrameV1 CreateFrameOutput() => new()
+    internal static NativeSpoutFrameV1 CreateFrameOutput() => new()
     {
         StructSize = checked((uint)Marshal.SizeOf<NativeSpoutFrameV1>()),
         AbiVersion = NativeSpoutSourceLibrary.SupportedAbiVersion,
     };
 
-    private static SpoutSenderSnapshot[] DecodeSnapshot(
+    internal static SpoutSenderSnapshot[] DecodeSnapshot(
         NativeSpoutSenderSnapshotV1[] entries,
         byte[] utf8,
         int entryCount)
@@ -297,7 +297,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
         return result;
     }
 
-    private static SpoutFrameObservation DecodeFrame(
+    internal static SpoutFrameObservation DecodeFrame(
         NativeSpoutFrameV1 frame,
         byte[] utf8)
     {
@@ -341,7 +341,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
             receivedAt);
     }
 
-    private static string DecodeUtf8(
+    internal static string DecodeUtf8(
         byte[] buffer,
         uint offset,
         uint size,
@@ -379,7 +379,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
         }
     }
 
-    private static void ValidateOutputHeader(
+    internal static void ValidateOutputHeader(
         uint structSize,
         uint abiVersion,
         uint expectedSize,
@@ -394,7 +394,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
         }
     }
 
-    private static void ValidateRequiredSizes(
+    internal static void ValidateRequiredSizes(
         uint entryCount,
         uint requiredUtf8Size,
         string operation)
@@ -409,7 +409,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
         }
     }
 
-    private static GpuVendor ConvertGpuVendor(NativeGpuVendor vendor) =>
+    internal static GpuVendor ConvertGpuVendor(NativeGpuVendor vendor) =>
         vendor switch
         {
             NativeGpuVendor.Unknown => GpuVendor.Unknown,
@@ -421,7 +421,7 @@ public sealed class PInvokeSpoutVideoSource : ISpoutVideoSource, IDisposable
                 "frame returned an unknown GPU vendor"),
         };
 
-    private static VideoPixelFormat ConvertPixelFormat(
+    internal static VideoPixelFormat ConvertPixelFormat(
         NativeSourcePixelFormat pixelFormat) =>
         pixelFormat switch
         {
