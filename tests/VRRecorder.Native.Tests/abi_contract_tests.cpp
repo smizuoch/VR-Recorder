@@ -2488,11 +2488,23 @@ bool RejectsInvalidSteamVrHapticAbiInputs()
     CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
           VRREC_STATUS_UNSUPPORTED_ABI);
     config = ValidSteamVrHapticConfig();
+    config.action_manifest_path_utf8 = nullptr;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
     config.action_manifest_path_utf8 = "relative/actions.json";
     CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     config = ValidSteamVrHapticConfig();
+    config.haptic_action_path_utf8 = nullptr;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
     config.haptic_action_path_utf8 = "haptic";
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrHapticConfig();
+    config.input_source_path_utf8 = nullptr;
     CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     config = ValidSteamVrHapticConfig();
@@ -2542,6 +2554,13 @@ bool RejectsInvalidSteamVrHapticAbiInputs()
     }
     vrrec_steamvr_haptic_destroy_v1(haptic);
     vrrec_steamvr_haptic_destroy_v1(nullptr);
+
+    config = ValidSteamVrHapticConfig();
+    config.input_source_path_utf8 = "/user/hand/left";
+    haptic = nullptr;
+    CHECK(vrrec_steamvr_haptic_create_v1(&config, &haptic) ==
+          VRREC_STATUS_OK);
+    vrrec_steamvr_haptic_destroy_v1(haptic);
     return true;
 }
 
