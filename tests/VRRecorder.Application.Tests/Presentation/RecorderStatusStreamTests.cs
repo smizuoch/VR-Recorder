@@ -334,6 +334,72 @@ public sealed class RecorderStatusStreamTests
         Assert.Equal(2, stream.Current.Revision);
     }
 
+    [Fact]
+    public void HubAndSubscriptionPublicContractsAreIdempotent()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new RecorderStatusHub(null!));
+        var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        Assert.Throws<ArgumentNullException>(() => stream.Subscribe(null!));
+        Assert.Throws<ArgumentNullException>(() => stream.TryPublish(null!));
+        var subscription = stream.Subscribe(_ => { });
+
+        subscription.Dispose();
+        subscription.Dispose();
+        stream.Dispose();
+        stream.Dispose();
+
+        Assert.Equal(0, stream.Current.Revision);
+    }
+
+    [Fact]
+    public async Task CallbackCanReenterDisposeWhileForeignDisposeWaits()
+    {
+        var stream = new RecorderStatusHub(
+            RecorderStatusSnapshot.Create(0, RecorderState.Ready));
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReentrantDispose = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = stream.Subscribe(status =>
+        {
+            if (status.Revision != 1)
+            {
+                return;
+            }
+
+            entered.TrySetResult();
+            allowReentrantDispose.Task.GetAwaiter().GetResult();
+            stream.Dispose();
+        });
+        var publishing = Task.Run(() => stream.TryPublish(
+            RecorderStatusSnapshot.Create(1, RecorderState.Arming)));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var disposing = Task.Run(stream.Dispose);
+
+        var observedDisposing = false;
+        for (var attempt = 0; attempt < 1_000; attempt++)
+        {
+            try
+            {
+                stream.Subscribe(_ => { }).Dispose();
+                await Task.Yield();
+            }
+            catch (ObjectDisposedException)
+            {
+                observedDisposing = true;
+                break;
+            }
+        }
+        Assert.True(observedDisposing);
+        Assert.False(disposing.IsCompleted);
+        allowReentrantDispose.TrySetResult();
+
+        Assert.True(await publishing.WaitAsync(TimeSpan.FromSeconds(5)));
+        await disposing.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     private static class InterlockedExtensions
     {
         public static void Max(ref int target, int candidate)
