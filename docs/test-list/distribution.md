@@ -6,8 +6,8 @@
 - [x] Hardware Validation Payloadを一般公開可能と判定しない
 - [x] MSIXをunpackaged実機検証targetとして受理しない
 - [x] self-contained `win-x64` publish directoryを再現可能に生成する
-- [ ] existing root directoryとroot内normalized relative entrypointを読み取り、traversal／reparse／inventory非所属を拒否する
-- [ ] publish directory全fileのpath／length／SHA-256／kindからcanonical inventory digestを生成する
+- [x] existing root directoryとroot内normalized relative entrypointを読み取り、traversal／reparse／inventory非所属を拒否する
+- [x] publish directory全fileのpath／length／SHA-256／kindからcanonical inventory digestを生成する
 - [x] strict `WindowsRuntimeStagingManifest` v2でprofile／RID／Legal anchor／source／target、role、component、platform、deployment kind、length／SHA-256を読み、unknown／duplicate field、absolute／traversal／ADS記法／device name、Windows case-fold duplicate／親子衝突を拒否する
 - [x] dedicated input rootのmissing／extra file、hash、kind、reparse point、ApprovedGraph owner／runtime scope、native registryをfail-closed検査する
 - [x] factory-selection evidenceのproduction 4 family、binary filename／length／SHA-256、intent marker、evidence SHA-256をactual staged input bytesと照合する
