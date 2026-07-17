@@ -25,7 +25,7 @@ $(BUILD_DIR)/c_header_smoke.o: c_header_smoke.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/abi_contract_tests: abi_contract_tests.cpp fake_media_backend.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CPPFLAGS) -DVRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/audio_mixer_tests: audio_mixer_tests.cpp $(NATIVE_ROOT)/src/audio_mixer.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
