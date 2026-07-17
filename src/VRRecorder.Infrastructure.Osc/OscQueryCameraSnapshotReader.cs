@@ -112,6 +112,7 @@ internal sealed class OscQueryCameraSnapshotReader
             !root.TryGetProperty("VALUE", out var values) ||
             values.ValueKind != JsonValueKind.Array ||
             values.GetArrayLength() != 1 ||
+            values[0].ValueKind != JsonValueKind.Number ||
             !values[0].TryGetInt32(out var rawMode) ||
             !Enum.IsDefined((CameraMode)rawMode))
         {

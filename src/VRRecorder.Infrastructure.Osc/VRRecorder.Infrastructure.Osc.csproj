@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="VRRecorder.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../VRRecorder.Application/VRRecorder.Application.csproj" />
   </ItemGroup>
 </Project>
