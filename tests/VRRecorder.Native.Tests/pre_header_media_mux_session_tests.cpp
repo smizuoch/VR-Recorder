@@ -244,6 +244,51 @@ void RejectsAConfigurationThatDiffersFromTheWiredGraph()
     CHECK(downstream.AbortCalls() == 1);
 }
 
+void RejectsInvalidPrimingEpochAndEncoderIdentity()
+{
+    {
+        RecordingDownstream downstream;
+        const auto configuration = Configuration();
+        const int encoder_identity = 5;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            configuration.audio,
+            configuration.fragment_policy,
+            &encoder_identity);
+        PreHeaderMediaMuxSession session(
+            coordinator,
+            -1,
+            &encoder_identity,
+            configuration);
+
+        CHECK(session.Start(configuration) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(downstream.StartCalls() == 0);
+        CHECK(downstream.AbortCalls() == 1);
+    }
+
+    RecordingDownstream downstream;
+    const auto configuration = Configuration();
+    const int expected_identity = 6;
+    const int actual_identity = 7;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        configuration.audio,
+        configuration.fragment_policy,
+        &expected_identity);
+    PreHeaderMediaMuxSession session(
+        coordinator,
+        103,
+        &actual_identity,
+        configuration);
+
+    CHECK(session.Start(configuration) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(downstream.StartCalls() == 0);
+    CHECK(downstream.AbortCalls() == 1);
+}
+
 void PropagatesHeaderFailureAndAbortsExactlyOnce()
 {
     RecordingDownstream downstream;
@@ -309,6 +354,7 @@ int main()
 {
     StartsCoordinatorWithTheExactCodecDescriptors();
     RejectsAConfigurationThatDiffersFromTheWiredGraph();
+    RejectsInvalidPrimingEpochAndEncoderIdentity();
     PropagatesHeaderFailureAndAbortsExactlyOnce();
     RequestAbortInterruptsAConcurrentHeaderStart();
     return 0;
