@@ -752,6 +752,101 @@ void PreservesVideoDeviceRemovedAndResetResults()
     }
 }
 
+void RejectsInvalidPollTimeoutsAndUnstartedOperations()
+{
+    CallOrder order;
+    FakeCaptureWorker capture(order);
+    FakeEncodingWorker encoding(order);
+    RecordingEvents events;
+    VideoPipelineSession session(capture, encoding, events);
+
+    CHECK(session.Start(std::chrono::milliseconds(0)) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(session.Start(std::chrono::milliseconds(
+              VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS + 1)) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    session.JoinAfterAbort();
+    CHECK(session.Join() == VideoPipelineResult::InvalidState);
+    CHECK(capture.start_calls == 0);
+    CHECK(capture.abort_calls == 0);
+    CHECK(capture.join_calls == 0);
+    CHECK(encoding.start_calls == 0);
+}
+
+void MapsCaptureFailureAndUnknownCaptureOutcome()
+{
+    for (const auto &[capture_result, pipeline_result, fault_count] : {
+             std::tuple {
+                 SpoutCaptureWorkerResult::Failed,
+                 VideoPipelineResult::CaptureFailed,
+                 1U},
+             std::tuple {
+                 SpoutCaptureWorkerResult::InvalidState,
+                 VideoPipelineResult::Failed,
+                 0U},
+         }) {
+        CallOrder order;
+        FakeCaptureWorker capture(order);
+        capture.join_result = capture_result;
+        FakeEncodingWorker encoding(order);
+        RecordingEvents events;
+        VideoPipelineSession session(capture, encoding, events);
+
+        CHECK(session.Start(std::chrono::milliseconds(100)) ==
+              VRREC_STATUS_OK);
+        CHECK(session.Join() == pipeline_result);
+        CHECK(events.fault_calls == fault_count);
+        CHECK(encoding.abort_calls == 1);
+        CHECK(capture.join_calls == 1);
+    }
+}
+
+void PreservesEveryRemainingEncodingOutcome()
+{
+    for (const auto &[encoding_result, pipeline_result, abort_capture] : {
+             std::tuple {
+                 VideoEncodingWorkerResult::SurfaceAbandoned,
+                 VideoPipelineResult::SurfaceAbandoned,
+                 true},
+             std::tuple {
+                 VideoEncodingWorkerResult::InvalidState,
+                 VideoPipelineResult::InvalidState,
+                 true},
+             std::tuple {
+                 VideoEncodingWorkerResult::ClockFailed,
+                 VideoPipelineResult::Failed,
+                 true},
+             std::tuple {
+                 VideoEncodingWorkerResult::Failed,
+                 VideoPipelineResult::Failed,
+                 true},
+             std::tuple {
+                 VideoEncodingWorkerResult::Aborted,
+                 VideoPipelineResult::Aborted,
+                 false},
+             std::tuple {
+                 VideoEncodingWorkerResult::Stopped,
+                 VideoPipelineResult::Stopped,
+                 true},
+         }) {
+        CallOrder order;
+        FakeCaptureWorker capture(order);
+        FakeEncodingWorker encoding(order);
+        encoding.join_result = encoding_result;
+        RecordingEvents events;
+        VideoPipelineSession session(capture, encoding, events);
+
+        CHECK(session.Start(std::chrono::milliseconds(100)) ==
+              VRREC_STATUS_OK);
+        CHECK(session.Join() == pipeline_result);
+        CHECK(capture.abort_calls == (abort_capture ? 1U : 0U));
+        CHECK(capture.join_calls == 1);
+        CHECK(encoding.join_calls == 1);
+        CHECK(events.fault_calls == 0);
+    }
+}
+
 void AbortDoesNotReturnUntilBothWorkersAreJoined()
 {
     CallOrder order;
@@ -1356,6 +1451,9 @@ int main(int argc, char **argv)
     EncoderFailureAbortsCapture();
     SealedEncoderFailureStopsCaptureAndPreservesThePart();
     PreservesVideoDeviceRemovedAndResetResults();
+    RejectsInvalidPollTimeoutsAndUnstartedOperations();
+    MapsCaptureFailureAndUnknownCaptureOutcome();
+    PreservesEveryRemainingEncodingOutcome();
     AbortDoesNotReturnUntilBothWorkersAreJoined();
     StopFailureAbortsAndJoinsBothWorkersWithoutBeingMasked();
     AbortDuringCaptureStartRollsBackWithoutStartingEncoding();
