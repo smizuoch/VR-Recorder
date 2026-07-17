@@ -192,12 +192,16 @@ public:
         auto existing = states_.find(metadata.sender_id);
         if (existing != states_.end()) {
             const auto &state = existing->second;
-            if (metadata.receiver_epoch < state.receiver_epoch ||
-                metadata.frame_sequence < state.last_frame_sequence) {
+            if (metadata.receiver_epoch < state.receiver_epoch) {
                 return VRREC_STATUS_INTERNAL_ERROR;
             }
-            if (metadata.frame_sequence == state.last_frame_sequence) {
-                return VRREC_STATUS_TIMEOUT;
+            if (metadata.receiver_epoch == state.receiver_epoch) {
+                if (metadata.frame_sequence < state.last_frame_sequence) {
+                    return VRREC_STATUS_INTERNAL_ERROR;
+                }
+                if (metadata.frame_sequence == state.last_frame_sequence) {
+                    return VRREC_STATUS_TIMEOUT;
+                }
             }
 
             const auto same_resource =

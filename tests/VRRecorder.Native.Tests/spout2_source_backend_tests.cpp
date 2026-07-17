@@ -359,6 +359,33 @@ void AllowsLossAndReappearanceWithANewReceiverEpoch()
     CHECK(borrowed->copy_calls == 2);
 }
 
+void AllowsFrameSequenceToRestartInANewReceiverEpoch()
+{
+    auto port = std::make_unique<ScriptedReceiverPort>();
+    port->receive_steps.push_back({
+        Spout2ReceiverResult::FrameReady,
+        Metadata(10),
+    });
+    port->receive_steps.push_back({Spout2ReceiverResult::SenderLost, {}});
+    port->receive_steps.push_back({
+        Spout2ReceiverResult::FrameReady,
+        Metadata(1, 10, 2),
+    });
+    ScriptedReceiverPort *borrowed = nullptr;
+    auto backend = CreateBackend(std::move(port), borrowed);
+    SpoutFrame frame;
+
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_OK);
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_OK);
+    CHECK(frame.frame_sequence == 1);
+    CHECK(frame.surface->Descriptor().generation_id == 2);
+    CHECK(borrowed->copy_calls == 2);
+}
+
 void MapsTimeoutAndPortFailuresWithoutPublishingAFrame()
 {
     auto port = std::make_unique<ScriptedReceiverPort>();
@@ -475,6 +502,7 @@ int main()
     CopiesEveryFrameAndAdvancesOnlyResourceGenerations();
     RejectsMetadataMutationWithoutAResourceChange();
     AllowsLossAndReappearanceWithANewReceiverEpoch();
+    AllowsFrameSequenceToRestartInANewReceiverEpoch();
     MapsTimeoutAndPortFailuresWithoutPublishingAFrame();
     RejectsASurfaceThatDoesNotMatchTheReceivedTexture();
     AbortWinsOverAFrameReturnedByAnInFlightReceive();
