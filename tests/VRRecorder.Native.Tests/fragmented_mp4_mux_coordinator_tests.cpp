@@ -254,9 +254,12 @@ void RejectsInvalidStreamDescriptorsBeforeHeaderMutation()
     rejects([](auto &streams) {
         streams.audio.packet_time_base = {0, 1'000'000};
     });
+    rejects([](auto &streams) { streams.video.width = 0; });
     rejects([](auto &streams) { streams.video.width = 1'919; });
     rejects([](auto &streams) { streams.video.width = 16'386; });
     rejects([](auto &streams) { streams.video.height = 0; });
+    rejects([](auto &streams) { streams.video.height = 1'079; });
+    rejects([](auto &streams) { streams.video.height = 16'386; });
     rejects([](auto &streams) {
         streams.video.profile = static_cast<H264Profile>(99);
     });
@@ -307,6 +310,41 @@ void RejectsInvalidStreamDescriptorsBeforeHeaderMutation()
     rejects([](auto &streams) {
         streams.fragment_policy.minimum_duration_microseconds = 0;
     });
+    rejects([](auto &streams) {
+        ++streams.fragment_policy.maximum_duration_microseconds;
+    });
+    rejects([](auto &streams) {
+        streams.fragment_policy.prefer_video_key_frames = false;
+    });
+}
+
+void AcceptsEverySupportedH264DescriptorVariant()
+{
+    for (const auto profile : {H264Profile::Main, H264Profile::High}) {
+        for (const auto packet_format : {
+                 H264PacketFormat::AnnexB,
+                 H264PacketFormat::AvccLengthPrefixed,
+             }) {
+            RecordingMuxer muxer;
+            FragmentedMp4MuxCoordinator coordinator(muxer);
+            auto streams = Streams();
+            streams.video.profile = profile;
+            streams.video.packet_format = packet_format;
+            CHECK(coordinator.Begin(streams) == VRREC_STATUS_OK);
+        }
+    }
+}
+
+void CalculatesAacPrimingBoundsForMissingAndRoundedInputs()
+{
+    auto audio = Streams().audio;
+    audio.sample_rate = 0;
+    CHECK(AacPrimingLowerBoundMicroseconds(audio) == 0);
+    audio.sample_rate = 48'000;
+    audio.initial_padding_samples = 0;
+    CHECK(AacPrimingLowerBoundMicroseconds(audio) == 0);
+    audio.initial_padding_samples = 1;
+    CHECK(AacPrimingLowerBoundMicroseconds(audio) == -21);
 }
 
 void HeaderFailureAbortsWithoutAcceptingPacketsOrTrailer()
@@ -394,6 +432,27 @@ void RejectsMalformedTimingAndSkipSamplesBeforeMuxMutation()
     missing_audio_timestamp.pts_microseconds = UnknownMediaTimestamp;
     invalid_packets.push_back(missing_audio_timestamp);
 
+    auto missing_audio_dts = Audio(0);
+    missing_audio_dts.dts_microseconds = UnknownMediaTimestamp;
+    invalid_packets.push_back(missing_audio_dts);
+
+    auto invalid_stream = Video(0);
+    invalid_stream.stream = static_cast<MediaStreamKind>(99);
+    invalid_packets.push_back(invalid_stream);
+
+    auto pts_before_dts = Video(1);
+    pts_before_dts.pts_microseconds = 0;
+    invalid_packets.push_back(pts_before_dts);
+
+    auto negative_duration = Video(0);
+    negative_duration.duration_microseconds = -1;
+    invalid_packets.push_back(negative_duration);
+
+    auto too_early_audio_dts = Audio(-21'333);
+    too_early_audio_dts.pts_microseconds = -21'334;
+    too_early_audio_dts.dts_microseconds = -21'335;
+    invalid_packets.push_back(too_early_audio_dts);
+
     auto timestamp_end_overflow = Audio(
         std::numeric_limits<std::int64_t>::max());
     timestamp_end_overflow.duration_microseconds = 1;
@@ -438,6 +497,15 @@ void RejectsMalformedTimingAndSkipSamplesBeforeMuxMutation()
         },
     };
     invalid_packets.push_back(duplicate_skip_samples);
+
+    auto unknown_side_data = Audio(0);
+    unknown_side_data.side_data.push_back({
+        static_cast<EncodedPacketSideDataKind>(99),
+        std::vector<std::byte>(
+            SkipSamplesSideDataSize,
+            std::byte {0x04}),
+    });
+    invalid_packets.push_back(unknown_side_data);
 
     for (const auto &packet : invalid_packets) {
         RecordingMuxer muxer;
@@ -485,7 +553,9 @@ void RejectsNonMonotonicDtsPerStream()
 
     CHECK(coordinator.Submit(Video(100, true)) == Mp4MuxResult::Written);
     CHECK(coordinator.Submit(Video(99)) == Mp4MuxResult::InvalidPacket);
-    CHECK(muxer.packets.size() == 1);
+    CHECK(coordinator.Submit(Audio(100)) == Mp4MuxResult::Written);
+    CHECK(coordinator.Submit(Audio(100)) == Mp4MuxResult::InvalidPacket);
+    CHECK(muxer.packets.size() == 2);
 }
 
 void PreflightsAnEntireBatchBeforeWritingItsValidPrefix()
@@ -646,6 +716,8 @@ int main()
     ZeroPacketFinishAndDestructorFollowHeaderLifecycle();
     EmptyBatchChecksLifecycleWithoutWritingAPacket();
     RejectsInvalidStreamDescriptorsBeforeHeaderMutation();
+    AcceptsEverySupportedH264DescriptorVariant();
+    CalculatesAacPrimingBoundsForMissingAndRoundedInputs();
     HeaderFailureAbortsWithoutAcceptingPacketsOrTrailer();
     DelegatesFragmentCutsToTheMuxerHeaderPolicy();
     SerializesAudioAndVideoPacketsWithoutChangingTimestamps();
