@@ -279,6 +279,9 @@ void RejectsIdentityAndAdapterMismatchesBeforeDecode()
         [](auto &value) { value.fps_numerator++; },
         [](auto &value) { value.fps_denominator++; },
         [](auto &value) { value.profile = H264Profile::Main; },
+        [](auto &value) {
+            value.profile = static_cast<H264Profile>(UINT32_MAX);
+        },
         [](auto &value) { value.maximum_b_frame_count = 1; },
         [](auto &value) { value.driver_identity.clear(); },
         [](auto &value) { value.ffmpeg_build_identity.clear(); },
@@ -299,6 +302,64 @@ void RejectsIdentityAndAdapterMismatchesBeforeDecode()
         CHECK(decoder.call_count == 0);
         CHECK(evidence.codec_name == "sentinel");
         CHECK(evidence.validation_flags == UINT32_C(0xa5a5a5a5));
+    }
+
+    const auto &software = ExpectedIdentities[3];
+    const std::vector<Mutation> software_adapter_mutations {
+        [](auto &value) { value.source_adapter_luid++; },
+        [](auto &value) { value.processor_adapter_luid++; },
+        [](auto &value) { value.encoder_adapter_luid = AdapterLuid; },
+    };
+    for (const auto &mutate : software_adapter_mutations) {
+        const auto software_config = Config(software.kind);
+        auto opened = Opened(software);
+        mutate(opened);
+        FakeDecoder decoder;
+        auto evidence = SentinelEvidence();
+        CHECK(BuildVerifiedEncoderProbeEvidence(
+                  software_config,
+                  opened,
+                  Packets(),
+                  decoder,
+                  evidence) == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(decoder.call_count == 0);
+        CHECK(evidence.codec_name == "sentinel");
+    }
+}
+
+void RejectsEveryMalformedProbeConfigurationBeforeDecode()
+{
+    const auto &expected = ExpectedIdentities[0];
+    using Mutation =
+        std::function<void(vrrec_encoder_probe_config_v1 &)>;
+    const std::vector<Mutation> mutations {
+        [](auto &value) { value.struct_size -= 1; },
+        [](auto &value) { value.abi_version += 1; },
+        [](auto &value) { value.synthetic_frame_count -= 1; },
+        [](auto &value) { value.adapter_luid = 0; },
+        [](auto &value) { value.fps_denominator = 2; },
+        [](auto &value) { value.gpu_identity_utf8 = nullptr; },
+        [](auto &value) { value.gpu_identity_utf8 = ""; },
+        [](auto &value) { value.reserved = 1; },
+        [](auto &value) { value.encoder_kind = UINT32_MAX; },
+        [](auto &value) { value.width = 0; },
+        [](auto &value) { value.height = 0; },
+        [](auto &value) { value.fps_numerator = 0; },
+    };
+
+    for (const auto &mutate : mutations) {
+        auto config = Config(expected.kind);
+        mutate(config);
+        FakeDecoder decoder;
+        auto evidence = SentinelEvidence();
+        CHECK(BuildVerifiedEncoderProbeEvidence(
+                  config,
+                  Opened(expected),
+                  Packets(),
+                  decoder,
+                  evidence) == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(decoder.call_count == 0);
+        CHECK(evidence.codec_name == "sentinel");
     }
 }
 
@@ -352,6 +413,16 @@ void RejectsMalformedPacketAndDecodeMismatchWithoutPublishingEvidence()
               evidence) == VRREC_STATUS_INTERNAL_ERROR);
     CHECK(evidence.codec_name == "sentinel");
 
+    FakeDecoder wrong_height;
+    wrong_height.result.height += 2;
+    CHECK(BuildVerifiedEncoderProbeEvidence(
+              config,
+              opened,
+              Packets(),
+              wrong_height,
+              evidence) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(evidence.codec_name == "sentinel");
+
     FakeDecoder wrong_frame_count;
     wrong_frame_count.result.decoded_frame_count--;
     CHECK(BuildVerifiedEncoderProbeEvidence(
@@ -380,5 +451,6 @@ int main()
     BuildsEvidenceOnlyFromParsedAndDecodedPackets();
     AcceptsOnlyTheExactIdentityForEachPublicEncoder();
     RejectsIdentityAndAdapterMismatchesBeforeDecode();
+    RejectsEveryMalformedProbeConfigurationBeforeDecode();
     RejectsMalformedPacketAndDecodeMismatchWithoutPublishingEvidence();
 }
