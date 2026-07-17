@@ -512,6 +512,86 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         Assert.IsNotType<OscQueryTimeoutException>(exception);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://127.0.0.1:19026/?HOST_INFO")]
+    [InlineData("http://user@127.0.0.1:19026/?HOST_INFO")]
+    [InlineData("http://127.0.0.1:19027/?HOST_INFO")]
+    [InlineData("http://localhost:19026/?HOST_INFO")]
+    public async Task UntrustedHostInfoEffectiveUriProducesNoCandidate(
+        string? effectiveUri)
+    {
+        var advertisement = Advertisement("response-uri", httpPort: 19026);
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            ValidHostInfoJson(advertisement.InstanceName, oscPort: 9026),
+            "application/json",
+            effectiveUri is null ? null : new Uri(effectiveUri)));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Empty(await discovery.DiscoverAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task NonJsonDiscoveryResponseIsRejected()
+    {
+        var advertisement = Advertisement("content-type", httpPort: 19028);
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            ValidHostInfoJson(advertisement.InstanceName, oscPort: 9028),
+            "text/plain",
+            new Uri("http://127.0.0.1:19028/?HOST_INFO")));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            discovery.DiscoverAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DiscoveryRejectsDeclaredOrStreamedResponseAboveSixtyFourKiB(
+        bool declareLength)
+    {
+        var advertisement = Advertisement("oversize", httpPort: 19029);
+        var bytes = new byte[(64 * 1024) + 1];
+        HttpContent content = declareLength
+            ? new ByteArrayContent(bytes)
+            : new UnknownLengthContent(bytes);
+        content.Headers.ContentType = new("application/json");
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            content,
+            new Uri("http://127.0.0.1:19029/?HOST_INFO")));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            discovery.DiscoverAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DuplicatePropertyNestedInRootArrayIsRejected()
+    {
+        var advertisement = Advertisement("array-duplicate", httpPort: 19030);
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            """[{ "duplicate": 1, "duplicate": 2 }]""",
+            "application/json",
+            new Uri("http://127.0.0.1:19030/?HOST_INFO")));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            discovery.DiscoverAsync(CancellationToken.None));
+    }
+
     private static OscQueryServiceAdvertisement Advertisement(
         string suffix,
         int httpPort)
@@ -573,6 +653,17 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                 { "HOST_INFO": {{body}} }
                 """;
     }
+
+    private static string ValidHostInfoJson(string name, int oscPort) => $$"""
+        {
+          "HOST_INFO": {
+            "NAME": "{{name}}",
+            "OSC_IP": "127.0.0.1",
+            "OSC_PORT": {{oscPort}},
+            "OSC_TRANSPORT": "UDP"
+          }
+        }
+        """;
 
     private static string InvalidCapabilityJson(string mutation) =>
         mutation switch
@@ -798,6 +889,59 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException(
                 "An ineligible advertisement reached the HTTP probe.");
+    }
+
+    private sealed class FirstResponseHandler : HttpMessageHandler
+    {
+        private readonly HttpContent _content;
+        private readonly Uri? _effectiveUri;
+
+        public FirstResponseHandler(
+            string content,
+            string mediaType,
+            Uri? effectiveUri)
+            : this(
+                new StringContent(content, Encoding.UTF8, mediaType),
+                effectiveUri)
+        {
+        }
+
+        public FirstResponseHandler(HttpContent content, Uri? effectiveUri)
+        {
+            _content = content;
+            _effectiveUri = effectiveUri;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = _effectiveUri is null
+                    ? null
+                    : new HttpRequestMessage(HttpMethod.Get, _effectiveUri),
+                Content = _content,
+            });
+        }
+    }
+
+    private sealed class UnknownLengthContent(byte[] bytes) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context) =>
+            stream.WriteAsync(bytes).AsTask();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync() =>
+            Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
     }
 
     private sealed class CapturingOscOperationEventSink
