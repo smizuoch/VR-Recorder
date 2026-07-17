@@ -349,6 +349,29 @@ void AbortBeforeStartRejectsLaunchWithoutTouchingDependencies()
     CHECK(waiter.abort_calls == 0);
 }
 
+void StandardThreadFactoryPublishesAJoinableThreadOrOutOfMemory()
+{
+    StandardNativeThreadFactory factory;
+    std::atomic_bool ran = false;
+    std::thread thread;
+    const auto entry = [](void *context) noexcept {
+        static_cast<std::atomic_bool *>(context)->store(true);
+    };
+
+    CHECK(factory.Start(thread, entry, &ran) == VRREC_STATUS_OK);
+    CHECK(thread.joinable());
+    thread.join();
+    CHECK(ran.load());
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = factory.Start(thread, entry, &ran);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(!thread.joinable());
+
+    CHECK(&DefaultNativeThreadFactory() == &DefaultNativeThreadFactory());
+}
+
 }
 
 int main()
@@ -361,5 +384,6 @@ int main()
     EmptySuccessfulThreadCreationFailsClosed();
     ConfigurationAllocationFailureIsTerminal();
     AbortBeforeStartRejectsLaunchWithoutTouchingDependencies();
+    StandardThreadFactoryPublishesAJoinableThreadOrOutOfMemory();
     return 0;
 }
