@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <span>
@@ -366,6 +367,46 @@ void FactoryFailureNeverStartsEncodingOrPublishesEvidence()
     CHECK(evidence.codec_name == "sentinel");
 }
 
+void RejectsEveryNonRunnableConfigurationBeforeFactoryCreation()
+{
+    using Mutation =
+        std::function<void(vrrec_encoder_probe_config_v1 &)>;
+    const std::vector<Mutation> mutations {
+        [](auto &value) { value.struct_size -= 1; },
+        [](auto &value) { value.abi_version += 1; },
+        [](auto &value) { value.encoder_kind = UINT32_MAX; },
+        [](auto &value) { value.synthetic_frame_count -= 1; },
+        [](auto &value) { value.adapter_luid = 0; },
+        [](auto &value) { value.width = 0; },
+        [](auto &value) { value.height = 0; },
+        [](auto &value) { value.fps_numerator = 0; },
+        [](auto &value) { value.fps_denominator = 2; },
+        [](auto &value) { value.gpu_identity_utf8 = nullptr; },
+        [](auto &value) { value.gpu_identity_utf8 = ""; },
+        [](auto &value) { value.reserved = 1; },
+    };
+
+    for (const auto &mutate : mutations) {
+        auto config = Config();
+        mutate(config);
+        FactoryState factory_state;
+        SessionState session_state;
+        FakeFactory factory(factory_state, session_state);
+        FakeDecoder decoder;
+        auto evidence = SentinelEvidence();
+
+        CHECK(RunVerifiedEncoderProbe(
+                  config,
+                  factory,
+                  decoder,
+                  evidence) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(factory_state.call_count == 0);
+        CHECK(session_state.frames.empty());
+        CHECK(decoder.call_count == 0);
+        CHECK(evidence.codec_name == "sentinel");
+    }
+}
+
 void EncodeOrFinishFailureAbortsExactlyOnce()
 {
     FactoryState factory_state;
@@ -490,6 +531,7 @@ int main()
     FinishDrainPacketsAreIncludedInTheSameDecodeProof();
     ZeroAndMultiplePacketEncodeBatchesRemainOrdered();
     FactoryFailureNeverStartsEncodingOrPublishesEvidence();
+    RejectsEveryNonRunnableConfigurationBeforeFactoryCreation();
     EncodeOrFinishFailureAbortsExactlyOnce();
     IdentityOrDecodeFailureAfterFinishDoesNotPublishEvidence();
     BackendKeepsLegacyBoolAndStructuredEvidenceOnTheSamePipeline();
