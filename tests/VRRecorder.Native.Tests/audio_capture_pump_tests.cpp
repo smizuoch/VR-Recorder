@@ -1,6 +1,8 @@
 #include "audio_capture_input_runner.hpp"
 #include "audio_capture_pump.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -8,6 +10,7 @@
 #include <cstdlib>
 #include <deque>
 #include <iostream>
+#include <limits>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -1044,6 +1047,104 @@ void AbortDuringSourceStartPerformsPostStartCleanup()
     CHECK(source.AbortCalls() == 2);
 }
 
+void RejectsPumpStateAndPacketBoundaries()
+{
+    FakeAudioCaptureSource source;
+    source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0, 0, 0, 0, {}, false, false, 0});
+    source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0, 0, 0,
+        std::numeric_limits<std::size_t>::max(),
+        {}, true, false, 0});
+    source.reads.push_back({
+        static_cast<AudioCaptureReadResult>(999U),
+        0, 0, 0, 0, {}, false, false, 0});
+    StereoCaptureTimeline timeline(8);
+    AudioCapturePump pump(source, timeline);
+
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::InvalidState);
+    CHECK(pump.Start(Config()) == VRREC_STATUS_OK);
+    CHECK(pump.Start(Config()) == VRREC_STATUS_INVALID_STATE);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::InvalidPacket);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::InvalidPacket);
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::Failed);
+
+    pump.Abort();
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::Aborted);
+    CHECK(pump.StartRecovery(Config()) == VRREC_STATUS_INVALID_STATE);
+}
+
+void AbortsTheTimelineWhenSilentPacketExpansionFails()
+{
+    FakeAudioCaptureSource source;
+    source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0, 0, 1'000'000, 2, {}, true, false, 0});
+    StereoCaptureTimeline timeline(8);
+    AudioCapturePump pump(source, timeline);
+    CHECK(pump.Start(Config()) == VRREC_STATUS_OK);
+
+    allocation_failure::fail_on_allocation = 1;
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::Failed);
+    allocation_failure::fail_on_allocation = 0;
+
+    const std::vector<float> samples {0.0F, 0.0F};
+    CHECK(timeline.Push({
+              0,
+              {0, 1'000'000, 10'000'000},
+              samples,
+              false,
+          }) == AudioTimelineResult::Aborted);
+}
+
+void RejectsInvalidRecoveryAndAbortsFailedAppliedRecovery()
+{
+    FakeAudioCaptureSource invalid_source;
+    invalid_source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0, 0, 1'000'000, 1, {0.5F, 0.5F}, false, false, 0});
+    StereoCaptureTimeline invalid_timeline(8);
+    AudioCapturePump invalid_recovery(invalid_source, invalid_timeline);
+    CHECK(invalid_recovery.StartRecovery(Config()) == VRREC_STATUS_OK);
+    CHECK(invalid_recovery.PumpOne() ==
+          AudioCapturePumpResult::InvalidPacket);
+
+    FakeAudioCaptureSource overrun_source;
+    overrun_source.reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0, 0, 1'000'000, 9,
+        std::vector<float>(18, 0.5F), false, false, 0});
+    StereoCaptureTimeline overrun_timeline(8);
+    CHECK(overrun_timeline.SetAvailable(false, 0) ==
+          AudioTimelineResult::Ready);
+    AudioCapturePump failed_recovery(overrun_source, overrun_timeline);
+    CHECK(failed_recovery.StartRecovery(Config()) == VRREC_STATUS_OK);
+    CHECK(failed_recovery.PumpOne() == AudioCapturePumpResult::Overrun);
+
+    const std::vector<float> samples {0.0F, 0.0F};
+    CHECK(overrun_timeline.Push({
+              0,
+              {0, 1'000'000, 10'000'000},
+              samples,
+              false,
+          }) == AudioTimelineResult::Aborted);
+}
+
+void MapsDeviceLossAgainstAnAbortedTimeline()
+{
+    FakeAudioCaptureSource source;
+    source.reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0, 0, 0, 0, {}, false, false, 0});
+    StereoCaptureTimeline timeline(8);
+    AudioCapturePump pump(source, timeline);
+    CHECK(pump.Start(Config()) == VRREC_STATUS_OK);
+    timeline.Abort();
+    CHECK(pump.PumpOne() == AudioCapturePumpResult::Aborted);
+}
+
 }
 
 int main()
@@ -1067,5 +1168,9 @@ int main()
     MapsAnAbortedPumpWithoutRetrying();
     FatalPacketFailureAbortsTheSourceAndTimeline();
     AbortDuringSourceStartPerformsPostStartCleanup();
+    RejectsPumpStateAndPacketBoundaries();
+    AbortsTheTimelineWhenSilentPacketExpansionFails();
+    RejectsInvalidRecoveryAndAbortsFailedAppliedRecovery();
+    MapsDeviceLossAgainstAnAbortedTimeline();
     return 0;
 }
