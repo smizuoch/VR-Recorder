@@ -26,19 +26,28 @@ public sealed class SystemRecordingEnvironmentSource
         var version = Assembly.GetEntryAssembly()?.GetName().Version ??
                       Assembly.GetExecutingAssembly().GetName().Version ??
                       new Version(0, 0, 0, 0);
-        var architecture = RuntimeInformation.ProcessArchitecture switch
+        var architecture = ConvertArchitecture(
+            RuntimeInformation.ProcessArchitecture);
+        return new SystemRecordingEnvironmentSource(
+            FormatVersion(version),
+            FormatVersion(Environment.OSVersion.Version),
+            architecture);
+    }
+
+    internal static RecordingProcessArchitecture ConvertArchitecture(
+        Architecture architecture) => architecture switch
         {
             Architecture.X64 => RecordingProcessArchitecture.X64,
             Architecture.Arm64 => RecordingProcessArchitecture.Arm64,
             var unsupported => throw new PlatformNotSupportedException(
                 $"Unsupported process architecture: {unsupported}"),
         };
-        return new SystemRecordingEnvironmentSource(
-            version.ToString(Math.Max(3, version.Revision >= 0 ? 4 : 3)),
-            Environment.OSVersion.Version.ToString(
-                Environment.OSVersion.Version.Revision >= 0 ? 4 : 3),
-            architecture);
-    }
+
+    internal static string FormatVersion(Version version) =>
+        version.Revision >= 0
+            ? $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}." +
+              $"{version.Revision}"
+            : $"{version.Major}.{version.Minor}.{Math.Max(0, version.Build)}";
 
     public RecordingEnvironmentSnapshot Capture(StableVideoSignal signal)
     {
