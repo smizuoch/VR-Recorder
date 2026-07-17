@@ -155,8 +155,22 @@ public static class WindowsApplicationPayloadIdentityPublisher
             writer.WriteEndObject();
         }
 
-        output.WriteByte((byte)'\n');
-        return output.ToArray();
+        var generated = output.ToArray();
+        using var canonical = new MemoryStream(generated.Length + 1);
+        for (var index = 0; index < generated.Length; index++)
+        {
+            if (generated[index] == (byte)'\r' &&
+                index + 1 < generated.Length &&
+                generated[index + 1] == (byte)'\n')
+            {
+                continue;
+            }
+
+            canonical.WriteByte(generated[index]);
+        }
+
+        canonical.WriteByte((byte)'\n');
+        return canonical.ToArray();
     }
 
     private static string Kind(StagedArtifactKind kind) => kind switch
