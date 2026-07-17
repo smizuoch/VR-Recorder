@@ -614,6 +614,60 @@ public sealed class PInvokeNativeRecordingBackendTests
     }
 
     [Fact]
+    public async Task SealedVideoEncoderFailureIsTypedAndStopStillCompletes()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var pending = new PendingRecording(
+            Path.Combine(directory.Path, "part.recording.mp4"),
+            Path.Combine(directory.Path, "part.mp4"));
+        var plan = new RecordingPlan(
+            new StableVideoSignal(320, 180),
+            pending,
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(30));
+        var firstPacket = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var encoderFailure = new TaskCompletionSource<NativeRecordingFault>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var terminalFault = new TaskCompletionSource<NativeRecordingFault>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var session = await backend.OpenAsync(
+            plan,
+            new NativeRecordingCallbacks(
+                FirstVideoPacketMuxed: () => firstPacket.TrySetResult(),
+                Faulted: fault => terminalFault.TrySetResult(fault),
+                VideoEncoderFailed: fault =>
+                    encoderFailure.TrySetResult(fault)),
+            CancellationToken.None);
+
+        controls.CommitMuxedVideoPacket();
+        await firstPacket.Task;
+        controls.EmitVideoEncoderFailed(
+            status: 6,
+            message: "hardware encoder failed; part is ready");
+
+        var failure = await encoderFailure.Task;
+        Assert.Equal(6, failure.Status);
+        Assert.Equal(
+            "hardware encoder failed; part is ready",
+            failure.Message);
+        Assert.False(terminalFault.Task.IsCompleted);
+
+        var stopping = session.StopAsync(CancellationToken.None);
+        Assert.False(stopping.IsCompleted);
+        controls.CompleteTrailerFlushClose(45, 72);
+        Assert.Equal(pending, (await stopping).Recording);
+        Assert.False(terminalFault.Task.IsCompleted);
+    }
+
+    [Fact]
     public async Task AudioDeviceEventsAreTypedAndDoNotCompletePendingStop()
     {
         if (!OperatingSystem.IsLinux())
@@ -832,6 +886,7 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly AudioEndpointAvailabilityDelegate
             _microphoneAudioEndpointAvailability;
         private readonly FailDelegate _fail;
+        private readonly FailDelegate _videoEncoderFailed;
         private readonly EncoderKindDelegate _encoderKind;
         private readonly CopyMediaConfigDelegate _copyMediaConfig;
         private readonly CopyVideoLayoutDelegate _copyVideoLayout;
@@ -857,6 +912,11 @@ public sealed class PInvokeNativeRecordingBackendTests
                 NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_fail"));
+            _videoEncoderFailed =
+                Marshal.GetDelegateForFunctionPointer<FailDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_emit_video_encoder_failed"));
             _desktopAudioEndpointAvailability =
                 Marshal.GetDelegateForFunctionPointer<
                     AudioEndpointAvailabilityDelegate>(
@@ -920,6 +980,9 @@ public sealed class PInvokeNativeRecordingBackendTests
             _complete(videoPacketCount, audioPacketCount);
 
         public void Fail(int status, string message) => _fail(status, message);
+
+        public void EmitVideoEncoderFailed(int status, string message) =>
+            _videoEncoderFailed(status, message);
 
         public void EmitAvDrift(
             ulong videoPtsMicroseconds,

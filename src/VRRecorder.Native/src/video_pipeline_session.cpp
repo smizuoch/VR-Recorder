@@ -321,6 +321,8 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
 
     const auto encoding_result = encoding_.Join();
     if (encoding_result == VideoEncodingWorkerResult::EncoderFailed ||
+        encoding_result ==
+            VideoEncodingWorkerResult::EncoderFailedPartSealed ||
         encoding_result == VideoEncodingWorkerResult::ClockFailed ||
         encoding_result == VideoEncodingWorkerResult::SurfaceAbandoned ||
         encoding_result == VideoEncodingWorkerResult::SurfaceDeviceRemoved ||
@@ -396,6 +398,10 @@ VideoPipelineResult VideoPipelineSession::Join() noexcept
     }
     if (encoding_result == VideoEncodingWorkerResult::EncoderFailed) {
         return VideoPipelineResult::EncoderFailed;
+    }
+    if (encoding_result ==
+        VideoEncodingWorkerResult::EncoderFailedPartSealed) {
+        return VideoPipelineResult::EncoderFailedPartSealed;
     }
     if (encoding_result == VideoEncodingWorkerResult::SurfaceAbandoned) {
         return VideoPipelineResult::SurfaceAbandoned;

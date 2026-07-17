@@ -272,6 +272,13 @@ public:
         events_.Faulted(status, message.c_str());
     }
 
+    void EmitVideoEncoderFailed(
+        vrrec_status_t status,
+        const std::string &message) noexcept
+    {
+        events_.VideoEncoderFailed(status, message.c_str());
+    }
+
     void SetAudioEndpointAvailable(
         AudioEndpointRole role,
         bool available,
@@ -1146,6 +1153,15 @@ void CompleteTrailerFlushClose(
 void Fail(std::int32_t status, std::string_view message)
 {
     FakeMediaBackend::Active()->Fail(status, std::string(message));
+}
+
+void EmitVideoEncoderFailed(
+    std::int32_t status,
+    std::string_view message)
+{
+    FakeMediaBackend::Active()->EmitVideoEncoderFailed(
+        status,
+        std::string(message));
 }
 
 void EmitAvDrift(

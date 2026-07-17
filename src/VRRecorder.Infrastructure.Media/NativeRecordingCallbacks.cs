@@ -8,4 +8,5 @@ public sealed record NativeRecordingCallbacks(
     Action<AudioSessionWarning>? AudioWarning = null,
     Action<AudioSessionStatus>? AudioStatus = null,
     Action<NativeAvDriftEvent>? AvDrift = null,
-    Action<RecordingAudioBufferHealthEvent>? AudioBufferHealth = null);
+    Action<RecordingAudioBufferHealthEvent>? AudioBufferHealth = null,
+    Action<NativeRecordingFault>? VideoEncoderFailed = null);

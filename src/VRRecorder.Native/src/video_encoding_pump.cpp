@@ -90,6 +90,7 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
                 0,
                 release_status,
                 false,
+                false,
             };
             return VideoEncodingResult::SurfaceFailed;
         }
@@ -102,6 +103,7 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
                 0,
                 preparation.status,
                 false,
+                false,
             };
             return VideoEncodingResult::ProcessorFailed;
         }
@@ -113,6 +115,7 @@ VideoEncodingResult VideoEncodingPump::PumpTick(
         write.encode_latency_microseconds,
         write.status,
         false,
+        write.part_sealed_after_encoder_failure,
     };
     if (write.status != VRREC_STATUS_OK) {
         if (write.failure_stage == VideoEncoderFailureStage::Processing) {

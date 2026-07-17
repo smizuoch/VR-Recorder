@@ -77,6 +77,8 @@ void AdaptsConfiguredVideoSession()
     CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
     session.join_result = VideoPipelineResult::EncoderFailed;
     CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = VideoPipelineResult::EncoderFailedPartSealed;
+    CHECK(adapter.Join() == VRREC_STATUS_OK);
     session.join_result = VideoPipelineResult::SurfaceDeviceRemoved;
     CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
     session.join_result = VideoPipelineResult::SurfaceDeviceReset;

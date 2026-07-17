@@ -31,6 +31,7 @@ enum class VideoEncodingWorkerResult {
     Stopped,
     Aborted,
     EncoderFailed,
+    EncoderFailedPartSealed,
     ClockFailed,
     SurfaceAbandoned,
     SurfaceDeviceRemoved,
@@ -95,6 +96,10 @@ private:
     void Finish() noexcept;
     void Fail(
         VideoEncodingWorkerResult result,
+        vrrec_status_t status,
+        const char *message,
+        bool abort_clock) noexcept;
+    void ReportSealedEncoderFailure(
         vrrec_status_t status,
         const char *message,
         bool abort_clock) noexcept;

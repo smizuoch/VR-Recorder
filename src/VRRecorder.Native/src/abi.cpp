@@ -446,6 +446,34 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         });
     }
 
+    void VideoEncoderFailed(
+        vrrec_status_t status,
+        const char *message_utf8) noexcept override
+    {
+        const std::lock_guard callback_lock(callback_mutex_);
+        std::uint64_t sequence;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_ || !first_packet_emitted_) {
+                return;
+            }
+
+            sequence = ++sequence_;
+        }
+
+        Emit(vrrec_event_v1 {
+            sizeof(vrrec_event_v1),
+            VRREC_ABI_V1,
+            VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY,
+            status,
+            sequence,
+            0,
+            0,
+            message_utf8,
+        });
+    }
+
     void AudioEndpointAvailabilityChanged(
         vrrecorder::native::AudioEndpointRole role,
         bool available,

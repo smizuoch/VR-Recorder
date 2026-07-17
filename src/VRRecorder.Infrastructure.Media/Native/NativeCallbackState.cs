@@ -35,6 +35,7 @@ internal sealed class NativeCallbackState
         NativeAvDriftEvent? avDrift = null;
         RecordingAudioBufferHealthEvent? audioBufferHealth = null;
         NativeRecordingFault? fault = null;
+        NativeRecordingFault? videoEncoderFailure = null;
         RecordingStopResult? stopped = null;
         lock (_gate)
         {
@@ -68,6 +69,12 @@ internal sealed class NativeCallbackState
                         (int)nativeEvent.Status,
                         Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
                         "Native recording failed.");
+                    break;
+                case NativeEventKind.VideoEncoderFailedPartReady:
+                    videoEncoderFailure = new NativeRecordingFault(
+                        (int)nativeEvent.Status,
+                        Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
+                        "Native video encoder failed after sealing the current part.");
                     break;
                 case NativeEventKind.DesktopAudioDeviceLost:
                     audioWarning = CreateAudioWarning(
@@ -155,6 +162,11 @@ internal sealed class NativeCallbackState
         {
             Stopped.TrySetException(new NativeRecordingException(fault));
             _callbacks.Faulted(fault);
+        }
+
+        if (videoEncoderFailure is not null)
+        {
+            _callbacks.VideoEncoderFailed?.Invoke(videoEncoderFailure);
         }
     }
 

@@ -102,9 +102,16 @@ void VideoEncodingWorker::RunEntry(void *context) noexcept
 
 vrrec_status_t VideoEncodingWorker::RequestStop() noexcept
 {
-    if (!started_.load() || abort_requested_.load() ||
-        (finished_.load() && !stop_requested_.load())) {
+    if (!started_.load() || abort_requested_.load()) {
         return VRREC_STATUS_INVALID_STATE;
+    }
+
+    if (finished_.load()) {
+        const std::lock_guard lock(state_mutex_);
+        return result_ ==
+                VideoEncodingWorkerResult::EncoderFailedPartSealed
+            ? VRREC_STATUS_OK
+            : VRREC_STATUS_INVALID_STATE;
     }
 
     if (!stop_requested_.exchange(true) && !finished_.load()) {
@@ -245,11 +252,18 @@ void VideoEncodingWorker::Run() noexcept
         }
 
         if (encoding_result == VideoEncodingResult::EncoderFailed) {
-            Fail(
-                VideoEncodingWorkerResult::EncoderFailed,
-                read.encoder_status,
-                "video encoder failed while recording",
-                true);
+            if (read.part_sealed_after_encoder_failure) {
+                ReportSealedEncoderFailure(
+                    read.encoder_status,
+                    "video encoder failed after the current part was sealed",
+                    true);
+            } else {
+                Fail(
+                    VideoEncodingWorkerResult::EncoderFailed,
+                    read.encoder_status,
+                    "video encoder failed while recording",
+                    true);
+            }
         } else if (encoding_result == VideoEncodingResult::ProcessorFailed) {
             Fail(
                 VideoEncodingWorkerResult::Failed,
@@ -309,11 +323,18 @@ void VideoEncodingWorker::Finish() noexcept
         return;
     }
     if (finish.status != VRREC_STATUS_OK) {
-        Fail(
-            VideoEncodingWorkerResult::EncoderFailed,
-            finish.status,
-            "video encoder flush failed",
-            false);
+        if (finish.part_sealed_after_encoder_failure) {
+            ReportSealedEncoderFailure(
+                finish.status,
+                "video encoder flush failed after the current part was sealed",
+                false);
+        } else {
+            Fail(
+                VideoEncodingWorkerResult::EncoderFailed,
+                finish.status,
+                "video encoder flush failed",
+                false);
+        }
         return;
     }
 
@@ -340,6 +361,21 @@ void VideoEncodingWorker::Fail(
     }
     sink_.Abort();
     events_.Faulted(status, message);
+}
+
+void VideoEncodingWorker::ReportSealedEncoderFailure(
+    vrrec_status_t status,
+    const char *message,
+    bool abort_clock) noexcept
+{
+    if (!SetResult(
+            VideoEncodingWorkerResult::EncoderFailedPartSealed)) {
+        return;
+    }
+    if (abort_clock) {
+        clock_.Abort();
+    }
+    events_.VideoEncoderFailed(status, message);
 }
 
 bool VideoEncodingWorker::SetResult(

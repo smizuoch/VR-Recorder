@@ -27,6 +27,7 @@ static_assert(VRREC_EVENT_DESKTOP_AUDIO_BUFFER_UNDERRUN == 9);
 static_assert(VRREC_EVENT_DESKTOP_AUDIO_BUFFER_OVERRUN == 10);
 static_assert(VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_UNDERRUN == 11);
 static_assert(VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN == 12);
+static_assert(VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY == 13);
 static_assert(sizeof(vrrec_session_config_v1) == 176);
 static_assert(offsetof(vrrec_session_config_v1, source_pixel_format) == 160);
 static_assert(offsetof(vrrec_session_config_v1, reserved_v2) == 164);
@@ -2071,6 +2072,39 @@ bool FaultIsTerminalAndAbortQuiescesCallbacks()
     return true;
 }
 
+bool SealedVideoEncoderFailureIsNonterminalAndCanStop()
+{
+    EventLog log;
+    auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    vrrecorder::native::testing::EmitVideoEncoderFailed(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "hardware encoder failed; part is ready");
+
+    CHECK(log.events.size() == 2);
+    CHECK(log.events[0].kind == VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED);
+    CHECK(log.events[1].kind ==
+          VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY);
+    CHECK(log.events[1].status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events[1].message ==
+          "hardware encoder failed; part is ready");
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    vrrecorder::native::testing::CompleteTrailerFlushClose(45, 72);
+    CHECK(log.events.size() == 3);
+    CHECK(log.events[2].kind == VRREC_EVENT_STOPPED);
+    CHECK(log.events[2].video_packet_count == 45);
+    CHECK(log.events[2].audio_packet_count == 72);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool RejectsInvalidSteamVrAbiInputs()
 {
     auto config = ValidSteamVrConfig();
@@ -3858,6 +3892,7 @@ int main(int argc, char **argv)
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
+        !SealedVideoEncoderFailureIsNonterminalAndCanStop() ||
         !RejectsInvalidSteamVrAbiInputs() ||
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||
         !RejectsInvalidSteamVrHapticAbiInputs() ||

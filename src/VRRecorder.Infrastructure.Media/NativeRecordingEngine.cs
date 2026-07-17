@@ -105,7 +105,8 @@ public sealed class NativeRecordingEngine
             AudioWarning: PublishAudioBestEffort,
             AudioStatus: PublishAudioBestEffort,
             AvDrift: PublishAvDriftBestEffort,
-            AudioBufferHealth: PublishAudioBufferHealthBestEffort);
+            AudioBufferHealth: PublishAudioBufferHealthBestEffort,
+            VideoEncoderFailed: runtimeFaultContext.Report);
         var session = await _backend
             .OpenAsync(
                 plan,

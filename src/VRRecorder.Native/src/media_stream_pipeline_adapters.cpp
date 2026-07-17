@@ -9,6 +9,7 @@ vrrec_status_t MapVideoResult(VideoPipelineResult result) noexcept
 {
     switch (result) {
     case VideoPipelineResult::Stopped:
+    case VideoPipelineResult::EncoderFailedPartSealed:
         return VRREC_STATUS_OK;
     case VideoPipelineResult::SenderLost:
     case VideoPipelineResult::AdapterChanged:

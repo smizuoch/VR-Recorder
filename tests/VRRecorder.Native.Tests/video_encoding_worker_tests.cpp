@@ -383,6 +383,15 @@ public:
         fault_message = message_utf8;
     }
 
+    void VideoEncoderFailed(
+        vrrec_status_t status,
+        const char *message_utf8) noexcept override
+    {
+        ++video_encoder_failure_calls;
+        video_encoder_failure_status = status;
+        video_encoder_failure_message = message_utf8;
+    }
+
     void AudioEndpointAvailabilityChanged(
         AudioEndpointRole,
         bool,
@@ -392,8 +401,11 @@ public:
 
     std::size_t first_packet_calls = 0;
     std::size_t fault_calls = 0;
+    std::size_t video_encoder_failure_calls = 0;
     vrrec_status_t fault_status = VRREC_STATUS_OK;
+    vrrec_status_t video_encoder_failure_status = VRREC_STATUS_OK;
     const char *fault_message = nullptr;
+    const char *video_encoder_failure_message = nullptr;
 };
 
 class ScriptedThreadFactory final : public NativeThreadFactoryPort {
@@ -533,6 +545,40 @@ void RuntimeEncoderFailureRaisesFaultAndDoesNotFlush()
     CHECK(sink.finish_calls == 0);
     CHECK(sink.abort_calls == 1);
     CHECK(clock.abort_calls == 1);
+}
+
+void RuntimeEncoderFailureAfterFirstPacketSealsPartWithoutAbortingSink()
+{
+    VideoCfrScheduler scheduler;
+    CHECK(scheduler.Push({20, 2'000'000}) == VRREC_STATUS_OK);
+    ScriptedCfrClock clock;
+    clock.ready_tick_count = 2;
+    ScriptedVideoSink sink;
+    sink.writes.push_back({VRREC_STATUS_OK, 1, 100});
+    sink.writes.push_back({
+        VRREC_STATUS_INTERNAL_ERROR,
+        0,
+        999,
+        VideoEncoderFailureStage::Encoding,
+        true,
+    });
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    CHECK(worker.Join() ==
+          VideoEncodingWorkerResult::EncoderFailedPartSealed);
+    CHECK(worker.RequestStop() == VRREC_STATUS_OK);
+    CHECK(events.first_packet_calls == 1);
+    CHECK(events.fault_calls == 0);
+    CHECK(events.video_encoder_failure_calls == 1);
+    CHECK(events.video_encoder_failure_status ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(events.video_encoder_failure_message != nullptr);
+    CHECK(sink.finish_calls == 0);
+    CHECK(sink.abort_calls == 0);
+    CHECK(clock.abort_calls == 1);
+    CHECK(worker.Statistics().muxed_packet_count == 1);
 }
 
 void ForcedAbortDoesNotFlushOrRaiseFault()
@@ -929,6 +975,7 @@ int main()
 {
     GracefulStopFlushesAndReportsTheFirstPacketOnce();
     RuntimeEncoderFailureRaisesFaultAndDoesNotFlush();
+    RuntimeEncoderFailureAfterFirstPacketSealsPartWithoutAbortingSink();
     ForcedAbortDoesNotFlushOrRaiseFault();
     AbortDominatesAConcurrentGracefulFinish();
     AbortDominatesAnInFlightVideoWriteFailure();

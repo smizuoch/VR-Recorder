@@ -49,13 +49,16 @@ public:
 private:
     VideoEncoderWrite Commit(
         PacketVideoEncoderWrite encoded) noexcept;
+    void AbortEncoderOnce() noexcept;
 
     PacketVideoEncoder &encoder_;
     EncodedMediaPacketSubmissionPort &mux_;
     H264DescriptorPacketSubmissionPort *descriptor_mux_;
     std::mutex operation_mutex_;
     std::atomic_bool aborted_ = false;
+    std::atomic_bool encoder_aborted_ = false;
     std::atomic_bool finished_ = false;
+    std::uint64_t committed_muxed_packet_count_ = 0;
 };
 
 }

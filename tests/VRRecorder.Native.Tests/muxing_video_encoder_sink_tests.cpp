@@ -321,6 +321,33 @@ void EncoderFailureAbortsBothSidesAndRejectsFurtherFrames()
     CHECK(encoder.encode_calls == 1);
 }
 
+void EncoderFailureAfterACommittedPacketSealsTheRecoverablePart()
+{
+    ScriptedPacketEncoder encoder;
+    encoder.encode = {VRREC_STATUS_OK, 50, {VideoPacket(0)}};
+    RecordingPacketSubmissionPort mux;
+    MuxingVideoEncoderSink sink(encoder, mux);
+
+    const auto committed = sink.Write({});
+    CHECK(committed.status == VRREC_STATUS_OK);
+    CHECK(committed.muxed_packet_count == 1);
+
+    encoder.encode = {VRREC_STATUS_INTERNAL_ERROR, 75, {}};
+    const auto failed = sink.Write({});
+
+    CHECK(failed.status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(failed.failure_stage == VideoEncoderFailureStage::Encoding);
+    CHECK(failed.part_sealed_after_encoder_failure);
+    CHECK(failed.muxed_packet_count == 0);
+    CHECK(failed.encode_latency_microseconds == 75);
+    CHECK(encoder.abort_calls == 1);
+    CHECK(mux.finished_streams ==
+          std::vector<MediaStreamKind>({MediaStreamKind::Video}));
+    CHECK(mux.failed_streams.empty());
+    CHECK(sink.Write({}).status == VRREC_STATUS_INVALID_STATE);
+    CHECK(encoder.encode_calls == 2);
+}
+
 void FinishEncodingFailureSignalsTheMuxBoundaryExactlyOnce()
 {
     ScriptedPacketEncoder encoder;
@@ -615,6 +642,7 @@ int main()
     FlushesEncoderPacketsWithoutFinalizingTheSharedMuxer();
     SuccessfulFinishTerminalizesTheVideoEncoderSink();
     EncoderFailureAbortsBothSidesAndRejectsFurtherFrames();
+    EncoderFailureAfterACommittedPacketSealsTheRecoverablePart();
     FinishEncodingFailureSignalsTheMuxBoundaryExactlyOnce();
     FinishBatchSubmissionFailureSignalsMuxBoundaryExactlyOnce();
     FinalMuxCompletionFailureAbortsAndMapsToMuxing();

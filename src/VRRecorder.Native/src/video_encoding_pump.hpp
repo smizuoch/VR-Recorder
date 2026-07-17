@@ -22,6 +22,7 @@ struct VideoEncoderWrite final {
     std::uint64_t encode_latency_microseconds;
     VideoEncoderFailureStage failure_stage =
         VideoEncoderFailureStage::None;
+    bool part_sealed_after_encoder_failure = false;
 };
 
 class VideoEncoderSink {
@@ -89,6 +90,7 @@ struct VideoEncodingRead final {
     std::uint64_t encode_latency_microseconds = 0;
     vrrec_status_t encoder_status = VRREC_STATUS_OK;
     bool first_packet_muxed = false;
+    bool part_sealed_after_encoder_failure = false;
 };
 
 struct VideoEncodingStatistics final {

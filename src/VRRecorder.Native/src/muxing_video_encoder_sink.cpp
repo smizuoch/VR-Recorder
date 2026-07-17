@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 namespace vrrecorder::native {
@@ -76,7 +77,14 @@ void MuxingVideoEncoderSink::Abort() noexcept
         return;
     }
     mux_.EncoderFailed(MediaStreamKind::Video);
-    encoder_.Abort();
+    AbortEncoderOnce();
+}
+
+void MuxingVideoEncoderSink::AbortEncoderOnce() noexcept
+{
+    if (!encoder_aborted_.exchange(true)) {
+        encoder_.Abort();
+    }
 }
 
 VideoEncoderWrite MuxingVideoEncoderSink::Commit(
@@ -91,6 +99,30 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
         };
     }
     if (encoded.status != VRREC_STATUS_OK) {
+        if (committed_muxed_packet_count_ > 0) {
+            finished_.store(true);
+            AbortEncoderOnce();
+            const auto finish_status =
+                mux_.EncoderFinished(MediaStreamKind::Video);
+            if (finish_status == VRREC_STATUS_OK && !aborted_.load()) {
+                return {
+                    encoded.status,
+                    0,
+                    encoded.encode_latency_microseconds,
+                    VideoEncoderFailureStage::Encoding,
+                    true,
+                };
+            }
+            Abort();
+            return {
+                finish_status != VRREC_STATUS_OK
+                    ? finish_status
+                    : VRREC_STATUS_INVALID_STATE,
+                0,
+                encoded.encode_latency_microseconds,
+                VideoEncoderFailureStage::Muxing,
+            };
+        }
         Abort();
         return {
             encoded.status,
@@ -171,6 +203,19 @@ VideoEncoderWrite MuxingVideoEncoderSink::Commit(
             VideoEncoderFailureStage::Muxing,
         };
     }
+
+    if (committed_muxed_packet_count_ >
+        std::numeric_limits<std::uint64_t>::max() -
+            encoded.packets.size()) {
+        Abort();
+        return {
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            encoded.encode_latency_microseconds,
+            VideoEncoderFailureStage::Muxing,
+        };
+    }
+    committed_muxed_packet_count_ += encoded.packets.size();
 
     return {
         VRREC_STATUS_OK,

@@ -29,6 +29,7 @@ internal enum NativeEventKind : uint
     DesktopAudioBufferOverrun = 10,
     MicrophoneAudioBufferUnderrun = 11,
     MicrophoneAudioBufferOverrun = 12,
+    VideoEncoderFailedPartReady = 13,
 }
 
 internal enum NativeEncoderKind : uint
