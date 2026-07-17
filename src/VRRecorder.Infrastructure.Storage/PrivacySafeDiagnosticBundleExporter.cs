@@ -335,7 +335,7 @@ public sealed class PrivacySafeDiagnosticBundleExporter
         return eventCount;
     }
 
-    private static string? TrySanitize(string line)
+    internal static string? TrySanitize(string line)
     {
         if (line.Length is 0 or > MaximumDiagnosticLineCharacters)
         {

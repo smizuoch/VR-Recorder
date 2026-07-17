@@ -6,6 +6,215 @@ namespace VRRecorder.IntegrationTests.Storage;
 
 public sealed class PrivacySafeDiagnosticBundleExporterTests
 {
+    [Theory]
+    [MemberData(nameof(UnsafeDiagnosticLines))]
+    public void RejectsMalformedOrPrivacyUnsafeDiagnosticLine(string line)
+    {
+        Assert.Null(PrivacySafeDiagnosticBundleExporter.TrySanitize(line));
+    }
+
+    public static IEnumerable<object[]> UnsafeDiagnosticLines()
+    {
+        yield return [string.Empty];
+        yield return [new string('x', (64 * 1024) + 1)];
+        yield return ["[]"];
+        yield return ["""
+            {
+              "timestampUtc":"2026-07-11T01:02:03.0000000+00:00",
+              "timestampUtc":"2026-07-11T01:02:03.0000000+00:00",
+              "level":"information",
+              "event":"recording.saved",
+              "fields":{"container":"mp4","result":"saved"}
+            }
+            """];
+        yield return [Envelope(
+            "recording.saved",
+            Fields(("container", "mp4"), ("result", "saved")),
+            timestamp: "invalid")];
+        yield return [Envelope(
+            "recording.saved",
+            Fields(("container", "mp4"), ("result", "saved")),
+            timestamp: "2026-07-11T01:02:03.0000000+09:00")];
+        yield return [Envelope(
+            "recording.saved",
+            Fields(("container", "mp4"), ("result", "saved")),
+            level: "debug")];
+        yield return [Envelope("unknown.event", Fields(("secret", "value")))];
+        yield return [Envelope("recording.saved", new object[] { "not", "object" })];
+        yield return ["""
+            {
+              "timestampUtc":"2026-07-11T01:02:03.0000000+00:00",
+              "level":"information",
+              "event":"recording.saved",
+              "fields":{"container":"mp4","container":"mp4","result":"saved"}
+            }
+            """];
+
+        foreach (var line in Mutations(
+                     "recording.state_transition",
+                     Fields(("revision", "7"), ("state", "recording")),
+                     ("revision", null, true),
+                     ("revision", "invalid", false),
+                     ("revision", "-1", false),
+                     ("state", "private-state", false)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "recording.storage",
+                     Fields(
+                         ("availableBytes", "1024"),
+                         ("estimatedRemainingSeconds", "12.5"),
+                         ("state", "healthy")),
+                     ("availableBytes", null, true),
+                     ("availableBytes", "invalid", false),
+                     ("availableBytes", "-1", false),
+                     ("estimatedRemainingSeconds", null, true),
+                     ("estimatedRemainingSeconds", "invalid", false),
+                     ("estimatedRemainingSeconds", "-1", false),
+                     ("state", "private-state", false)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "recording.saved",
+                     Fields(("container", "mp4"), ("result", "saved")),
+                     ("container", null, true),
+                     ("container", "mkv", false),
+                     ("result", null, true),
+                     ("result", "private-result", false)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "camera.restore_warning",
+                     Fields(("reason", "recording_completed")),
+                     ("reason", null, true),
+                     ("reason", "private-reason", false)))
+            yield return [line];
+
+        foreach (var eventCase in new[]
+                 {
+                     (
+                         Event: "audio.input_warning",
+                         Kind: "input_unavailable"),
+                     (
+                         Event: "audio.input_status",
+                         Kind: "input_recovered"),
+                     (
+                         Event: "audio.buffer_health",
+                         Kind: "buffer_overrun"),
+                 })
+        {
+            foreach (var line in Mutations(
+                         eventCase.Event,
+                         Fields(
+                             ("framePosition", "4800"),
+                             ("input", "microphone"),
+                             ("kind", eventCase.Kind)),
+                         ("framePosition", null, true),
+                         ("framePosition", "invalid", false),
+                         ("framePosition", "-1", false),
+                         ("input", "private-input", false),
+                         ("kind", "private-kind", false)))
+                yield return [line];
+        }
+
+        foreach (var line in Mutations(
+                     "audio.input_status",
+                     Fields(
+                         ("framePosition", "4800"),
+                         ("input", "microphone"),
+                         ("kind", "input_recovered"),
+                         ("rediscoveryBudgetMilliseconds", "10.5")),
+                     ("rediscoveryBudgetMilliseconds", 1, false),
+                     ("rediscoveryBudgetMilliseconds", "invalid", false),
+                     ("rediscoveryBudgetMilliseconds", "-1", false)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "recording.media_profile",
+                     Fields(
+                         ("encoder", "nvenc"),
+                         ("estimatedSourceFramesPerSecond", "59.94"),
+                         ("gpuVendor", "nvidia"),
+                         ("outputFramesPerSecond", "60"),
+                         ("outputHeight", "1080"),
+                         ("outputWidth", "1920"),
+                         ("sourceHeight", "1080"),
+                         ("sourcePixelFormat", "bgra8"),
+                         ("sourceWidth", "1920")),
+                     ("encoder", "private", false),
+                     ("estimatedSourceFramesPerSecond", "0", false),
+                     ("estimatedSourceFramesPerSecond", "1001", false),
+                     ("gpuVendor", "private", false),
+                     ("outputFramesPerSecond", "0", false),
+                     ("outputFramesPerSecond", "1001", false),
+                     ("outputHeight", "0", false),
+                     ("outputWidth", "invalid", false),
+                     ("sourceHeight", "-1", false),
+                     ("sourcePixelFormat", "private", false),
+                     ("sourceWidth", null, true)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "recording.media_statistics",
+                     Fields(
+                         ("audioVideoOffsetMicroseconds", "-10"),
+                         ("droppedSourceVideoFrameCount", "1"),
+                         ("duplicatedOutputVideoFrameCount", "1"),
+                         ("latestEncodeLatencyMicroseconds", "10"),
+                         ("maximumEncodeLatencyMicroseconds", "20"),
+                         ("muxedAudioPacketCount", "1"),
+                         ("muxedVideoPacketCount", "1"),
+                         ("sourceVideoFrameCount", "1")),
+                     ("audioVideoOffsetMicroseconds", "invalid", false),
+                     ("droppedSourceVideoFrameCount", "-1", false),
+                     ("duplicatedOutputVideoFrameCount", "invalid", false),
+                     ("latestEncodeLatencyMicroseconds", "-1", false),
+                     ("maximumEncodeLatencyMicroseconds", "5", false),
+                     ("muxedAudioPacketCount", "-1", false),
+                     ("muxedVideoPacketCount", "invalid", false),
+                     ("sourceVideoFrameCount", null, true)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "application.environment",
+                     Fields(
+                         ("appVersion", "0.3.0"),
+                         ("architecture", "x64"),
+                         ("gpuModel", "ven_10de&dev_2684"),
+                         ("gpuVendor", "nvidia"),
+                         ("osBuild", "10.0.26100"),
+                         ("driverVersion", "32.0.15.6094")),
+                     ("appVersion", "1.2", false),
+                     ("appVersion", "1.2.3.4.5", false),
+                     ("appVersion", "1..3", false),
+                     ("appVersion", "01.2.3", false),
+                     ("appVersion", "a.2.3", false),
+                     ("architecture", "private", false),
+                     ("gpuVendor", "private", false),
+                     ("gpuModel", "private", false),
+                     ("gpuModel", "ven_10de&bad_2684", false),
+                     ("gpuModel", "ven_10d&dev_2684", false),
+                     ("gpuModel", "ven_zzzz&dev_2684", false),
+                     ("osBuild", "10.0", false),
+                     ("driverVersion", "32.0.15", false)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "recording.finalization_recovery",
+                     Fields(("reason", "validation_failed")),
+                     ("reason", "private", false)))
+            yield return [line];
+
+        foreach (var line in Mutations(
+                     "osc.operation",
+                     Fields(
+                         ("operation", "capability_probe"),
+                         ("outcome", "succeeded")),
+                     ("operation", "private", false),
+                     ("outcome", "private", false)))
+            yield return [line];
+    }
+
     [Fact]
     public async Task ExportsOnlySanitizedKnownDiagnosticEvents()
     {
@@ -307,6 +516,49 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
         {
             timestampUtc = "2026-07-11T01:02:03.0000000+00:00",
             level = "information",
+            @event = eventName,
+            fields,
+        });
+
+    private static Dictionary<string, object?> Fields(
+        params (string Name, object? Value)[] values) =>
+        values.ToDictionary(
+            value => value.Name,
+            value => value.Value,
+            StringComparer.Ordinal);
+
+    private static IEnumerable<string> Mutations(
+        string eventName,
+        IReadOnlyDictionary<string, object?> validFields,
+        params (string Name, object? Value, bool Remove)[] mutations)
+    {
+        foreach (var mutation in mutations)
+        {
+            var fields = new Dictionary<string, object?>(
+                validFields,
+                StringComparer.Ordinal);
+            if (mutation.Remove)
+            {
+                fields.Remove(mutation.Name);
+            }
+            else
+            {
+                fields[mutation.Name] = mutation.Value;
+            }
+
+            yield return Envelope(eventName, fields);
+        }
+    }
+
+    private static string Envelope(
+        string eventName,
+        object fields,
+        string timestamp = "2026-07-11T01:02:03.0000000+00:00",
+        string level = "information") =>
+        JsonSerializer.Serialize(new
+        {
+            timestampUtc = timestamp,
+            level,
             @event = eventName,
             fields,
         });
