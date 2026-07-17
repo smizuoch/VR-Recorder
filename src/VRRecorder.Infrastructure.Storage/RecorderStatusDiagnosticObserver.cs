@@ -8,7 +8,7 @@ namespace VRRecorder.Infrastructure.Storage;
 public sealed class RecorderStatusDiagnosticObserver : IDisposable
 {
     private readonly object _gate = new();
-    private readonly RotatingJsonLinesDiagnosticLog _log;
+    private readonly IDiagnosticLogWriter _log;
     private readonly IWallClock _clock;
     private readonly IDisposable _subscription;
     private Task _writeTail = Task.CompletedTask;
@@ -17,7 +17,7 @@ public sealed class RecorderStatusDiagnosticObserver : IDisposable
 
     public RecorderStatusDiagnosticObserver(
         IRecorderStatusSource statuses,
-        RotatingJsonLinesDiagnosticLog log,
+        IDiagnosticLogWriter log,
         IWallClock clock)
     {
         ArgumentNullException.ThrowIfNull(statuses);
@@ -111,7 +111,7 @@ public sealed class RecorderStatusDiagnosticObserver : IDisposable
         _ => DiagnosticLogLevel.Information,
     };
 
-    private static string StateName(RecorderState state) => state switch
+    internal static string StateName(RecorderState state) => state switch
     {
         RecorderState.Booting => "booting",
         RecorderState.Ready => "ready",
