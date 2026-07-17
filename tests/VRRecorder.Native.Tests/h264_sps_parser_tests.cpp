@@ -1,6 +1,8 @@
 #include "h264_sps_parser.hpp"
 #include "h264_test_vectors.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdlib>
@@ -336,6 +338,29 @@ void RejectsMalformedOrOutOfRangePpsIdentifiers()
           VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void ReportsSpsAndPpsRbspAllocationFailureWithoutPartialResults()
+{
+    const auto sps = MakeSps(SpsSettings {});
+    H264SpsInfo sps_result {};
+    sps_result.width = 1'920;
+    allocation_failure::fail_on_allocation = 1;
+    const auto sps_status = ParseH264Sps(sps, sps_result);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(sps_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(sps_result.width == 0);
+    CHECK(sps_result.height == 0);
+
+    const auto pps = MakePps(PpsSettings {});
+    H264PpsInfo pps_result {};
+    pps_result.picture_parameter_set_id = 7;
+    allocation_failure::fail_on_allocation = 1;
+    const auto pps_status = ParseH264Pps(pps, pps_result);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(pps_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(pps_result.picture_parameter_set_id == 0);
+    CHECK(pps_result.sequence_parameter_set_id == 0);
+}
+
 }
 
 int main()
@@ -351,5 +376,6 @@ int main()
     RejectsMalformedOrImpossibleSps();
     RejectsEverySpsSyntaxLimit();
     RejectsMalformedOrOutOfRangePpsIdentifiers();
+    ReportsSpsAndPpsRbspAllocationFailureWithoutPartialResults();
     return 0;
 }
