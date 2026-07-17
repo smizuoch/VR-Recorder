@@ -412,6 +412,136 @@ public sealed class NativeRecordingEngineTests
     }
 
     [Fact]
+    public async Task PreCommitEncoderFailuresCoalesceIntoOneSoftwareRollover()
+    {
+        var firstPlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var secondPlan = firstPlan with
+        {
+            Output = new PendingRecording(
+                Path.Combine(Path.GetTempPath(), "early_part002.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "early_part002.mp4")),
+            Encoder = EncoderKind.MediaFoundationSoftware,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover(secondPlan);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            runtimeFaults,
+            rollover);
+        var starting = engine.StartAsync(firstPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+
+        backend.SignalVideoEncoderFailed(
+            partIndex: 0,
+            new NativeRecordingFault(6, "first pre-commit failure"));
+        backend.SignalVideoEncoderFailed(
+            partIndex: 0,
+            new NativeRecordingFault(6, "duplicate pre-commit failure"));
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+        await backend.WaitUntilOpenedAsync(2);
+
+        Assert.Single(rollover.Reservations);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 1);
+        await rollover.FinalizationCompleted.WaitAsync(TimeSpan.FromSeconds(2));
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(secondPlan.Output, stopped.Recording);
+        Assert.Empty(runtimeFaults.Reports);
+    }
+
+    [Fact]
+    public async Task RolloverRejectsAReservedHardwareEncoderPlan()
+    {
+        var firstPlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var invalidNextPlan = firstPlan with
+        {
+            Output = new PendingRecording(
+                Path.Combine(Path.GetTempPath(), "invalid_part002.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "invalid_part002.mp4")),
+            Encoder = EncoderKind.Amf,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover(invalidNextPlan);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            runtimeFaults,
+            rollover);
+        var starting = engine.StartAsync(firstPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+
+        backend.SignalVideoEncoderFailed(
+            partIndex: 0,
+            new NativeRecordingFault(6, "NVENC device lost"));
+        var report = await runtimeFaults.WaitForReportAsync()
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(firstPlan.Output, stopped.Recording);
+        Assert.Single(backend.Sessions);
+        Assert.Equal(handle, report.Handle);
+        Assert.Contains("InvalidOperationException", report.Fault.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedOpenedSoftwarePartIsAbortedAndSealedPartRemainsStoppable(
+        bool abortFails)
+    {
+        var firstPlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var secondPlan = firstPlan with
+        {
+            Output = new PendingRecording(
+                Path.Combine(Path.GetTempPath(), "failed_part002.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "failed_part002.mp4")),
+            Encoder = EncoderKind.MediaFoundationSoftware,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover(secondPlan);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            runtimeFaults,
+            rollover);
+        var starting = engine.StartAsync(firstPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+
+        backend.SignalVideoEncoderFailed(
+            partIndex: 0,
+            new NativeRecordingFault(6, "NVENC device lost"));
+        await backend.WaitUntilOpenedAsync(2);
+        if (abortFails)
+        {
+            backend.Sessions[1].AbortFailure = new IOException(
+                "software abort failed");
+        }
+        backend.SignalFault(
+            partIndex: 1,
+            new NativeRecordingFault(6, "software first packet failed"));
+        var report = await runtimeFaults.WaitForReportAsync()
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(firstPlan.Output, stopped.Recording);
+        Assert.Equal(1, backend.Sessions[1].AbortCallCount);
+        Assert.Equal(handle, report.Handle);
+        Assert.Contains("NativeRecordingException", report.Fault.Message);
+    }
+
+    [Fact]
     public async Task SealedSoftwareEncoderFailureUsesTerminalFaultPath()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -733,12 +863,16 @@ public sealed class NativeRecordingEngineTests
 
         public int StopCallCount { get; private set; }
 
+        public Exception? AbortFailure { get; set; }
+
         public string Id { get; } = id;
 
         public Task AbortAsync(CancellationToken cancellationToken)
         {
             AbortCallCount++;
-            return Task.CompletedTask;
+            return AbortFailure is null
+                ? Task.CompletedTask
+                : Task.FromException(AbortFailure);
         }
 
         public Task UpdateAudioRoutingAsync(
