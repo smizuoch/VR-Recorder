@@ -134,6 +134,7 @@ bool SpoutCapturePump::IsFrameValid(
            vendor_defined && format_defined &&
            std::isfinite(frame.estimated_source_fps) &&
            frame.estimated_source_fps > 0.0 &&
+           frame.frame_sequence != 0 &&
            frame.monotonic_timestamp_microseconds >= 0;
 }
 

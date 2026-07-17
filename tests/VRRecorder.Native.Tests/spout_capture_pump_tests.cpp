@@ -1,12 +1,15 @@
 #include "spout_capture_pump.hpp"
 
 #include <chrono>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <condition_variable>
 #include <cstdlib>
 #include <deque>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -27,8 +30,10 @@ using namespace vrrecorder::native;
 
 class FakeVideoSurface final : public VideoSurface {
 public:
-    explicit FakeVideoSurface(VideoSurfaceDescriptor descriptor) noexcept
-        : descriptor_(descriptor)
+    explicit FakeVideoSurface(
+        VideoSurfaceDescriptor descriptor,
+        bool has_native_handle = true) noexcept
+        : descriptor_(descriptor), has_native_handle_(has_native_handle)
     {
     }
 
@@ -39,7 +44,7 @@ public:
 
     void *NativeHandle() const noexcept override
     {
-        return reinterpret_cast<void *>(1);
+        return has_native_handle_ ? reinterpret_cast<void *>(1) : nullptr;
     }
 
     VideoSurfaceAcquireResult AcquireForRead(
@@ -55,6 +60,7 @@ public:
 
 private:
     VideoSurfaceDescriptor descriptor_;
+    bool has_native_handle_;
 };
 
 class BlockingDescriptorSurface final : public VideoSurface {
@@ -130,6 +136,9 @@ public:
         std::chrono::milliseconds timeout,
         SpoutFrame &frame) override
     {
+        if (throw_on_poll) {
+            throw 1;
+        }
         last_timeout = timeout;
         ++poll_calls;
         if (polls.empty()) {
@@ -151,6 +160,7 @@ public:
     std::chrono::milliseconds last_timeout {0};
     std::size_t poll_calls = 0;
     std::size_t abort_calls = 0;
+    bool throw_on_poll = false;
 };
 
 SpoutFrame Frame(
@@ -217,6 +227,34 @@ void KeepsTimeoutSeparateFromSenderLoss()
     CHECK(scheduler.Statistics().source_frame_count == 0);
 }
 
+void ValidatesPollArgumentsAndMapsBackendFailures()
+{
+    ScriptedSpoutBackend backend;
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump missing_sender(backend, scheduler, "");
+    CHECK(missing_sender.PollOne(std::chrono::milliseconds(0)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(backend.poll_calls == 0);
+
+    SpoutCapturePump pump(backend, scheduler, "selected");
+    CHECK(pump.PollOne(std::chrono::milliseconds(-1)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(pump.PollOne(std::chrono::milliseconds(
+              VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS + 1)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(backend.poll_calls == 0);
+
+    backend.polls.push_back({VRREC_STATUS_OUT_OF_MEMORY, {}});
+    CHECK(pump.PollOne(std::chrono::milliseconds(0)) ==
+          SpoutCaptureResult::Failed);
+    CHECK(backend.poll_calls == 1);
+
+    backend.throw_on_poll = true;
+    CHECK(pump.PollOne(std::chrono::milliseconds(
+              VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS)) ==
+          SpoutCaptureResult::Failed);
+}
+
 void RejectsFramesFromAnotherSender()
 {
     ScriptedSpoutBackend backend;
@@ -251,6 +289,110 @@ void RejectsSurfaceMetadataThatDoesNotMatchTheTexture()
     CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
           SpoutCaptureResult::InvalidFrame);
     CHECK(scheduler.Statistics().source_frame_count == 0);
+}
+
+void RejectsEveryMalformedFrameBoundary()
+{
+    const auto rejects = [](SpoutFrame frame) {
+        ScriptedSpoutBackend backend;
+        backend.polls.push_back({VRREC_STATUS_OK, std::move(frame)});
+        VideoCfrScheduler scheduler;
+        SpoutCapturePump pump(backend, scheduler, "selected");
+        CHECK(pump.PollOne(std::chrono::milliseconds(10)) ==
+              SpoutCaptureResult::InvalidFrame);
+        CHECK(scheduler.Statistics().source_frame_count == 0);
+    };
+
+    auto invalid = Frame("selected", 1, 1);
+    invalid.surface.reset();
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.surface = std::make_shared<FakeVideoSurface>(
+        invalid.surface->Descriptor(), false);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.gpu_identity.clear();
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.width = 0;
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.height = 0;
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    auto descriptor = invalid.surface->Descriptor();
+    descriptor.generation_id = 0;
+    invalid.surface = std::make_shared<FakeVideoSurface>(descriptor);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    descriptor = invalid.surface->Descriptor();
+    ++descriptor.adapter_luid;
+    invalid.surface = std::make_shared<FakeVideoSurface>(descriptor);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    descriptor = invalid.surface->Descriptor();
+    ++descriptor.width;
+    invalid.surface = std::make_shared<FakeVideoSurface>(descriptor);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    descriptor = invalid.surface->Descriptor();
+    ++descriptor.height;
+    invalid.surface = std::make_shared<FakeVideoSurface>(descriptor);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    descriptor = invalid.surface->Descriptor();
+    descriptor.pixel_format = VRREC_SOURCE_PIXEL_FORMAT_RGBA8;
+    invalid.surface = std::make_shared<FakeVideoSurface>(descriptor);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.gpu_vendor = static_cast<vrrec_gpu_vendor_t>(99);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.pixel_format = static_cast<vrrec_source_pixel_format_t>(99);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.estimated_source_fps =
+        std::numeric_limits<double>::quiet_NaN();
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, 1);
+    invalid.estimated_source_fps = 0.0;
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 1, -1);
+    rejects(std::move(invalid));
+    invalid = Frame("selected", 0, 1);
+    rejects(std::move(invalid));
+}
+
+void AcceptsEverySupportedVendorAndPixelFormat()
+{
+    constexpr std::array vendors {
+        VRREC_GPU_VENDOR_UNKNOWN,
+        VRREC_GPU_VENDOR_NVIDIA,
+        VRREC_GPU_VENDOR_AMD,
+        VRREC_GPU_VENDOR_INTEL,
+    };
+    constexpr std::array pixel_formats {
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12,
+    };
+    std::uint64_t sequence = 1;
+    for (const auto vendor : vendors) {
+        for (const auto pixel_format : pixel_formats) {
+            ScriptedSpoutBackend backend;
+            auto frame = Frame("selected", sequence++, 1);
+            frame.gpu_vendor = vendor;
+            frame.pixel_format = pixel_format;
+            auto descriptor = frame.surface->Descriptor();
+            descriptor.pixel_format = pixel_format;
+            frame.surface = std::make_shared<FakeVideoSurface>(descriptor);
+            backend.polls.push_back({VRREC_STATUS_OK, std::move(frame)});
+            VideoCfrScheduler scheduler;
+            SpoutCapturePump pump(backend, scheduler, "selected");
+            CHECK(pump.PollOne(std::chrono::milliseconds(10)) ==
+                  SpoutCaptureResult::FrameAccepted);
+        }
+    }
 }
 
 void AbortStopsPollingAndReleasesTheBackend()
@@ -380,11 +522,37 @@ void RejectsResourceMutationWithoutAGenerationAdvance()
             3,
         });
     backend.polls.push_back({VRREC_STATUS_OK, std::move(changed)});
+    auto height_changed = Frame("selected", 72, 7'020'000, 3);
+    height_changed.height = 720;
+    height_changed.surface = std::make_shared<FakeVideoSurface>(
+        VideoSurfaceDescriptor {
+            42,
+            1'920,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            3,
+        });
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(height_changed)});
+    auto format_changed = Frame("selected", 73, 7'030'000, 3);
+    format_changed.pixel_format = VRREC_SOURCE_PIXEL_FORMAT_RGBA8;
+    format_changed.surface = std::make_shared<FakeVideoSurface>(
+        VideoSurfaceDescriptor {
+            42,
+            1'920,
+            1'080,
+            VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+            3,
+        });
+    backend.polls.push_back({VRREC_STATUS_OK, std::move(format_changed)});
     VideoCfrScheduler scheduler;
     SpoutCapturePump pump(backend, scheduler, "selected");
 
     CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
           SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::InvalidFrame);
     CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
           SpoutCaptureResult::InvalidFrame);
     CHECK(scheduler.Statistics().source_frame_count == 1);
@@ -396,8 +564,11 @@ int main()
 {
     AcceptsOnlyTheSelectedSenderIntoTheScheduler();
     KeepsTimeoutSeparateFromSenderLoss();
+    ValidatesPollArgumentsAndMapsBackendFailures();
     RejectsFramesFromAnotherSender();
     RejectsSurfaceMetadataThatDoesNotMatchTheTexture();
+    RejectsEveryMalformedFrameBoundary();
+    AcceptsEverySupportedVendorAndPixelFormat();
     AbortStopsPollingAndReleasesTheBackend();
     AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler();
     DropsAnOlderSurfaceGenerationWithoutReplacingTheNewFrame();
