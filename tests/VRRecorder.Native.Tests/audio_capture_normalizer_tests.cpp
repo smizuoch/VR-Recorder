@@ -1,6 +1,7 @@
 #include "audio_capture_normalizer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -633,6 +634,79 @@ void RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics()
     CHECK(normalized.interleaved_samples.empty());
 }
 
+void DownmixesEverySupportedSurroundSpeakerPosition()
+{
+    using namespace vrrecorder::native;
+    constexpr auto minus_3_db = 0.70710678F;
+    struct ExpectedMix final {
+        std::uint32_t speaker;
+        float left;
+        float right;
+    };
+    constexpr std::array cases {
+        ExpectedMix {0x0000'0040, minus_3_db, 0.0F},
+        ExpectedMix {0x0000'0080, 0.0F, minus_3_db},
+        ExpectedMix {0x0000'0100, 0.5F, 0.5F},
+        ExpectedMix {0x0000'0200, minus_3_db, 0.0F},
+        ExpectedMix {0x0000'0400, 0.0F, minus_3_db},
+    };
+    const std::vector<float> samples {0.0F, 0.0F, 1.0F};
+
+    for (const auto &expected : cases) {
+        const CapturePcmFormat format {
+            48'000,
+            3,
+            CaptureSampleEncoding::IeeeFloat,
+            32,
+            32,
+            12,
+            0x0000'0003 | expected.speaker,
+        };
+        StereoCaptureNormalizer48k normalizer(9'500'000);
+        CapturedStereoPacket48k normalized {};
+
+        CHECK(normalizer.Normalize(
+                  format,
+                  {
+                      0,
+                      9'500'000,
+                      1,
+                      std::as_bytes(std::span<const float>(samples)),
+                      false,
+                      false,
+                      false,
+                  },
+                  normalized) == CaptureNormalizationResult::Ready);
+        CHECK(normalized.interleaved_samples.size() == 2);
+        CHECK(NearlyEqual(normalized.interleaved_samples[0], expected.left));
+        CHECK(NearlyEqual(normalized.interleaved_samples[1], expected.right));
+    }
+
+    const CapturePcmFormat unsupported {
+        48'000,
+        3,
+        CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        12,
+        0x0000'0803,
+    };
+    StereoCaptureNormalizer48k normalizer(9'500'000);
+    CapturedStereoPacket48k normalized {};
+    CHECK(normalizer.Normalize(
+              unsupported,
+              {
+                  0,
+                  9'500'000,
+                  1,
+                  std::as_bytes(std::span<const float>(samples)),
+                  false,
+                  false,
+                  false,
+              },
+              normalized) == CaptureNormalizationResult::InvalidFormat);
+}
+
 void RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits()
 {
     const std::vector<std::int32_t> malformed {1};
@@ -928,6 +1002,7 @@ int main()
     PreservesAForwardGapAfterAShortDiscontinuityPacket();
     RejectsPositionGapsOutsideTheDiscontinuityFollowup();
     RejectsNonstandardStereoSpeakerLayoutsInsteadOfSwappingSemantics();
+    DownmixesEverySupportedSurroundSpeakerPosition();
     RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits();
     RejectsEveryUnsupportedCaptureFormat();
     AcceptsAlternateLayoutsAndPcm32();
