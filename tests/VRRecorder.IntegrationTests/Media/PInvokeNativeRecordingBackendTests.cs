@@ -8,6 +8,7 @@ using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
 using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Media;
+using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.IntegrationTests.Media;
 
@@ -848,6 +849,197 @@ public sealed class PInvokeNativeRecordingBackendTests
         controls.CompleteTrailerFlushClose(1, 1);
         await stopping;
     }
+
+    [Fact]
+    public async Task OpenContractRejectsInvalidLifecycleCalls()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var plan = CreatePlan();
+        var callbacks = new NativeRecordingCallbacks(() => { }, _ => { });
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            backend.OpenAsync(null!, callbacks, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            backend.OpenAsync(plan, null!, CancellationToken.None));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            backend.OpenAsync(
+                plan,
+                callbacks,
+                new CancellationToken(canceled: true)));
+
+        backend.Dispose();
+        backend.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            backend.OpenAsync(plan, callbacks, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManagedConfigurationFailureReleasesSessionLease()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var plan = CreatePlan() with { Media = null! };
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            backend.OpenAsync(
+                plan,
+                new NativeRecordingCallbacks(() => { }, _ => { }),
+                CancellationToken.None));
+        var disposeFailure = Record.Exception(backend.Dispose);
+
+        Assert.Equal(
+            "The recording media configuration is required.",
+            exception.Message);
+        Assert.Null(disposeFailure);
+    }
+
+    [Fact]
+    public void AbiMappingsCoverSupportedValuesAndRejectUnknownValues()
+    {
+        Assert.Equal(
+            NativeEncoderKind.Nvenc,
+            PInvokeNativeRecordingBackend.ToNativeEncoder(EncoderKind.Nvenc));
+        Assert.Equal(
+            NativeEncoderKind.Amf,
+            PInvokeNativeRecordingBackend.ToNativeEncoder(EncoderKind.Amf));
+        Assert.Equal(
+            NativeEncoderKind.Qsv,
+            PInvokeNativeRecordingBackend.ToNativeEncoder(EncoderKind.Qsv));
+        Assert.Equal(
+            NativeEncoderKind.MediaFoundationSoftware,
+            PInvokeNativeRecordingBackend.ToNativeEncoder(
+                EncoderKind.MediaFoundationSoftware));
+        Assert.Equal(
+            NativeCanvasBackground.Black,
+            PInvokeNativeRecordingBackend.ToNativeBackground(
+                VideoCanvasBackground.Black));
+        Assert.Equal(
+            NativeVideoRotation.None,
+            PInvokeNativeRecordingBackend.ToNativeRotation(VideoRotation.None));
+        Assert.Equal(
+            NativeAudioRouting.Mixed,
+            PInvokeNativeRecordingBackend.ToNativeAudioRouting(
+                AudioRouting.Mixed));
+        Assert.Equal(
+            NativeAudioRouting.DesktopOnly,
+            PInvokeNativeRecordingBackend.ToNativeAudioRouting(
+                AudioRouting.DesktopOnly));
+        Assert.Equal(
+            NativeAudioRouting.MicOnly,
+            PInvokeNativeRecordingBackend.ToNativeAudioRouting(
+                AudioRouting.MicOnly));
+        Assert.Equal(
+            NativeAudioRouting.Muted,
+            PInvokeNativeRecordingBackend.ToNativeAudioRouting(
+                AudioRouting.Muted));
+        Assert.Equal(
+            NativeSourcePixelFormat.Bgra8,
+            PInvokeNativeRecordingBackend.ToNativeSourcePixelFormat(
+                VideoPixelFormat.Bgra8));
+        Assert.Equal(
+            NativeSourcePixelFormat.Rgba8,
+            PInvokeNativeRecordingBackend.ToNativeSourcePixelFormat(
+                VideoPixelFormat.Rgba8));
+        Assert.Equal(
+            NativeSourcePixelFormat.Nv12,
+            PInvokeNativeRecordingBackend.ToNativeSourcePixelFormat(
+                VideoPixelFormat.Nv12));
+        Assert.Equal(
+            NativeQualityPreset.Standard,
+            PInvokeNativeRecordingBackend.ToNativeQualityPreset(
+                VideoQualityPreset.Standard));
+        Assert.Equal(
+            NativeQualityPreset.High,
+            PInvokeNativeRecordingBackend.ToNativeQualityPreset(
+                VideoQualityPreset.High));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingBackend.ToNativeEncoder((EncoderKind)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingBackend.ToNativeBackground(
+                (VideoCanvasBackground)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingBackend.ToNativeRotation(
+                (VideoRotation)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingBackend.ToNativeAudioRouting(
+                (AudioRouting)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingBackend.ToNativeSourcePixelFormat(
+                (VideoPixelFormat)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingBackend.ToNativeQualityPreset(
+                (VideoQualityPreset)999));
+    }
+
+    [Fact]
+    public void NativeCallbackBoundaryIgnoresMissingPointersAndManagedFailures()
+    {
+        PInvokeNativeRecordingBackend.OnNativeEvent(0, (nint)1);
+        PInvokeNativeRecordingBackend.OnNativeEvent((nint)1, 0);
+
+        var foreignHandle = GCHandle.Alloc("not a callback state");
+        try
+        {
+            PInvokeNativeRecordingBackend.OnNativeEvent(
+                GCHandle.ToIntPtr(foreignHandle),
+                (nint)1);
+        }
+        finally
+        {
+            foreignHandle.Free();
+        }
+
+        var state = new NativeCallbackState(
+            CreatePlan(),
+            new NativeRecordingCallbacks(() => { }, _ => { }));
+        var callbackHandle = GCHandle.Alloc(state);
+        var nativeEvent = Marshal.AllocCoTaskMem(
+            Marshal.SizeOf<NativeEventV1>());
+        try
+        {
+            Marshal.StructureToPtr(
+                new NativeEventV1
+                {
+                    StructSize = checked((uint)Marshal.SizeOf<NativeEventV1>()),
+                    AbiVersion = NativeAbiLibrary.SupportedAbiVersion,
+                    Kind = NativeEventKind.Stopped,
+                    Sequence = 1,
+                    VideoPacketCount = ulong.MaxValue,
+                },
+                nativeEvent,
+                fDeleteOld: false);
+
+            PInvokeNativeRecordingBackend.OnNativeEvent(
+                GCHandle.ToIntPtr(callbackHandle),
+                nativeEvent);
+
+            Assert.False(state.Stopped.Task.IsCompleted);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(nativeEvent);
+            callbackHandle.Free();
+        }
+    }
+
+    private static RecordingPlan CreatePlan() => new(
+        new StableVideoSignal(320, 180),
+        new PendingRecording(
+            Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), "take.mp4")),
+        new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+        new FrameRate(30));
 
     private static string FixturePath()
     {

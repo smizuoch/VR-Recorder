@@ -214,7 +214,7 @@ public sealed class PInvokeNativeRecordingBackend
         }
     }
 
-    private static void OnNativeEvent(nint userData, nint nativeEvent)
+    internal static void OnNativeEvent(nint userData, nint nativeEvent)
     {
         try
         {
@@ -242,7 +242,7 @@ public sealed class PInvokeNativeRecordingBackend
             (int)status,
             $"Native recording {operation} failed with status {(int)status}."));
 
-    private static NativeEncoderKind ToNativeEncoder(
+    internal static NativeEncoderKind ToNativeEncoder(
         Domain.Encoding.EncoderKind encoder) => encoder switch
         {
             Domain.Encoding.EncoderKind.Nvenc => NativeEncoderKind.Nvenc,
@@ -256,7 +256,7 @@ public sealed class PInvokeNativeRecordingBackend
                 "The selected encoder kind is unsupported by the native ABI."),
         };
 
-    private static NativeCanvasBackground ToNativeBackground(
+    internal static NativeCanvasBackground ToNativeBackground(
         VideoCanvasBackground background) => background switch
         {
             VideoCanvasBackground.Black => NativeCanvasBackground.Black,
@@ -266,7 +266,7 @@ public sealed class PInvokeNativeRecordingBackend
                 "The canvas background is unsupported by the native ABI."),
         };
 
-    private static NativeVideoRotation ToNativeRotation(
+    internal static NativeVideoRotation ToNativeRotation(
         VideoRotation rotation) => rotation switch
         {
             VideoRotation.None => NativeVideoRotation.None,
@@ -276,7 +276,7 @@ public sealed class PInvokeNativeRecordingBackend
                 "The video rotation is unsupported by the native ABI."),
         };
 
-    private static NativeAudioRouting ToNativeAudioRouting(
+    internal static NativeAudioRouting ToNativeAudioRouting(
         AudioRouting routing) => routing switch
         {
             AudioRouting.Mixed => NativeAudioRouting.Mixed,
@@ -289,7 +289,7 @@ public sealed class PInvokeNativeRecordingBackend
                 "The audio routing is unsupported by the native ABI."),
         };
 
-    private static NativeSourcePixelFormat ToNativeSourcePixelFormat(
+    internal static NativeSourcePixelFormat ToNativeSourcePixelFormat(
         VideoPixelFormat pixelFormat) => pixelFormat switch
         {
             VideoPixelFormat.Bgra8 => NativeSourcePixelFormat.Bgra8,
@@ -301,7 +301,7 @@ public sealed class PInvokeNativeRecordingBackend
                 "The source pixel format is unsupported by the native ABI."),
         };
 
-    private static NativeQualityPreset ToNativeQualityPreset(
+    internal static NativeQualityPreset ToNativeQualityPreset(
         VideoQualityPreset preset) => preset switch
         {
             VideoQualityPreset.Standard => NativeQualityPreset.Standard,
