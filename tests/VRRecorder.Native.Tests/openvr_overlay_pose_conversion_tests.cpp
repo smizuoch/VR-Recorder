@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 
 using vrrecorder::native::ConvertOpenVrOverlayPose;
 using vrrecorder::native::OpenVrHand;
@@ -123,6 +124,62 @@ void RejectsMismatchedDockHand()
     CHECK(converted == OpenVrOverlayPose {});
 }
 
+void RejectsEveryPoseConversionBoundary()
+{
+    const auto dock = OpenVrOverlayPose {
+        OpenVrOverlayPlacementMode::WristDock,
+        OpenVrHand::Left,
+        OpenVrTrackingOrigin::None,
+        Translation(1, 0, 0),
+    };
+    auto converted = OpenVrOverlayPose {};
+
+    CHECK(ConvertOpenVrOverlayPose(
+              {},
+              Translation(0, 0, 0),
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ConvertOpenVrOverlayPose(
+              dock,
+              Translation(0, 0, 0),
+              static_cast<OpenVrOverlayPlacementMode>(99),
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ConvertOpenVrOverlayPose(
+              dock,
+              Translation(0, 0, 0),
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::None,
+              converted) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(ConvertOpenVrOverlayPose(
+              dock,
+              {},
+              OpenVrOverlayPlacementMode::WristDock,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_OK);
+    CHECK(converted == dock);
+
+    auto invalid_controller = Translation(0, 0, 0);
+    invalid_controller.values[0] =
+        std::numeric_limits<float>::quiet_NaN();
+    CHECK(ConvertOpenVrOverlayPose(
+              dock,
+              invalid_controller,
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(converted == OpenVrOverlayPose {});
+
+    CHECK(ConvertOpenVrOverlayPose(
+              dock,
+              Translation(100, 0, 0),
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::Left,
+              converted) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(converted == OpenVrOverlayPose {});
+}
+
 }
 
 int main()
@@ -130,5 +187,6 @@ int main()
     ConvertsDockRelativePoseToStandingAbsoluteAndBack();
     ControllerRotationRotatesDockTranslation();
     RejectsMismatchedDockHand();
+    RejectsEveryPoseConversionBoundary();
     return 0;
 }
