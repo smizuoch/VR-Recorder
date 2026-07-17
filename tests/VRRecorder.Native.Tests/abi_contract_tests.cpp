@@ -2629,7 +2629,15 @@ bool RejectsInvalidSteamVrOverlayAbiInputs()
     CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     config = ValidSteamVrOverlayConfig();
+    config.overlay_key_utf8 = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
     config.overlay_key_utf8 = "com.example.untrusted";
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidSteamVrOverlayConfig();
+    config.overlay_name_utf8 = nullptr;
     CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     config = ValidSteamVrOverlayConfig();
@@ -2652,6 +2660,19 @@ bool RejectsInvalidSteamVrOverlayAbiInputs()
     config.reserved_v1 = 1;
     CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+
+    config = ValidSteamVrOverlayConfig();
+#if defined(_WIN32)
+    config.application_manifest_path_utf8 =
+        "C:/VR Recorder/OpenVr/steamvr.vrmanifest";
+#else
+    config.application_manifest_path_utf8 =
+        "/opt/VR Recorder\\OpenVr\\steamvr.vrmanifest";
+#endif
+    overlay = nullptr;
+    CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
+          VRREC_STATUS_OK);
+    vrrec_steamvr_overlay_destroy_v1(overlay);
 
     CHECK(vrrec_steamvr_overlay_show_v1(nullptr) ==
           VRREC_STATUS_INVALID_ARGUMENT);
