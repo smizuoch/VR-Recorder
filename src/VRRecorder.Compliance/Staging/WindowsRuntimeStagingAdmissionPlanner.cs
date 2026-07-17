@@ -89,6 +89,9 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
         }
 
         var issues = new List<ComplianceIssue>(inventory.ScanIssues);
+        issues.AddRange(
+            FullProductionWindowsRuntimeProfileValidator.Validate(
+                manifest.Entries));
         issues.AddRange(StagingInventoryValidator.Validate(
             inventory.Files,
             registeredArtifacts));

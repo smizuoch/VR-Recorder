@@ -55,6 +55,8 @@ desktop production録画、production OpenVR overlay、first-run setup 7／8のp
 | `13d3283` | factory-selection evidenceとactual native binaryの照合 |
 | `3c622f4` | ApprovedGraph admission、決定的props、immutable digest publication、失敗注入 |
 | `f1aaff0` | Release Appを`ApprovedWindowsRuntime.props`限定へ変更 |
+| `409d9b3` | staging対象DLL／EXEのAMD64 PE32+ admissionをrelease plannerへ接続 |
+| `7399852` | manifest v2のprofile／RID／declared length／Legal anchorをApp buildまで伝播 |
 | `e358204` | non-native asset owner／scope closureとfactory evidence target固定 |
 | `cf07e1b` | Windows-only orchestration、ADS拒否、end-to-end staging境界 |
 | `3d1a99c` | 共有D3D11 immediate contextのmultithread保護 |
@@ -97,8 +99,8 @@ desktop production録画、production OpenVR overlay、first-run setup 7／8のp
 
 このfoundationがまだ証明しないことも明確にする。
 
-- schema v1にはproduct profile、runtime identifier、declared byte length、Legal Bundle anchorがない。一般entryのlengthはadmission scan時のactual値をplanへ固定するだけで、manifest宣言値との比較ではない。factory DLLだけはevidence内lengthでも照合する。
-- 現在のDLL／EXE kind判定は拡張子契約であり、PE headerをparseしていない。ASCII fixtureを`.dll`名にしたtest inputも通るため、x64 machine type、PE32+、subsystem、entrypoint、import closureを実binaryから検証した証拠ではない。
+- schema v2は`full-production-hardware-validation-v1`、`win-x64`、全entryのdeclared byte length、Legal Bundle ID／manifest SHAを固定し、Release App buildでもstager生成値との一致を要求する。first-party native／factory evidence、FFmpeg 8 runtime majorの4 DLL＋ffprobe、OpenVR runtime／application manifest／action manifest／3 bindingsをexact closureにし、static-link Spout2とOS／driver提供encoder以外のruntime追加を拒否する。
+- DLL／EXEはactual bytesからAMD64 PE32+、subsystem、entrypoint、通常／delay import tableまでparseする。staging closureへのPE admission接続は完了したが、読み取ったimport名とstaged／Windows system DLLのclosure照合は次の独立単位として残る。
 - actual production registryにはnative artifactが0件で、componentは独立承認待ちである。synthetic first-party fixtureのGreenをactual FFmpeg／OpenVR／Spout admissionと呼ばない。
 - repositoryから`NormalizedComponentGraph`／`ApprovedReleaseGraph`を構築するproduction trust-source、外部CLI、two-invocation publish scriptは未実装である。stagerをApp build中に生成して同じevaluationへimportすることはできない。
 - generated propsはruntime subsetを列挙するが、self-contained .NET／managed output／Legalを含む最終publish directoryのpost-publish inventory sealerは未実装である。

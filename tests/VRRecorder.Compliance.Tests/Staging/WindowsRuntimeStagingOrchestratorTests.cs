@@ -94,7 +94,7 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
     }
 
     [Fact]
-    public async Task ExactFirstPartyManifestRunsThroughRealAdmissionAndPublish()
+    public async Task ExactFullProductionManifestRunsThroughRealAdmissionAndPublish()
     {
         using var fixture = Fixture.Create();
         fixture.UseExactFirstPartyRuntime();
@@ -292,7 +292,7 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
 
         public string ManifestPath { get; }
 
-        public WindowsRuntimeStagingRequest Request { get; }
+        public WindowsRuntimeStagingRequest Request { get; private set; }
 
         public static Fixture Create()
         {
@@ -324,37 +324,25 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
 
         public void UseExactFirstPartyRuntime()
         {
-            File.Delete(Path.Combine(SourceRoot, "asset.txt"));
-            var native = WindowsPeImageTestData.Create(
-                isDll: true,
-                subsystem: 2,
-                imports: ["KERNEL32.dll"],
-                payload: Encoding.ASCII.GetBytes(
-                    "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
-                    FactoryIntentSha +
-                    "-suffix"));
-            var nativePath = Path.Combine(
+            Directory.Delete(SourceRoot, recursive: true);
+            Directory.CreateDirectory(SourceRoot);
+            var data = FullProductionStagingTestData.Create(
                 SourceRoot,
-                "native",
-                "vrrecorder_native.dll");
-            Directory.CreateDirectory(Path.GetDirectoryName(nativePath)!);
-            File.WriteAllBytes(nativePath, native);
-            var evidence = $$$"""
-                {"schemaVersion":1,"evidenceKind":"linked-native-factory-selection","selectionIntentSha256":"{{{FactoryIntentSha}}}","fullProductionRequired":true,"nativeBinary":{"file":"vrrecorder_native.dll","length":{{{native.LongLength}}},"sha256":"{{{Sha256(native)}}}"},"media":{"variant":"PRODUCTION","source":"production_media_backend.cpp"},"encoderProbe":{"variant":"PRODUCTION","source":"production_encoder_probe_backend.cpp"},"spout":{"variant":"PRODUCTION","source":"spout2_source_backend.cpp"},"steamVr":{"variant":"PRODUCTION","source":"openvr_steamvr_input_backend.cpp"}}
-                """;
-            var evidenceBytes = Encoding.UTF8.GetBytes(evidence);
-            var evidencePath = Path.Combine(
+                RepositoryRoot,
+                FactoryIntentSha);
+            var manifest = FullProductionStagingTestData.ManifestJson(
                 SourceRoot,
-                "evidence",
-                "native-factory-selection.json");
-            Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
-            File.WriteAllBytes(evidencePath, evidenceBytes);
-            var manifest = $$"""
-                {"schemaVersion":2,"profile":"full-production-hardware-validation-v1","runtimeIdentifier":"win-x64","legalBundle":{"bundleId":"https://example.invalid/spdx/vr-recorder-test","manifestSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"entries":[{"source":"native/vrrecorder_native.dll","target":"vrrecorder_native.dll","role":"first-party-native","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"native-library","sha256":"{{Sha256(native)}}","length":{{native.LongLength}}},{"source":"evidence/native-factory-selection.json","target":"native-factory-selection.json","role":"factory-selection-evidence","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"evidence","sha256":"{{Sha256(evidenceBytes)}}","length":{{evidenceBytes.LongLength}}}]}
-                """;
+                data.Entries);
             File.WriteAllBytes(
                 ManifestPath,
                 Encoding.UTF8.GetBytes(manifest));
+            Request = Request with
+            {
+                ApprovedGraph = new ApprovedReleaseGraph(
+                    new NormalizedComponentGraph(
+                        [],
+                        data.ApprovedComponents)),
+            };
         }
 
         public string CreateExistingOutputMarker()

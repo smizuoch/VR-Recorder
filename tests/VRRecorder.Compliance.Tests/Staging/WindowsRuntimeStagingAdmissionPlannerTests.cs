@@ -11,7 +11,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
 
     [Fact]
-    public async Task ExactFirstPartyFixtureProducesImmutableIdentityPlan()
+    public async Task ExactFullProductionFixtureProducesImmutableIdentityPlan()
     {
         using var fixture = Fixture.Create();
 
@@ -32,7 +32,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             fixture.Manifest.LegalBundle.ManifestSha256,
             plan.LegalManifestSha256);
         Assert.Equal(fixture.SourceRoot, plan.SourceRoot);
-        Assert.Equal(2, plan.Files.Count);
+        Assert.Equal(fixture.RequiredEntries.Count, plan.Files.Count);
         var native = Assert.Single(
             plan.Files,
             file => file.Role == WindowsRuntimeRole.FirstPartyNative);
@@ -49,6 +49,17 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         var mutableView = Assert.IsAssignableFrom<
             IList<AdmittedWindowsRuntimeStagingFile>>(plan.Files);
         Assert.Throws<NotSupportedException>(() => mutableView.Clear());
+    }
+
+    [Fact]
+    public async Task FullProductionProfileRequiresItsEntireRuntimeClosure()
+    {
+        using var fixture = Fixture.Create();
+        fixture.UseEntries(fixture.NativeEntry, fixture.EvidenceEntry);
+
+        AssertIssue(
+            "required-runtime-staging-artifact-missing",
+            await fixture.PlanAsync());
     }
 
     [Fact]
@@ -89,7 +100,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     public async Task DeploymentKindMustMatchScannedFileKind()
     {
         using var fixture = Fixture.Create();
-        var disguised = new TestEntry(
+        var disguised = new WindowsRuntimeStagingTestEntry(
             "assets/disguised.dll",
             "assets/disguised.dll",
             "application-asset",
@@ -97,9 +108,8 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             "asset");
         fixture.Write(disguised.Source, Encoding.UTF8.GetBytes("not-a-pe"));
         fixture.UseEntries(
-            fixture.NativeEntry,
-            fixture.EvidenceEntry,
-            disguised);
+            [.. fixture.RequiredEntries,
+             disguised]);
 
         AssertIssue("staging-file-kind-mismatch", await fixture.PlanAsync());
     }
@@ -117,8 +127,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             fullProductionRequired: true,
             binary: malformed);
         fixture.UseEntries(
-            fixture.NativeEntry,
-            fixture.EvidenceEntry);
+            fixture.RequiredEntries.ToArray());
 
         AssertIssue("invalid-windows-pe-image", await fixture.PlanAsync());
     }
@@ -174,7 +183,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             await missingNative.PlanAsync());
 
         using var duplicateNative = Fixture.Create();
-        var duplicate = new TestEntry(
+        var duplicate = new WindowsRuntimeStagingTestEntry(
             "duplicate/vrrecorder_native.dll",
             "duplicate/vrrecorder_native.dll",
             "first-party-native",
@@ -212,8 +221,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         using var invalidFamily = Fixture.Create();
         invalidFamily.WriteEvidence(fullProductionRequired: false);
         invalidFamily.UseEntries(
-            invalidFamily.NativeEntry,
-            invalidFamily.EvidenceEntry);
+            invalidFamily.RequiredEntries.ToArray());
         AssertIssue(
             "invalid-native-factory-selection-evidence",
             await invalidFamily.PlanAsync());
@@ -223,8 +231,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             fullProductionRequired: true,
             declaredBinaryLength: wrongLength.Binary.LongLength + 1);
         wrongLength.UseEntries(
-            wrongLength.NativeEntry,
-            wrongLength.EvidenceEntry);
+            wrongLength.RequiredEntries.ToArray());
         AssertIssue(
             "native-factory-binary-identity-mismatch",
             await wrongLength.PlanAsync());
@@ -234,7 +241,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     public async Task ApprovedGraphIsAppliedToEveryThirdPartyNativeFile()
     {
         using var fixture = Fixture.Create();
-        var thirdParty = new TestEntry(
+        var thirdParty = new WindowsRuntimeStagingTestEntry(
             "runtime/third-party.dll",
             "third-party.dll",
             "ffmpeg-runtime",
@@ -242,9 +249,8 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             "native-library");
         fixture.Write(thirdParty.Source, Encoding.ASCII.GetBytes("third-party"));
         fixture.UseEntries(
-            fixture.NativeEntry,
-            fixture.EvidenceEntry,
-            thirdParty);
+            [.. fixture.RequiredEntries,
+             thirdParty]);
 
         AssertIssue(
             "unapproved-native-artifact-owner",
@@ -255,17 +261,16 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     public async Task ApprovedGraphIsAppliedToEveryThirdPartyAsset()
     {
         using var fixture = Fixture.Create();
-        var binding = new TestEntry(
-            "openvr/actions.json",
-            "openvr/actions.json",
+        var binding = new WindowsRuntimeStagingTestEntry(
+            "openvr/rogue.json",
+            "OpenVr/bindings/rogue.json",
             "openvr-binding",
-            "openvr",
+            "not-approved",
             "asset");
         fixture.Write(binding.Source, "{}"u8.ToArray());
         fixture.UseEntries(
-            fixture.NativeEntry,
-            fixture.EvidenceEntry,
-            binding);
+            [.. fixture.RequiredEntries,
+             binding]);
 
         AssertIssue(
             "unapproved-runtime-staging-owner",
@@ -276,17 +281,6 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     public async Task BuildOnlyOwnerCannotStageRuntimeAsset()
     {
         using var fixture = Fixture.Create();
-        var binding = new TestEntry(
-            "openvr/actions.json",
-            "openvr/actions.json",
-            "openvr-binding",
-            "openvr",
-            "asset");
-        fixture.Write(binding.Source, "{}"u8.ToArray());
-        fixture.UseEntries(
-            fixture.NativeEntry,
-            fixture.EvidenceEntry,
-            binding);
         fixture.UseApprovedComponents(
             Component("openvr", NoticeScope.BuildOnly));
 
@@ -299,17 +293,6 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     public async Task RuntimeAssetOwnerCanStageItsExactRegisteredAsset()
     {
         using var fixture = Fixture.Create();
-        var binding = new TestEntry(
-            "openvr/actions.json",
-            "openvr/actions.json",
-            "openvr-binding",
-            "openvr",
-            "asset");
-        fixture.Write(binding.Source, "{}"u8.ToArray());
-        fixture.UseEntries(
-            fixture.NativeEntry,
-            fixture.EvidenceEntry,
-            binding);
         fixture.UseApprovedComponents(
             Component("openvr", NoticeScope.RuntimeAsset));
 
@@ -426,14 +409,6 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             throw new IOException("synthetic read failure");
     }
 
-    private sealed record TestEntry(
-        string Source,
-        string Target,
-        string Role,
-        string ComponentId,
-        string DeploymentKind,
-        long? DeclaredLength = null);
-
     private sealed class Fixture : IDisposable
     {
         private Fixture(string root)
@@ -443,31 +418,18 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             SourceRoot = Path.Combine(root, "source");
             Directory.CreateDirectory(RepositoryRoot);
             Directory.CreateDirectory(SourceRoot);
-            Binary = WindowsPeImageTestData.Create(
-                isDll: true,
-                subsystem: 2,
-                imports: ["KERNEL32.dll"],
-                payload: Encoding.ASCII.GetBytes(
-                    "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
-                    IntentSha +
-                    "-suffix"));
-            NativeEntry = new TestEntry(
-                "native/vrrecorder_native.dll",
-                "vrrecorder_native.dll",
-                "first-party-native",
-                "vr-recorder",
-                "native-library");
-            EvidenceEntry = new TestEntry(
-                "evidence/native-factory-selection.json",
-                "native-factory-selection.json",
-                "factory-selection-evidence",
-                "vr-recorder",
-                "evidence");
-            Write(NativeEntry.Source, Binary);
-            WriteEvidence(fullProductionRequired: true);
-            UseEntries(NativeEntry, EvidenceEntry);
+            var data = FullProductionStagingTestData.Create(
+                SourceRoot,
+                RepositoryRoot,
+                IntentSha);
+            Binary = data.NativeBinary;
+            NativeEntry = data.NativeEntry;
+            EvidenceEntry = data.EvidenceEntry;
+            RequiredEntries = data.Entries;
+            BaseComponents = data.ApprovedComponents;
+            UseEntries(RequiredEntries.ToArray());
             ApprovedGraph = new ApprovedReleaseGraph(
-                new NormalizedComponentGraph([], []));
+                new NormalizedComponentGraph([], BaseComponents));
         }
 
         public string Root { get; }
@@ -478,9 +440,16 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
 
         public byte[] Binary { get; }
 
-        public TestEntry NativeEntry { get; }
+        public WindowsRuntimeStagingTestEntry NativeEntry { get; }
 
-        public TestEntry EvidenceEntry { get; }
+        public WindowsRuntimeStagingTestEntry EvidenceEntry { get; }
+
+        public IReadOnlyList<WindowsRuntimeStagingTestEntry> RequiredEntries
+        {
+            get;
+        }
+
+        private IReadOnlyList<NormalizedComponent> BaseComponents { get; }
 
         public WindowsRuntimeStagingManifest Manifest { get; private set; }
             = null!;
@@ -508,19 +477,25 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
                 repositoryRoot ?? RepositoryRoot,
                 cancellationToken);
 
-        public void UseEntries(params TestEntry[] entries)
+        public void UseEntries(params WindowsRuntimeStagingTestEntry[] entries)
         {
-            var json = $$"""
-                {"schemaVersion":2,"profile":"full-production-hardware-validation-v1","runtimeIdentifier":"win-x64","legalBundle":{"bundleId":"https://example.invalid/spdx/vr-recorder-test","manifestSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"entries":[{{string.Join(',', entries.Select(EntryJson))}}]}
-                """;
+            var json = FullProductionStagingTestData.ManifestJson(
+                SourceRoot,
+                entries);
             Manifest = WindowsRuntimeStagingManifestReader.Read(
                 Encoding.UTF8.GetBytes(json));
         }
 
         public void UseApprovedComponents(params NormalizedComponent[] components)
         {
+            var overrides = components
+                .ToDictionary(component => component.Id, StringComparer.Ordinal);
+            var merged = BaseComponents
+                .Where(component => !overrides.ContainsKey(component.Id))
+                .Concat(components)
+                .ToArray();
             ApprovedGraph = new ApprovedReleaseGraph(
-                new NormalizedComponentGraph([], components));
+                new NormalizedComponentGraph([], merged));
         }
 
         public void WriteEvidence(
@@ -553,14 +528,5 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             }
         }
 
-        private string EntryJson(TestEntry entry)
-        {
-            var sha256 = Sha256(File.ReadAllBytes(Resolve(entry.Source)));
-            var length = entry.DeclaredLength ??
-                new FileInfo(Resolve(entry.Source)).Length;
-            return $$"""
-                {"source":"{{entry.Source}}","target":"{{entry.Target}}","role":"{{entry.Role}}","componentId":"{{entry.ComponentId}}","platform":"windows-x64","deploymentKind":"{{entry.DeploymentKind}}","sha256":"{{sha256}}","length":{{length}}}
-                """;
-        }
     }
 }
