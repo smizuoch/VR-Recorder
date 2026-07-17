@@ -14,6 +14,31 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
     [Fact]
+    public void RejectsRelativeNativeOverlayLibraryPath()
+    {
+        using var install = TemporaryInstall.Create();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new NativeSteamVrOverlayLifecycle(
+                "vrrecorder_native_test.so",
+                install.Path));
+
+        Assert.Equal("libraryPath", exception.ParamName);
+    }
+
+    [Fact]
+    public void RejectsMissingNativeOverlayLibrary()
+    {
+        using var install = TemporaryInstall.Create();
+        var missingPath = Path.Combine(install.Path, "missing-native.so");
+
+        var exception = Assert.Throws<FileNotFoundException>(() =>
+            new NativeSteamVrOverlayLifecycle(missingPath, install.Path));
+
+        Assert.Equal(missingPath, exception.FileName);
+    }
+
+    [Fact]
     public void RejectsMalformedNativePointerMappings()
     {
         foreach (var nativeEvent in new[]
