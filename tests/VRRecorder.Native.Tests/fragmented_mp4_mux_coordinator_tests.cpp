@@ -144,6 +144,90 @@ FragmentedMp4StreamConfiguration Streams()
     };
 }
 
+void ComparesEveryMuxDescriptorFieldByValue()
+{
+    const auto streams = Streams();
+    CHECK(streams == streams);
+    CHECK(streams.video == streams.video);
+    CHECK(streams.audio == streams.audio);
+    CHECK(streams.fragment_policy == streams.fragment_policy);
+
+    const auto different_video = [&](const auto &mutate) {
+        auto changed = streams.video;
+        mutate(changed);
+        CHECK(!(streams.video == changed));
+    };
+    different_video([](auto &value) { value.packet_time_base.numerator = 2; });
+    different_video([](auto &value) { value.packet_time_base.denominator = 1; });
+    different_video([](auto &value) { ++value.width; });
+    different_video([](auto &value) { ++value.height; });
+    different_video([](auto &value) { value.profile = H264Profile::Main; });
+    different_video([](auto &value) {
+        value.packet_format = H264PacketFormat::AvccLengthPrefixed;
+    });
+    different_video([](auto &value) {
+        value.codec_extradata.push_back(std::byte {0xff});
+    });
+
+    const auto different_audio = [&](const auto &mutate) {
+        auto changed = streams.audio;
+        mutate(changed);
+        CHECK(!(streams.audio == changed));
+    };
+    different_audio([](auto &value) { value.packet_time_base.numerator = 2; });
+    different_audio([](auto &value) { value.packet_time_base.denominator = 1; });
+    different_audio([](auto &value) { --value.sample_rate; });
+    different_audio([](auto &value) { --value.channel_count; });
+    different_audio([](auto &value) { --value.frame_size; });
+    different_audio([](auto &value) { --value.initial_padding_samples; });
+    different_audio([](auto &value) {
+        value.profile = static_cast<AacProfile>(99);
+    });
+    different_audio([](auto &value) {
+        value.channel_layout = static_cast<AudioChannelLayout>(99);
+    });
+    different_audio([](auto &value) {
+        value.packet_format = static_cast<AacPacketFormat>(99);
+    });
+    different_audio([](auto &value) {
+        value.codec_extradata.push_back(std::byte {0xff});
+    });
+    different_audio([](auto &value) { --value.bitrate_bits_per_second; });
+
+    const auto different_policy = [&](const auto &mutate) {
+        auto changed = streams.fragment_policy;
+        mutate(changed);
+        CHECK(!(streams.fragment_policy == changed));
+    };
+    different_policy([](auto &value) { --value.minimum_duration_microseconds; });
+    different_policy([](auto &value) { ++value.maximum_duration_microseconds; });
+    different_policy([](auto &value) { value.prefer_video_key_frames = false; });
+
+    for (const auto field : {0, 1, 2}) {
+        auto changed = streams;
+        if (field == 0) {
+            ++changed.video.width;
+        } else if (field == 1) {
+            --changed.audio.sample_rate;
+        } else {
+            changed.fragment_policy.prefer_video_key_frames = false;
+        }
+        CHECK(!(streams == changed));
+    }
+
+    const auto side_data = EncodedPacketSideData {
+        EncodedPacketSideDataKind::SkipSamples,
+        std::vector<std::byte>(SkipSamplesSideDataSize, std::byte {0}),
+    };
+    CHECK(side_data == side_data);
+    auto changed_side_data = side_data;
+    changed_side_data.kind = static_cast<EncodedPacketSideDataKind>(99);
+    CHECK(!(side_data == changed_side_data));
+    changed_side_data = side_data;
+    changed_side_data.payload[0] = std::byte {1};
+    CHECK(!(side_data == changed_side_data));
+}
+
 void Begin(FragmentedMp4MuxCoordinator &coordinator)
 {
     CHECK(coordinator.Begin(Streams()) == VRREC_STATUS_OK);
@@ -712,6 +796,7 @@ void FinalizationFailureStopsAtTheExactFailedStageAndAbortsOnce()
 
 int main()
 {
+    ComparesEveryMuxDescriptorFieldByValue();
     RequiresOwnedStreamDescriptorsBeforeWritingPackets();
     ZeroPacketFinishAndDestructorFollowHeaderLifecycle();
     EmptyBatchChecksLifecycleWithoutWritingAPacket();
