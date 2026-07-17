@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 
 namespace {
 
@@ -145,6 +146,120 @@ void RejectsInvalidGeometryAndEndpointInputs()
           VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void RejectsEveryInvalidProductionBoundary()
+{
+    ProductionMediaConfiguration output {};
+    const auto rejects = [&](const auto mutate) {
+        auto input = ValidConfiguration();
+        mutate(input);
+        CHECK(ValidateProductionMediaConfiguration(input, output) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    };
+
+    rejects([](auto &value) { value.struct_size = 0; });
+    rejects([](auto &value) { value.fps_numerator = 29; });
+    rejects([](auto &value) { value.width = 0; });
+    rejects([](auto &value) { value.height = 0; });
+    rejects([](auto &value) { value.width = 16'386; });
+    rejects([](auto &value) { value.height = 16'386; });
+    rejects([](auto &value) { value.width = 1'919; });
+    rejects([](auto &value) { value.height = 1'079; });
+    rejects([](auto &value) { value.source_width = 0; });
+    rejects([](auto &value) { value.source_height = 0; });
+    rejects([](auto &value) { value.source_width = 16'385; });
+    rejects([](auto &value) { value.source_height = 16'385; });
+    rejects([](auto &value) { value.destination_width = 0; });
+    rejects([](auto &value) { value.destination_height = 0; });
+    rejects([](auto &value) { value.destination_width = 1'919; });
+    rejects([](auto &value) { value.destination_height = 1'079; });
+    rejects([](auto &value) { value.destination_x = value.width + 1; });
+    rejects([](auto &value) { value.destination_y = value.height + 1; });
+    rejects([](auto &value) {
+        value.destination_x = 2;
+        value.destination_width = value.width;
+    });
+    rejects([](auto &value) {
+        value.destination_y = 2;
+        value.destination_height = value.height;
+    });
+    rejects([](auto &value) { value.canvas_background++; });
+    rejects([](auto &value) { value.rotation++; });
+    rejects([](auto &value) { value.audio_routing = 99; });
+    rejects([](auto &value) { value.quality_preset = 99; });
+    rejects([](auto &value) {
+        value.desktop_gain_db =
+            std::numeric_limits<double>::quiet_NaN();
+    });
+    rejects([](auto &value) { value.desktop_gain_db = -96.1; });
+    rejects([](auto &value) { value.desktop_gain_db = 24.1; });
+    rejects([](auto &value) {
+        value.microphone_gain_db =
+            std::numeric_limits<double>::infinity();
+    });
+    rejects([](auto &value) { value.microphone_gain_db = -96.1; });
+    rejects([](auto &value) { value.microphone_gain_db = 24.1; });
+    rejects([](auto &value) { value.source_pixel_format = 99; });
+    rejects([](auto &value) {
+        value.estimated_source_fps =
+            std::numeric_limits<double>::quiet_NaN();
+    });
+    rejects([](auto &value) { value.estimated_source_fps = 1'000.1; });
+    rejects([](auto &value) { value.temporary_output_path_utf8 = nullptr; });
+    rejects([](auto &value) { value.temporary_output_path_utf8 = ""; });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "relative\\pending.mp4";
+    });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "1:\\pending.mp4";
+    });
+    rejects([](auto &value) { value.desktop_endpoint_id_utf8 = nullptr; });
+    rejects([](auto &value) { value.microphone_endpoint_id_utf8 = ""; });
+    rejects([](auto &value) { value.spout_sender_identity_utf8 = ""; });
+    rejects([](auto &value) { value.gpu_identity_utf8 = ""; });
+    rejects([](auto &value) { value.reserved = 1; });
+    rejects([](auto &value) { value.reserved_v1 = 1; });
+    rejects([](auto &value) { value.reserved_v2 = 1; });
+}
+
+void AcceptsEverySupportedProductionVariant()
+{
+    ProductionMediaConfiguration output {};
+    const auto accepts = [&](const auto mutate) {
+        auto input = ValidConfiguration();
+        mutate(input);
+        CHECK(ValidateProductionMediaConfiguration(input, output) ==
+              VRREC_STATUS_OK);
+    };
+
+    accepts([](auto &value) {
+        value.audio_routing = VRREC_AUDIO_ROUTING_DESKTOP_ONLY;
+    });
+    accepts([](auto &value) {
+        value.audio_routing = VRREC_AUDIO_ROUTING_MIC_ONLY;
+    });
+    accepts([](auto &value) {
+        value.audio_routing = VRREC_AUDIO_ROUTING_MUTED;
+    });
+    accepts([](auto &value) {
+        value.quality_preset = VRREC_QUALITY_PRESET_STANDARD;
+    });
+    accepts([](auto &value) {
+        value.source_pixel_format = VRREC_SOURCE_PIXEL_FORMAT_RGBA8;
+    });
+    accepts([](auto &value) {
+        value.source_pixel_format = VRREC_SOURCE_PIXEL_FORMAT_NV12;
+    });
+    accepts([](auto &value) { value.desktop_gain_db = -96.0; });
+    accepts([](auto &value) { value.microphone_gain_db = 24.0; });
+    accepts([](auto &value) {
+        value.temporary_output_path_utf8 = "d:/recordings/pending.mp4";
+    });
+    accepts([](auto &value) {
+        value.temporary_output_path_utf8 =
+            "\\\\server\\share\\pending.mp4";
+    });
+}
+
 }
 
 int main()
@@ -154,5 +269,7 @@ int main()
     RejectsNonSoftwareEncodersAndNonIntegralFps();
     RejectsUnknownOrMismatchedAdapters();
     RejectsInvalidGeometryAndEndpointInputs();
+    RejectsEveryInvalidProductionBoundary();
+    AcceptsEverySupportedProductionVariant();
     return 0;
 }
