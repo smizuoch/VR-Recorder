@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -517,6 +518,30 @@ void HapticPortRejectsInvalidPulseBeforeCallingTheRawApi()
     haptic.reset();
     CHECK(state->shutdown_calls == 1);
     (void)raw;
+}
+
+void ValidatesEveryHapticPulseBoundary()
+{
+    CHECK(IsValidOpenVrHapticPulse({0.001F, 0.0F, 0.001F}));
+    CHECK(IsValidOpenVrHapticPulse({1.0F, 1'000.0F, 1.0F}));
+    const auto nan = std::numeric_limits<float>::quiet_NaN();
+    const auto infinity = std::numeric_limits<float>::infinity();
+    for (const auto pulse : {
+             OpenVrHapticPulse {nan, 120.0F, 0.5F},
+             OpenVrHapticPulse {infinity, 120.0F, 0.5F},
+             OpenVrHapticPulse {0.0F, 120.0F, 0.5F},
+             OpenVrHapticPulse {-0.001F, 120.0F, 0.5F},
+             OpenVrHapticPulse {0.03F, nan, 0.5F},
+             OpenVrHapticPulse {0.03F, infinity, 0.5F},
+             OpenVrHapticPulse {0.03F, -0.001F, 0.5F},
+             OpenVrHapticPulse {0.03F, 120.0F, nan},
+             OpenVrHapticPulse {0.03F, 120.0F, infinity},
+             OpenVrHapticPulse {0.03F, 120.0F, 0.0F},
+             OpenVrHapticPulse {0.03F, 120.0F, -0.001F},
+             OpenVrHapticPulse {0.03F, 120.0F, 1.001F},
+         }) {
+        CHECK(!IsValidOpenVrHapticPulse(pulse));
+    }
 }
 
 void FansOutOneBackgroundPollRevisionToEveryActionClient()
@@ -1405,6 +1430,7 @@ int main()
     RoutesOverlayPoseThroughTheSharedRuntimeGeneration();
     RoutesHapticsThroughTheSharedRuntimeGeneration();
     HapticPortRejectsInvalidPulseBeforeCallingTheRawApi();
+    ValidatesEveryHapticPulseBoundary();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
     FailsClosedAtEveryOverlayCompositionStage();
     RejectsClientStateAndZeroRawHandles();

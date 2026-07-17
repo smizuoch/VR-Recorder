@@ -401,6 +401,33 @@ void ValidatesEveryPoseAndDeviceProfileBoundary()
     }
 }
 
+void ComparesEveryPointerEventFieldByValue()
+{
+    const auto event = OpenVrOverlayPointerEvent {
+        OpenVrOverlayPointerEventKind::ButtonDown,
+        100,
+        200,
+        1,
+        7,
+    };
+    CHECK(event == event);
+    for (const auto field : std::array<std::size_t, 5> {0, 1, 2, 3, 4}) {
+        auto changed = event;
+        if (field == 0) {
+            changed.kind = OpenVrOverlayPointerEventKind::ButtonUp;
+        } else if (field == 1) {
+            ++changed.pixel_x;
+        } else if (field == 2) {
+            ++changed.pixel_y;
+        } else if (field == 3) {
+            ++changed.button;
+        } else {
+            ++changed.cursor_index;
+        }
+        CHECK(!(event == changed));
+    }
+}
+
 std::unique_ptr<OpenVrOverlayLifecycle> Create(
     std::unique_ptr<FakePort> port,
     vrrec_status_t &status)
@@ -1148,6 +1175,7 @@ void RejectsMissingPortsAndReportsEveryFactoryAllocationFailure()
 int main()
 {
     ValidatesEveryPoseAndDeviceProfileBoundary();
+    ComparesEveryPointerEventFieldByValue();
     CreatesHiddenOverlayAndTransitionsIdempotently();
     RejectsInvalidConfigurationBeforeCallingThePort();
     RollsBackExactlyOnceWhenCreationCannotBeCompleted();
