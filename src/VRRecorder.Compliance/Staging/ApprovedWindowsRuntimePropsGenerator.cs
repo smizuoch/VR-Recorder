@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml;
+using System.Globalization;
 
 namespace VRRecorder.Compliance.Staging;
 
@@ -62,6 +63,12 @@ internal static class ApprovedWindowsRuntimePropsGenerator
             RequireCanonicalPath(entry.Source, "source");
             RequireCanonicalPath(entry.Target, "target");
             RequireXmlText(entry.Target);
+            _ = NormalizeSha256(entry.Sha256);
+            if (entry.Length < 0 ||
+                !Enum.IsDefined(entry.DeploymentKind))
+            {
+                throw Invalid();
+            }
         }
 
         RequireUnique(entries.Select(entry => entry.Source));
@@ -126,6 +133,15 @@ internal static class ApprovedWindowsRuntimePropsGenerator
                 writer.WriteElementString("Link", entry.Target);
                 writer.WriteElementString("TargetPath", entry.Target);
                 writer.WriteElementString(
+                    "VRRecorderSha256",
+                    NormalizeSha256(entry.Sha256));
+                writer.WriteElementString(
+                    "VRRecorderLength",
+                    entry.Length.ToString(CultureInfo.InvariantCulture));
+                writer.WriteElementString(
+                    "VRRecorderKind",
+                    ArtifactKind(entry.DeploymentKind));
+                writer.WriteElementString(
                     "CopyToOutputDirectory",
                     "IfDifferent");
                 writer.WriteElementString(
@@ -156,6 +172,19 @@ internal static class ApprovedWindowsRuntimePropsGenerator
 
         return value.ToLowerInvariant();
     }
+
+    private static string ArtifactKind(
+        WindowsRuntimeDeploymentKind deploymentKind) => deploymentKind switch
+        {
+            WindowsRuntimeDeploymentKind.NativeLibrary =>
+                StagedArtifactKind.NativeLibrary.ToString(),
+            WindowsRuntimeDeploymentKind.Executable =>
+                StagedArtifactKind.Executable.ToString(),
+            WindowsRuntimeDeploymentKind.Asset or
+                WindowsRuntimeDeploymentKind.Evidence =>
+                StagedArtifactKind.Asset.ToString(),
+            _ => throw Invalid(),
+        };
 
     private static void RequireCanonicalPath(
         string path,

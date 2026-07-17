@@ -90,6 +90,18 @@ public sealed class ApprovedWindowsRuntimePropsGeneratorTests
         Assert.Equal(
             "native/z.dll",
             contents[0].Element("TargetPath")?.Value);
+        Assert.Equal(
+            ShaB,
+            contents[0].Element("VRRecorderSha256")?.Value);
+        Assert.Equal(
+            "17",
+            contents[0].Element("VRRecorderLength")?.Value);
+        Assert.Equal(
+            "NativeLibrary",
+            contents[0].Element("VRRecorderKind")?.Value);
+        Assert.Equal(
+            "Executable",
+            contents[1].Element("VRRecorderKind")?.Value);
         Assert.All(
             contents,
             content =>

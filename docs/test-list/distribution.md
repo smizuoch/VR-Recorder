@@ -19,7 +19,7 @@
 - [x] DLL／EXEを実PE bytesとしてparseし、PE32+／AMD64 machine／subsystem／entrypoint／import closureを検証して拡張子だけのkind判定をrelease gateにしない
 - [ ] authenticated Legal Bundle admission、ambient PATH排除、手動copy回避、publish後の全managed／native／self-contained .NET／asset／Legal inventory sealerを通す
 - [ ] Windows上でalternate data stream／reparse HILを実行し、portable injection testだけで合格にしない
-- [ ] Legal Bundle ID／manifest hashをpayload identityへ取り込む
+- [x] Legal Bundle ID／manifest hashをpost-publish payload identityへ取り込み、認証失敗／identity差替え時はidentityを発行しない
 - [ ] 実Windows／GPU／VRChat／SteamVR／HMD試験reportをschema検証してpayload identityへ結び付ける
 - [ ] 必須matrix caseの完全性と結果から合否を導出し、自己申告`Passed`を入力にしない
 - [ ] application source／DLL／asset／manifest／Legal変更でinner identityが変わる場合に以前の実機証拠を無効化する
