@@ -358,6 +358,9 @@ void RunsACompleteGracefulAudioPipeline()
     CHECK(encoder.write_calls == 2);
     CHECK(encoder.finish_calls == 1);
     CHECK(encoder.abort_calls == 0);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.SetRouting(VRREC_AUDIO_ROUTING_MUTED) ==
+          VRREC_STATUS_INVALID_STATE);
 }
 
 void DoesNotStartEncodingWhenCaptureInitializationFails()
@@ -406,6 +409,37 @@ void WorkerFailureTerminalizesThePipelineOnStopRequest()
     CHECK(encoder.abort_calls == 1);
 }
 
+void StopDetectsWorkerFailureAndAbortsTheSession()
+{
+    FakeCaptureSession capture;
+    capture.fail_immediately = true;
+    CountingEncoderSink encoder;
+    StereoAudioPipelineSession session(capture, encoder);
+
+    CHECK(session.Start(Config(), 1'024) == VRREC_STATUS_OK);
+    encoder.WaitForAbort();
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(capture.abort_calls == 1);
+    CHECK(encoder.abort_calls == 1);
+    CHECK(session.Join() == StereoAudioEncodingWorkerResult::InvalidState);
+}
+
+void PropagatesCaptureRoutingFailureWhileStillActive()
+{
+    FakeCaptureSession capture;
+    capture.ready_windows = 0;
+    capture.routing_status = VRREC_STATUS_INVALID_ARGUMENT;
+    CountingEncoderSink encoder;
+    StereoAudioPipelineSession session(capture, encoder);
+
+    CHECK(session.Start(Config(), 1'024) == VRREC_STATUS_OK);
+    capture.WaitForMix();
+    CHECK(session.SetRouting(VRREC_AUDIO_ROUTING_MUTED) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(capture.routing_calls == 1);
+    session.Abort();
+}
+
 void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
 {
     FakeCaptureSession capture;
@@ -418,6 +452,8 @@ void AbortDuringCaptureStartRollsBackWithoutStartingEncoding()
         return session.Start(Config(), 1'024);
     });
     capture.WaitForStart();
+    CHECK(session.Start(Config(), 1'024) ==
+          VRREC_STATUS_INVALID_STATE);
     session.RequestAbort();
     auto aborting = std::async(std::launch::async, [&] {
         session.Abort();
@@ -539,6 +575,7 @@ void AbortCleanupUnblocksAnInFlightEncodingJoin()
     join_invoked.wait();
     CHECK(joining.wait_for(std::chrono::milliseconds(50)) !=
           std::future_status::ready);
+    CHECK(session.Join() == StereoAudioEncodingWorkerResult::InvalidState);
 
     auto aborting = std::async(std::launch::async, [&] {
         session.Abort();
@@ -551,6 +588,18 @@ void AbortCleanupUnblocksAnInFlightEncodingJoin()
     CHECK(joining.get() == StereoAudioEncodingWorkerResult::Aborted);
     CHECK(capture.abort_calls == 1);
     CHECK(encoder.abort_calls == 1);
+}
+
+void JoinAndJoinAfterAbortRejectAnUnstartedSession()
+{
+    FakeCaptureSession capture;
+    CountingEncoderSink encoder;
+    StereoAudioPipelineSession session(capture, encoder);
+
+    session.JoinAfterAbort();
+    CHECK(session.Join() == StereoAudioEncodingWorkerResult::InvalidState);
+    CHECK(capture.abort_calls == 0);
+    CHECK(encoder.abort_calls == 0);
 }
 
 void JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort()
@@ -730,11 +779,14 @@ int main()
     DoesNotStartEncodingWhenCaptureInitializationFails();
     RejectsInvalidWindowsBeforeStartingCapture();
     WorkerFailureTerminalizesThePipelineOnStopRequest();
+    StopDetectsWorkerFailureAndAbortsTheSession();
+    PropagatesCaptureRoutingFailureWhileStillActive();
     AbortDuringCaptureStartRollsBackWithoutStartingEncoding();
     AbortDominatesAFailedBlockingCaptureStart();
     AbortDominatesABlockingRoutingUpdate();
     AbortDominatesABlockingEncodingStopRequest();
     AbortCleanupUnblocksAnInFlightEncodingJoin();
+    JoinAndJoinAfterAbortRejectAnUnstartedSession();
     JoinOwnerPerformsPhysicalCleanupAfterLogicalAbort();
     AbortDuringEncodingThreadFailureReclaimsCapture();
     AbortDuringSuccessfulEncodingThreadCreationPreventsFirstWindow();
