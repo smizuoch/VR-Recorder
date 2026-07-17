@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using VRRecorder.Application.Settings;
 using VRRecorder.Infrastructure.Storage;
 
@@ -91,274 +90,65 @@ public sealed class SettingsJsonSchemaTests
                 .GetProperty("schemaVersion")
                 .GetProperty("const")
                 .GetInt32());
-        Assert.Empty(JsonSchemaSubsetValidator.Validate(
-            schema.RootElement,
-            settings.RootElement));
+        SettingsJsonSchemaValidator.Default.Validate(
+            await File.ReadAllBytesAsync(settingsPath));
     }
 
-    private static class JsonSchemaSubsetValidator
+    [Theory]
+    [InlineData("127.0.0.999")]
+    [InlineData("::2")]
+    public async Task ConformingValidatorRejectsNonLoopbackOrMalformedAddresses(
+        string invalidAddress)
     {
-        public static List<string> Validate(
-            JsonElement schema,
-            JsonElement instance)
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        var store = new JsonFileSettingsStore(settingsPath);
+        await store.SaveAsync(
+            VRRecorderSettings.CreateDefault(),
+            CancellationToken.None);
+        var validDocument = await File.ReadAllTextAsync(settingsPath);
+        var invalidDocument = validDocument.Replace(
+            "127.0.0.1",
+            invalidAddress,
+            StringComparison.Ordinal);
+
+        var exception = Assert.Throws<InvalidDataException>(() =>
+            SettingsJsonSchemaValidator.Default.Validate(
+                System.Text.Encoding.UTF8.GetBytes(invalidDocument)));
+
+        Assert.Contains("schema v3", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConformingValidatorRejectsUnknownProperties()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        var store = new JsonFileSettingsStore(settingsPath);
+        await store.SaveAsync(
+            VRRecorderSettings.CreateDefault(),
+            CancellationToken.None);
+        var validDocument = await File.ReadAllTextAsync(settingsPath);
+        var invalidDocument = validDocument.Replace(
+            "{\r\n  \"schemaVersion\"",
+            "{\r\n  \"unexpected\": true,\r\n  \"schemaVersion\"",
+            StringComparison.Ordinal);
+        if (string.Equals(
+                validDocument,
+                invalidDocument,
+                StringComparison.Ordinal))
         {
-            var errors = new List<string>();
-            Validate(schema, schema, instance, "$", errors);
-            return errors;
+            invalidDocument = validDocument.Replace(
+                "{\n  \"schemaVersion\"",
+                "{\n  \"unexpected\": true,\n  \"schemaVersion\"",
+                StringComparison.Ordinal);
         }
 
-        private static void Validate(
-            JsonElement rootSchema,
-            JsonElement schema,
-            JsonElement instance,
-            string path,
-            List<string> errors)
-        {
-            if (schema.TryGetProperty("$ref", out var reference))
-            {
-                Validate(
-                    rootSchema,
-                    ResolveLocalReference(rootSchema, reference.GetString()!),
-                    instance,
-                    path,
-                    errors);
-                return;
-            }
+        var exception = Assert.Throws<InvalidDataException>(() =>
+            SettingsJsonSchemaValidator.Default.Validate(
+                System.Text.Encoding.UTF8.GetBytes(invalidDocument)));
 
-            if (schema.TryGetProperty("anyOf", out var alternatives))
-            {
-                var matched = alternatives.EnumerateArray().Any(alternative =>
-                {
-                    var alternativeErrors = new List<string>();
-                    Validate(
-                        rootSchema,
-                        alternative,
-                        instance,
-                        path,
-                        alternativeErrors);
-                    return alternativeErrors.Count == 0;
-                });
-                if (!matched)
-                {
-                    errors.Add($"{path} did not match any allowed schema.");
-                }
-
-                return;
-            }
-
-            if (schema.TryGetProperty("type", out var type) &&
-                !MatchesType(type.GetString(), instance))
-            {
-                errors.Add(
-                    $"{path} has type {instance.ValueKind}, expected {type.GetString()}.");
-                return;
-            }
-
-            if (schema.TryGetProperty("const", out var constant) &&
-                !JsonElement.DeepEquals(constant, instance))
-            {
-                errors.Add($"{path} does not equal its constant value.");
-            }
-
-            if (schema.TryGetProperty("enum", out var allowed) &&
-                !allowed.EnumerateArray().Any(value =>
-                    JsonElement.DeepEquals(value, instance)))
-            {
-                errors.Add($"{path} is not an allowed enum value.");
-            }
-
-            switch (instance.ValueKind)
-            {
-                case JsonValueKind.Object:
-                    ValidateObject(rootSchema, schema, instance, path, errors);
-                    break;
-                case JsonValueKind.Array:
-                    ValidateArray(rootSchema, schema, instance, path, errors);
-                    break;
-                case JsonValueKind.String:
-                    ValidateString(schema, instance, path, errors);
-                    break;
-                case JsonValueKind.Number:
-                    ValidateNumber(schema, instance, path, errors);
-                    break;
-            }
-        }
-
-        private static void ValidateObject(
-            JsonElement rootSchema,
-            JsonElement schema,
-            JsonElement instance,
-            string path,
-            List<string> errors)
-        {
-            var properties = schema.TryGetProperty("properties", out var value)
-                ? value
-                : default;
-            if (schema.TryGetProperty("required", out var required))
-            {
-                foreach (var name in required.EnumerateArray()
-                             .Select(item => item.GetString()!))
-                {
-                    if (!instance.TryGetProperty(name, out _))
-                    {
-                        errors.Add($"{path}.{name} is required.");
-                    }
-                }
-            }
-
-            foreach (var property in instance.EnumerateObject())
-            {
-                if (properties.ValueKind == JsonValueKind.Object &&
-                    properties.TryGetProperty(property.Name, out var propertySchema))
-                {
-                    Validate(
-                        rootSchema,
-                        propertySchema,
-                        property.Value,
-                        $"{path}.{property.Name}",
-                        errors);
-                }
-                else if (schema.TryGetProperty(
-                             "additionalProperties",
-                             out var additionalProperties) &&
-                         additionalProperties.ValueKind == JsonValueKind.False)
-                {
-                    errors.Add($"{path}.{property.Name} is not allowed.");
-                }
-            }
-        }
-
-        private static void ValidateArray(
-            JsonElement rootSchema,
-            JsonElement schema,
-            JsonElement instance,
-            string path,
-            List<string> errors)
-        {
-            var length = instance.GetArrayLength();
-            if (schema.TryGetProperty("minItems", out var minimum) &&
-                length < minimum.GetInt32())
-            {
-                errors.Add($"{path} has too few items.");
-            }
-
-            if (schema.TryGetProperty("maxItems", out var maximum) &&
-                length > maximum.GetInt32())
-            {
-                errors.Add($"{path} has too many items.");
-            }
-
-            if (schema.TryGetProperty("items", out var itemSchema))
-            {
-                var index = 0;
-                foreach (var item in instance.EnumerateArray())
-                {
-                    Validate(
-                        rootSchema,
-                        itemSchema,
-                        item,
-                        $"{path}[{index}]",
-                        errors);
-                    index++;
-                }
-            }
-        }
-
-        private static void ValidateString(
-            JsonElement schema,
-            JsonElement instance,
-            string path,
-            List<string> errors)
-        {
-            var text = instance.GetString()!;
-            if (schema.TryGetProperty("minLength", out var minimum) &&
-                text.Length < minimum.GetInt32())
-            {
-                errors.Add($"{path} is too short.");
-            }
-
-            if (schema.TryGetProperty("maxLength", out var maximum) &&
-                text.Length > maximum.GetInt32())
-            {
-                errors.Add($"{path} is too long.");
-            }
-
-            if (schema.TryGetProperty("pattern", out var pattern) &&
-                !Regex.IsMatch(
-                    text,
-                    pattern.GetString()!,
-                    RegexOptions.CultureInvariant,
-                    TimeSpan.FromMilliseconds(100)))
-            {
-                errors.Add($"{path} does not match its required pattern.");
-            }
-        }
-
-        private static void ValidateNumber(
-            JsonElement schema,
-            JsonElement instance,
-            string path,
-            List<string> errors)
-        {
-            var number = instance.GetDouble();
-            if (schema.TryGetProperty("minimum", out var minimum) &&
-                number < minimum.GetDouble())
-            {
-                errors.Add($"{path} is below its minimum.");
-            }
-
-            if (schema.TryGetProperty(
-                    "exclusiveMinimum",
-                    out var exclusiveMinimum) &&
-                number <= exclusiveMinimum.GetDouble())
-            {
-                errors.Add($"{path} is not above its exclusive minimum.");
-            }
-
-            if (schema.TryGetProperty("maximum", out var maximum) &&
-                number > maximum.GetDouble())
-            {
-                errors.Add($"{path} is above its maximum.");
-            }
-        }
-
-        private static bool MatchesType(
-            string? type,
-            JsonElement instance) => type switch
-            {
-                "object" => instance.ValueKind == JsonValueKind.Object,
-                "array" => instance.ValueKind == JsonValueKind.Array,
-                "string" => instance.ValueKind == JsonValueKind.String,
-                "integer" => instance.ValueKind == JsonValueKind.Number &&
-                             instance.TryGetInt64(out _),
-                "number" => instance.ValueKind == JsonValueKind.Number,
-                "boolean" => instance.ValueKind is JsonValueKind.True or
-                    JsonValueKind.False,
-                "null" => instance.ValueKind == JsonValueKind.Null,
-                _ => false,
-            };
-
-        private static JsonElement ResolveLocalReference(
-            JsonElement rootSchema,
-            string reference)
-        {
-            if (!reference.StartsWith("#/", StringComparison.Ordinal))
-            {
-                throw new InvalidDataException(
-                    $"Only local JSON schema references are supported: {reference}");
-            }
-
-            var current = rootSchema;
-            foreach (var token in reference[2..].Split('/'))
-            {
-                var propertyName = token
-                    .Replace("~1", "/", StringComparison.Ordinal)
-                    .Replace("~0", "~", StringComparison.Ordinal);
-                current = current.GetProperty(propertyName);
-            }
-
-            return current;
-        }
+        Assert.Contains("schema v3", exception.Message, StringComparison.Ordinal);
     }
 
     private sealed class TemporaryDirectory : IDisposable

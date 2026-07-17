@@ -181,6 +181,130 @@
       }
     },
     {
+      "id": "jsonschema-net",
+      "displayName": "JsonSchema.Net",
+      "version": "8.0.5",
+      "purl": "pkg:nuget/jsonschema.net@8.0.5",
+      "scope": "runtime-bundled",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors",
+      "licenseFilePath": "third-party/licenses/json-everything/LICENSE.txt",
+      "licenseFileSha256": "baebca0309090f4eca1b7a82c836cc91e48b2b92139c2280fb0ff69af922c2ae",
+      "repository": {
+        "url": "https://github.com/json-everything/json-everything",
+        "commit": "3520d7ac43e5c6c9b91abeac5af992eb82ffbf63"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "JsonSchema.Net",
+          "version": "8.0.5",
+          "contentHashSha512": "QoEqdoAUgAkbzuFAiHySjGuh8lJs8L8DxkEDGJLEebtlZ6+EbEr0wmYlidErSS2ASNFOModueb83DLNIRLqshg==",
+          "archiveSha256": "cc54849aa7248aeb357dafefc61244328342fd1536e64177012b72330c4708f3",
+          "kind": "Direct"
+        }
+      ]
+    },
+    {
+      "id": "jsonpointer-net",
+      "displayName": "JsonPointer.Net",
+      "version": "6.0.1",
+      "purl": "pkg:nuget/jsonpointer.net@6.0.1",
+      "scope": "runtime-bundled-transitive",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors",
+      "licenseFilePath": "third-party/licenses/json-everything/LICENSE.txt",
+      "licenseFileSha256": "baebca0309090f4eca1b7a82c836cc91e48b2b92139c2280fb0ff69af922c2ae",
+      "repository": {
+        "url": "https://github.com/json-everything/json-everything",
+        "commit": "694b3e47897b6bca03ec8285acb426822c129308"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "JsonPointer.Net",
+          "version": "6.0.1",
+          "contentHashSha512": "EbSJkd/1y9r0WBIptjUctA6BzjgKh1aNU/g6QGgdMZVZ8wc0S/ysQhfiQerP9/VFTeENFHFdCQaoOk9fZqwnFQ==",
+          "archiveSha256": "888bce1f3ea38d3b069d7cb138aef5cf617c821db54e6412e00f522c1e2ef770",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "json-more-net",
+      "displayName": "Json.More.Net",
+      "version": "2.2.0",
+      "purl": "pkg:nuget/json.more.net@2.2.0",
+      "scope": "runtime-bundled-transitive",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors",
+      "licenseFilePath": "third-party/licenses/json-everything/LICENSE.txt",
+      "licenseFileSha256": "baebca0309090f4eca1b7a82c836cc91e48b2b92139c2280fb0ff69af922c2ae",
+      "repository": {
+        "url": "https://github.com/json-everything/json-everything",
+        "commit": "f53d4d27eeed6a73d377bf4188175f0b8a46f856"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "Json.More.Net",
+          "version": "2.2.0",
+          "contentHashSha512": "fiyEZJNgiCzDa7/N9bZ+CnM5qnawyJ54+CkHNZ2svwxWBWNNFzydJ7RlroqMdOjokGBiLcKIxdajNvOklzlYqQ==",
+          "archiveSha256": "1dbe3295c4ffe9b2c75400e99e3a0124ac93477714f968d895b94eefd03e4925",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
+      "id": "humanizer-core",
+      "displayName": "Humanizer Core",
+      "version": "3.0.1",
+      "purl": "pkg:nuget/humanizer.core@3.0.1",
+      "scope": "runtime-bundled-transitive",
+      "licenseDeclared": "MIT",
+      "licenseConcluded": "MIT",
+      "copyrightNotice": "Copyright (c) .NET Foundation and Contributors; includes Inflector Copyright (c) 2013 Scott Kirkland and ByteSize Copyright (c) 2013-2014 Omar Khudeira",
+      "licenseFilePath": "third-party/licenses/humanizer/LICENSE.txt",
+      "licenseFileSha256": "e24ec7f2eea5c5f4b3e2c08308109ba99b49b4b56ea7ff0e0a178f2bdd4bbce8",
+      "repository": {
+        "url": "https://github.com/Humanizr/Humanizer",
+        "commit": "6e54d3786f4c4fe2cf665fa41d74a6e79bf9a85f"
+      },
+      "modified": false,
+      "approval": {
+        "status": "pending-independent-review",
+        "id": null,
+        "reviewer": null
+      },
+      "packages": [
+        {
+          "id": "Humanizer.Core",
+          "version": "3.0.1",
+          "contentHashSha512": "scB3+KcxNmEjZK5V8rKCW2gIiL8m8KH91w14FuuExyhi9xTyAJ+jr+DDxGdy12mHmioe2uvjxTfMgM7WmSUFlw==",
+          "archiveSha256": "5b1a9fd45457b6c42e94b16d6dfb1f62ee28666ac2b8e6408a431c6368ba0f0c",
+          "kind": "Transitive"
+        }
+      ]
+    },
+    {
       "id": "coverlet",
       "displayName": "Coverlet collector",
       "version": "6.0.4",

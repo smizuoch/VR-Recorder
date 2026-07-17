@@ -76,6 +76,35 @@ public sealed class JsonFileSettingsStoreTests
     }
 
     [Fact]
+    public async Task SchemaRejectionLeavesExistingDocumentUntouched()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        byte[] originalDocument = "original-document"u8.ToArray();
+        await File.WriteAllBytesAsync(settingsPath, originalDocument);
+        var validator = new RejectingSettingsJsonSchemaValidator();
+        var store = new JsonFileSettingsStore(
+            settingsPath,
+            new FixedWallClock(DateTimeOffset.UnixEpoch),
+            validator);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(
+                VRRecorderSettings.CreateDefault(),
+                CancellationToken.None));
+
+        Assert.Equal("schema rejected", exception.Message);
+        Assert.Equal(1, validator.ValidationCount);
+        Assert.Equal(
+            originalDocument,
+            await File.ReadAllBytesAsync(settingsPath));
+        Assert.Empty(Directory.EnumerateFiles(
+            directory.Path,
+            "*.tmp-*",
+            SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
     public async Task SchemaV1GlobalPlacementMigratesToSchemaV3Fallback()
     {
         using var directory = TemporaryDirectory.Create();
@@ -258,5 +287,17 @@ public sealed class JsonFileSettingsStoreTests
         }
 
         public DateTimeOffset LocalNow { get; }
+    }
+
+    private sealed class RejectingSettingsJsonSchemaValidator
+        : ISettingsJsonSchemaValidator
+    {
+        public int ValidationCount { get; private set; }
+
+        public void Validate(ReadOnlyMemory<byte> documentBytes)
+        {
+            ValidationCount++;
+            throw new InvalidDataException("schema rejected");
+        }
     }
 }

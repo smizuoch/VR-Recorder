@@ -3,12 +3,12 @@
 - 更新日: 2026-07-17
 - 対象branch: `main`
 - 実装基準commit: `58750cf`（PICO production WASAPI startup stabilization）
-- 現在の判定: automated release-payload identity実装中。配布製品でもrelease候補でもない
+- 現在の判定: release-payload identity／Hardware Validation evidence contract／settings schema validationは自動化完了。quality gate実装中で、配布製品でもrelease候補でもない
 - 配布方針: unpackaged self-contained `win-x64` payloadで実機検証し、同一payloadの合格後だけMicrosoft Store MSIX候補へ進める
 
 ## 1. 最初に読む結論
 
-desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect captureとMicOnly production mux／oracleは完了した。実機検証は最終Hardware Validationへまとめる。先に自動化可能なrelease payload identity、report schema／matrix validator、settings schema、quality gateを閉じ、payloadをfreezeしてからWindows／GPU／VRChat／SteamVR／HMDを同一identityで一括検証する。独立Legal承認は外部gateとしてfail-closedのまま維持し、自動化可能な実装と直列化しない。
+desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect captureとMicOnly production mux／oracleは完了した。release payload identity、versioned Hardware Validation report／required matrix validator、settings schemaの自動化も完了した。実機検証は最終Hardware Validationへまとめる。残る自動quality gateを閉じてpayloadをfreezeしてから、Windows／GPU／VRChat／SteamVR／HMDを同一identityで一括検証する。独立Legal承認は外部gateとしてfail-closedのまま維持し、自動化可能な実装と直列化しない。
 
 2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。PICO `default-capture`のdirect production WASAPI HILでは、session前packetとshort discontinuity後のdevice-position gapを修正し、3秒／48 kHz captureを500 ms間隔で10回連続成功させた。さらに同じPICO endpointをMicOnlyでfull production sessionへ接続し、Spout映像110 H.264 packetとmicrophone音声179 AAC packetをmuxした。pinned oracleはvideo 110 frame、audio 178 decoded frame／182,272 sample、audio presentation 0.000～3.797秒を確認し、検証後だけfinal `.mp4`へ公開した。独立Legal review／canonical registry admission、VRChat sender、device change／privacy、controller HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.5節を優先する。
 

@@ -9,7 +9,8 @@
 - [x] schema v1のglobal VR配置とschema v2のdevice別配置を無損失にschema v3へ起動時migrationする
 - [x] schema v1／v2／v3のJSON Schemaを別identityのembedded resource／offline fileとして同梱する
 - [x] haptics enabled／frequency／amplitudeをschema v3へ保持し、既定tokenと範囲を検証する
-- [ ] 承認済みのJSON Schema準拠validatorで保存documentを検証する
+- [x] Draft 2020-12準拠validatorでload時とatomic保存直前のdocumentをoffline検証する
+- [ ] validatorと推移依存のcandidate license metadataを独立Legal reviewerが承認する
 - [x] `%LocalAppData%\VR-Recorder\settings.json`をWindows Known Folder経由で解決する
 - [x] desktop UIからtimer／FPS／解像度方針／encoder／qualityを保存し、次回RECで再読込する
 - [x] 保存先変更時は認証済みLegal Bundleのミラー成功後だけ新しいpathを保存する
@@ -29,7 +30,8 @@
 - [x] Migrate the schema-v1 global VR placement and schema-v2 device profiles losslessly to schema v3 at startup
 - [x] Ship the schema-v1, schema-v2, and schema-v3 JSON Schemas as separately identified embedded resources and offline files
 - [x] Persist haptics enabled/frequency/amplitude in schema v3 and validate their defaults and ranges
-- [ ] Validate saved documents with an approved conforming JSON Schema validator
+- [x] Validate documents offline with a conforming Draft 2020-12 validator on load and immediately before atomic persistence
+- [ ] Obtain independent Legal review of the validator and its transitive dependencies' candidate license metadata
 - [x] Resolve `%LocalAppData%\VR-Recorder\settings.json` through the Windows Known Folder API
 - [x] Save timer, FPS, resolution policy, encoder, and quality from the desktop UI and reload them for the next REC
 - [x] Persist a changed output path only after mirroring the authenticated Legal Bundle successfully

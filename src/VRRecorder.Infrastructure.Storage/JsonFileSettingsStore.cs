@@ -11,6 +11,7 @@ public sealed class JsonFileSettingsStore : ISettingsStore
     private static readonly JsonSerializerOptions SerializerOptions = CreateOptions();
     private readonly string _settingsPath;
     private readonly IWallClock _clock;
+    private readonly ISettingsJsonSchemaValidator _schemaValidator;
 
     public JsonFileSettingsStore(string settingsPath)
         : this(settingsPath, SystemWallClock.Instance)
@@ -20,9 +21,21 @@ public sealed class JsonFileSettingsStore : ISettingsStore
     public JsonFileSettingsStore(
         string settingsPath,
         IWallClock clock)
+        : this(
+            settingsPath,
+            clock,
+            SettingsJsonSchemaValidator.Default)
+    {
+    }
+
+    internal JsonFileSettingsStore(
+        string settingsPath,
+        IWallClock clock,
+        ISettingsJsonSchemaValidator schemaValidator)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
         ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(schemaValidator);
         if (!Path.IsPathFullyQualified(settingsPath))
         {
             throw new ArgumentException(
@@ -32,6 +45,7 @@ public sealed class JsonFileSettingsStore : ISettingsStore
 
         _settingsPath = Path.GetFullPath(settingsPath);
         _clock = clock;
+        _schemaValidator = schemaValidator;
     }
 
     public async Task<VRRecorderSettings> LoadAsync(
@@ -59,6 +73,10 @@ public sealed class JsonFileSettingsStore : ISettingsStore
         CancellationToken cancellationToken)
     {
         VRRecorderSettingsContract.Validate(settings);
+        var documentBytes = JsonSerializer.SerializeToUtf8Bytes(
+            settings,
+            SerializerOptions);
+        _schemaValidator.Validate(documentBytes);
         var directory = Path.GetDirectoryName(_settingsPath) ??
                         throw new InvalidOperationException(
                             "The settings path has no parent directory.");
@@ -75,12 +93,8 @@ public sealed class JsonFileSettingsStore : ISettingsStore
                              FileOptions.Asynchronous |
                              FileOptions.SequentialScan))
             {
-                await JsonSerializer
-                    .SerializeAsync(
-                        stream,
-                        settings,
-                        SerializerOptions,
-                        cancellationToken)
+                await stream
+                    .WriteAsync(documentBytes, cancellationToken)
                     .ConfigureAwait(false);
                 await stream
                     .FlushAsync(cancellationToken)
@@ -116,16 +130,11 @@ public sealed class JsonFileSettingsStore : ISettingsStore
     private async Task<VRRecorderSettings> LoadExistingAsync(
         CancellationToken cancellationToken)
     {
-        await using var stream = new FileStream(
-            _settingsPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 81920,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        using var document = await JsonDocument
-            .ParseAsync(stream, cancellationToken: cancellationToken)
+        var documentBytes = await File
+            .ReadAllBytesAsync(_settingsPath, cancellationToken)
             .ConfigureAwait(false);
+        _schemaValidator.Validate(documentBytes);
+        using var document = JsonDocument.Parse(documentBytes);
         var settings = document.RootElement
             .Deserialize<VRRecorderSettings>(SerializerOptions) ??
             throw new InvalidDataException("The settings document is empty.");
