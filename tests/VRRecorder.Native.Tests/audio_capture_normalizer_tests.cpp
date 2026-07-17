@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -805,6 +806,57 @@ void RejectsEveryUnsupportedCaptureFormat()
     rejects([](auto &value) { value.block_align = 9; });
 }
 
+void RejectsEveryMidstreamCaptureFormatChange()
+{
+    using namespace vrrecorder::native;
+    using FormatPair = std::pair<CapturePcmFormat, CapturePcmFormat>;
+    const std::array cases {
+        FormatPair {
+            {48'000, 2, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 8, 0x0000'0003},
+            {44'100, 2, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 8, 0x0000'0003}},
+        FormatPair {
+            {48'000, 2, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 8, 0x0000'0003},
+            {48'000, 1, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 4, 0x0000'0004}},
+        FormatPair {
+            {48'000, 2, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 8, 0x0000'0003},
+            {48'000, 2, CaptureSampleEncoding::PcmSignedInteger,
+             32, 32, 8, 0x0000'0003}},
+        FormatPair {
+            {48'000, 2, CaptureSampleEncoding::PcmSignedInteger,
+             16, 16, 4, 0x0000'0003},
+            {48'000, 2, CaptureSampleEncoding::PcmSignedInteger,
+             24, 24, 6, 0x0000'0003}},
+        FormatPair {
+            {48'000, 2, CaptureSampleEncoding::PcmSignedInteger,
+             32, 24, 8, 0x0000'0003},
+            {48'000, 2, CaptureSampleEncoding::PcmSignedInteger,
+             32, 32, 8, 0x0000'0003}},
+        FormatPair {
+            {48'000, 2, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 8, 0},
+            {48'000, 2, CaptureSampleEncoding::IeeeFloat,
+             32, 32, 8, 0x0000'0003}},
+    };
+
+    for (const auto &[initial, changed] : cases) {
+        StereoCaptureNormalizer48k normalizer(2'500'000);
+        CapturedStereoPacket48k normalized {};
+        CHECK(normalizer.Normalize(
+                  initial,
+                  {0, 2'500'000, 1, {}, true, false, false},
+                  normalized) == CaptureNormalizationResult::Ready);
+        CHECK(normalizer.Normalize(
+                  changed,
+                  {1, 2'500'100, 1, {}, true, false, false},
+                  normalized) == CaptureNormalizationResult::InvalidPacket);
+    }
+}
+
 void AcceptsAlternateLayoutsAndPcm32()
 {
     using namespace vrrecorder::native;
@@ -1005,6 +1057,7 @@ int main()
     DownmixesEverySupportedSurroundSpeakerPosition();
     RejectsNonzeroPaddingBitsInPcm24StoredIn32Bits();
     RejectsEveryUnsupportedCaptureFormat();
+    RejectsEveryMidstreamCaptureFormatChange();
     AcceptsAlternateLayoutsAndPcm32();
     RejectsMalformedPacketMetadataAndPayloads();
     AcceptsSilentPacketsWithEitherPayloadRepresentation();
