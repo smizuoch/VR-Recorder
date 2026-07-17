@@ -65,6 +65,68 @@ public sealed class OfflineLegalAccessFirstRunSetupProbeTests
             CancellationToken.None));
     }
 
+    [Fact]
+    public async Task WrongStepRejectedCatalogAndDocumentFailuresDoNotVerify()
+    {
+        var reference = new LegalDocumentReference(
+            LegalDocumentKind.License,
+            "LICENSES/MIT.txt");
+        var component = Component("component", [reference]);
+        var validTexts = new Dictionary<
+            LegalDocumentReference,
+            LegalTextReadResult>
+        {
+            [reference] = Available(component.Id, reference, "MIT License"),
+        };
+        var validReader = new StubReader(
+            new LegalCatalogReadResult.Available(Catalog([component])),
+            validTexts);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new OfflineLegalAccessFirstRunSetupProbe(null!));
+        Assert.False(await new OfflineLegalAccessFirstRunSetupProbe(validReader)
+            .VerifyAsync((FirstRunSetupStep)int.MaxValue, CancellationToken.None));
+        Assert.False(await new OfflineLegalAccessFirstRunSetupProbe(
+            new StubReader(
+                new LegalCatalogReadResult.Rejected(
+                    [new LegalCatalogIssue("rejected", "catalog")]),
+                validTexts)).VerifyAsync(
+                FirstRunSetupStep.OfflineLegalAccess,
+                CancellationToken.None));
+        Assert.False(await new OfflineLegalAccessFirstRunSetupProbe(
+            new StubReader(
+                new LegalCatalogReadResult.Available(Catalog(
+                    [Component("component", [])])),
+                validTexts)).VerifyAsync(
+                FirstRunSetupStep.OfflineLegalAccess,
+                CancellationToken.None));
+
+        foreach (var documentResult in new LegalTextReadResult[]
+                 {
+                     new LegalTextReadResult.Rejected(
+                         [new LegalCatalogIssue("rejected", "document")]),
+                     Available(
+                         component.Id,
+                         new LegalDocumentReference(
+                             LegalDocumentKind.Notice,
+                             "NOTICES/other.txt"),
+                         "text"),
+                     Available(component.Id, reference, " "),
+                 })
+        {
+            var reader = new StubReader(
+                new LegalCatalogReadResult.Available(Catalog([component])),
+                new Dictionary<LegalDocumentReference, LegalTextReadResult>
+                {
+                    [reference] = documentResult,
+                });
+            Assert.False(await new OfflineLegalAccessFirstRunSetupProbe(reader)
+                .VerifyAsync(
+                    FirstRunSetupStep.OfflineLegalAccess,
+                    CancellationToken.None));
+        }
+    }
+
     private static LegalTextReadResult.Available Available(
         string componentId,
         LegalDocumentReference reference,
