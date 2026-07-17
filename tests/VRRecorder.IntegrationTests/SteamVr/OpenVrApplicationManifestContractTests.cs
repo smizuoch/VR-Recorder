@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using VRRecorder.Infrastructure.SteamVr;
 
 namespace VRRecorder.IntegrationTests.SteamVr;
@@ -96,6 +97,82 @@ public sealed class OpenVrApplicationManifestContractTests
     }
 
     [Fact]
+    public void RejectsRelativeInstallRoot()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            OpenVrApplicationManifest.ResolveAndValidate("relative-install"));
+    }
+
+    [Theory]
+    [InlineData("applications-object")]
+    [InlineData("application-not-object")]
+    [InlineData("source-not-string")]
+    [InlineData("dashboard-overlay")]
+    [InlineData("missing-launch-type")]
+    [InlineData("strings-not-object")]
+    [InlineData("missing-locale")]
+    [InlineData("blank-localized-name")]
+    [InlineData("localized-description-not-string")]
+    public void RejectsManifestShapeAndLocalizationTampering(string mutation)
+    {
+        var manifest = MutateValidManifest(root =>
+        {
+            var applications = root["applications"]!.AsArray();
+            var application = applications[0]!.AsObject();
+            var strings = application["strings"]!.AsObject();
+            switch (mutation)
+            {
+                case "applications-object":
+                    root["applications"] = new JsonObject();
+                    break;
+                case "application-not-object":
+                    applications[0] = "invalid";
+                    break;
+                case "source-not-string":
+                    root["source"] = 42;
+                    break;
+                case "dashboard-overlay":
+                    application["is_dashboard_overlay"] = true;
+                    break;
+                case "missing-launch-type":
+                    application.Remove("launch_type");
+                    break;
+                case "strings-not-object":
+                    application["strings"] = "invalid";
+                    break;
+                case "missing-locale":
+                    strings.Remove("ja_jp");
+                    break;
+                case "blank-localized-name":
+                    strings["en_us"]!["name"] = " ";
+                    break;
+                case "localized-description-not-string":
+                    strings["en_us"]!["description"] = 42;
+                    break;
+                default:
+                    throw new InvalidOperationException(mutation);
+            }
+        });
+        using var install = TestInstall.Create(manifest);
+
+        Assert.Throws<InvalidDataException>(() =>
+            OpenVrApplicationManifest.ResolveAndValidate(install.Path));
+    }
+
+    [Fact]
+    public void RejectsDuplicateKnownProperty()
+    {
+        var manifest = ValidManifest.Replace(
+            "\"source\": \"vrrecorder\"",
+            "\"source\": \"vrrecorder\", \"source\": \"vrrecorder\"",
+            StringComparison.Ordinal);
+        using var install = TestInstall.Create(manifest);
+
+        Assert.Throws<InvalidDataException>(() =>
+            OpenVrApplicationManifest.ResolveAndValidate(install.Path));
+    }
+
+    [Fact]
     public void RejectsMultipleApplicationEntries()
     {
         var manifest = ValidManifest.Replace(
@@ -168,6 +245,13 @@ public sealed class OpenVrApplicationManifestContractTests
             ["binary_path_windows"] = "../VRRecorder.App.exe",
             ["action_manifest_path"] = "actions.json",
         };
+
+    private static string MutateValidManifest(Action<JsonObject> mutation)
+    {
+        var root = JsonNode.Parse(ValidManifest)!.AsObject();
+        mutation(root);
+        return root.ToJsonString();
+    }
 
     private const string ValidManifest = """
         {
