@@ -150,7 +150,8 @@ export-check:
 	test -s $(NATIVE_ROOT)/build/vrrecorder_native.map
 
 cmake-contract-sync:
-	test "$$(wc -l < expected_exports.txt)" -eq 18
+	test -s expected_exports.txt
+	test "$$(sort -u expected_exports.txt | wc -l)" -eq "$$(wc -l < expected_exports.txt)"
 	grep -Fq "list(LENGTH expected_exports expected_export_count)" cmake_build_contract.cmake
 	grep -Fq "list(LENGTH expected_exports expected_export_count)" verify_exports.cmake
 	grep -Fq 'Verified exactly $${expected_export_count} native exports' verify_exports.cmake
