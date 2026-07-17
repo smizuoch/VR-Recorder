@@ -135,6 +135,45 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
         Assert.Null(disposeException);
     }
 
+    [Theory]
+    [InlineData("success-null", 13u, false)]
+    [InlineData("native-error", 5u, false)]
+    [InlineData("blank-instance", 13u, false)]
+    [InlineData("blank-host", 13u, false)]
+    [InlineData("zero-port", 13u, false)]
+    [InlineData("too-many-properties", 13u, false)]
+    [InlineData("no-addresses", 13u, false)]
+    [InlineData("only-ipv4", 0u, true)]
+    [InlineData("only-ipv6", 0u, true)]
+    [InlineData("empty-properties", 0u, true)]
+    [InlineData("missing-keys", 13u, false)]
+    [InlineData("missing-values", 13u, false)]
+    [InlineData("blank-key", 13u, false)]
+    [InlineData("null-value", 13u, false)]
+    [InlineData("duplicate-key", 13u, false)]
+    public void ResolveFailsClosedForMalformedNativeService(
+        string mutation,
+        uint expectedStatus,
+        bool expectService)
+    {
+        var interop = new StubWindowsDnsServiceInterop();
+        var api = new ShellWindowsDnsServiceNativeApi(interop);
+        uint? callbackStatus = null;
+        WindowsDnsSdResolvedService? callbackService = null;
+        using var operation = api.StartResolve(
+            "VRChat-Client-test._oscjson._tcp.local.",
+            (status, service) =>
+            {
+                callbackStatus = status;
+                callbackService = service;
+            });
+
+        interop.EmitResolveVariant(mutation);
+
+        Assert.Equal(expectedStatus, callbackStatus);
+        Assert.Equal(expectService, callbackService is not null);
+    }
+
     [Fact]
     public void ProductionInteropFailsBeforeNativeCallOutsideWindows()
     {
@@ -244,6 +283,92 @@ public sealed class ShellWindowsDnsServiceNativeApiTests
             var callback = Marshal.GetDelegateForFunctionPointer<
                 WindowsDnsServiceResolveNativeCallback>(ResolveRequest.Callback);
             callback(status, ResolveRequest.QueryContext, serviceInstance);
+        }
+
+        public void EmitResolveVariant(string mutation)
+        {
+            var callback = Marshal.GetDelegateForFunctionPointer<
+                WindowsDnsServiceResolveNativeCallback>(ResolveRequest.Callback);
+            if (mutation == "success-null")
+            {
+                callback(0, ResolveRequest.QueryContext, 0);
+                return;
+            }
+
+            if (mutation == "native-error")
+            {
+                callback(5, ResolveRequest.QueryContext, 0);
+                return;
+            }
+
+            var properties = mutation == "empty-properties"
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["name"] = "test",
+                    ["txtvers"] = "1",
+                };
+            var serviceInstance = CreateServiceInstance(
+                "VRChat-Client-test._oscjson._tcp.local.",
+                "test-host.local.",
+                0x7F000001,
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                19000,
+                properties);
+            var native = Marshal.PtrToStructure<TestDnsServiceInstance>(
+                serviceInstance);
+            switch (mutation)
+            {
+                case "blank-instance":
+                    native.InstanceName = AllocateString(" ", _resolveAllocations);
+                    break;
+                case "blank-host":
+                    native.HostName = AllocateString(" ", _resolveAllocations);
+                    break;
+                case "zero-port":
+                    native.Port = 0;
+                    break;
+                case "too-many-properties":
+                    native.PropertyCount = 257;
+                    break;
+                case "no-addresses":
+                    native.Ip4Address = 0;
+                    native.Ip6Address = 0;
+                    break;
+                case "only-ipv4":
+                    native.Ip6Address = 0;
+                    break;
+                case "only-ipv6":
+                    native.Ip4Address = 0;
+                    break;
+                case "empty-properties":
+                    break;
+                case "missing-keys":
+                    native.Keys = 0;
+                    break;
+                case "missing-values":
+                    native.Values = 0;
+                    break;
+                case "blank-key":
+                    Marshal.WriteIntPtr(
+                        native.Keys,
+                        AllocateString(" ", _resolveAllocations));
+                    break;
+                case "null-value":
+                    Marshal.WriteIntPtr(native.Values, 0);
+                    break;
+                case "duplicate-key":
+                    Marshal.WriteIntPtr(
+                        native.Keys,
+                        nint.Size,
+                        Marshal.ReadIntPtr(native.Keys));
+                    break;
+                default:
+                    throw new InvalidOperationException(mutation);
+            }
+
+            Marshal.StructureToPtr(native, serviceInstance, fDeleteOld: false);
+            callback(0, ResolveRequest.QueryContext, serviceInstance);
         }
 
         private nint CreatePtrRecordList(IReadOnlyList<string> serviceIds)

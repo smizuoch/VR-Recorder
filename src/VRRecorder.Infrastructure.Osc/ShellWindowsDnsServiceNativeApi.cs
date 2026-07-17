@@ -346,12 +346,19 @@ public sealed class ShellWindowsDnsServiceNativeApi
             var callbackStatus = status;
             try
             {
-                if (status == ErrorSuccess && serviceInstance != 0)
+                if (status == ErrorSuccess)
                 {
-                    resolved = TryReadServiceInstance(serviceInstance);
-                    if (resolved is null)
+                    if (serviceInstance == 0)
                     {
                         callbackStatus = ErrorInvalidData;
+                    }
+                    else
+                    {
+                        resolved = TryReadServiceInstance(serviceInstance);
+                        if (resolved is null)
+                        {
+                            callbackStatus = ErrorInvalidData;
+                        }
                     }
                 }
             }
