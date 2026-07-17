@@ -39,8 +39,8 @@ $(BUILD_DIR)/av_sync_monitor_tests: av_sync_monitor_tests.cpp $(NATIVE_ROOT)/src
 $(BUILD_DIR)/av_sync_media_event_adapter_tests: av_sync_media_event_adapter_tests.cpp $(NATIVE_ROOT)/src/av_sync_media_event_adapter.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/media_mux_pipeline_tests: media_mux_pipeline_tests.cpp $(NATIVE_ROOT)/src/media_mux_pipeline.cpp $(NATIVE_ROOT)/src/av_sync_monitor.cpp $(NATIVE_ROOT)/src/av_sync_media_event_adapter.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp $(NATIVE_ROOT)/src/shared_mux_finalization_session.cpp | $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+$(BUILD_DIR)/media_mux_pipeline_tests: media_mux_pipeline_tests.cpp $(NATIVE_ROOT)/src/media_mux_pipeline.cpp $(NATIVE_ROOT)/src/av_sync_monitor.cpp $(NATIVE_ROOT)/src/av_sync_media_event_adapter.cpp $(NATIVE_ROOT)/src/fragmented_mp4_mux_coordinator.cpp $(NATIVE_ROOT)/src/muxing_audio_encoder_sink.cpp $(NATIVE_ROOT)/src/muxing_video_encoder_sink.cpp $(NATIVE_ROOT)/src/shared_mux_finalization_session.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) -DVRRECORDER_NATIVE_TESTING=1 $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/media_recording_session_tests: media_recording_session_tests.cpp $(NATIVE_ROOT)/src/media_recording_session.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
