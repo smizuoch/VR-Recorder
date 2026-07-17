@@ -1,4 +1,5 @@
 #include "encoder_probe_evidence_builder.hpp"
+#include "allocation_failure_test_support.hpp"
 #include "h264_test_vectors.hpp"
 
 #include <cstddef>
@@ -444,6 +445,30 @@ void RejectsMalformedPacketAndDecodeMismatchWithoutPublishingEvidence()
     CHECK(evidence.codec_name == "sentinel");
 }
 
+void ReportsAllocationFailureWithoutPublishingPartialEvidence()
+{
+    const auto &expected = ExpectedIdentities[0];
+    const auto config = Config(expected.kind);
+    const auto opened = Opened(expected);
+    const auto packets = Packets();
+    FakeDecoder decoder;
+    auto evidence = SentinelEvidence();
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = BuildVerifiedEncoderProbeEvidence(
+        config,
+        opened,
+        packets,
+        decoder,
+        evidence);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(decoder.call_count == 0);
+    CHECK(evidence.codec_name == "sentinel");
+    CHECK(evidence.validation_flags == UINT32_C(0xa5a5a5a5));
+}
+
 }
 
 int main()
@@ -453,4 +478,5 @@ int main()
     RejectsIdentityAndAdapterMismatchesBeforeDecode();
     RejectsEveryMalformedProbeConfigurationBeforeDecode();
     RejectsMalformedPacketAndDecodeMismatchWithoutPublishingEvidence();
+    ReportsAllocationFailureWithoutPublishingPartialEvidence();
 }
