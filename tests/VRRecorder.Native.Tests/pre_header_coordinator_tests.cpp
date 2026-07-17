@@ -1,5 +1,7 @@
 #include "pre_header_coordinator.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -1423,6 +1425,94 @@ void EncoderFailureIsForwardedOnlyWhileActive()
     CHECK(aborted_downstream.encoder_failed_calls == 0);
 }
 
+void DescriptorPublicationAllocationFailureIsTerminal()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    auto descriptor = VideoDescriptor();
+    descriptor.codec_extradata.assign(256, std::byte {1});
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = coordinator.PublishVideoDescriptor(
+        &encoder_identity,
+        descriptor);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+}
+
+void QueueOwnershipAllocationFailureIsTerminal()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    const std::vector packets {
+        Packet(MediaStreamKind::Audio, 0, std::byte {1})};
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto result = coordinator.SubmitBatch(
+        MediaStreamKind::Audio,
+        packets);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(result == Mp4MuxResult::MuxFailed);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+    CHECK(coordinator.QueuedPacketCountForTesting() == 0);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+}
+
+void HeaderConfigurationAllocationFailureIsTerminal()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    auto descriptor = VideoDescriptor();
+    descriptor.codec_extradata.assign(256, std::byte {1});
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              descriptor) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = coordinator.ProducerStarted(MediaStreamKind::Audio);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -1454,5 +1544,8 @@ int main()
     RejectsEveryMalformedPreHeaderPacket();
     RejectsDuplicateAndUnknownProducerLifecycleEvents();
     EncoderFailureIsForwardedOnlyWhileActive();
+    DescriptorPublicationAllocationFailureIsTerminal();
+    QueueOwnershipAllocationFailureIsTerminal();
+    HeaderConfigurationAllocationFailureIsTerminal();
     return 0;
 }
