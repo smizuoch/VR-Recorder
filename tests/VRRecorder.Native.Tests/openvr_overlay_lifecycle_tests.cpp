@@ -1,5 +1,7 @@
 #include "openvr_overlay_lifecycle.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <array>
 #include <cstdint>
 #include <cstdlib>
@@ -894,6 +896,106 @@ void PropagatesPortFailuresAndRejectsEveryOperationAfterClose()
     CHECK(event == OpenVrOverlayPointerEvent {});
 }
 
+void RejectsMissingPortsAndReportsEveryFactoryAllocationFailure()
+{
+    for (std::size_t missing = 0; missing < 4; ++missing) {
+        auto state = std::make_shared<FakeState>();
+        auto lifecycle = std::make_unique<FakePort>(state);
+        auto texture = std::make_unique<FakeTexturePort>(state);
+        auto event = std::make_unique<FakeEventPort>(state);
+        auto pose = std::make_unique<FakePosePort>(state);
+        if (missing == 0) {
+            lifecycle.reset();
+        } else if (missing == 1) {
+            texture.reset();
+        } else if (missing == 2) {
+            event.reset();
+        } else {
+            pose.reset();
+        }
+        auto status = VRREC_STATUS_OK;
+        CHECK(CreateOpenVrOverlayLifecycle(
+                  Config(),
+                  std::move(lifecycle),
+                  std::move(texture),
+                  std::move(event),
+                  std::move(pose),
+                  status) == nullptr);
+        CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(state->calls.empty());
+    }
+
+    {
+        auto state = std::make_shared<FakeState>();
+        auto lifecycle = std::make_unique<FakePort>(state);
+        auto status = VRREC_STATUS_OK;
+        allocation_failure::fail_on_allocation = 1;
+        auto overlay = CreateOpenVrOverlayLifecycle(
+            Config(), std::move(lifecycle), status);
+        allocation_failure::fail_on_allocation = 0;
+        CHECK(overlay == nullptr);
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+        CHECK(state->calls.empty());
+    }
+
+    {
+        auto state = std::make_shared<FakeState>();
+        auto lifecycle = std::make_unique<FakePort>(state);
+        auto texture = std::make_unique<FakeTexturePort>(state);
+        auto status = VRREC_STATUS_OK;
+        allocation_failure::fail_on_allocation = 1;
+        auto overlay = CreateOpenVrOverlayLifecycle(
+            Config(),
+            std::move(lifecycle),
+            std::move(texture),
+            status);
+        allocation_failure::fail_on_allocation = 0;
+        CHECK(overlay == nullptr);
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+        CHECK(state->calls.empty());
+    }
+
+    {
+        auto state = std::make_shared<FakeState>();
+        auto lifecycle = std::make_unique<FakePort>(state);
+        auto texture = std::make_unique<FakeTexturePort>(state);
+        auto event = std::make_unique<FakeEventPort>(state);
+        auto status = VRREC_STATUS_OK;
+        allocation_failure::fail_on_allocation = 1;
+        auto overlay = CreateOpenVrOverlayLifecycle(
+            Config(),
+            std::move(lifecycle),
+            std::move(texture),
+            std::move(event),
+            status);
+        allocation_failure::fail_on_allocation = 0;
+        CHECK(overlay == nullptr);
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+        CHECK(state->calls.empty());
+    }
+
+    {
+        auto state = std::make_shared<FakeState>();
+        auto lifecycle = std::make_unique<FakePort>(state);
+        auto texture = std::make_unique<FakeTexturePort>(state);
+        auto event = std::make_unique<FakeEventPort>(state);
+        auto pose = std::make_unique<FakePosePort>(state);
+        auto status = VRREC_STATUS_OK;
+        allocation_failure::fail_on_allocation = 1;
+        auto overlay = CreateOpenVrOverlayLifecycle(
+            Config(),
+            std::move(lifecycle),
+            std::move(texture),
+            std::move(event),
+            std::move(pose),
+            status);
+        allocation_failure::fail_on_allocation = 0;
+        CHECK(overlay == nullptr);
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+        CHECK(state->calls.empty());
+    }
+}
+
 }
 
 int main()
@@ -914,5 +1016,6 @@ int main()
     ConvertsOnlyValidatedOverlayPosesForASelectedHand();
     ReadsOnlyValidatedDeviceProfilesForASelectedHand();
     PropagatesPortFailuresAndRejectsEveryOperationAfterClose();
+    RejectsMissingPortsAndReportsEveryFactoryAllocationFailure();
     return 0;
 }
