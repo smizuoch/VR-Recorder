@@ -1,5 +1,7 @@
 #include "audio_encoding_worker.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -51,6 +53,10 @@ public:
             return StereoAudioMixResult::InvalidArgument;
         }
 
+        if (invalid_state) {
+            return StereoAudioMixResult::InvalidState;
+        }
+
         if (windows_returned_ < ready_windows_) {
             const auto start = windows_returned_ * frame_count_48k;
             ++windows_returned_;
@@ -99,6 +105,7 @@ public:
     bool fail_unexpectedly = false;
     bool fail_capture = false;
     bool violate_contract = false;
+    bool invalid_state = false;
 
 private:
     std::mutex mutex_;
@@ -283,6 +290,47 @@ private:
     bool release_start_ = false;
 };
 
+class GatedEntryThreadFactory final : public NativeThreadFactoryPort {
+public:
+    vrrec_status_t Start(
+        std::thread &thread,
+        NativeThreadEntry entry,
+        void *context) noexcept override
+    {
+        thread = std::thread([this, entry, context] {
+            {
+                std::unique_lock lock(mutex_);
+                entered_ = true;
+                changed_.notify_all();
+                changed_.wait(lock, [this] { return released_; });
+            }
+            entry(context);
+        });
+        return VRREC_STATUS_OK;
+    }
+
+    void WaitForEntry()
+    {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return entered_; });
+    }
+
+    void ReleaseEntry()
+    {
+        {
+            const std::lock_guard lock(mutex_);
+            released_ = true;
+        }
+        changed_.notify_all();
+    }
+
+private:
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    bool entered_ = false;
+    bool released_ = false;
+};
+
 void GracefulStopFlushesAfterAllSubmittedWindows()
 {
     BlockingMixSource source(2);
@@ -374,6 +422,87 @@ void SourceContractFailureReleasesBothPipelineEnds()
     CHECK(worker.Join() == StereoAudioEncodingWorkerResult::Failed);
     CHECK(source.abort_calls == 1);
     CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+}
+
+void SourceInvalidStateReleasesBothPipelineEnds()
+{
+    BlockingMixSource source(0);
+    source.invalid_state = true;
+    RecordingEncoderSink sink;
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::CaptureFailed);
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+}
+
+void MuxWriteFailureReleasesBothPipelineEnds()
+{
+    BlockingMixSource source(1);
+    RecordingEncoderSink sink;
+    sink.write_result = {
+        VRREC_STATUS_INTERNAL_ERROR,
+        0,
+        AudioEncoderFailureStage::Muxing,
+    };
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::MuxFailed);
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+    CHECK(worker.SubmittedFrameCount() == 0);
+}
+
+void FinishFailureIsTerminal(AudioEncoderFailureStage stage)
+{
+    BlockingMixSource source(0);
+    RecordingEncoderSink sink;
+    sink.finish_result = {VRREC_STATUS_INTERNAL_ERROR, 0, stage};
+    StereoAudioEncodingWorker worker(source, sink);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    CHECK(worker.RequestStop() == VRREC_STATUS_OK);
+    const auto expected = stage == AudioEncoderFailureStage::Muxing
+        ? StereoAudioEncodingWorkerResult::MuxFailed
+        : StereoAudioEncodingWorkerResult::EncoderFailed;
+    CHECK(worker.Join() == expected);
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.finish_calls == 1);
+    CHECK(sink.abort_calls == 1);
+}
+
+void EncoderFinishFailureIsTerminal()
+{
+    FinishFailureIsTerminal(AudioEncoderFailureStage::Encoding);
+}
+
+void MuxFinishFailureIsTerminal()
+{
+    FinishFailureIsTerminal(AudioEncoderFailureStage::Muxing);
+}
+
+void PumpAllocationFailureReleasesBothPipelineEnds()
+{
+    BlockingMixSource source(0);
+    RecordingEncoderSink sink;
+    GatedEntryThreadFactory thread_factory;
+    StereoAudioEncodingWorker worker(source, sink, thread_factory);
+
+    CHECK(worker.Start(1'024) == VRREC_STATUS_OK);
+    thread_factory.WaitForEntry();
+    allocation_failure::fail_on_allocation = 1;
+    thread_factory.ReleaseEntry();
+
+    CHECK(worker.Join() == StereoAudioEncodingWorkerResult::Failed);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(source.abort_calls == 1);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.write_calls == 0);
     CHECK(sink.finish_calls == 0);
 }
 
@@ -636,12 +765,24 @@ void DestroyingANeverStartedWorkerDoesNotAbortAdjacentPorts()
 
 int main()
 {
+    {
+        BlockingMixSource source(0);
+        RecordingEncoderSink sink;
+        StereoAudioEncodingWorker worker(source, sink);
+        CHECK(worker.Start(0) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(worker.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    }
     GracefulStopFlushesAfterAllSubmittedWindows();
     AbortDoesNotFlushTheEncoder();
     EncoderFailureAbortsWithoutCountingTheWindow();
     UnexpectedSourceAbortReleasesBothPipelineEnds();
     CaptureFailureReleasesBothPipelineEnds();
     SourceContractFailureReleasesBothPipelineEnds();
+    SourceInvalidStateReleasesBothPipelineEnds();
+    MuxWriteFailureReleasesBothPipelineEnds();
+    EncoderFinishFailureIsTerminal();
+    MuxFinishFailureIsTerminal();
+    PumpAllocationFailureReleasesBothPipelineEnds();
     AbortDominatesAConcurrentGracefulFinish();
     AbortDominatesAnInFlightAudioWriteFailure();
     AbortDoesNotCommitASuccessfulInFlightAudioWrite();
