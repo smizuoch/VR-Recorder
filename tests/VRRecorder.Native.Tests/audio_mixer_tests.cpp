@@ -125,6 +125,21 @@ void RequiresRampReversalFromCurrentGain()
     CHECK(NearlyEqual(reversed_output[480U * 2U], 0.75F));
 }
 
+void CancelsAnUnstartedRampAndChangesEitherGainIndependently()
+{
+    vrrecorder::native::StereoAudioMixer mixer(
+        VRREC_AUDIO_ROUTING_MIXED,
+        0.0,
+        0.0);
+
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_DESKTOP_ONLY) ==
+          VRREC_STATUS_OK);
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_MIXED) ==
+          VRREC_STATUS_OK);
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_MIC_ONLY) ==
+          VRREC_STATUS_OK);
+}
+
 void RequiresUnderrunZeroFillWithoutChangingTimeline()
 {
     const auto desktop = ConstantStereo(2, 0.25F);
@@ -260,6 +275,7 @@ int main()
     RequiresAllSteadyRoutingModes();
     RequiresTenMillisecondMicrophoneRamp();
     RequiresRampReversalFromCurrentGain();
+    CancelsAnUnstartedRampAndChangesEitherGainIndependently();
     RequiresUnderrunZeroFillWithoutChangingTimeline();
     RequiresConfiguredInputGainAndStrictBuffers();
     RequiresFinitePeakLimitedOutput();
