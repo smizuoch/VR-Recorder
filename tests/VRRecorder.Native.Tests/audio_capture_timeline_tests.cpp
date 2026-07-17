@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -274,6 +275,141 @@ void RejectsDuplicateDeviceClockAnchorsWithoutMutation()
     }
 }
 
+void RejectsMalformedPacketsClockRegressionAndCapacityFailures()
+{
+    using vrrecorder::native::AudioTimelineResult;
+    using vrrecorder::native::NormalizedStereoPacket;
+    using vrrecorder::native::StereoCaptureTimeline;
+
+    const auto stereo = ConstantStereo(2, 0.25F);
+    const std::vector<float> odd_samples {0.25F, 0.25F, 0.25F};
+    StereoCaptureTimeline validation(8);
+    CHECK(validation.Push(NormalizedStereoPacket {
+              0, {0, 0, 10'000'000}, {}, false}) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(validation.Push(NormalizedStereoPacket {
+              0, {0, 0, 10'000'000}, odd_samples, false}) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(validation.Push(NormalizedStereoPacket {
+              std::numeric_limits<std::uint64_t>::max(),
+              {0, 0, 10'000'000},
+              stereo,
+              false}) == AudioTimelineResult::InvalidPacket);
+    CHECK(validation.Push(NormalizedStereoPacket {
+              0, {0, -1, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(validation.Push(NormalizedStereoPacket {
+              0, {0, 0, 0}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+
+    StereoCaptureTimeline ordering(16);
+    CHECK(ordering.Push({
+              0, {100, 1'000, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::Ready);
+    CHECK(ordering.Push({
+              1, {102, 1'100, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(ordering.Push({
+              2, {101, 999, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(ordering.Push({
+              2, {101, 1'100, 9'999'999}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(ordering.Push({
+              2, {100, 1'100, 10'000'000}, stereo, true}) ==
+          AudioTimelineResult::Ready);
+    CHECK(ordering.BufferedFrames() == 4);
+
+    StereoCaptureTimeline past_read(16);
+    CHECK(past_read.SetAvailable(false, 0) == AudioTimelineResult::Ready);
+    std::vector<float> silence(4U, -1.0F);
+    vrrecorder::native::AudioTimelineRead read {};
+    CHECK(past_read.WaitRead(2, silence, read) == AudioTimelineResult::Ready);
+    CHECK(past_read.Push({
+              0, {1, 1, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+
+    StereoCaptureTimeline unavailable(16);
+    CHECK(unavailable.SetAvailable(false, 1) == AudioTimelineResult::Ready);
+    CHECK(unavailable.Push({
+              0, {1, 1, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+
+    StereoCaptureTimeline recovering(16);
+    CHECK(recovering.SetAvailable(false, 0) == AudioTimelineResult::Ready);
+    CHECK(recovering.SetAvailable(true, 2) == AudioTimelineResult::Ready);
+    CHECK(recovering.Push({
+              1, {1, 1, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::InvalidPacket);
+
+    StereoCaptureTimeline overrun(1);
+    CHECK(overrun.Push({
+              0, {1, 1, 10'000'000}, stereo, false}) ==
+          AudioTimelineResult::Overrun);
+
+    StereoCaptureTimeline no_capacity(0);
+    const auto one_frame = ConstantStereo(1, 0.25F);
+    CHECK(no_capacity.Push({
+              0, {1, 1, 10'000'000}, one_frame, false}) ==
+          AudioTimelineResult::Overrun);
+
+    validation.Abort();
+    CHECK(validation.Push({
+              0, {1, 1, 10'000'000}, one_frame, false}) ==
+          AudioTimelineResult::Aborted);
+}
+
+void ValidatesReadAndAvailabilityTransitionBoundaries()
+{
+    using vrrecorder::native::AudioTimelineRead;
+    using vrrecorder::native::AudioTimelineResult;
+    using vrrecorder::native::StereoCaptureTimeline;
+
+    StereoCaptureTimeline timeline(8);
+    AudioTimelineRead read {99, true, true};
+    std::vector<float> stereo(2U, -1.0F);
+    std::vector<float> wrong_size(1U, -1.0F);
+    CHECK(timeline.WaitRead(0, {}, read) == AudioTimelineResult::InvalidPacket);
+    CHECK(timeline.WaitRead(1, wrong_size, read) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(read.start_frame_48k == 0);
+    CHECK(!read.input_available);
+    CHECK(!read.underrun);
+
+    CHECK(timeline.SetAvailable(true, 0) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(timeline.SetAvailable(false, 2) == AudioTimelineResult::Ready);
+    CHECK(timeline.SetAvailable(false, 2) == AudioTimelineResult::Ready);
+    CHECK(timeline.SetAvailable(false, 3) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(timeline.SetAvailable(true, 1) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(timeline.SetAvailable(true, 4) == AudioTimelineResult::Ready);
+    CHECK(timeline.SetAvailable(true, 5) ==
+          AudioTimelineResult::InvalidPacket);
+    CHECK(timeline.SetAvailable(false, 5) ==
+          AudioTimelineResult::InvalidPacket);
+
+    const auto recovered = ConstantStereo(1, 0.5F);
+    CHECK(timeline.Push({
+              4, {0, 1, 10'000'000}, recovered, false}) ==
+          AudioTimelineResult::Ready);
+    CHECK(timeline.WaitRead(1, stereo, read) == AudioTimelineResult::Ready);
+    CHECK(read.input_available);
+    CHECK(read.underrun);
+    CHECK(timeline.FramePosition() == 1);
+    CHECK(timeline.SetAvailable(false, 0) ==
+          AudioTimelineResult::InvalidPacket);
+
+    StereoCaptureTimeline invalid_buffer(0);
+    CHECK(invalid_buffer.SetAvailable(false, 0) == AudioTimelineResult::Ready);
+    CHECK(invalid_buffer.WaitRead(1, stereo, read) ==
+          AudioTimelineResult::InvalidPacket);
+
+    timeline.Abort();
+    CHECK(timeline.SetAvailable(false, 1) == AudioTimelineResult::Aborted);
+}
+
 }
 
 int main()
@@ -284,5 +420,7 @@ int main()
     ReportsOnlyGapsInsideTheCurrentReadWindow();
     RecoveryKeepsSilenceUntilItsExactEffectiveFrame();
     RejectsDuplicateDeviceClockAnchorsWithoutMutation();
+    RejectsMalformedPacketsClockRegressionAndCapacityFailures();
+    ValidatesReadAndAvailabilityTransitionBoundaries();
     return 0;
 }
