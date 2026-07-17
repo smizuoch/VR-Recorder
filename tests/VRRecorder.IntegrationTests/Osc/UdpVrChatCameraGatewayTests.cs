@@ -12,6 +12,107 @@ namespace VRRecorder.IntegrationTests.Osc;
 public sealed class UdpVrChatCameraGatewayTests
 {
     [Fact]
+    public void GatewaysRejectNonLoopbackRemoteEndpoint()
+    {
+        var endpoint = new IPEndPoint(
+            IPAddress.Parse("203.0.113.10"),
+            9000);
+
+        Assert.Throws<ArgumentException>(() =>
+            new ConfirmedUdpVrChatCameraGateway(endpoint));
+        Assert.Throws<ArgumentException>(() =>
+            new UdpVrChatCameraGateway(endpoint));
+    }
+
+    [Fact]
+    public async Task FallbackConfirmedGatewayReportsSnapshotUnavailable()
+    {
+        using var receiver = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(
+            (IPEndPoint)receiver.Client.LocalEndPoint!);
+
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            gateway.ReadSnapshotAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public void InvalidSnapshotCandidateCleansUpGatewayConstruction()
+    {
+        using var receiver = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        using var invoker = new HttpMessageInvoker(
+            new RejectEveryHttpRequestHandler());
+        var candidate = new VrChatInstanceCandidate(
+            "VRChat-Client-invalid._oscjson._tcp.local.",
+            "VRChat-Client-invalid",
+            new Uri("https://127.0.0.1:19000/"),
+            "127.0.0.1",
+            ((IPEndPoint)receiver.Client.LocalEndPoint!).Port);
+
+        Assert.Throws<ArgumentException>(() =>
+            new ConfirmedUdpVrChatCameraGateway(
+                (IPEndPoint)receiver.Client.LocalEndPoint!,
+                candidate,
+                invoker,
+                snapshotHttpOwner: null,
+                events: null));
+    }
+
+    [Fact]
+    public async Task DiagnosticSinkFailureCannotFailConfirmedWrite()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var fakeVrChat = new UdpClient(
+            new IPEndPoint(IPAddress.Loopback, 0));
+        await using var gateway = new ConfirmedUdpVrChatCameraGateway(
+            (IPEndPoint)fakeVrChat.Client.LocalEndPoint!,
+            new ThrowingOscOperationEventSink());
+
+        var write = gateway.SetStreamingAsync(true, timeout.Token);
+        var request = await fakeVrChat.ReceiveAsync(timeout.Token);
+        await fakeVrChat.SendAsync(
+            request.Buffer,
+            request.RemoteEndPoint,
+            timeout.Token);
+
+        await write;
+    }
+
+    [Fact]
+    public async Task IPv6GatewaysBindAndWriteOnIPv6Loopback()
+    {
+        if (!Socket.OSSupportsIPv6)
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var confirmedReceiver = new UdpClient(
+            new IPEndPoint(IPAddress.IPv6Loopback, 0));
+        await using (var confirmed = new ConfirmedUdpVrChatCameraGateway(
+                         (IPEndPoint)confirmedReceiver.Client.LocalEndPoint!))
+        {
+            var write = confirmed.SetModeAsync(CameraMode.Stream, timeout.Token);
+            var request = await confirmedReceiver.ReceiveAsync(timeout.Token);
+            await confirmedReceiver.SendAsync(
+                request.Buffer,
+                request.RemoteEndPoint,
+                timeout.Token);
+            await write;
+        }
+
+        using var unconfirmedReceiver = new UdpClient(
+            new IPEndPoint(IPAddress.IPv6Loopback, 0));
+        await using var unconfirmed = new UdpVrChatCameraGateway(
+            (IPEndPoint)unconfirmedReceiver.Client.LocalEndPoint!);
+        await unconfirmed.SetStreamingAsync(true, timeout.Token);
+        Assert.Equal(
+            StreamingTruePacket,
+            (await unconfirmedReceiver.ReceiveAsync(timeout.Token)).Buffer);
+    }
+
+    [Fact]
     public async Task ConfirmedWritePublishesPrivacySafeOutcome()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -244,6 +345,21 @@ public sealed class UdpVrChatCameraGatewayTests
 
         public void Publish(OscOperationEvent operation) =>
             Events.Add(operation);
+    }
+
+    private sealed class ThrowingOscOperationEventSink
+        : IOscOperationEventSink
+    {
+        public void Publish(OscOperationEvent operation) =>
+            throw new InvalidOperationException("diagnostics unavailable");
+    }
+
+    private sealed class RejectEveryHttpRequestHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("HTTP was not expected.");
     }
 
     private static readonly byte[] ModeStreamPacket = Convert.FromHexString(
