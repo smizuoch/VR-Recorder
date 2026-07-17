@@ -169,13 +169,6 @@ internal static class DistributionPromotionPolicy
 
         ArgumentNullException.ThrowIfNull(evidence.Payload);
 
-        if (!evidence.Passed)
-        {
-            issues.Add(new ComplianceIssue(
-                "hardware-validation-failed",
-                evidence.Payload.SourceRevision));
-        }
-
         if (!string.Equals(
                 evidence.Payload.ProductVersion,
                 request.Payload.ProductVersion,

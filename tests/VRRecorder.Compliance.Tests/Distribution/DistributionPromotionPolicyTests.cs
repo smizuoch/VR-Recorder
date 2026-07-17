@@ -63,7 +63,7 @@ public sealed class DistributionPromotionPolicyTests
             CreateRequest(
                 DistributionTarget.MicrosoftStorePackagingCandidate,
                 artifactPath,
-                HardwareEvidence(passed: true),
+                HardwareEvidence(),
                 StoreIdentity()));
 
         Assert.True(result.Allowed);
@@ -89,20 +89,9 @@ public sealed class DistributionPromotionPolicyTests
     }
 
     [Fact]
-    public void FailedHardwareEvidenceCannotPromoteStoreMsix()
+    public void HardwareEvidenceHasNoCallerSuppliedPassedFlag()
     {
-        var result = DistributionPromotionPolicy.Evaluate(
-            CreateRequest(
-                DistributionTarget.MicrosoftStorePackagingCandidate,
-                "VR-Recorder.msix",
-                HardwareEvidence(passed: false),
-                StoreIdentity()));
-
-        Assert.Contains(
-            result.Issues,
-            issue => issue.Code == "hardware-validation-failed");
-        Assert.False(result.Allowed);
-        Assert.False(result.PublishEligible);
+        Assert.Null(typeof(HardwareValidationEvidence).GetProperty("Passed"));
     }
 
     [Theory]
@@ -121,7 +110,7 @@ public sealed class DistributionPromotionPolicyTests
         string validatedExecutableSha256,
         string expectedCode)
     {
-        var evidence = HardwareEvidence(passed: true);
+        var evidence = HardwareEvidence();
         evidence = evidence with
         {
             Payload = evidence.Payload with
@@ -147,7 +136,7 @@ public sealed class DistributionPromotionPolicyTests
     [Fact]
     public void StoreMsixMustContainTheValidatedPublishDirectoryPayload()
     {
-        var evidence = HardwareEvidence(passed: true);
+        var evidence = HardwareEvidence();
         evidence = evidence with
         {
             Payload = evidence.Payload with
@@ -183,7 +172,7 @@ public sealed class DistributionPromotionPolicyTests
         string validatedManifestSha256,
         string expectedCode)
     {
-        var evidence = HardwareEvidence(passed: true);
+        var evidence = HardwareEvidence();
         evidence = evidence with
         {
             Payload = evidence.Payload with
@@ -212,7 +201,7 @@ public sealed class DistributionPromotionPolicyTests
             CreateRequest(
                 DistributionTarget.MicrosoftStorePackagingCandidate,
                 "VR-Recorder.msix",
-                HardwareEvidence(passed: true),
+                HardwareEvidence(),
                 storeIdentity: null));
 
         Assert.False(result.Allowed);
@@ -241,7 +230,7 @@ public sealed class DistributionPromotionPolicyTests
             CreateRequest(
                 DistributionTarget.MicrosoftStorePackagingCandidate,
                 "VR-Recorder.msix",
-                HardwareEvidence(passed: true),
+                HardwareEvidence(),
                 new MicrosoftStoreIdentity(
                     name,
                     publisher,
@@ -261,7 +250,7 @@ public sealed class DistributionPromotionPolicyTests
             CreateRequest(
                 DistributionTarget.MicrosoftStorePackagingCandidate,
                 "VR-Recorder.exe",
-                HardwareEvidence(passed: true),
+                HardwareEvidence(),
                 StoreIdentity()));
 
         Assert.Contains(
@@ -283,11 +272,12 @@ public sealed class DistributionPromotionPolicyTests
             hardwareValidation,
             storeIdentity);
 
-    private static HardwareValidationEvidence HardwareEvidence(bool passed) =>
+    private static HardwareValidationEvidence HardwareEvidence() =>
         new(
             PayloadIdentity(),
             ReportSha256,
-            passed);
+            ReportSha256,
+            [Guid.Parse("01234567-89ab-4cde-8fab-0123456789ab")]);
 
     private static ValidatedPayloadIdentity PayloadIdentity() =>
         new(

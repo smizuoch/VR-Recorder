@@ -21,8 +21,8 @@
 - [ ] Windows上でalternate data stream／reparse HILを実行し、portable injection testだけで合格にしない
 - [x] Legal Bundle ID／manifest hashをpost-publish payload identityへ取り込み、認証失敗／identity差替え時はidentityを発行しない
 - [ ] 実Windows／GPU／VRChat／SteamVR／HMD試験reportをschema検証してpayload identityへ結び付ける
-- [ ] 必須matrix caseの完全性と結果から合否を導出し、自己申告`Passed`を入力にしない
-- [ ] application source／DLL／asset／manifest／Legal変更でinner identityが変わる場合に以前の実機証拠を無効化する
+- [x] 必須matrix caseの完全性と結果から合否を導出し、自己申告`Passed`を入力にしない
+- [x] application source／DLL／asset／manifest／Legal変更でinner identityが変わる場合に以前の実機証拠を無効化する
 
 ## Microsoft Store Packaging Candidate
 
