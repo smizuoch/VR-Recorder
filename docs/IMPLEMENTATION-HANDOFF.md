@@ -2,21 +2,21 @@
 
 - 更新日: 2026-07-17
 - 対象branch: `main`
-- 実装基準commit: `58750cf`（PICO production WASAPI startup stabilization）
-- 現在の判定: release-payload identity／Hardware Validation evidence contract／settings schema validationは自動化完了。quality gate実装中で、配布製品でもrelease候補でもない
+- 実装基準commit: `4180958`（native line／branch coverage threshold達成）
+- 現在の判定: release-payload identity／Hardware Validation evidence contract／settings schema validation／native coverage gateは自動化完了。managed integration coverage／mutation／UI Automationを実装中で、配布製品でもrelease候補でもない
 - 配布方針: unpackaged self-contained `win-x64` payloadで実機検証し、同一payloadの合格後だけMicrosoft Store MSIX候補へ進める
 
 ## 1. 最初に読む結論
 
-desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect captureとMicOnly production mux／oracleは完了した。release payload identity、versioned Hardware Validation report／required matrix validator、settings schemaの自動化も完了した。実機検証は最終Hardware Validationへまとめる。残る自動quality gateを閉じてpayloadをfreezeしてから、Windows／GPU／VRChat／SteamVR／HMDを同一identityで一括検証する。独立Legal承認は外部gateとしてfail-closedのまま維持し、自動化可能な実装と直列化しない。
+desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect captureとMicOnly production mux／oracleは完了した。release payload identity、versioned Hardware Validation report／required matrix validator、settings schema、native line／branch coverage gateの自動化も完了した。実機検証は最終Hardware Validationへまとめる。残るmanaged integration coverage／mutation／UI Automationを閉じてpayloadをfreezeしてから、Windows／GPU／VRChat／SteamVR／HMDを同一identityで一括検証する。独立Legal承認は外部gateとしてfail-closedのまま維持し、自動化可能な実装と直列化しない。
 
-2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。PICO `default-capture`のdirect production WASAPI HILでは、session前packetとshort discontinuity後のdevice-position gapを修正し、3秒／48 kHz captureを500 ms間隔で10回連続成功させた。さらに同じPICO endpointをMicOnlyでfull production sessionへ接続し、Spout映像110 H.264 packetとmicrophone音声179 AAC packetをmuxした。pinned oracleはvideo 110 frame、audio 178 decoded frame／182,272 sample、audio presentation 0.000～3.797秒を確認し、検証後だけfinal `.mp4`へ公開した。独立Legal review／canonical registry admission、VRChat sender、device change／privacy、controller HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.5節を優先する。
+2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。PICO `default-capture`のdirect production WASAPI HILでは、session前packetとshort discontinuity後のdevice-position gapを修正し、3秒／48 kHz captureを500 ms間隔で10回連続成功させた。さらに同じPICO endpointをMicOnlyでfull production sessionへ接続し、Spout映像110 H.264 packetとmicrophone音声179 AAC packetをmuxした。pinned oracleはvideo 110 frame、audio 178 decoded frame／182,272 sample、audio presentation 0.000～3.797秒を確認し、検証後だけfinal `.mp4`へ公開した。独立Legal review／canonical registry admission、VRChat sender、device change／privacy、controller HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.6節を優先する。
 
 推奨順は次のとおり。
 
 1. manifest v2、PE admission、repository-derived graph、staging CLI、two-phase publish、post-publish sealの自動gateを完成させる。
 2. source revision／product versionを含むapplication payload identityと、versioned Hardware Validation report schema／required matrix validatorをRed→Greenで閉じる。
-3. settings schema、coverage／mutation、UI Automationのうち実機を要しない範囲を閉じ、全機能を含むunpackaged directoryをfreezeする。
+3. native coverageは完了済み。managed integration coverage／mutation／UI Automationの実機を要しない範囲を閉じ、全機能を含むunpackaged directoryをfreezeする。
 4. freeze済みの同一identityに対してWindows／GPU／VRChat／audio／SteamVR／HMDの最終実機検証を一括実行する。
 5. 実在するticket／requester／independent reviewerからLegal approvalを取得し、合格payloadだけを別projectでMSIXへ包む。
 
@@ -227,6 +227,12 @@ coverage／mutationは今回再採取していない。前回値は[`VALIDATION-
 
 次の開始点はOpenVR production compositionである。既存のruntime owner、lifecycle、D3D11 texture presenter、event、pose、recenter、hapticを作り直さず、production Appから実SteamVRへ接続して最初の未接続点だけをTDDで直す。
 
+### 2.6 2026-07-17 native coverage checkpoint
+
+この節は2.5節より新しい。canonical `build/native-linux-coverage`でnative CTest 75/75を実行後、first-party sourceを`/src/VRRecorder.Native/src/`へ限定して271個のgcov JSON artifactを再収集した。結果はline 94.78%（8860/9348）、branch 90.02%（6025/6693）で、line／branch各90%以上のnative release thresholdを通過した。到達不能counter overflowや汎用`catch (...)`を除外追加で隠さず、ABI UTF-8、H.264 parser、pre-header race、OpenVR lifecycle／pose／texture、Windows path、mux result、AV sync、audio timing／routing、thread factory、Spout abort、CFR timestamp／clock overflow等の公開境界テストで到達した。
+
+native coverage gateは完了とし、次はIntegrationTests単独のmanaged first-party line／branch各90%以上へ進む。mutation 75%以上とWindows UI Automationはその後に閉じ、実機Hardware Validationはfreeze済み同一payloadへ最後に一括実施する。
+
 ## 3. 現在の実装とplaceholderの境界
 
 ### 3.1 実装済みのproduction境界
@@ -339,7 +345,7 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |
 | P1 | OpenVR input／overlay一式 | runtime owner、native lifecycle／texture／event／pose／haptic、production glyph、App表示接続、Dock／Pin／nudge／recenter、drag release、World Pinでの実HMD表示はGreen。実controllerでのWrist Dock／drag／左右入力、再接続HILが未完了 | Wrist操作・表示 |
 | P1 | first-run setup 7／8 | setup 7はproduction overlayのShow＋mode／hand／origin／pose readback、setup 8はproduction 3秒録画＋ffprobe済みSaved＋既定player起動までGreen。実VRChat／controllerを含む全行程HILは未完了 | setup完走 |
-| P1 | coverage／mutation／UI Automation | 90%未達／未測定 | release quality gate |
+| P1 | coverage／mutation／UI Automation | native line 94.78%／branch 90.02%はGreen。managed IntegrationTests単独coverage、mutation、UI Automationは未完了 | release quality gate |
 | P1 | final Legal Bundle／承認 | candidate台帳、承認済みnative 0 | 配布・署名 |
 | P2 | MSIX／Store submission | policyのみ、packaging projectなし | Store提出 |
 
@@ -773,7 +779,7 @@ Microsoft公式資料の表現には差がある。Visual Studio packaging手順
 
 - 基本設計はintegration-test単独のfirst-party line／branch各90%以上を要求する。
 - 前回記録は全体line 71.82%、branch 56.94%で未達。
-- nativeも前回line 88.53%、branch 75.32%で未達。
+- nativeは2026-07-17のcanonical再採取でline 94.78%（8860/9348）、branch 90.02%（6025/6693）、CTest 75/75となりthreshold達成。
 - mutation score 75%は未測定。
 - Windows UI Automation、HIL、WPF実行は未完了。
 
