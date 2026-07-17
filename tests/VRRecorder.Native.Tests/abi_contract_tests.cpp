@@ -3887,18 +3887,30 @@ bool RejectsInvalidEncoderProbeAbiInputs()
     config = ValidEncoderProbeConfig();
     config.gpu_identity_utf8 = malformed_utf8.c_str();
     CHECK(rejects(config));
-    const std::array<std::string, 12> malformed_utf8_boundaries {
+    const std::array<std::string, 24> malformed_utf8_boundaries {
+        std::string("\x1F", 1),
+        std::string("\x7F", 1),
         std::string("\xC2", 1),
         std::string("\xE1\x80", 2),
         std::string("\xE1\x80\x28", 3),
         std::string("\xE0\x9F\x80", 3),
+        std::string("\xE0\xC0\x80", 3),
+        std::string("\xED\x7F\x80", 3),
         std::string("\xED\xA0\x80", 3),
         std::string("\xE1\x28\x80", 3),
+        std::string("\xE1\xC0\x80", 3),
         std::string("\xF1\x80\x80", 3),
+        std::string("\xF1\x80\x28\x80", 4),
         std::string("\xF1\x80\x80\x28", 4),
         std::string("\xF0\x8F\x80\x80", 4),
+        std::string("\xF0\xC0\x80\x80", 4),
+        std::string("\xF4\x7F\x80\x80", 4),
         std::string("\xF4\x90\x80\x80", 4),
         std::string("\xF1\x28\x80\x80", 4),
+        std::string("\xF1\xC0\x80\x80", 4),
+        std::string("\x80", 1),
+        std::string("\xC0", 1),
+        std::string("\xF5", 1),
         std::string("\xFF", 1),
     };
     for (const auto &malformed : malformed_utf8_boundaries) {
