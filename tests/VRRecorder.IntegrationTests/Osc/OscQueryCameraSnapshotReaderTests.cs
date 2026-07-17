@@ -121,6 +121,20 @@ public sealed class OscQueryCameraSnapshotReaderTests
             reader.ReadAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task RejectsSnapshotResponseWithoutContentType()
+    {
+        using var content = new ByteArrayContent(
+            Encoding.UTF8.GetBytes(ValidHostInfoJson));
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            content,
+            new Uri("http://127.0.0.1:19000/?HOST_INFO")));
+        var reader = new OscQueryCameraSnapshotReader(Candidate(), invoker);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            reader.ReadAsync(CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
