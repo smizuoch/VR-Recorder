@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
 using VRRecorder.Infrastructure.Storage;
@@ -252,6 +253,207 @@ public sealed class JsonFileSettingsStoreTests
         Assert.False(File.Exists(settingsPath));
     }
 
+    [Theory]
+    [InlineData(MalformedSettingsDocument.NullDocument)]
+    [InlineData(MalformedSettingsDocument.NullVr)]
+    [InlineData(MalformedSettingsDocument.V1PlacementProfiles)]
+    [InlineData(MalformedSettingsDocument.V1HapticsEnabled)]
+    [InlineData(MalformedSettingsDocument.V1HapticFrequency)]
+    [InlineData(MalformedSettingsDocument.V1HapticAmplitude)]
+    [InlineData(MalformedSettingsDocument.V2MissingPlacementProfiles)]
+    [InlineData(MalformedSettingsDocument.V2HapticProperty)]
+    [InlineData(MalformedSettingsDocument.V3MissingEnabled)]
+    [InlineData(MalformedSettingsDocument.V3MissingFrequency)]
+    [InlineData(MalformedSettingsDocument.V3MissingAmplitude)]
+    [InlineData(MalformedSettingsDocument.UnknownSchema)]
+    public async Task MalformedVersionShapeIsBackedUpBeforeDefaults(
+        MalformedSettingsDocument malformed)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        var writer = new JsonFileSettingsStore(settingsPath);
+        await writer.SaveAsync(
+            VRRecorderSettings.CreateDefault(),
+            CancellationToken.None);
+        string content;
+        if (malformed == MalformedSettingsDocument.NullDocument)
+        {
+            content = "null";
+        }
+        else
+        {
+            var root = JsonNode.Parse(
+                await File.ReadAllTextAsync(settingsPath))!.AsObject();
+            var vr = root["vr"]!.AsObject();
+            switch (malformed)
+            {
+                case MalformedSettingsDocument.NullVr:
+                    root["vr"] = null;
+                    break;
+                case MalformedSettingsDocument.V1PlacementProfiles:
+                    root["schemaVersion"] = 1;
+                    RemoveHaptics(vr);
+                    break;
+                case MalformedSettingsDocument.V1HapticsEnabled:
+                    PrepareV1(vr);
+                    vr.Remove("hapticFrequencyHertz");
+                    vr.Remove("hapticAmplitude");
+                    root["schemaVersion"] = 1;
+                    break;
+                case MalformedSettingsDocument.V1HapticFrequency:
+                    PrepareV1(vr);
+                    vr.Remove("hapticsEnabled");
+                    vr.Remove("hapticAmplitude");
+                    root["schemaVersion"] = 1;
+                    break;
+                case MalformedSettingsDocument.V1HapticAmplitude:
+                    PrepareV1(vr);
+                    vr.Remove("hapticsEnabled");
+                    vr.Remove("hapticFrequencyHertz");
+                    root["schemaVersion"] = 1;
+                    break;
+                case MalformedSettingsDocument.V2MissingPlacementProfiles:
+                    root["schemaVersion"] = 2;
+                    vr.Remove("placementProfiles");
+                    RemoveHaptics(vr);
+                    break;
+                case MalformedSettingsDocument.V2HapticProperty:
+                    root["schemaVersion"] = 2;
+                    vr.Remove("hapticFrequencyHertz");
+                    vr.Remove("hapticAmplitude");
+                    break;
+                case MalformedSettingsDocument.V3MissingEnabled:
+                    vr.Remove("hapticsEnabled");
+                    break;
+                case MalformedSettingsDocument.V3MissingFrequency:
+                    vr.Remove("hapticFrequencyHertz");
+                    break;
+                case MalformedSettingsDocument.V3MissingAmplitude:
+                    vr.Remove("hapticAmplitude");
+                    break;
+                case MalformedSettingsDocument.UnknownSchema:
+                    root["schemaVersion"] = 999;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        "The malformed settings case is not supported.");
+            }
+
+            content = root.ToJsonString();
+        }
+
+        await File.WriteAllTextAsync(settingsPath, content);
+        var store = new JsonFileSettingsStore(
+            settingsPath,
+            new FixedWallClock(DateTimeOffset.UnixEpoch),
+            new AcceptingSettingsJsonSchemaValidator());
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equivalent(
+            VRRecorderSettings.CreateDefault(),
+            loaded,
+            strict: true);
+        Assert.False(File.Exists(settingsPath));
+        Assert.Single(Directory.GetFiles(
+            directory.Path,
+            "settings.corrupt-*.json"));
+    }
+
+    [Theory]
+    [InlineData(RecoverableSettingsValidationFailure.Argument)]
+    [InlineData(RecoverableSettingsValidationFailure.NotSupported)]
+    public async Task EveryRecoverableValidatorFailureBacksUpDocument(
+        RecoverableSettingsValidationFailure failure)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        await File.WriteAllTextAsync(settingsPath, "validator evidence");
+        var store = new JsonFileSettingsStore(
+            settingsPath,
+            new FixedWallClock(DateTimeOffset.UnixEpoch),
+            new ThrowingSettingsJsonSchemaValidator(failure));
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equivalent(
+            VRRecorderSettings.CreateDefault(),
+            loaded,
+            strict: true);
+        Assert.False(File.Exists(settingsPath));
+        Assert.Single(Directory.GetFiles(
+            directory.Path,
+            "settings.corrupt-*.json"));
+    }
+
+    [Fact]
+    public async Task ExistingCorruptBackupIsPreservedAtNextOrdinal()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var settingsPath = Path.Combine(directory.Path, "settings.json");
+        var firstBackup = Path.Combine(
+            directory.Path,
+            "settings.corrupt-19700101T000000000Z.json");
+        var secondBackup = Path.Combine(
+            directory.Path,
+            "settings.corrupt-19700101T000000000Z_002.json");
+        await File.WriteAllTextAsync(settingsPath, "invalid current evidence");
+        await File.WriteAllTextAsync(firstBackup, "earlier evidence");
+        var store = new JsonFileSettingsStore(
+            settingsPath,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        _ = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(
+            "earlier evidence",
+            await File.ReadAllTextAsync(firstBackup));
+        Assert.Equal(
+            "invalid current evidence",
+            await File.ReadAllTextAsync(secondBackup));
+    }
+
+    [Fact]
+    public void RejectsRelativeSettingsPath()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new JsonFileSettingsStore("settings.json"));
+    }
+
+    private static void PrepareV1(JsonObject vr)
+    {
+        vr.Remove("placementProfiles");
+    }
+
+    private static void RemoveHaptics(JsonObject vr)
+    {
+        vr.Remove("hapticsEnabled");
+        vr.Remove("hapticFrequencyHertz");
+        vr.Remove("hapticAmplitude");
+    }
+
+    public enum MalformedSettingsDocument
+    {
+        NullDocument,
+        NullVr,
+        V1PlacementProfiles,
+        V1HapticsEnabled,
+        V1HapticFrequency,
+        V1HapticAmplitude,
+        V2MissingPlacementProfiles,
+        V2HapticProperty,
+        V3MissingEnabled,
+        V3MissingFrequency,
+        V3MissingAmplitude,
+        UnknownSchema,
+    }
+
+    public enum RecoverableSettingsValidationFailure
+    {
+        Argument,
+        NotSupported,
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         private TemporaryDirectory(string path)
@@ -298,6 +500,32 @@ public sealed class JsonFileSettingsStoreTests
         {
             ValidationCount++;
             throw new InvalidDataException("schema rejected");
+        }
+    }
+
+    private sealed class AcceptingSettingsJsonSchemaValidator
+        : ISettingsJsonSchemaValidator
+    {
+        public void Validate(ReadOnlyMemory<byte> documentBytes)
+        {
+        }
+    }
+
+    private sealed class ThrowingSettingsJsonSchemaValidator(
+        RecoverableSettingsValidationFailure failure)
+        : ISettingsJsonSchemaValidator
+    {
+        public void Validate(ReadOnlyMemory<byte> documentBytes)
+        {
+            throw failure switch
+            {
+                RecoverableSettingsValidationFailure.Argument =>
+                    new ArgumentException("schema argument failure"),
+                RecoverableSettingsValidationFailure.NotSupported =>
+                    new NotSupportedException("schema feature failure"),
+                _ => new InvalidOperationException(
+                    "The recoverable failure is not supported."),
+            };
         }
     }
 }
