@@ -561,6 +561,12 @@ bool RejectsInvalidAbiInputs()
     CHECK(vrrec_session_create_v1(nullptr, &callbacks, &session) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(session == nullptr);
+    session = reinterpret_cast<vrrec_session_t *>(UINTPTR_MAX);
+    CHECK(vrrec_session_create_v1(&config, nullptr, &session) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(session == nullptr);
+    CHECK(vrrec_session_create_v1(&config, &callbacks, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
 
     config.struct_size = sizeof(config) - 1;
     CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
@@ -574,12 +580,54 @@ bool RejectsInvalidAbiInputs()
     CHECK(session == nullptr);
 
     config = ValidConfig();
+    callbacks = ValidCallbacks(log);
+    callbacks.abi_version = VRREC_ABI_V1 + 1;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_UNSUPPORTED_ABI);
+    CHECK(session == nullptr);
+
+    const auto rejected = [&](vrrec_session_config_v1 invalid_config,
+                              vrrec_callbacks_v1 invalid_callbacks) {
+        session = reinterpret_cast<vrrec_session_t *>(UINTPTR_MAX);
+        return vrrec_session_create_v1(
+                   &invalid_config,
+                   &invalid_callbacks,
+                   &session) == VRREC_STATUS_INVALID_ARGUMENT &&
+            session == nullptr;
+    };
+    callbacks = ValidCallbacks(log);
+    config = ValidConfig();
+    config.temporary_output_path_utf8 = nullptr;
+    CHECK(rejected(config, callbacks));
+    config = ValidConfig();
+    config.width = 0;
+    CHECK(rejected(config, callbacks));
+    config = ValidConfig();
+    config.height = 0;
+    CHECK(rejected(config, callbacks));
+    config = ValidConfig();
+    config.fps_numerator = 0;
+    CHECK(rejected(config, callbacks));
+    config = ValidConfig();
+    config.fps_denominator = 0;
+    CHECK(rejected(config, callbacks));
+    config = ValidConfig();
+    callbacks.on_event = nullptr;
+    CHECK(rejected(config, callbacks));
+
+    CHECK(vrrec_session_start_v1(nullptr) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_session_request_stop_v1(nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(vrrec_session_abort_v1(nullptr) == VRREC_STATUS_INVALID_ARGUMENT);
+    config = ValidConfig();
+    callbacks = ValidCallbacks(log);
     config.encoder_kind = UINT32_MAX;
     CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(session == nullptr);
 
     config = ValidConfig();
+    callbacks = ValidCallbacks(log);
     callbacks.struct_size = sizeof(callbacks) - 1;
     CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
           VRREC_STATUS_INVALID_ARGUMENT);
