@@ -199,6 +199,66 @@ public sealed class WindowsPostPublishPayloadSealerTests
             await fixture.SealAsync());
     }
 
+    [Theory]
+    [InlineData("<Project>", "<Other>")]
+    [InlineData("<Project>", "<Project unexpected=\"true\">")]
+    [InlineData("<PropertyGroup>", "<PropertyGroup unexpected=\"true\">")]
+    [InlineData("<VRRecorderApprovedWindowsRuntimeImported>true</VRRecorderApprovedWindowsRuntimeImported>", "<VRRecorderApprovedWindowsRuntimeImported>false</VRRecorderApprovedWindowsRuntimeImported>")]
+    [InlineData("<VRRecorderApprovedWindowsRuntimeImported>", "<VRRecorderApprovedWindowsRuntimeImported unexpected=\"true\">")]
+    [InlineData("<VRRecorderApprovedWindowsRuntimeManifestSha256>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</VRRecorderApprovedWindowsRuntimeManifestSha256>", "<VRRecorderApprovedWindowsRuntimeManifestSha256>invalid</VRRecorderApprovedWindowsRuntimeManifestSha256>")]
+    [InlineData("<VRRecorderApprovedWindowsRuntimeInventorySha256>bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</VRRecorderApprovedWindowsRuntimeInventorySha256>", "<VRRecorderApprovedWindowsRuntimeInventorySha256>invalid</VRRecorderApprovedWindowsRuntimeInventorySha256>")]
+    [InlineData("<VRRecorderApprovedWindowsRuntimeProfile>full-production-hardware-validation-v1</VRRecorderApprovedWindowsRuntimeProfile>", "<VRRecorderApprovedWindowsRuntimeProfile>other</VRRecorderApprovedWindowsRuntimeProfile>")]
+    [InlineData("<VRRecorderApprovedWindowsRuntimeIdentifier>win-x64</VRRecorderApprovedWindowsRuntimeIdentifier>", "<VRRecorderApprovedWindowsRuntimeIdentifier>win-arm64</VRRecorderApprovedWindowsRuntimeIdentifier>")]
+    [InlineData("<VRRecorderApprovedLegalBundleId>https://example.invalid/spdx/vr-recorder-test</VRRecorderApprovedLegalBundleId>", "<VRRecorderApprovedLegalBundleId> </VRRecorderApprovedLegalBundleId>")]
+    [InlineData("<VRRecorderApprovedLegalManifestSha256>cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc</VRRecorderApprovedLegalManifestSha256>", "<VRRecorderApprovedLegalManifestSha256>invalid</VRRecorderApprovedLegalManifestSha256>")]
+    [InlineData("<LegalBundleId>https://example.invalid/spdx/vr-recorder-test</LegalBundleId>", "<LegalBundleId>other</LegalBundleId>")]
+    [InlineData("<LegalManifestSha256>cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc</LegalManifestSha256>", "<LegalManifestSha256>dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd</LegalManifestSha256>")]
+    [InlineData("<ItemGroup>", "<ItemGroup unexpected=\"true\">")]
+    [InlineData("<Content Include=", "<Other Include=")]
+    [InlineData("<Content Include=\"$(MSBuildThisFileDirectory)payload/native.dll\">", "<Content Include=\"native.dll\">")]
+    [InlineData("<Content Include=\"$(MSBuildThisFileDirectory)payload/native.dll\">", "<Content Include=\"$(MSBuildThisFileDirectory)payload/native.dll\" unexpected=\"true\">")]
+    [InlineData("<Link>native.dll</Link>", "<Link>other.dll</Link>")]
+    [InlineData("<TargetPath>native.dll</TargetPath>", "<TargetPath>other.dll</TargetPath>")]
+    [InlineData("<CopyToOutputDirectory>IfDifferent</CopyToOutputDirectory>", "<CopyToOutputDirectory>Always</CopyToOutputDirectory>")]
+    [InlineData("<CopyToPublishDirectory>IfDifferent</CopyToPublishDirectory>", "<CopyToPublishDirectory>Always</CopyToPublishDirectory>")]
+    [InlineData("<Link>native.dll</Link>", "<Link unexpected=\"true\">native.dll</Link>")]
+    [InlineData("<VRRecorderSha256>", "<VRRecorderSha256>g")]
+    [InlineData("<VRRecorderLength>", "<VRRecorderLength>-1")]
+    [InlineData("<VRRecorderLength>", "<VRRecorderLength>invalid")]
+    [InlineData("<VRRecorderKind>NativeLibrary</VRRecorderKind>", "<VRRecorderKind>nativeLibrary</VRRecorderKind>")]
+    [InlineData("<VRRecorderKind>NativeLibrary</VRRecorderKind>", "<VRRecorderKind>999</VRRecorderKind>")]
+    public async Task EveryApprovedPropsContractDeviationIsRejected(
+        string oldValue,
+        string newValue)
+    {
+        using var fixture = Fixture.Create();
+        fixture.ReplaceApprovedProps(oldValue, newValue);
+
+        AssertIssue(
+            "invalid-approved-runtime-props",
+            await fixture.SealAsync());
+    }
+
+    [Fact]
+    public async Task PropsPathMustBeAbsoluteExistingCanonicalAndNonempty()
+    {
+        using var fixture = Fixture.Create();
+
+        AssertIssue(
+            "invalid-approved-runtime-props",
+            await fixture.SealWithPropsAsync("ApprovedWindowsRuntime.props"));
+        AssertIssue(
+            "invalid-approved-runtime-props",
+            await fixture.SealWithPropsAsync(Path.Combine(
+                fixture.Root,
+                "missing",
+                "ApprovedWindowsRuntime.props")));
+        File.WriteAllBytes(fixture.ApprovedPropsPath, []);
+        AssertIssue(
+            "invalid-approved-runtime-props",
+            await fixture.SealAsync());
+    }
+
     private static void AssertIssue(
         string code,
         WindowsPostPublishPayloadSealResult result)
@@ -325,6 +385,31 @@ public sealed class WindowsPostPublishPayloadSealerTests
                     PublishRoot,
                     ApprovedPropsPath,
                     CancellationToken.None);
+        }
+
+        public Task<WindowsPostPublishPayloadSealResult> SealWithPropsAsync(
+            string approvedPropsPath) =>
+            new WindowsPostPublishPayloadSealer(
+                    new CallbackLegalVerifier((_, anchor) =>
+                        new LegalBundleVerification.Verified(
+                            new LegalBundleIdentity(
+                                anchor.BundleId,
+                                anchor.ManifestSha256,
+                                ProductVersion))))
+                .SealAsync(
+                    PublishRoot,
+                    approvedPropsPath,
+                    CancellationToken.None);
+
+        public void ReplaceApprovedProps(string oldValue, string newValue)
+        {
+            var text = File.ReadAllText(ApprovedPropsPath);
+            var replaced = text.Replace(
+                oldValue,
+                newValue,
+                StringComparison.Ordinal);
+            Assert.NotEqual(text, replaced);
+            File.WriteAllText(ApprovedPropsPath, replaced);
         }
 
         public void Dispose()
