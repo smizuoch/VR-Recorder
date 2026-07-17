@@ -197,6 +197,62 @@ void RequiresFinitePeakLimitedOutput()
     }
 }
 
+void RejectsEveryPublicConfigurationAndBufferBoundary()
+{
+    const auto stereo = ConstantStereo(1, 0.25F);
+    const auto too_many_samples = ConstantStereo(2, 0.25F);
+    const std::vector<float> odd_samples {0.25F};
+    const std::vector<float> invalid_samples {
+        std::numeric_limits<float>::quiet_NaN(),
+        0.0F,
+    };
+    std::vector<float> output(2);
+
+    const struct InvalidConfiguration final {
+        vrrec_audio_routing_t routing;
+        double desktop_gain_db;
+        double microphone_gain_db;
+    } configurations[] {
+        {999U, 0.0, 0.0},
+        {VRREC_AUDIO_ROUTING_MIXED,
+         std::numeric_limits<double>::quiet_NaN(), 0.0},
+        {VRREC_AUDIO_ROUTING_MIXED, -96.0001, 0.0},
+        {VRREC_AUDIO_ROUTING_MIXED, 0.0, 24.0001},
+    };
+    for (const auto &configuration : configurations) {
+        vrrecorder::native::StereoAudioMixer mixer(
+            configuration.routing,
+            configuration.desktop_gain_db,
+            configuration.microphone_gain_db);
+        CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_MUTED) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(mixer.Mix(stereo, stereo, 1, output) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    }
+
+    vrrecorder::native::StereoAudioMixer mixer(
+        VRREC_AUDIO_ROUTING_MIXED,
+        0.0,
+        0.0);
+    CHECK(mixer.SetRouting(VRREC_AUDIO_ROUTING_MIXED) ==
+          VRREC_STATUS_OK);
+    CHECK(mixer.Mix(stereo, stereo, 0, {}) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(
+              {},
+              {},
+              std::numeric_limits<std::size_t>::max(),
+              {}) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(too_many_samples, stereo, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(stereo, too_many_samples, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(stereo, odd_samples, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(mixer.Mix(stereo, invalid_samples, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+}
+
 }
 
 int main()
@@ -207,5 +263,6 @@ int main()
     RequiresUnderrunZeroFillWithoutChangingTimeline();
     RequiresConfiguredInputGainAndStrictBuffers();
     RequiresFinitePeakLimitedOutput();
+    RejectsEveryPublicConfigurationAndBufferBoundary();
     return 0;
 }
