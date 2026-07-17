@@ -1,11 +1,36 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Xml.Linq;
 using VRRecorder.Compliance.Repository;
 
 namespace VRRecorder.Compliance.Tests.Repository;
 
 public sealed class RepositoryComplianceTests
 {
+    [Fact]
+    public void ManagedCoverageRunSettingsIncludeApplicationProductionCode()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var document = XDocument.Load(Path.Combine(
+            repositoryRoot,
+            "eng",
+            "managed-coverage.runsettings"));
+        var configuration = document
+            .Descendants("Configuration")
+            .Single();
+
+        Assert.Equal("[VRRecorder.*]*", configuration.Element("Include")?.Value);
+        Assert.Equal(
+            "[VRRecorder.*.Tests]*",
+            configuration.Element("Exclude")?.Value);
+        Assert.Equal(
+            "**/obj/**,**/*.g.cs,**/*.g.i.cs",
+            configuration.Element("ExcludeByFile")?.Value);
+        Assert.Equal(
+            "false",
+            configuration.Element("IncludeTestAssembly")?.Value);
+    }
+
     [Fact]
     public void OpenVrLegalCandidateBindsOfficialArchiveRecipeAndSdkArtifacts()
     {
