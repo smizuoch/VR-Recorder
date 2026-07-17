@@ -94,6 +94,158 @@ public sealed class JsonFileFirstRunSetupStoreTests
             "first-run-setup.corrupt-*.json"));
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "setupVersion": 1,
+          "setupVersion": 1,
+          "completedSteps": []
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 2,
+          "setupVersion": 1,
+          "completedSteps": []
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "setupVersion": 1,
+          "completedSteps": {}
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "setupVersion": 1,
+          "completedSteps": [null]
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "setupVersion": 1,
+          "completedSteps": ["privateUnknownStep"]
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "setupVersion": 1,
+          "completedSteps": [
+            "steamVrDetection",
+            "vrChatOscDetection",
+            "cameraOscEndpoint",
+            "microphonePrivacyAndDevice",
+            "encoderSelfTest",
+            "steamVrActionBinding",
+            "wristOverlayPlacement",
+            "testRecordingPlayback",
+            "legalBundleVerification",
+            "offlineLegalAccess",
+            "localizationAccessibility",
+            "designAssetConformance",
+            "designAssetConformance"
+          ]
+        }
+        """)]
+    public async Task EveryInvalidDocumentShapeIsBackedUp(string content)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "first-run-setup.json");
+        await File.WriteAllTextAsync(path, content);
+        using var store = new JsonFileFirstRunSetupStore(path);
+
+        Assert.Null(await store.LoadAsync(CancellationToken.None));
+
+        Assert.False(File.Exists(path));
+        Assert.Single(Directory.GetFiles(
+            directory.Path,
+            "first-run-setup.corrupt-*.json"));
+    }
+
+    [Fact]
+    public async Task SaveRejectsSkippedOrExcessCompletedSteps()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "first-run-setup.json");
+        using var store = new JsonFileFirstRunSetupStore(path);
+        var skipped = new FirstRunSetupProgress(
+            FirstRunSetupController.CurrentSetupVersion,
+            [FirstRunSetupStep.VrChatOscDetection]);
+        var excess = new FirstRunSetupProgress(
+            FirstRunSetupController.CurrentSetupVersion,
+            Enumerable.Repeat(
+                FirstRunSetupStep.SteamVrDetection,
+                FirstRunSetupController.RequiredSteps.Count + 1));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(skipped, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(excess, CancellationToken.None));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(directory.Path));
+    }
+
+    [Fact]
+    public async Task RejectsRelativePathAndUseAfterDisposal()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new JsonFileFirstRunSetupStore("first-run-setup.json"));
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "first-run-setup.json");
+        var store = new JsonFileFirstRunSetupStore(path);
+        var progress = new FirstRunSetupProgress(
+            FirstRunSetupController.CurrentSetupVersion,
+            []);
+
+        store.Dispose();
+        store.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.LoadAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.SaveAsync(progress, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LinkedDocumentAndParentDirectoryAreRejected()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var targetFile = Path.Combine(directory.Path, "target.json");
+        var linkedFile = Path.Combine(directory.Path, "first-run-setup.json");
+        await File.WriteAllTextAsync(targetFile, "outside evidence");
+        File.CreateSymbolicLink(linkedFile, targetFile);
+        using (var store = new JsonFileFirstRunSetupStore(linkedFile))
+        {
+            await Assert.ThrowsAsync<IOException>(() =>
+                store.LoadAsync(CancellationToken.None));
+        }
+
+        var targetDirectory = Path.Combine(directory.Path, "target-directory");
+        var linkedDirectory = Path.Combine(directory.Path, "linked-directory");
+        Directory.CreateDirectory(targetDirectory);
+        Directory.CreateSymbolicLink(linkedDirectory, targetDirectory);
+        using var linkedParentStore = new JsonFileFirstRunSetupStore(
+            Path.Combine(linkedDirectory, "first-run-setup.json"));
+        var progress = new FirstRunSetupProgress(
+            FirstRunSetupController.CurrentSetupVersion,
+            []);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            linkedParentStore.SaveAsync(progress, CancellationToken.None));
+        Assert.Equal("outside evidence", await File.ReadAllTextAsync(targetFile));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(targetDirectory));
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         private TemporaryDirectory(string path) => Path = path;
