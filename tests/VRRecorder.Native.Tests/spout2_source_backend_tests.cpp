@@ -1,13 +1,16 @@
 #include "spout2_source_backend_core.hpp"
 
 #include <atomic>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -31,8 +34,10 @@ class FakeVideoSurface final : public VideoSurface {
 public:
     FakeVideoSurface(
         VideoSurfaceDescriptor descriptor,
-        std::shared_ptr<std::atomic_size_t> destructions) noexcept
-        : descriptor_(descriptor), destructions_(std::move(destructions))
+        std::shared_ptr<std::atomic_size_t> destructions,
+        bool has_native_handle = true) noexcept
+        : descriptor_(descriptor), destructions_(std::move(destructions)),
+          has_native_handle_(has_native_handle)
     {
     }
 
@@ -48,7 +53,7 @@ public:
 
     void *NativeHandle() const noexcept override
     {
-        return reinterpret_cast<void *>(1);
+        return has_native_handle_ ? reinterpret_cast<void *>(1) : nullptr;
     }
 
     VideoSurfaceAcquireResult AcquireForRead(
@@ -65,6 +70,18 @@ public:
 private:
     VideoSurfaceDescriptor descriptor_;
     std::shared_ptr<std::atomic_size_t> destructions_;
+    bool has_native_handle_;
+};
+
+enum class SurfaceFault {
+    None,
+    Missing,
+    NullHandle,
+    Adapter,
+    Width,
+    Height,
+    PixelFormat,
+    Generation,
 };
 
 struct ReceiveStep final {
@@ -116,6 +133,10 @@ public:
             surface.reset();
             return copy_status;
         }
+        if (surface_fault == SurfaceFault::Missing) {
+            surface.reset();
+            return VRREC_STATUS_OK;
+        }
         auto descriptor = VideoSurfaceDescriptor {
             metadata.adapter_luid,
             metadata.width,
@@ -123,13 +144,22 @@ public:
             metadata.pixel_format,
             generation_id,
         };
-        if (mismatch_surface) {
+        if (surface_fault == SurfaceFault::Adapter) {
+            ++descriptor.adapter_luid;
+        } else if (surface_fault == SurfaceFault::Width) {
             ++descriptor.width;
+        } else if (surface_fault == SurfaceFault::Height) {
+            ++descriptor.height;
+        } else if (surface_fault == SurfaceFault::PixelFormat) {
+            descriptor.pixel_format = VRREC_SOURCE_PIXEL_FORMAT_RGBA8;
+        } else if (surface_fault == SurfaceFault::Generation) {
+            ++descriptor.generation_id;
         }
         try {
             surface = std::make_shared<FakeVideoSurface>(
                 descriptor,
-                destructions);
+                destructions,
+                surface_fault != SurfaceFault::NullHandle);
             return VRREC_STATUS_OK;
         } catch (...) {
             surface.reset();
@@ -189,7 +219,7 @@ public:
     std::vector<SpoutSenderSnapshot> snapshot;
     std::deque<ReceiveStep> receive_steps;
     vrrec_status_t copy_status = VRREC_STATUS_OK;
-    bool mismatch_surface = false;
+    SurfaceFault surface_fault = SurfaceFault::None;
     std::shared_ptr<std::atomic_size_t> destructions =
         std::make_shared<std::atomic_size_t>(0);
     std::chrono::milliseconds last_timeout {0};
@@ -264,6 +294,39 @@ void CanonicalizesZeroOneAndMultipleSenderSnapshots()
     CHECK(output[1].sender_id == "zeta");
 
     borrowed->snapshot = {{"duplicate", 1}, {"duplicate", 2}};
+    CHECK(backend->Snapshot(output) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(output.empty());
+}
+
+void RejectsInvalidSenderSnapshotsAndPortFailures()
+{
+    auto port = std::make_unique<ScriptedReceiverPort>();
+    ScriptedReceiverPort *borrowed = nullptr;
+    auto backend = CreateBackend(std::move(port), borrowed);
+    std::vector<SpoutSenderSnapshot> output { {"stale", 99} };
+
+    borrowed->snapshot_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(backend->Snapshot(output) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(output.empty());
+    borrowed->snapshot_status = VRREC_STATUS_OK;
+
+    const auto rejects = [&](std::string sender_id) {
+        borrowed->snapshot = {{std::move(sender_id), 1}};
+        output = {{"stale", 99}};
+        CHECK(backend->Snapshot(output) == VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(output.empty());
+    };
+    rejects("");
+    rejects(std::string(VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE + 1, 's'));
+    rejects(std::string("sender\0suffix", 13));
+
+    borrowed->snapshot.clear();
+    borrowed->snapshot.reserve(VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES + 1);
+    for (std::uint32_t index = 0;
+         index <= VRREC_SPOUT_MAX_SNAPSHOT_ENTRIES;
+         ++index) {
+        borrowed->snapshot.push_back({"sender-" + std::to_string(index), 1});
+    }
     CHECK(backend->Snapshot(output) == VRREC_STATUS_INTERNAL_ERROR);
     CHECK(output.empty());
 }
@@ -386,6 +449,218 @@ void AllowsFrameSequenceToRestartInANewReceiverEpoch()
     CHECK(borrowed->copy_calls == 2);
 }
 
+void RejectsEveryMalformedTextureMetadataBoundary()
+{
+    const auto rejects = [](Spout2TextureMetadata metadata) {
+        auto port = std::make_unique<ScriptedReceiverPort>();
+        port->receive_steps.push_back({
+            Spout2ReceiverResult::FrameReady,
+            std::move(metadata),
+        });
+        ScriptedReceiverPort *borrowed = nullptr;
+        auto backend = CreateBackend(std::move(port), borrowed);
+        SpoutFrame frame;
+        CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+              VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(frame.surface == nullptr);
+        CHECK(borrowed->copy_calls == 0);
+    };
+
+    auto invalid = Metadata(1);
+    invalid.sender_id.clear();
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.sender_id.assign(VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE + 1, 's');
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.sender_id = std::string("sender\0suffix", 13);
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.resource_identity = 0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.receiver_epoch = 0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.adapter_luid = 0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.gpu_identity.clear();
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.gpu_identity.assign(VRREC_SPOUT_MAX_IDENTITY_UTF8_SIZE + 1, 'g');
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.gpu_identity = std::string("gpu\0identity", 12);
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.gpu_vendor = static_cast<vrrec_gpu_vendor_t>(99);
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.width = 0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.height = 0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.pixel_format = static_cast<vrrec_source_pixel_format_t>(99);
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.estimated_source_fps =
+        std::numeric_limits<double>::quiet_NaN();
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.estimated_source_fps =
+        std::numeric_limits<double>::infinity();
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.estimated_source_fps = 0.0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.estimated_source_fps = -1.0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.estimated_source_fps = 1'000.01;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.frame_sequence = 0;
+    rejects(std::move(invalid));
+    invalid = Metadata(1);
+    invalid.monotonic_timestamp_microseconds = -1;
+    rejects(std::move(invalid));
+}
+
+void AcceptsEverySupportedVendorAndPixelFormat()
+{
+    constexpr std::array vendors {
+        VRREC_GPU_VENDOR_UNKNOWN,
+        VRREC_GPU_VENDOR_NVIDIA,
+        VRREC_GPU_VENDOR_AMD,
+        VRREC_GPU_VENDOR_INTEL,
+    };
+    constexpr std::array pixel_formats {
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+        VRREC_SOURCE_PIXEL_FORMAT_NV12,
+    };
+    for (const auto vendor : vendors) {
+        for (const auto pixel_format : pixel_formats) {
+            auto metadata = Metadata(1);
+            metadata.gpu_vendor = vendor;
+            metadata.pixel_format = pixel_format;
+            auto port = std::make_unique<ScriptedReceiverPort>();
+            port->receive_steps.push_back({
+                Spout2ReceiverResult::FrameReady,
+                std::move(metadata),
+            });
+            ScriptedReceiverPort *borrowed = nullptr;
+            auto backend = CreateBackend(std::move(port), borrowed);
+            SpoutFrame frame;
+            CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+                  VRREC_STATUS_OK);
+            CHECK(frame.gpu_vendor == vendor);
+            CHECK(frame.pixel_format == pixel_format);
+        }
+    }
+}
+
+void RejectsRegressedAndDuplicateFramesWithinAnEpoch()
+{
+    auto port = std::make_unique<ScriptedReceiverPort>();
+    port->receive_steps.push_back({Spout2ReceiverResult::FrameReady, Metadata(2)});
+    port->receive_steps.push_back({Spout2ReceiverResult::FrameReady, Metadata(2)});
+    port->receive_steps.push_back({Spout2ReceiverResult::FrameReady, Metadata(1)});
+    port->receive_steps.push_back({
+        Spout2ReceiverResult::FrameReady,
+        Metadata(3, 10, 0),
+    });
+    ScriptedReceiverPort *borrowed = nullptr;
+    auto backend = CreateBackend(std::move(port), borrowed);
+    SpoutFrame frame;
+
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_OK);
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_TIMEOUT);
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(borrowed->copy_calls == 1);
+}
+
+void RejectsEverySurfaceDescriptorMismatch()
+{
+    constexpr std::array faults {
+        SurfaceFault::Missing,
+        SurfaceFault::NullHandle,
+        SurfaceFault::Adapter,
+        SurfaceFault::Width,
+        SurfaceFault::Height,
+        SurfaceFault::PixelFormat,
+        SurfaceFault::Generation,
+    };
+    for (const auto fault : faults) {
+        auto port = std::make_unique<ScriptedReceiverPort>();
+        port->surface_fault = fault;
+        port->receive_steps.push_back({
+            Spout2ReceiverResult::FrameReady,
+            Metadata(1),
+        });
+        const auto destructions = port->destructions;
+        ScriptedReceiverPort *borrowed = nullptr;
+        auto backend = CreateBackend(std::move(port), borrowed);
+        SpoutFrame frame;
+
+        CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+              VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(frame.surface == nullptr);
+        CHECK(destructions->load() ==
+              (fault == SurfaceFault::Missing ? 0 : 1));
+    }
+}
+
+void ValidatesPollTimeoutsAndReceiverResults()
+{
+    auto port = std::make_unique<ScriptedReceiverPort>();
+    port->receive_steps.push_back({Spout2ReceiverResult::Aborted, {}});
+    port->receive_steps.push_back({Spout2ReceiverResult::Timeout, {}});
+    ScriptedReceiverPort *borrowed = nullptr;
+    auto backend = CreateBackend(std::move(port), borrowed);
+    SpoutFrame frame;
+
+    CHECK(backend->Poll(std::chrono::milliseconds(-1), frame) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(backend->Poll(std::chrono::milliseconds(
+              VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS + 1), frame) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(borrowed->receive_calls == 0);
+    CHECK(backend->Poll(std::chrono::milliseconds(0), frame) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(backend->Poll(std::chrono::milliseconds(
+              VRREC_SPOUT_MAX_POLL_TIMEOUT_MILLISECONDS), frame) ==
+          VRREC_STATUS_TIMEOUT);
+    CHECK(borrowed->receive_calls == 2);
+}
+
+void ForwardsCopyFailuresWithoutPublishingASurface()
+{
+    auto port = std::make_unique<ScriptedReceiverPort>();
+    port->copy_status = VRREC_STATUS_OUT_OF_MEMORY;
+    port->receive_steps.push_back({
+        Spout2ReceiverResult::FrameReady,
+        Metadata(1),
+    });
+    ScriptedReceiverPort *borrowed = nullptr;
+    auto backend = CreateBackend(std::move(port), borrowed);
+    SpoutFrame frame;
+
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(frame.surface == nullptr);
+    CHECK(borrowed->copy_calls == 1);
+}
+
 void MapsTimeoutAndPortFailuresWithoutPublishingAFrame()
 {
     auto port = std::make_unique<ScriptedReceiverPort>();
@@ -409,7 +684,7 @@ void MapsTimeoutAndPortFailuresWithoutPublishingAFrame()
 void RejectsASurfaceThatDoesNotMatchTheReceivedTexture()
 {
     auto port = std::make_unique<ScriptedReceiverPort>();
-    port->mismatch_surface = true;
+    port->surface_fault = SurfaceFault::Width;
     port->receive_steps.push_back({
         Spout2ReceiverResult::FrameReady,
         Metadata(1),
@@ -494,19 +769,48 @@ void ReleasesAnAcceptedSurfaceWhenTheConsumerDropsIt()
     CHECK(destructions->load() == 1);
 }
 
+void RejectsCreationWithoutAReceiverAndOperationsAfterAbort()
+{
+    auto status = VRREC_STATUS_OK;
+    CHECK(CreateSpout2SourceBackend(nullptr, status) == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+
+    auto port = std::make_unique<ScriptedReceiverPort>();
+    ScriptedReceiverPort *borrowed = nullptr;
+    auto backend = CreateBackend(std::move(port), borrowed);
+    backend->Abort();
+    std::vector<SpoutSenderSnapshot> senders {{"stale", 99}};
+    SpoutFrame frame;
+    CHECK(backend->Snapshot(senders) == VRREC_STATUS_INVALID_STATE);
+    CHECK(senders.empty());
+    CHECK(backend->Poll(std::chrono::milliseconds(10), frame) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(frame.surface == nullptr);
+    CHECK(borrowed->abort_calls == 1);
+    CHECK(borrowed->receive_calls == 0);
+}
+
 }
 
 int main()
 {
     CanonicalizesZeroOneAndMultipleSenderSnapshots();
+    RejectsInvalidSenderSnapshotsAndPortFailures();
     CopiesEveryFrameAndAdvancesOnlyResourceGenerations();
     RejectsMetadataMutationWithoutAResourceChange();
     AllowsLossAndReappearanceWithANewReceiverEpoch();
     AllowsFrameSequenceToRestartInANewReceiverEpoch();
+    RejectsEveryMalformedTextureMetadataBoundary();
+    AcceptsEverySupportedVendorAndPixelFormat();
+    RejectsRegressedAndDuplicateFramesWithinAnEpoch();
+    RejectsEverySurfaceDescriptorMismatch();
+    ValidatesPollTimeoutsAndReceiverResults();
+    ForwardsCopyFailuresWithoutPublishingASurface();
     MapsTimeoutAndPortFailuresWithoutPublishingAFrame();
     RejectsASurfaceThatDoesNotMatchTheReceivedTexture();
     AbortWinsOverAFrameReturnedByAnInFlightReceive();
     AbortDropsAndReleasesALateCopiedSurfaceExactlyOnce();
     ReleasesAnAcceptedSurfaceWhenTheConsumerDropsIt();
+    RejectsCreationWithoutAReceiverAndOperationsAfterAbort();
     return 0;
 }
