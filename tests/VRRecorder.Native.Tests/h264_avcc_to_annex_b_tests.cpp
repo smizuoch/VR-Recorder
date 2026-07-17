@@ -1,4 +1,5 @@
 #include "h264_avcc_to_annex_b.hpp"
+#include "allocation_failure_test_support.hpp"
 
 #include <cstddef>
 #include <cstdlib>
@@ -82,11 +83,22 @@ void RejectsMalformedDescriptorWithoutChangingOutput()
     const auto valid = AvccDescriptor();
     using Mutation = void (*)(std::vector<std::byte> &);
     const Mutation mutations[] {
+        [](auto &bytes) { bytes.clear(); },
         [](auto &bytes) { bytes[0] = std::byte {2}; },
+        [](auto &bytes) { bytes[4] = std::byte {0x03}; },
         [](auto &bytes) { bytes[4] = std::byte {0xfe}; },
+        [](auto &bytes) { bytes[5] = std::byte {0x01}; },
         [](auto &bytes) { bytes[5] = std::byte {0xe0}; },
+        [](auto &bytes) {
+            bytes[6] = std::byte {0};
+            bytes[7] = std::byte {0};
+        },
+        [](auto &bytes) { bytes[8] = std::byte {0x68}; },
+        [](auto &bytes) { bytes[8] = std::byte {0xe7}; },
+        [](auto &bytes) { bytes[15] = std::byte {0x67}; },
         [](auto &bytes) { bytes[7] = std::byte {0xff}; },
         [](auto &bytes) { bytes[12] = std::byte {0}; },
+        [](auto &bytes) { bytes.resize(12); },
         [](auto &bytes) { bytes.push_back(std::byte {0}); },
         [](auto &bytes) { bytes.pop_back(); },
     };
@@ -110,6 +122,10 @@ void RejectsMalformedAccessUnitWithoutChangingOutput()
             std::byte {0}, std::byte {0}, std::byte {0}, std::byte {2},
             std::byte {0x65},
         },
+        {
+            std::byte {0}, std::byte {0}, std::byte {0}, std::byte {1},
+            std::byte {0x80},
+        },
     };
     for (const auto &input : invalid) {
         std::vector<std::byte> output {std::byte {0xbb}};
@@ -117,6 +133,33 @@ void RejectsMalformedAccessUnitWithoutChangingOutput()
               VRREC_STATUS_INVALID_ARGUMENT);
         CHECK(output == std::vector<std::byte> {std::byte {0xbb}});
     }
+}
+
+void ReportsAllocationFailureWithoutChangingOutput()
+{
+    std::vector<std::byte> descriptor_output {std::byte {0xaa}};
+    const auto descriptor = AvccDescriptor();
+    allocation_failure::fail_on_allocation = 1;
+    const auto descriptor_status = ConvertH264AvccDescriptorToAnnexB(
+        descriptor,
+        descriptor_output);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(descriptor_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(descriptor_output ==
+          std::vector<std::byte> {std::byte {0xaa}});
+
+    const std::vector<std::byte> access_unit {
+        std::byte {0}, std::byte {0}, std::byte {0}, std::byte {1},
+        std::byte {0x65},
+    };
+    std::vector<std::byte> access_output {std::byte {0xbb}};
+    allocation_failure::fail_on_allocation = 1;
+    const auto access_status = ConvertH264AvccAccessUnitToAnnexB(
+        access_unit,
+        access_output);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(access_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(access_output == std::vector<std::byte> {std::byte {0xbb}});
 }
 
 }
@@ -127,5 +170,6 @@ int main()
     ConvertsEveryLengthPrefixedNalInAnAccessUnit();
     RejectsMalformedDescriptorWithoutChangingOutput();
     RejectsMalformedAccessUnitWithoutChangingOutput();
+    ReportsAllocationFailureWithoutChangingOutput();
     return 0;
 }
