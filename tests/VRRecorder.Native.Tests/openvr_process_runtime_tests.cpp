@@ -122,7 +122,7 @@ struct RawState final {
     };
 };
 
-class FakeRawApi final : public OpenVrRuntimePort {
+class FakeRawApi : public OpenVrRuntimePort {
 public:
     explicit FakeRawApi(std::shared_ptr<RawState> state)
         : state_(std::move(state))
@@ -394,6 +394,54 @@ public:
 
 private:
     std::shared_ptr<RawState> state_;
+};
+
+class AllocationStableRawApi final : public FakeRawApi {
+public:
+    explicit AllocationStableRawApi(std::shared_ptr<RawState> state)
+        : FakeRawApi(std::move(state))
+    {
+    }
+
+    vrrec_status_t Initialize() noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t AddApplicationManifest(
+        std::string_view,
+        bool) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t CreateOverlay(
+        std::string_view,
+        std::string_view,
+        std::uint64_t &handle) noexcept override
+    {
+        handle = 91;
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t SetOverlayWidthInMeters(
+        std::uint64_t,
+        float) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
+    vrrec_status_t ConfigureOverlayPointerInput(
+        std::uint64_t,
+        std::uint32_t,
+        std::uint32_t) noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
+    void Shutdown() noexcept override
+    {
+    }
 };
 
 class ScriptedThreadFactory final : public NativeThreadFactoryPort {
@@ -1377,6 +1425,39 @@ void ReportsOutOfMemoryFromRuntimeOwnedStateCopies()
     CHECK(handle == 0);
 }
 
+void ReportsEveryOverlayCompositionAllocationFailure()
+{
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+
+    for (std::size_t failing_allocation = 1;
+         failing_allocation <= 6;
+         ++failing_allocation) {
+        auto state = std::make_shared<RawState>();
+        auto api = std::make_unique<AllocationStableRawApi>(state);
+        auto status = VRREC_STATUS_INTERNAL_ERROR;
+        auto runtime = CreateOpenVrProcessRuntime(
+            std::move(api),
+            status);
+        CHECK(status == VRREC_STATUS_OK);
+        CHECK(runtime != nullptr);
+
+        allocation_failure::fail_on_allocation = failing_allocation;
+        auto lifecycle = CreateOpenVrProcessOverlayLifecycle(
+            runtime,
+            "x",
+            config,
+            status);
+        allocation_failure::fail_on_allocation = 0;
+
+        CHECK(lifecycle == nullptr);
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    }
+}
+
 }
 
 int main()
@@ -1402,5 +1483,6 @@ int main()
     FailsClosedBeforeAcquiringAReference();
     ReportsOutOfMemoryFromProcessRuntimeFactories();
     ReportsOutOfMemoryFromRuntimeOwnedStateCopies();
+    ReportsEveryOverlayCompositionAllocationFailure();
     return 0;
 }
