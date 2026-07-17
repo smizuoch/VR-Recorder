@@ -68,10 +68,21 @@ void ForwardsExactPrivacySafeDriftValuesToMediaEvents()
     CHECK(events.absolute_drift == 80'001);
 }
 
+void DropsDriftEventsWithNegativeMediaTimestamps()
+{
+    RecordingMediaEvents events;
+    AvSyncMediaEventAdapter adapter(events);
+
+    adapter.DriftThresholdExceeded(-1, 100'000, 100'001);
+    adapter.DriftThresholdExceeded(100'000, -1, 100'001);
+    CHECK(events.calls == 0);
+}
+
 }
 
 int main()
 {
     ForwardsExactPrivacySafeDriftValuesToMediaEvents();
+    DropsDriftEventsWithNegativeMediaTimestamps();
     return 0;
 }
