@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <future>
 #include <memory>
@@ -182,6 +183,39 @@ public:
 
 private:
     std::unique_ptr<AudioCaptureSource> initial_;
+};
+
+class ScriptedSourceProvider final : public AudioCaptureSourceProvider {
+public:
+    void Add(
+        vrrec_status_t status,
+        std::unique_ptr<AudioCaptureSource> source = nullptr)
+    {
+        steps_.push_back({status, std::move(source)});
+    }
+
+    vrrec_status_t Create(
+        std::unique_ptr<AudioCaptureSource> &source) noexcept override
+    {
+        ++create_calls;
+        if (steps_.empty()) {
+            source.reset();
+            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        auto step = std::move(steps_.front());
+        steps_.pop_front();
+        source = std::move(step.source);
+        return step.status;
+    }
+
+    std::size_t create_calls = 0;
+
+private:
+    struct Step final {
+        vrrec_status_t status;
+        std::unique_ptr<AudioCaptureSource> source;
+    };
+    std::deque<Step> steps_;
 };
 
 class RecordingRecoveryWaiter final : public AudioCaptureRecoveryWaiter {
@@ -813,6 +847,153 @@ void ReportsInitialCaptureStartFailureExactlyOnce()
     CHECK(starts.statuses[0] == VRREC_STATUS_BACKEND_UNAVAILABLE);
 }
 
+void RejectsConcurrentAndPostAbortRunnerStarts()
+{
+    auto source = std::make_unique<BlockingStartAudioCaptureSource>();
+    auto *borrowed = source.get();
+    ScriptedSourceProvider provider;
+    provider.Add(VRREC_STATUS_OK, std::move(source));
+    RecordingRecoveryWaiter waiter;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+    RecordingInputStartSink first_start;
+    auto running = std::async(std::launch::async, [&] {
+        return runner.Run(Config(), first_start);
+    });
+    borrowed->WaitForStart();
+
+    RecordingInputStartSink concurrent_start;
+    CHECK(runner.Run(Config(), concurrent_start) ==
+          AudioCaptureInputResult::InvalidState);
+    CHECK(concurrent_start.statuses ==
+          std::vector<vrrec_status_t> {VRREC_STATUS_INVALID_STATE});
+
+    runner.Abort();
+    runner.Abort();
+    borrowed->ReleaseStart();
+    CHECK(running.get() == AudioCaptureInputResult::Aborted);
+    CHECK(waiter.wait_calls == 0);
+
+    RecordingInputStartSink post_abort_start;
+    CHECK(runner.Run(Config(), post_abort_start) ==
+          AudioCaptureInputResult::InvalidState);
+    CHECK(post_abort_start.statuses ==
+          std::vector<vrrec_status_t> {VRREC_STATUS_INVALID_STATE});
+}
+
+void RejectsInitialProviderFailureAndNullSuccess()
+{
+    for (const auto status : {
+             VRREC_STATUS_BACKEND_UNAVAILABLE,
+             VRREC_STATUS_OK,
+         }) {
+        ScriptedSourceProvider provider;
+        provider.Add(status);
+        RecordingRecoveryWaiter waiter;
+        RecordingInputStartSink starts;
+        StereoCaptureTimeline timeline(8);
+        AudioCaptureInputRunner runner(provider, waiter, timeline);
+        CHECK(runner.Run(Config(), starts) ==
+              AudioCaptureInputResult::Failed);
+        CHECK(starts.statuses.size() == 1);
+        CHECK(starts.statuses[0] == (status == VRREC_STATUS_OK
+                  ? VRREC_STATUS_INTERNAL_ERROR
+                  : status));
+    }
+}
+
+void RecoversTheDefaultCaptureEndpointAndClearsRecoveryState()
+{
+    auto initial = std::make_unique<FakeAudioCaptureSource>();
+    initial->reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0,
+        0,
+        0,
+        0,
+        {},
+        false,
+        false,
+        0,
+    });
+    auto recovered = std::make_unique<FakeAudioCaptureSource>();
+    auto *borrowed_recovered = recovered.get();
+    recovered->reads.push_back({
+        AudioCaptureReadResult::Packet,
+        0,
+        0,
+        6'000'000,
+        1,
+        {0.5F, 0.5F},
+        false,
+        false,
+        0,
+    });
+    recovered->reads.push_back({
+        AudioCaptureReadResult::Failed, 0, 0, 0, 0, {}, false, false, 0});
+    ScriptedSourceProvider provider;
+    provider.Add(VRREC_STATUS_OK, std::move(initial));
+    provider.Add(VRREC_STATUS_OK, std::move(recovered));
+    RecordingRecoveryWaiter waiter;
+    RecordingInputStartSink starts;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+    auto config = Config();
+    config.role = AudioCaptureRole::Microphone;
+    config.endpoint_id_utf8 = "{capture-endpoint}";
+
+    CHECK(runner.Run(config, starts) == AudioCaptureInputResult::Failed);
+    CHECK(starts.statuses ==
+          std::vector<vrrec_status_t> {VRREC_STATUS_OK});
+    CHECK(borrowed_recovered->started_role == AudioCaptureRole::Microphone);
+    CHECK(borrowed_recovered->endpoint == "default-capture");
+    CHECK(waiter.wait_calls == 0);
+    CHECK(provider.create_calls == 2);
+}
+
+void RetriesAFailedRecoveryStartBeforeUsingTheNextSource()
+{
+    auto initial = std::make_unique<FakeAudioCaptureSource>();
+    initial->reads.push_back({
+        AudioCaptureReadResult::DeviceLost,
+        0, 0, 0, 0, {}, false, false, 0});
+    auto failed = std::make_unique<FakeAudioCaptureSource>();
+    failed->start_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    auto final_source = std::make_unique<FakeAudioCaptureSource>();
+    final_source->reads.push_back({
+        AudioCaptureReadResult::Failed, 0, 0, 0, 0, {}, false, false, 0});
+    ScriptedSourceProvider provider;
+    provider.Add(VRREC_STATUS_OK, std::move(initial));
+    provider.Add(VRREC_STATUS_OK, std::move(failed));
+    provider.Add(VRREC_STATUS_OK, std::move(final_source));
+    RecordingRecoveryWaiter waiter;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+
+    CHECK(runner.Run(Config()) == AudioCaptureInputResult::Failed);
+    CHECK(provider.create_calls == 3);
+    CHECK(waiter.wait_calls == 1);
+    CHECK(waiter.total_wait == AudioCaptureInputRunner::RetryInterval);
+}
+
+void MapsAnAbortedPumpWithoutRetrying()
+{
+    auto source = std::make_unique<FakeAudioCaptureSource>();
+    source->reads.push_back({
+        AudioCaptureReadResult::Aborted, 0, 0, 0, 0, {}, false, false, 0});
+    ScriptedSourceProvider provider;
+    provider.Add(VRREC_STATUS_OK, std::move(source));
+    RecordingRecoveryWaiter waiter;
+    RecordingInputStartSink starts;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+
+    CHECK(runner.Run(Config(), starts) == AudioCaptureInputResult::Aborted);
+    CHECK(starts.statuses ==
+          std::vector<vrrec_status_t> {VRREC_STATUS_OK});
+    CHECK(waiter.wait_calls == 0);
+}
+
 void FatalPacketFailureAbortsTheSourceAndTimeline()
 {
     auto abort_calls = std::make_shared<int>(0);
@@ -879,6 +1060,11 @@ int main()
     AbortReleasesARecoveryWaitImmediately();
     ReportsInitialCaptureStartExactlyOnce();
     ReportsInitialCaptureStartFailureExactlyOnce();
+    RejectsConcurrentAndPostAbortRunnerStarts();
+    RejectsInitialProviderFailureAndNullSuccess();
+    RecoversTheDefaultCaptureEndpointAndClearsRecoveryState();
+    RetriesAFailedRecoveryStartBeforeUsingTheNextSource();
+    MapsAnAbortedPumpWithoutRetrying();
     FatalPacketFailureAbortsTheSourceAndTimeline();
     AbortDuringSourceStartPerformsPostStartCleanup();
     return 0;
