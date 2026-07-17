@@ -1,5 +1,7 @@
 #include "audio_capture_normalizer.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -1038,6 +1040,78 @@ void ClearsThePreviousNormalizedPacketWhenAContractCheckFails()
     CHECK(!normalized.discontinuity);
 }
 
+void RejectsArithmeticAndAllocationBoundariesWithoutPartialOutput()
+{
+    using namespace vrrecorder::native;
+    const CapturePcmFormat format {
+        48'000,
+        2,
+        CaptureSampleEncoding::IeeeFloat,
+        32,
+        32,
+        8,
+        0x0000'0003,
+    };
+    CapturedStereoPacket48k normalized {};
+
+    StereoCaptureNormalizer48k oversized(12'000'000);
+    CHECK(oversized.Normalize(
+              format,
+              {
+                  0,
+                  12'000'000,
+                  std::numeric_limits<std::size_t>::max(),
+                  {},
+                  true,
+                  false,
+                  false,
+              },
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+
+    StereoCaptureNormalizer48k position_overflow(12'000'000);
+    CHECK(position_overflow.Normalize(
+              format,
+              {
+                  std::numeric_limits<std::uint64_t>::max(),
+                  12'000'000,
+                  1,
+                  {},
+                  true,
+                  false,
+                  false,
+              },
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+
+    auto zero_output_format = format;
+    zero_output_format.sample_rate_hz =
+        std::numeric_limits<std::uint32_t>::max();
+    StereoCaptureNormalizer48k zero_output(12'000'000);
+    CHECK(zero_output.Normalize(
+              zero_output_format,
+              {0, 12'000'000, 1, {}, true, false, false},
+              normalized) == CaptureNormalizationResult::InvalidPacket);
+
+    const std::vector<float> samples {0.25F, -0.25F};
+    StereoCaptureNormalizer48k oom_normalizer(12'000'000);
+    allocation_failure::fail_on_allocation = 1;
+    const auto allocation_status = oom_normalizer.Normalize(
+        format,
+        {
+            0,
+            12'000'000,
+            1,
+            std::as_bytes(std::span<const float>(samples)),
+            false,
+            false,
+            false,
+        },
+        normalized);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(allocation_status == CaptureNormalizationResult::OutOfMemory);
+    CHECK(normalized.frame_count_48k == 0);
+    CHECK(normalized.interleaved_samples.empty());
+}
+
 }
 
 int main()
@@ -1062,5 +1136,6 @@ int main()
     RejectsMalformedPacketMetadataAndPayloads();
     AcceptsSilentPacketsWithEitherPayloadRepresentation();
     ClearsThePreviousNormalizedPacketWhenAContractCheckFails();
+    RejectsArithmeticAndAllocationBoundariesWithoutPartialOutput();
     return 0;
 }
