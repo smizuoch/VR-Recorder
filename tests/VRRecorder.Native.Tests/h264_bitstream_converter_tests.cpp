@@ -1,6 +1,8 @@
 #include "h264_bitstream_converter.hpp"
 #include "h264_test_vectors.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -533,6 +535,61 @@ void RejectsMalformedOrIncompleteAnnexB()
               result) == VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void EveryAllocationStageFailsClosedBeforeEventualSuccess()
+{
+    const auto parameter_sets = AnnexB({Sps16x16, Pps});
+    std::size_t parameter_set_failures = 0;
+    auto parameter_set_succeeded = false;
+    for (std::size_t fail_on = 1; fail_on <= 32; ++fail_on) {
+        std::vector<std::byte> avcc {std::byte {0x7f}};
+        allocation_failure::fail_on_allocation = fail_on;
+        const auto status = ConvertH264AnnexBParameterSetsToAvcc(
+            parameter_sets,
+            16,
+            16,
+            H264Profile::High,
+            avcc);
+        allocation_failure::fail_on_allocation = 0;
+        if (status == VRREC_STATUS_OK) {
+            CHECK(!avcc.empty());
+            CHECK(avcc.front() == std::byte {1});
+            parameter_set_succeeded = true;
+            break;
+        }
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+        CHECK(avcc == std::vector<std::byte> {std::byte {0x7f}});
+        ++parameter_set_failures;
+    }
+    CHECK(parameter_set_succeeded);
+    CHECK(parameter_set_failures >= 3);
+
+    const auto access_unit = AnnexB({Sps16x16, Pps, Idr});
+    std::size_t access_unit_failures = 0;
+    auto access_unit_succeeded = false;
+    for (std::size_t fail_on = 1; fail_on <= 32; ++fail_on) {
+        H264AnnexBConversionResult result {};
+        allocation_failure::fail_on_allocation = fail_on;
+        const auto status = ConvertH264AnnexBToAvcc(
+            access_unit,
+            16,
+            16,
+            H264Profile::High,
+            result);
+        allocation_failure::fail_on_allocation = 0;
+        if (status == VRREC_STATUS_OK) {
+            CHECK(result.key_frame);
+            CHECK(!result.avcc.empty());
+            CHECK(!result.access_unit.empty());
+            access_unit_succeeded = true;
+            break;
+        }
+        CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+        ++access_unit_failures;
+    }
+    CHECK(access_unit_succeeded);
+    CHECK(access_unit_failures > parameter_set_failures);
+}
+
 }
 
 int main()
@@ -549,5 +606,6 @@ int main()
     RejectsDifferentParameterSetsWithTheSameIdentifier();
     DedupesRepeatedIdenticalParameterSets();
     RejectsMalformedOrIncompleteAnnexB();
+    EveryAllocationStageFailsClosedBeforeEventualSuccess();
     return 0;
 }
