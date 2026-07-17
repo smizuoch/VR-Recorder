@@ -114,6 +114,7 @@ public sealed class AuthenticatedLegalBundleVerifier
         }
 
         string[] authenticatedRelativePaths;
+        ParsedLegalCatalog catalog;
         try
         {
             var pathComparer = OperatingSystem.IsWindows()
@@ -131,7 +132,7 @@ public sealed class AuthenticatedLegalBundleVerifier
             var catalogBytes = await File
                 .ReadAllBytesAsync(catalogPath, cancellationToken)
                 .ConfigureAwait(false);
-            _ = LegalCatalogV3Parser.Parse(
+            catalog = LegalCatalogV3Parser.Parse(
                 catalogBytes,
                 anchor.BundleId,
                 manifestPaths,
@@ -146,7 +147,8 @@ public sealed class AuthenticatedLegalBundleVerifier
         return new LegalBundleVerification.Verified(
             new LegalBundleIdentity(
                 anchor.BundleId,
-                anchor.ManifestSha256))
+                anchor.ManifestSha256,
+                catalog.ProductVersion))
         {
             AuthenticatedRelativePaths = authenticatedRelativePaths,
         };

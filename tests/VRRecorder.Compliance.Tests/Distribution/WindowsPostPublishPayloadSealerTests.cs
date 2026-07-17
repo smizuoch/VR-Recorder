@@ -19,7 +19,8 @@ public sealed class WindowsPostPublishPayloadSealerTests
             return new LegalBundleVerification.Verified(
                 new LegalBundleIdentity(
                     anchor.BundleId,
-                    anchor.ManifestSha256));
+                    anchor.ManifestSha256,
+                    Fixture.ProductVersion));
         });
 
         var result = await new WindowsPostPublishPayloadSealer(verifier)
@@ -35,11 +36,13 @@ public sealed class WindowsPostPublishPayloadSealerTests
         Assert.Equal(fixture.PublishRoot, payload.RootDirectory);
         Assert.Equal("VRRecorder.App.exe", payload.EntryPoint);
         Assert.Equal("win-x64", payload.RuntimeIdentifier);
+        Assert.Equal(Fixture.ProductVersion, payload.ProductVersion);
+        Assert.Equal(Fixture.SourceRevision, payload.SourceRevision);
         Assert.Matches("^[0-9a-f]{64}$", payload.EntryPointSha256);
         Assert.Matches("^[0-9a-f]{64}$", payload.InventorySha256);
         Assert.Equal(Fixture.LegalBundleId, payload.LegalBundleId);
         Assert.Equal(Fixture.LegalManifestSha, payload.LegalManifestSha256);
-        Assert.Equal(2, payload.Files.Count);
+        Assert.Equal(3, payload.Files.Count);
         Assert.NotNull(observedAnchor);
         Assert.Equal(Fixture.LegalBundleId, observedAnchor.BundleId);
         Assert.Equal(
@@ -85,7 +88,8 @@ public sealed class WindowsPostPublishPayloadSealerTests
                         new LegalBundleVerification.Verified(
                             new LegalBundleIdentity(
                                 anchor.BundleId,
-                                anchor.ManifestSha256))))
+                                anchor.ManifestSha256,
+                                Fixture.ProductVersion))))
                 .SealAsync(
                     fixture.PublishRoot,
                     wrongProps,
@@ -147,9 +151,35 @@ public sealed class WindowsPostPublishPayloadSealerTests
             new LegalBundleVerification.Verified(
                 new LegalBundleIdentity(
                     "https://example.invalid/spdx/substituted",
-                    Fixture.LegalManifestSha)));
+                    Fixture.LegalManifestSha,
+                    Fixture.ProductVersion)));
 
         AssertIssue("legal-bundle-identity-mismatch", result);
+    }
+
+    [Fact]
+    public async Task LegalProductVersionMustMatchManagedBuildIdentity()
+    {
+        using var fixture = Fixture.Create();
+        var result = await fixture.SealAsync(
+            new LegalBundleVerification.Verified(
+                new LegalBundleIdentity(
+                    Fixture.LegalBundleId,
+                    Fixture.LegalManifestSha,
+                    "0.1.1")));
+
+        AssertIssue("application-product-version-legal-mismatch", result);
+    }
+
+    [Fact]
+    public async Task MissingManagedApplicationAssemblyPreventsIdentity()
+    {
+        using var fixture = Fixture.Create();
+        File.Delete(Path.Combine(fixture.PublishRoot, "VRRecorder.App.dll"));
+
+        AssertIssue(
+            "application-build-identity-assembly-missing",
+            await fixture.SealAsync());
     }
 
     [Fact]
@@ -192,6 +222,9 @@ public sealed class WindowsPostPublishPayloadSealerTests
 
     private sealed class Fixture : IDisposable
     {
+        public const string ProductVersion = "0.1.0";
+        public const string SourceRevision =
+            "0123456789abcdef0123456789abcdef01234567";
         public const string LegalBundleId =
             "https://example.invalid/spdx/vr-recorder-test";
         public const string LegalManifestSha =
@@ -217,6 +250,11 @@ public sealed class WindowsPostPublishPayloadSealerTests
             File.WriteAllBytes(
                 Path.Combine(PublishRoot, "native.dll"),
                 runtimeBytes);
+            File.Copy(
+                typeof(WindowsPostPublishPayloadSealerTests)
+                    .Assembly
+                    .Location,
+                Path.Combine(PublishRoot, "VRRecorder.App.dll"));
 
             var stagingRoot = Path.Combine(
                 root,
@@ -279,7 +317,8 @@ public sealed class WindowsPostPublishPayloadSealerTests
                 new LegalBundleVerification.Verified(
                     new LegalBundleIdentity(
                         LegalBundleId,
-                        LegalManifestSha));
+                        LegalManifestSha,
+                        ProductVersion));
             return new WindowsPostPublishPayloadSealer(
                     new CallbackLegalVerifier((_, _) => verification))
                 .SealAsync(

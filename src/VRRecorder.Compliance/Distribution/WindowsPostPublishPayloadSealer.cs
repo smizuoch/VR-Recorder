@@ -11,12 +11,15 @@ public sealed class SealedWindowsApplicationPayload
 {
     internal SealedWindowsApplicationPayload(
         WindowsPublishDirectoryInventory inventory,
+        ManagedApplicationBuildIdentity buildIdentity,
         string runtimeIdentifier,
         string legalBundleId,
         string legalManifestSha256)
     {
         RootDirectory = inventory.RootDirectory;
         EntryPoint = inventory.EntryPoint;
+        ProductVersion = buildIdentity.ProductVersion;
+        SourceRevision = buildIdentity.SourceRevision;
         RuntimeIdentifier = runtimeIdentifier;
         EntryPointSha256 = inventory.EntryPointSha256;
         InventorySha256 = inventory.InventorySha256;
@@ -29,6 +32,10 @@ public sealed class SealedWindowsApplicationPayload
     public string RootDirectory { get; }
 
     public string EntryPoint { get; }
+
+    public string ProductVersion { get; }
+
+    public string SourceRevision { get; }
 
     public string RuntimeIdentifier { get; }
 
@@ -178,6 +185,39 @@ public sealed class WindowsPostPublishPayloadSealer
         {
             return Reject(publishAdmission.Issues);
         }
+
+        var managedAssembly = publishAdmission.Inventory.Files
+            .Where(file => string.Equals(
+                file.RelativePath,
+                "VRRecorder.App.dll",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (managedAssembly.Length == 0)
+        {
+            return Reject(
+                "application-build-identity-assembly-missing",
+                "VRRecorder.App.dll");
+        }
+
+        if (managedAssembly.Length != 1 ||
+            managedAssembly[0].RelativePath != "VRRecorder.App.dll")
+        {
+            return Reject(
+                "application-build-identity-assembly-invalid",
+                managedAssembly[0].RelativePath);
+        }
+
+        var buildIdentityAdmission = ManagedApplicationBuildIdentityReader.Read(
+            Path.Combine(
+            publishAdmission.Inventory.RootDirectory,
+            "VRRecorder.App.dll"));
+        if (!buildIdentityAdmission.IsAdmitted ||
+            buildIdentityAdmission.Identity is null)
+        {
+            return Reject(buildIdentityAdmission.Issues);
+        }
+
+        var buildIdentity = buildIdentityAdmission.Identity;
 
         StagingInventory staged;
         try
@@ -336,9 +376,20 @@ public sealed class WindowsPostPublishPayloadSealer
                 verified.Identity.BundleId);
         }
 
+        if (!string.Equals(
+                verified.Identity.ProductVersion,
+                buildIdentity.ProductVersion,
+                StringComparison.Ordinal))
+        {
+            return Reject(
+                "application-product-version-legal-mismatch",
+                verified.Identity.ProductVersion ?? string.Empty);
+        }
+
         return new WindowsPostPublishPayloadSealResult(
             new SealedWindowsApplicationPayload(
                 publishAdmission.Inventory,
+                buildIdentity,
                 props.RuntimeIdentifier,
                 props.LegalBundleId,
                 props.LegalManifestSha256),

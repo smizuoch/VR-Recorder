@@ -2,7 +2,8 @@ namespace VRRecorder.Compliance.Runtime;
 
 public sealed record LegalBundleIdentity(
     string BundleId,
-    string ManifestSha256);
+    string ManifestSha256,
+    string? ProductVersion = null);
 
 public abstract record LegalBundleVerification
 {

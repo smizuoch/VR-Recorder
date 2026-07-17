@@ -9,6 +9,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <PublishSelfContained>true</PublishSelfContained>
     <RootNamespace>VRRecorder.App</RootNamespace>
+    <VersionPrefix>0.1.0</VersionPrefix>
   </PropertyGroup>
 
   <Import Project="$(ApprovedWindowsRuntimeProps)"
@@ -30,6 +31,15 @@
                       Value="$(LegalBundleId)" />
     <AssemblyMetadata Include="VRRecorder.LegalManifestSha256"
                       Value="$(LegalManifestSha256)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <AssemblyMetadata Include="VRRecorder.ProductVersion"
+                      Value="$(VersionPrefix)" />
+    <AssemblyMetadata Include="VRRecorder.SourceRevision"
+                      Value="$(SourceRevisionId)" />
+    <AssemblyMetadata Include="VRRecorder.RuntimeIdentifier"
+                      Value="$(RuntimeIdentifier)" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(LegalBundleDirectory)' != '' and Exists('$(LegalBundleDirectory)')">
@@ -99,6 +109,15 @@
     </PropertyGroup>
     <Error Condition="'$(_ComputedLegalManifestSha256)' != '$(LegalManifestSha256)'"
            Text="The LegalManifestSha256 digest does not match LEGAL-MANIFEST.sha256." />
+  </Target>
+
+  <Target Name="ValidateReleaseBuildIdentity"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'Release'">
+    <Error Condition="'$(VersionPrefix)' != '0.1.0'"
+           Text="Release requires the repository-pinned VR Recorder product version." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(SourceRevisionId)', '^[0-9a-f]{40}([0-9a-f]{24})?$'))"
+           Text="Release requires a canonical repository SourceRevisionId." />
   </Target>
 
   <Target Name="ValidateReleaseWindowsRuntimeStaging"

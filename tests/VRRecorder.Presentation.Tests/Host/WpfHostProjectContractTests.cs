@@ -2402,6 +2402,18 @@ public sealed class WpfHostProjectContractTests
         Assert.Equal(
             "$(LegalManifestSha256)",
             metadata["VRRecorder.LegalManifestSha256"]);
+        Assert.Equal(
+            "$(VersionPrefix)",
+            metadata["VRRecorder.ProductVersion"]);
+        Assert.Equal(
+            "$(SourceRevisionId)",
+            metadata["VRRecorder.SourceRevision"]);
+        Assert.Equal(
+            "$(RuntimeIdentifier)",
+            metadata["VRRecorder.RuntimeIdentifier"]);
+        Assert.Equal(
+            "0.1.0",
+            project.Descendants("VersionPrefix").Single().Value);
 
         var legalPayload = Assert.Single(project.Descendants("Content"), item =>
             item.Attribute("Include")?.Value ==
@@ -2443,6 +2455,20 @@ public sealed class WpfHostProjectContractTests
             hashOutput.Attribute("ItemName")?.Value);
         Assert.Contains(errors, text =>
             text!.Contains("digest does not match", StringComparison.Ordinal));
+
+        var identityGate = Assert.Single(
+            project.Descendants("Target"),
+            target => target.Attribute("Name")?.Value ==
+                      "ValidateReleaseBuildIdentity");
+        var identityConditions = identityGate.Elements("Error")
+            .Select(error => error.Attribute("Condition")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.Contains(identityConditions, condition =>
+            condition.Contains("$(VersionPrefix)", StringComparison.Ordinal) &&
+            condition.Contains("0.1.0", StringComparison.Ordinal));
+        Assert.Contains(identityConditions, condition =>
+            condition.Contains("$(SourceRevisionId)", StringComparison.Ordinal) &&
+            condition.Contains("[0-9a-f]{40}", StringComparison.Ordinal));
     }
 
     private static XDocument LoadRequiredXaml(
