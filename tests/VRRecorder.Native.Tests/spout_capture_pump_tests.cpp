@@ -136,6 +136,12 @@ public:
         std::chrono::milliseconds timeout,
         SpoutFrame &frame) override
     {
+        if (block_poll) {
+            std::unique_lock lock(mutex);
+            poll_entered = true;
+            changed.notify_all();
+            changed.wait(lock, [this] { return release_poll; });
+        }
         if (throw_on_poll) {
             throw 1;
         }
@@ -153,14 +159,30 @@ public:
 
     void Abort() noexcept override
     {
-        ++abort_calls;
+        {
+            const std::lock_guard lock(mutex);
+            ++abort_calls;
+            release_poll = true;
+        }
+        changed.notify_all();
     }
 
+    void WaitForPoll()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [this] { return poll_entered; });
+    }
+
+    std::mutex mutex;
+    std::condition_variable changed;
     std::deque<PollResult> polls;
     std::chrono::milliseconds last_timeout {0};
     std::size_t poll_calls = 0;
     std::size_t abort_calls = 0;
     bool throw_on_poll = false;
+    bool block_poll = false;
+    bool poll_entered = false;
+    bool release_poll = false;
 };
 
 SpoutFrame Frame(
@@ -431,6 +453,49 @@ void AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler()
     CHECK(backend.abort_calls == 1);
 }
 
+void AbortWakesAnInFlightBackendPollBeforeFrameValidation()
+{
+    ScriptedSpoutBackend backend;
+    backend.block_poll = true;
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 31, 3'100'000),
+    });
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    auto polling = std::async(std::launch::async, [&] {
+        return pump.PollOne(std::chrono::milliseconds(100));
+    });
+    backend.WaitForPoll();
+    pump.Abort();
+
+    CHECK(polling.get() == SpoutCaptureResult::Aborted);
+    CHECK(backend.abort_calls == 1);
+    CHECK(scheduler.Statistics().source_frame_count == 0);
+}
+
+void MapsSchedulerRejectionToAnInvalidFrame()
+{
+    ScriptedSpoutBackend backend;
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 32, 3'200'000),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 32, 3'200'001),
+    });
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected");
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::InvalidFrame);
+    CHECK(scheduler.Statistics().source_frame_count == 1);
+}
+
 void DropsAnOlderSurfaceGenerationWithoutReplacingTheNewFrame()
 {
     ScriptedSpoutBackend backend;
@@ -571,6 +636,8 @@ int main()
     AcceptsEverySupportedVendorAndPixelFormat();
     AbortStopsPollingAndReleasesTheBackend();
     AbortPreventsAValidatedInFlightFrameFromReachingTheScheduler();
+    AbortWakesAnInFlightBackendPollBeforeFrameValidation();
+    MapsSchedulerRejectionToAnInvalidFrame();
     DropsAnOlderSurfaceGenerationWithoutReplacingTheNewFrame();
     ReplacesTheSurfaceOnlyWithANewerGeneration();
     DistinguishesAnAdapterChangeWithoutPushingItsSurface();
