@@ -324,6 +324,31 @@ void RejectsAProducerStreamMismatchWithoutMuxMutation()
     CHECK(backend.abort_calls == 1);
 }
 
+void RejectsUnknownProducersAndPacketsFromAFinishedAudioEncoder()
+{
+    {
+        RecordingMuxer backend;
+        FragmentedMp4MuxCoordinator mux(backend);
+        CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+        SharedMuxFinalizationSession session(mux);
+
+        CHECK(session.SubmitBatch(
+                  static_cast<MediaStreamKind>(99),
+                  std::span<const EncodedMediaPacket> {}) ==
+              Mp4MuxResult::InvalidPacket);
+        CHECK(backend.abort_calls == 1);
+    }
+
+    RecordingMuxer backend;
+    FragmentedMp4MuxCoordinator mux(backend);
+    CHECK(mux.Begin(TestMp4Streams()) == VRREC_STATUS_OK);
+    SharedMuxFinalizationSession session(mux);
+    CHECK(session.EncoderFinished(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    CHECK(session.Submit(AudioPacket()) == Mp4MuxResult::InvalidState);
+    CHECK(backend.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -340,5 +365,6 @@ int main()
     PacketMuxFailureImmediatelyTerminalizesTheSharedSession();
     InvalidBatchTerminalizesBeforeWritingItsValidPrefix();
     RejectsAProducerStreamMismatchWithoutMuxMutation();
+    RejectsUnknownProducersAndPacketsFromAFinishedAudioEncoder();
     return 0;
 }
