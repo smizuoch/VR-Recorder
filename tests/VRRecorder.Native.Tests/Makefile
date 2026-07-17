@@ -135,7 +135,7 @@ $(BUILD_DIR)/spout_capture_pump_tests: spout_capture_pump_tests.cpp $(NATIVE_ROO
 $(BUILD_DIR)/spout_capture_worker_tests: spout_capture_worker_tests.cpp $(NATIVE_ROOT)/src/spout_capture_worker.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/video_pipeline_session_tests: video_pipeline_session_tests.cpp $(NATIVE_ROOT)/src/video_pipeline_session.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/video_pipeline_session_tests: video_pipeline_session_tests.cpp $(NATIVE_ROOT)/src/video_pipeline_session.cpp $(NATIVE_ROOT)/src/video_encoding_worker.cpp $(NATIVE_ROOT)/src/video_encoding_pump.cpp $(NATIVE_ROOT)/src/video_cfr_scheduler.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/libvrrecorder_native_test.so: fake_media_backend.cpp fake_control_exports.cpp $(NATIVE_ROOT)/src/abi.cpp | $(BUILD_DIR)
