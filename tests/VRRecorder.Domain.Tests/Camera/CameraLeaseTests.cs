@@ -54,6 +54,45 @@ public sealed class CameraLeaseTests
                     TimeSpan.FromHours(9))));
     }
 
+    [Theory]
+    [InlineData("session-001\n", "service-001")]
+    [InlineData("session-001", "service-001\t")]
+    public void PersistentIdentityRejectsControlCharactersIndependently(
+        string sessionId,
+        string vrChatServiceId)
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new CameraLeaseIdentity(
+                sessionId,
+                vrChatServiceId,
+                processId: 1,
+                DateTimeOffset.UnixEpoch));
+    }
+
+    [Fact]
+    public void PersistedStateComparisonRequiresEveryFieldToMatch()
+    {
+        var identity = Identity("session-001");
+        var lease = Lease(identity);
+
+        Assert.True(lease.HasSamePersistedState(Lease(Identity("session-001"))));
+        Assert.False(lease.HasSamePersistedState(Lease(Identity("session-002"))));
+        Assert.False(lease.HasSamePersistedState(Lease(
+            identity,
+            previousMode: ObservedCameraValue.Known(CameraMode.Stream))));
+        Assert.False(lease.HasSamePersistedState(Lease(
+            identity,
+            previousStreaming: ObservedCameraValue.Known(true))));
+        Assert.False(lease.HasSamePersistedState(Lease(
+            identity,
+            changedModeByRecorder: false)));
+        Assert.False(lease.HasSamePersistedState(Lease(
+            identity,
+            changedStreamingByRecorder: false)));
+        Assert.Throws<ArgumentNullException>(() =>
+            lease.HasSamePersistedState(null!));
+    }
+
     [Fact]
     public void ChangedModeAndStreamingAreBothRestored()
     {
@@ -147,4 +186,23 @@ public sealed class CameraLeaseTests
 
         Assert.Null(plan.Streaming);
     }
+
+    private static CameraLeaseIdentity Identity(string sessionId) => new(
+        sessionId,
+        "service-001",
+        processId: 42,
+        DateTimeOffset.UnixEpoch);
+
+    private static CameraLease Lease(
+        CameraLeaseIdentity identity,
+        ObservedCameraValue<CameraMode>? previousMode = null,
+        ObservedCameraValue<bool>? previousStreaming = null,
+        bool changedModeByRecorder = true,
+        bool changedStreamingByRecorder = true) =>
+        new(
+            identity,
+            previousMode ?? ObservedCameraValue.Known(CameraMode.Photo),
+            previousStreaming ?? ObservedCameraValue.Known(false),
+            changedModeByRecorder,
+            changedStreamingByRecorder);
 }
