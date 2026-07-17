@@ -3056,6 +3056,57 @@ bool ReadsSteamVrDeviceProfileThroughSizedPackedUtf8Abi()
     vrrec_steamvr_overlay_t *overlay = nullptr;
     CHECK(vrrec_steamvr_overlay_create_v1(&config, &overlay) ==
           VRREC_STATUS_OK);
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              nullptr,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    auto invalid_profile = profile;
+    invalid_profile.struct_size -= 1;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &invalid_profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    invalid_profile = profile;
+    invalid_profile.reserved_v1 = 1;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &invalid_profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    invalid_profile = profile;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &invalid_profile,
+              nullptr,
+              1,
+              &required_size) == VRREC_STATUS_INVALID_ARGUMENT);
+    invalid_profile = profile;
+    invalid_profile.abi_version += 1;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &invalid_profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_UNSUPPORTED_ABI);
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              nullptr,
+              0,
+              nullptr) == VRREC_STATUS_INVALID_ARGUMENT);
+
+    profile.hand = VRREC_STEAMVR_HAND_LEFT;
+    CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
+              overlay,
+              &profile,
+              nullptr,
+              0,
+              &required_size) == VRREC_STATUS_BUFFER_TOO_SMALL);
     profile.hand = VRREC_STEAMVR_HAND_NONE;
     CHECK(vrrec_steamvr_overlay_get_device_profile_v1(
               overlay,
@@ -3126,6 +3177,43 @@ bool ReadsSteamVrDeviceProfileThroughSizedPackedUtf8Abi()
               &required_size) == VRREC_STATUS_INTERNAL_ERROR);
     CHECK(required_size == 0);
     CHECK(profile.tracking_system_name_size == 0);
+
+    const auto rejects_backend_profile = [&](std::string tracking,
+                                             std::string model,
+                                             std::string controller) {
+        vrrecorder::native::testing::SetSteamVrOverlayDeviceProfile(
+            std::move(tracking),
+            std::move(model),
+            std::move(controller));
+        required_size = UINT32_MAX;
+        return vrrec_steamvr_overlay_get_device_profile_v1(
+                   overlay,
+                   &profile,
+                   nullptr,
+                   0,
+                   &required_size) == VRREC_STATUS_INTERNAL_ERROR &&
+            required_size == 0;
+    };
+    CHECK(rejects_backend_profile(
+        std::string(tracking_system),
+        std::string("\xC3\x28", 2),
+        std::string(controller_profile)));
+    CHECK(rejects_backend_profile(
+        std::string(tracking_system),
+        std::string(hmd_model),
+        std::string("\xC3\x28", 2)));
+    CHECK(rejects_backend_profile(
+        std::string("lighthouse\0suffix", 17),
+        std::string(hmd_model),
+        std::string(controller_profile)));
+    CHECK(rejects_backend_profile(
+        std::string(tracking_system),
+        std::string("Valve\0Index", 11),
+        std::string(controller_profile)));
+    CHECK(rejects_backend_profile(
+        std::string(tracking_system),
+        std::string(hmd_model),
+        std::string("profile\0suffix", 14)));
 
     CHECK(vrrec_steamvr_overlay_close_v1(overlay) == VRREC_STATUS_OK);
     required_size = UINT32_MAX;
