@@ -73,6 +73,63 @@ public sealed class WindowsApplicationPayloadIdentityReaderTests
             StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("\"productVersion\": \"0.1.0\"", "\"productVersion\": \"1.2.3-alpha.1+build.7\"")]
+    [InlineData("\"sourceRevision\": \"0123456789abcdef0123456789abcdef01234567\"", "\"sourceRevision\": \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"")]
+    [InlineData("\"legalBundleId\": \"legal-id\"", "\"legalBundleId\": \"legal-id!v1\"")]
+    public void CanonicalIdentityAlternativesAreAccepted(
+        string oldValue,
+        string newValue)
+    {
+        var document = WindowsApplicationPayloadIdentityReader.Read(
+            Encoding.UTF8.GetBytes(Replace(oldValue, newValue)));
+
+        Assert.Equal(3, document.Files.Count);
+    }
+
+    [Theory]
+    [InlineData("\"productVersion\": \"0.1.0\"", "\"productVersion\": \"01.1.0\"")]
+    [InlineData("\"productVersion\": \"0.1.0\"", "\"productVersion\": \"1.0\"")]
+    [InlineData("\"sourceRevision\": \"0123456789abcdef0123456789abcdef01234567\"", "\"sourceRevision\": \"0123456789abcdef0123456789abcdef0123456\"")]
+    [InlineData("\"sourceRevision\": \"0123456789abcdef0123456789abcdef01234567\"", "\"sourceRevision\": \"0123456789abcdef0123456789abcdef0123456G\"")]
+    [InlineData("\"runtimeIdentifier\": \"win-x64\"", "\"runtimeIdentifier\": \"win-arm64\"")]
+    [InlineData("\"entryPoint\": \"VRRecorder.App.exe\"", "\"entryPoint\": \"Other.exe\"")]
+    [InlineData("\"applicationExecutableSha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"", "\"applicationExecutableSha256\": \"Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"")]
+    [InlineData("\"payloadInventorySha256\": \"", "\"payloadInventorySha256\": \"G")]
+    [InlineData("\"legalBundleId\": \"legal-id\"", "\"legalBundleId\": \"bad id\"")]
+    [InlineData("\"legalManifestSha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"", "\"legalManifestSha256\": \"ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"")]
+    [InlineData("\"files\": [", "\"files\": {")]
+    [InlineData("\"path\": \"a.dll\"", "\"path\": \"bad\\\\path.dll\"")]
+    [InlineData("\"length\": 12", "\"length\": -1")]
+    [InlineData("\"sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"", "\"sha256\": \"gccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"")]
+    [InlineData("\"kind\": \"nativeLibrary\"", "\"kind\": \"unknown\"")]
+    [InlineData("\"kind\": \"executable\"", "\"kind\": \"asset\"")]
+    [InlineData("\"path\": \"VRRecorder.App.exe\"", "\"path\": \"vrrecorder.app.exe\"")]
+    [InlineData("\"schemaVersion\": 1", "\"schemaVersion\": \"1\"")]
+    [InlineData("\"productVersion\": \"0.1.0\"", "\"productVersion\": null")]
+    [InlineData("\"length\": 12", "\"length\": \"12\"")]
+    public void InvalidIdentityBoundariesAreRejected(
+        string oldValue,
+        string newValue)
+    {
+        AssertInvalid(Replace(oldValue, newValue));
+    }
+
+    [Fact]
+    public void EmptyNonUtf8AndOversizedFieldsAreRejected()
+    {
+        Assert.Throws<InvalidDataException>(() =>
+            WindowsApplicationPayloadIdentityReader.Read([]));
+        Assert.Throws<InvalidDataException>(() =>
+            WindowsApplicationPayloadIdentityReader.Read([0xff]));
+        AssertInvalid(Replace(
+            "\"productVersion\": \"0.1.0\"",
+            $"\"productVersion\": \"{new string('1', 65)}\""));
+        AssertInvalid(Replace(
+            "\"legalBundleId\": \"legal-id\"",
+            $"\"legalBundleId\": \"{new string('x', 2049)}\""));
+    }
+
     private static byte[] IdentityBytes()
     {
         var files = new StagedPayloadFile[]
@@ -109,6 +166,17 @@ public sealed class WindowsApplicationPayloadIdentityReaderTests
             "legal-id",
             ShaC);
         return WindowsApplicationPayloadIdentityPublisher.Generate(payload);
+    }
+
+    private static string Replace(string oldValue, string newValue)
+    {
+        var json = Encoding.UTF8.GetString(IdentityBytes());
+        var replaced = json.Replace(
+            oldValue,
+            newValue,
+            StringComparison.Ordinal);
+        Assert.NotEqual(json, replaced);
+        return replaced;
     }
 
     private static void AssertInvalid(string json) =>
