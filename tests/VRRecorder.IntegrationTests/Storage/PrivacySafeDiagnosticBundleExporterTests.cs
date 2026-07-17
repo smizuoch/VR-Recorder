@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using VRRecorder.Infrastructure.Storage;
 
@@ -165,6 +166,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                          ("muxedAudioPacketCount", "1"),
                          ("muxedVideoPacketCount", "1"),
                          ("sourceVideoFrameCount", "1")),
+                     ("audioVideoOffsetMicroseconds", null, true),
                      ("audioVideoOffsetMicroseconds", "invalid", false),
                      ("droppedSourceVideoFrameCount", "-1", false),
                      ("duplicatedOutputVideoFrameCount", "invalid", false),
@@ -184,6 +186,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                          ("gpuVendor", "nvidia"),
                          ("osBuild", "10.0.26100"),
                          ("driverVersion", "32.0.15.6094")),
+                     ("appVersion", null, true),
                      ("appVersion", "1.2", false),
                      ("appVersion", "1.2.3.4.5", false),
                      ("appVersion", "1..3", false),
@@ -191,6 +194,7 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
                      ("appVersion", "a.2.3", false),
                      ("architecture", "private", false),
                      ("gpuVendor", "private", false),
+                     ("gpuModel", null, true),
                      ("gpuModel", "private", false),
                      ("gpuModel", "ven_10de&bad_2684", false),
                      ("gpuModel", "ven_10d&dev_2684", false),
@@ -507,6 +511,174 @@ public sealed class PrivacySafeDiagnosticBundleExporterTests
 
         Assert.False(File.Exists(destination));
         Assert.Empty(Directory.EnumerateFiles(output.Path));
+    }
+
+    [Fact]
+    public void SanitizesValidStorageAndOptionalAudioBudget()
+    {
+        var storage = PrivacySafeDiagnosticBundleExporter.TrySanitize(
+            Envelope(
+                "recording.storage",
+                Fields(
+                    ("availableBytes", "1024"),
+                    ("estimatedRemainingSeconds", "12.500"),
+                    ("state", "healthy"))));
+        var audio = PrivacySafeDiagnosticBundleExporter.TrySanitize(
+            Envelope(
+                "audio.input_status",
+                Fields(
+                    ("framePosition", "4800"),
+                    ("input", "microphone"),
+                    ("kind", "input_recovered"),
+                    ("rediscoveryBudgetMilliseconds", "10.500"))));
+
+        Assert.Contains("\"estimatedRemainingSeconds\":\"12.5\"", storage);
+        Assert.Contains(
+            "\"rediscoveryBudgetMilliseconds\":\"10.5\"",
+            audio);
+    }
+
+    [Fact]
+    public async Task MissingLogDirectoryProducesEmptyBundle()
+    {
+        using var root = TemporaryDirectory.Create("missing-log-root");
+        using var output = TemporaryDirectory.Create("missing-log-output");
+        var exporter = new PrivacySafeDiagnosticBundleExporter(Path.Combine(
+            root.Path,
+            "missing"));
+        var destination = Path.Combine(output.Path, "diagnostics.zip");
+
+        var result = await exporter.ExportAsync(
+            destination,
+            CancellationToken.None);
+
+        Assert.Equal(0, result.EventCount);
+        using var archive = ZipFile.OpenRead(destination);
+        Assert.Equal(
+            string.Empty,
+            await ReadEntryAsync(archive.GetEntry("diagnostics.jsonl")!));
+    }
+
+    [Fact]
+    public async Task RejectsRelativeLogAndDestinationPaths()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new PrivacySafeDiagnosticBundleExporter("diagnostics"));
+
+        using var logs = TemporaryDirectory.Create("relative-logs");
+        var exporter = new PrivacySafeDiagnosticBundleExporter(logs.Path);
+        await Assert.ThrowsAsync<ArgumentException>(() => exporter.ExportAsync(
+            "diagnostics.zip",
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RejectsMissingOutputDirectoryAndDirectoryDestination()
+    {
+        using var logs = TemporaryDirectory.Create("invalid-output-logs");
+        using var output = TemporaryDirectory.Create("invalid-output");
+        var exporter = new PrivacySafeDiagnosticBundleExporter(logs.Path);
+        await Assert.ThrowsAsync<DirectoryNotFoundException>(() =>
+            exporter.ExportAsync(
+                Path.Combine(output.Path, "missing", "diagnostics.zip"),
+                CancellationToken.None));
+        var directoryDestination = Path.Combine(
+            output.Path,
+            "diagnostics.zip");
+        Directory.CreateDirectory(directoryDestination);
+
+        await Assert.ThrowsAsync<IOException>(() => exporter.ExportAsync(
+            directoryDestination,
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RejectsLinkedOutputDirectory()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var logs = TemporaryDirectory.Create("linked-output-logs");
+        using var output = TemporaryDirectory.Create("linked-output-root");
+        var target = Path.Combine(output.Path, "target");
+        var link = Path.Combine(output.Path, "link");
+        Directory.CreateDirectory(target);
+        Directory.CreateSymbolicLink(link, target);
+        var exporter = new PrivacySafeDiagnosticBundleExporter(logs.Path);
+
+        await Assert.ThrowsAsync<IOException>(() => exporter.ExportAsync(
+            Path.Combine(link, "diagnostics.zip"),
+            CancellationToken.None));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(target));
+    }
+
+    [Fact]
+    public async Task RejectsLinkedDestinationWithoutChangingTarget()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var logs = TemporaryDirectory.Create("linked-destination-logs");
+        using var output = TemporaryDirectory.Create("linked-destination-output");
+        using var outside = TemporaryDirectory.Create("linked-destination-target");
+        var target = Path.Combine(outside.Path, "outside.zip");
+        var destination = Path.Combine(output.Path, "diagnostics.zip");
+        await File.WriteAllTextAsync(target, "outside evidence");
+        File.CreateSymbolicLink(destination, target);
+        var exporter = new PrivacySafeDiagnosticBundleExporter(logs.Path);
+
+        await Assert.ThrowsAsync<IOException>(() => exporter.ExportAsync(
+            destination,
+            CancellationToken.None));
+
+        Assert.Equal("outside evidence", await File.ReadAllTextAsync(target));
+        Assert.Equal(target, new FileInfo(destination).LinkTarget);
+    }
+
+    [Fact]
+    public async Task RejectsOversizedLogBeforeCreatingBundle()
+    {
+        using var logs = TemporaryDirectory.Create("oversized-logs");
+        using var output = TemporaryDirectory.Create("oversized-output");
+        var logPath = Path.Combine(logs.Path, "vr-recorder.jsonl");
+        await using (var stream = new FileStream(
+                         logPath,
+                         FileMode.CreateNew,
+                         FileAccess.Write,
+                         FileShare.None))
+        {
+            stream.SetLength(
+                RotatingJsonLinesDiagnosticLog.DefaultMaximumFileBytes + 1);
+        }
+
+        var exporter = new PrivacySafeDiagnosticBundleExporter(logs.Path);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            exporter.ExportAsync(
+                Path.Combine(output.Path, "diagnostics.zip"),
+                CancellationToken.None));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output.Path));
+    }
+
+    [Fact]
+    public async Task InvalidUtf8RemovesTemporaryBundle()
+    {
+        using var logs = TemporaryDirectory.Create("invalid-utf8-logs");
+        using var output = TemporaryDirectory.Create("invalid-utf8-output");
+        await File.WriteAllBytesAsync(
+            Path.Combine(logs.Path, "vr-recorder.jsonl"),
+            [0xff]);
+        var exporter = new PrivacySafeDiagnosticBundleExporter(logs.Path);
+
+        await Assert.ThrowsAsync<DecoderFallbackException>(() =>
+            exporter.ExportAsync(
+                Path.Combine(output.Path, "diagnostics.zip"),
+                CancellationToken.None));
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output.Path));
     }
 
     private static string LogLine(
