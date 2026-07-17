@@ -544,6 +544,72 @@ public sealed class AudioSessionIntegrationTests
         Assert.Throws<ArgumentException>(() => session.Process(nonFinite));
     }
 
+    [Fact]
+    public void ConstructionAndRoutingChangesRejectInvalidContracts()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new AudioSessionService(
+                (AudioRouting)int.MaxValue,
+                new RecordingRediscoveryScheduler(),
+                new RecordingAudioSessionEventSink()));
+        Assert.Throws<ArgumentNullException>(() =>
+            new AudioSessionService(
+                AudioRouting.Mixed,
+                null!,
+                new RecordingAudioSessionEventSink()));
+        Assert.Throws<ArgumentNullException>(() =>
+            new AudioSessionService(
+                AudioRouting.Mixed,
+                new RecordingRediscoveryScheduler(),
+                null!));
+
+        var session = CreateSession(AudioRouting.Mixed);
+        session.SetRouting(AudioRouting.Mixed);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            session.SetRouting((AudioRouting)int.MaxValue));
+
+        var unavailable = session.Process(new ScheduledStereoAudioBuffer(
+            0,
+            SampleRate,
+            1,
+            [],
+            [],
+            AudioInputAvailability.None));
+        session.SetRouting(AudioRouting.DesktopOnly);
+        Assert.Equal([0f, 0f], unavailable.InterleavedSamples);
+    }
+
+    [Fact]
+    public void ScheduledBufferRejectsNegativeZeroAndUnknownTimelineValues()
+    {
+        var session = CreateSession(AudioRouting.Mixed);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            session.Process(new ScheduledStereoAudioBuffer(
+                -1,
+                SampleRate,
+                1,
+                [0, 0],
+                [0, 0],
+                AudioInputAvailability.All)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            session.Process(new ScheduledStereoAudioBuffer(
+                0,
+                SampleRate,
+                0,
+                [],
+                [],
+                AudioInputAvailability.All)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            session.Process(new ScheduledStereoAudioBuffer(
+                0,
+                SampleRate,
+                1,
+                [0, 0],
+                [0, 0],
+                (AudioInputAvailability)int.MaxValue)));
+    }
+
     private static AudioSessionService CreateSession(AudioRouting routing) =>
         new(
             routing,
