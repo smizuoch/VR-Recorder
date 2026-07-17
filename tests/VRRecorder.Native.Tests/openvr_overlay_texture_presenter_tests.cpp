@@ -1,5 +1,7 @@
 #include "openvr_overlay_texture_presenter.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -67,6 +69,9 @@ public:
         if (create_status != VRREC_STATUS_OK) {
             return create_status;
         }
+        if (!publish_resource) {
+            return VRREC_STATUS_OK;
+        }
         resource = std::make_unique<FakeResource>(state_, next_id++);
         return VRREC_STATUS_OK;
     }
@@ -104,6 +109,7 @@ public:
     vrrec_status_t upload_status = VRREC_STATUS_OK;
     vrrec_status_t submit_status = VRREC_STATUS_OK;
     vrrec_status_t clear_status = VRREC_STATUS_OK;
+    bool publish_resource = true;
 
 private:
     std::shared_ptr<FakeState> state_;
@@ -230,12 +236,62 @@ void RejectsUnsafeFramesBeforeTouchingGraphics()
 
     CHECK(presenter->SetOverlayBgraTexture(0, frame) ==
           VRREC_STATUS_INVALID_ARGUMENT);
-    frame.stride_bytes -= 1;
-    CHECK(presenter->SetOverlayBgraTexture(47, frame) ==
-          VRREC_STATUS_INVALID_ARGUMENT);
+    for (const auto invalid_case : {0, 1, 2, 3, 4}) {
+        frame = Frame(pixels);
+        if (invalid_case == 0) {
+            frame.pixel_bytes = nullptr;
+        } else if (invalid_case == 1) {
+            --frame.pixel_bytes_size;
+        } else if (invalid_case == 2) {
+            --frame.width;
+        } else if (invalid_case == 3) {
+            --frame.height;
+        } else {
+            --frame.stride_bytes;
+        }
+        CHECK(presenter->SetOverlayBgraTexture(47, frame) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    }
     CHECK(state->calls.empty());
+    CHECK(presenter->ClearOverlayTexture(0) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(CreateOpenVrOverlayTexturePresenter(nullptr, status) == nullptr);
     CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+}
+
+void RejectsTextureCreationContractFailuresAndFactoryOom()
+{
+    std::vector<std::uint8_t> pixels(1024U * 512U * 4U);
+    for (const auto missing_resource : {false, true}) {
+        auto state = std::make_shared<FakeState>();
+        auto graphics = std::make_unique<FakeGraphicsPort>(state);
+        auto *raw = graphics.get();
+        if (missing_resource) {
+            raw->publish_resource = false;
+        } else {
+            raw->create_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        auto status = VRREC_STATUS_INTERNAL_ERROR;
+        auto presenter = CreateOpenVrOverlayTexturePresenter(
+            std::move(graphics), status);
+        CHECK(presenter != nullptr);
+        const auto expected = missing_resource
+            ? VRREC_STATUS_INTERNAL_ERROR
+            : VRREC_STATUS_BACKEND_UNAVAILABLE;
+        CHECK(presenter->SetOverlayBgraTexture(47, Frame(pixels)) == expected);
+        CHECK(presenter->ClearOverlayTexture(47) == VRREC_STATUS_OK);
+    }
+
+    auto state = std::make_shared<FakeState>();
+    auto graphics = std::make_unique<FakeGraphicsPort>(state);
+    auto status = VRREC_STATUS_OK;
+    allocation_failure::fail_on_allocation = 1;
+    auto presenter = CreateOpenVrOverlayTexturePresenter(
+        std::move(graphics), status);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(presenter == nullptr);
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(state->calls.empty());
 }
 
 void ReleasesResourcesWhenTheRuntimeShutsDown()
@@ -262,6 +318,7 @@ int main()
     RetainsASubmittedResourceUntilClearSucceeds();
     RetainsASubmittedResourceAfterANewerUploadFails();
     RejectsUnsafeFramesBeforeTouchingGraphics();
+    RejectsTextureCreationContractFailuresAndFactoryOom();
     ReleasesResourcesWhenTheRuntimeShutsDown();
     return 0;
 }
