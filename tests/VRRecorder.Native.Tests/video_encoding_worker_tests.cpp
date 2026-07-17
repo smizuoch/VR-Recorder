@@ -41,6 +41,9 @@ public:
         if (fail_unexpectedly) {
             return VideoCfrClockResult::Aborted;
         }
+        if (fail_clock) {
+            return VideoCfrClockResult::Failed;
+        }
 
         if (next_tick < ready_tick_count) {
             tick = next_tick++;
@@ -48,6 +51,8 @@ public:
             return VideoCfrClockResult::Tick;
         }
 
+        waiting_for_abort = true;
+        changed.notify_all();
         changed.wait(lock, [&] { return aborted; });
         return VideoCfrClockResult::Aborted;
     }
@@ -85,6 +90,12 @@ public:
         changed.wait(lock, [&] { return aborted; });
     }
 
+    void WaitUntilWaitingForAbort()
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return waiting_for_abort; });
+    }
+
     void ReleaseTick()
     {
         {
@@ -101,8 +112,10 @@ public:
     std::size_t abort_calls = 0;
     bool aborted = false;
     bool fail_unexpectedly = false;
+    bool fail_clock = false;
     bool block_next_tick = false;
     bool wait_entered = false;
+    bool waiting_for_abort = false;
     bool release_tick = false;
 };
 
@@ -718,6 +731,120 @@ void UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault()
     CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
 }
 
+void ClockFailureReleasesTheEncoderSinkAndRaisesFault()
+{
+    VideoCfrScheduler scheduler;
+    ScriptedCfrClock clock;
+    clock.fail_clock = true;
+    ScriptedVideoSink sink;
+    RecordingMediaEvents events;
+    VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+    CHECK(worker.Start() == VRREC_STATUS_OK);
+    CHECK(worker.Join() == VideoEncodingWorkerResult::ClockFailed);
+    CHECK(clock.abort_calls == 0);
+    CHECK(sink.abort_calls == 1);
+    CHECK(sink.finish_calls == 0);
+    CHECK(events.fault_calls == 1);
+    CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
+}
+
+void EmptyAndTimedOutTicksRemainNonTerminalUntilStopped()
+{
+    for (const auto acquire_result : {
+             VideoSurfaceAcquireResult::Acquired,
+             VideoSurfaceAcquireResult::Timeout,
+         }) {
+        VideoCfrScheduler scheduler;
+        if (acquire_result == VideoSurfaceAcquireResult::Timeout) {
+            const auto surface = std::make_shared<WorkerSurface>();
+            surface->acquire_result = acquire_result;
+            CHECK(scheduler.Push({31, 3'100'000, surface}) ==
+                  VRREC_STATUS_OK);
+        }
+        ScriptedCfrClock clock;
+        clock.ready_tick_count = 1;
+        ScriptedVideoSink sink;
+        RecordingMediaEvents events;
+        VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+        CHECK(worker.Start() == VRREC_STATUS_OK);
+        clock.WaitUntilWaitingForAbort();
+        CHECK(worker.RequestStop() == VRREC_STATUS_OK);
+        CHECK(worker.Join() == VideoEncodingWorkerResult::Stopped);
+        CHECK(sink.write_calls == 0);
+        CHECK(sink.finish_calls == 1);
+        CHECK(sink.abort_calls == 0);
+        CHECK(events.fault_calls == 0);
+    }
+}
+
+void ProcessingAndMuxWriteFailuresKeepTheirStageIdentity()
+{
+    for (const auto &[stage, message] : {
+             std::pair {
+                 VideoEncoderFailureStage::Processing,
+                 "video frame processing failed while recording"},
+             std::pair {
+                 VideoEncoderFailureStage::Muxing,
+                 "video packet muxing failed while recording"},
+         }) {
+        VideoCfrScheduler scheduler;
+        CHECK(scheduler.Push({32, 3'200'000}) == VRREC_STATUS_OK);
+        ScriptedCfrClock clock;
+        clock.ready_tick_count = 1;
+        ScriptedVideoSink sink;
+        sink.writes.push_back({
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            0,
+            stage,
+        });
+        RecordingMediaEvents events;
+        VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+        CHECK(worker.Start() == VRREC_STATUS_OK);
+        CHECK(worker.Join() == VideoEncodingWorkerResult::Failed);
+        CHECK(clock.abort_calls == 1);
+        CHECK(sink.abort_calls == 1);
+        CHECK(sink.finish_calls == 0);
+        CHECK(events.fault_calls == 1);
+        CHECK(std::string(events.fault_message) == message);
+    }
+}
+
+void FinishFailurePreservesWhetherTheCurrentPartWasSealed()
+{
+    for (const auto part_sealed : {false, true}) {
+        VideoCfrScheduler scheduler;
+        ScriptedCfrClock clock;
+        clock.ready_tick_count = 0;
+        ScriptedVideoSink sink;
+        sink.finish = {
+            VRREC_STATUS_INTERNAL_ERROR,
+            0,
+            0,
+            VideoEncoderFailureStage::Encoding,
+            part_sealed,
+        };
+        RecordingMediaEvents events;
+        VideoEncodingWorker worker(scheduler, clock, sink, events);
+
+        CHECK(worker.Start() == VRREC_STATUS_OK);
+        CHECK(worker.RequestStop() == VRREC_STATUS_OK);
+        const auto expected = part_sealed
+            ? VideoEncodingWorkerResult::EncoderFailedPartSealed
+            : VideoEncodingWorkerResult::EncoderFailed;
+        CHECK(worker.Join() == expected);
+        CHECK(sink.finish_calls == 1);
+        CHECK(sink.abort_calls == (part_sealed ? 0U : 1U));
+        CHECK(events.fault_calls == (part_sealed ? 0U : 1U));
+        CHECK(events.video_encoder_failure_calls ==
+              (part_sealed ? 1U : 0U));
+        CHECK(clock.abort_calls == 1);
+    }
+}
+
 void WorkerReleaseFailureRejectsPreparedFrameBeforeEncoding()
 {
     VideoCfrScheduler scheduler;
@@ -756,6 +883,10 @@ void WorkerPreservesTerminalSurfaceAcquisitionIdentity()
                  VideoSurfaceAcquireResult::DeviceReset,
                  VideoEncodingWorkerResult::SurfaceDeviceReset,
                  "video device was reset"},
+             std::tuple {
+                 VideoSurfaceAcquireResult::Failed,
+                 VideoEncodingWorkerResult::Failed,
+                 "video surface synchronization failed"},
          }) {
         VideoCfrScheduler scheduler;
         const auto surface = std::make_shared<WorkerSurface>();
@@ -973,6 +1104,14 @@ void AbortBeforeStartPreventsThreadCreation()
 
 int main()
 {
+    {
+        VideoCfrScheduler scheduler;
+        ScriptedCfrClock clock;
+        ScriptedVideoSink sink;
+        RecordingMediaEvents events;
+        VideoEncodingWorker worker(scheduler, clock, sink, events);
+        CHECK(worker.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    }
     GracefulStopFlushesAndReportsTheFirstPacketOnce();
     RuntimeEncoderFailureRaisesFaultAndDoesNotFlush();
     RuntimeEncoderFailureAfterFirstPacketSealsPartWithoutAbortingSink();
@@ -981,6 +1120,10 @@ int main()
     AbortDominatesAnInFlightVideoWriteFailure();
     AbortDoesNotCommitASuccessfulInFlightVideoWrite();
     UnexpectedClockAbortReleasesTheEncoderSinkAndRaisesFault();
+    ClockFailureReleasesTheEncoderSinkAndRaisesFault();
+    EmptyAndTimedOutTicksRemainNonTerminalUntilStopped();
+    ProcessingAndMuxWriteFailuresKeepTheirStageIdentity();
+    FinishFailurePreservesWhetherTheCurrentPartWasSealed();
     WorkerReleaseFailureRejectsPreparedFrameBeforeEncoding();
     WorkerPreservesTerminalSurfaceAcquisitionIdentity();
     AbortPreventsATickReturnedByAnInFlightClockWaitFromEncoding();
