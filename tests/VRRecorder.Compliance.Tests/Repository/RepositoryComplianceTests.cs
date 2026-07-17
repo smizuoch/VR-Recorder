@@ -38,6 +38,35 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
+    public void ManagedCoverageWorkflowRunsTheLockedReleaseGate()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var workflow = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            ".github",
+            "workflows",
+            "managed-coverage.yml"));
+
+        Assert.Equal(2, workflow.Split(
+            "--locked-mode",
+            StringSplitOptions.None).Length - 1);
+        Assert.Contains(
+            "dotnet test tests/VRRecorder.IntegrationTests/" +
+            "VRRecorder.IntegrationTests.csproj",
+            workflow);
+        Assert.Contains("--configuration Release", workflow);
+        Assert.Contains("--collect:\"XPlat Code Coverage\"", workflow);
+        Assert.Contains(
+            "--settings eng/managed-coverage.runsettings",
+            workflow);
+        Assert.Contains(
+            "--project src/VRRecorder.ManagedCoverage/" +
+            "VRRecorder.ManagedCoverage.csproj",
+            workflow);
+        Assert.Contains("coverage.cobertura.xml", workflow);
+    }
+
+    [Fact]
     public void OpenVrLegalCandidateBindsOfficialArchiveRecipeAndSdkArtifacts()
     {
         var repositoryRoot = FindRepositoryRoot();

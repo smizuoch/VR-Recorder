@@ -1827,7 +1827,7 @@ Public native ABI contract scenarios = 100%
 Mutation score            >= 75%
 ```
 
-除外追加はADRとレビュー承認を必須にする。全体平均で隠さず、主要assemblyごとにline／branch各80%を要求する。
+除外追加はADRとレビュー承認を必須にする。全体平均で隠さず、主要assemblyごとにline／branch各80%を要求する。managed gateの対象は`VRRecorder.Application`、`VRRecorder.Compliance`、`VRRecorder.Domain`、`VRRecorder.Infrastructure.Media`、`VRRecorder.Infrastructure.Osc`、`VRRecorder.Infrastructure.SteamVr`、`VRRecorder.Infrastructure.Storage`、`VRRecorder.Presentation.Wrist`の8 packageとする。`eng/managed-coverage.runsettings`で収集したCoberturaを`VRRecorder.ManagedCoverage`へ渡し、package欠落またはline／branchいずれか80%未満ならCIをfailさせる。
 
 ### 18.6 CI
 

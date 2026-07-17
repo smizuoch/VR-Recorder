@@ -1,0 +1,76 @@
+name: Managed Coverage
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/managed-coverage.yml
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - eng/managed-coverage.runsettings
+      - src/**/*.cs
+      - src/**/*.csproj
+      - src/**/packages.lock.json
+      - tests/**/*.cs
+      - tests/**/*.csproj
+      - tests/**/packages.lock.json
+  push:
+    paths:
+      - .github/workflows/managed-coverage.yml
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - eng/managed-coverage.runsettings
+      - src/**/*.cs
+      - src/**/*.csproj
+      - src/**/packages.lock.json
+      - tests/**/*.cs
+      - tests/**/*.csproj
+      - tests/**/packages.lock.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact revision
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          server="${GITHUB_SERVER_URL#https://}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@${server}/${GITHUB_REPOSITORY}.git"
+          git -c protocol.version=2 fetch --no-tags --prune --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Restore locked integration graph
+        run: dotnet restore tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj --locked-mode
+
+      - name: Restore locked coverage gate
+        run: dotnet restore src/VRRecorder.ManagedCoverage/VRRecorder.ManagedCoverage.csproj --locked-mode
+
+      - name: Collect managed integration coverage
+        run: >-
+          dotnet test tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj
+          --configuration Release
+          --no-restore
+          --collect:"XPlat Code Coverage"
+          --settings eng/managed-coverage.runsettings
+          --results-directory artifacts/managed-coverage
+          --logger "console;verbosity=minimal"
+
+      - name: Enforce 80 percent per managed assembly
+        shell: bash
+        run: |
+          report="$(find artifacts/managed-coverage -type f -name coverage.cobertura.xml -print -quit)"
+          test -n "${report}"
+          dotnet run \
+            --project src/VRRecorder.ManagedCoverage/VRRecorder.ManagedCoverage.csproj \
+            --configuration Release \
+            --no-restore \
+            -- "${report}"
