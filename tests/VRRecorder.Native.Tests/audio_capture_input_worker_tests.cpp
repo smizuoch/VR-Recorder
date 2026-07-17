@@ -1,5 +1,7 @@
 #include "audio_capture_input_worker.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -298,6 +300,55 @@ void EmptySuccessfulThreadCreationFailsClosed()
         false);
 }
 
+void ConfigurationAllocationFailureIsTerminal()
+{
+    auto state = std::make_shared<SourceState>();
+    SingleSourceProvider provider(
+        std::make_unique<BlockingSource>(state, VRREC_STATUS_OK));
+    RecordingWaiter waiter;
+    StereoCaptureTimeline timeline(16);
+    ScriptedThreadFactory thread_factory({VRREC_STATUS_OK});
+    AudioCaptureInputWorker worker(
+        provider,
+        waiter,
+        timeline,
+        thread_factory);
+    auto config = Config();
+    config.endpoint_id_utf8.assign(256, 'x');
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = worker.Start(config);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(thread_factory.start_calls == 0);
+    CHECK(provider.create_calls == 0);
+    CHECK(worker.Join() == AudioCaptureInputResult::Failed);
+    CHECK(worker.Start(config) == VRREC_STATUS_INVALID_STATE);
+}
+
+void AbortBeforeStartRejectsLaunchWithoutTouchingDependencies()
+{
+    auto state = std::make_shared<SourceState>();
+    SingleSourceProvider provider(
+        std::make_unique<BlockingSource>(state, VRREC_STATUS_OK));
+    RecordingWaiter waiter;
+    StereoCaptureTimeline timeline(16);
+    ScriptedThreadFactory thread_factory({VRREC_STATUS_OK});
+    AudioCaptureInputWorker worker(
+        provider,
+        waiter,
+        timeline,
+        thread_factory);
+
+    worker.Abort();
+
+    CHECK(worker.Start(Config()) == VRREC_STATUS_INVALID_STATE);
+    CHECK(thread_factory.start_calls == 0);
+    CHECK(provider.create_calls == 0);
+    CHECK(waiter.abort_calls == 0);
+}
+
 }
 
 int main()
@@ -308,5 +359,7 @@ int main()
     OutOfMemoryThreadCreationIsTerminalFailure();
     InternalThreadCreationFailureIsTerminalFailure();
     EmptySuccessfulThreadCreationFailsClosed();
+    ConfigurationAllocationFailureIsTerminal();
+    AbortBeforeStartRejectsLaunchWithoutTouchingDependencies();
     return 0;
 }
