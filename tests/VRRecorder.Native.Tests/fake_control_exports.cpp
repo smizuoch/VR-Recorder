@@ -560,6 +560,24 @@ extern "C" VRREC_TEST_API void vrrec_test_spout_reset(void)
     vrrecorder::native::testing::ResetSpoutSource();
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_spout_fail_next_create(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::FailNextSpoutCreate(status);
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_fail_next_snapshot(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::FailNextSpoutSnapshot(status);
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_spout_fail_next_poll(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::FailNextSpoutPoll(status);
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_spout_add_snapshot_sender(
     const char *sender_id_utf8,
     std::uint64_t latest_frame_generation)

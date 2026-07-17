@@ -187,6 +187,9 @@ struct TestSpoutFrame {
     std::int64_t monotonic_timestamp_microseconds;
 };
 void ResetSpoutSource();
+void FailNextSpoutCreate(std::int32_t status);
+void FailNextSpoutSnapshot(std::int32_t status);
+void FailNextSpoutPoll(std::int32_t status);
 void SetSpoutSnapshot(std::vector<TestSpoutSenderSnapshot> senders);
 void AddSpoutSnapshotSender(TestSpoutSenderSnapshot sender);
 void PushSpoutFrame(TestSpoutFrame frame);

@@ -131,9 +131,13 @@ public sealed class PInvokeSpoutVideoSourceTests
         var disposal = Task.Run(source.Dispose);
         await Task.Delay(TimeSpan.FromMilliseconds(25));
         Assert.False(disposal.IsCompleted);
+        var repeatedDisposal = Task.Run(source.Dispose);
+        await Task.Delay(TimeSpan.FromMilliseconds(25));
+        Assert.False(repeatedDisposal.IsCompleted);
 
         controls.ReleasePoll();
         await disposal.WaitAsync(TimeSpan.FromSeconds(1));
+        await repeatedDisposal.WaitAsync(TimeSpan.FromSeconds(1));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => pending)
             .WaitAsync(TimeSpan.FromSeconds(1));
         source.Dispose();
@@ -390,6 +394,72 @@ public sealed class PInvokeSpoutVideoSourceTests
                 (NativeSourcePixelFormat)999));
     }
 
+    [Fact]
+    public void NativeCreateFailureIsTypedAndDoesNotLeakSource()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeSpoutFixtureControls(FixturePath());
+        controls.Reset();
+        controls.FailNextCreate(status: 4);
+
+        var exception = Assert.Throws<NativeSpoutSourceException>(() =>
+            new PInvokeSpoutVideoSource(FixturePath()));
+
+        Assert.Equal(4, exception.Status);
+        Assert.Contains("create failed", exception.Message);
+        Assert.Equal(0u, controls.ActiveSourceCount());
+    }
+
+    [Fact]
+    public async Task NativeSnapshotFailureIsTypedAndSourceRemainsDisposable()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeSpoutFixtureControls(FixturePath());
+        controls.Reset();
+        using var source = new PInvokeSpoutVideoSource(FixturePath());
+        controls.FailNextSnapshot(status: 6);
+
+        var exception = await Assert.ThrowsAsync<NativeSpoutSourceException>(() =>
+            source.SnapshotAsync(CancellationToken.None));
+
+        Assert.Equal(6, exception.Status);
+        Assert.Contains("snapshot failed", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(6, "frame size query")]
+    [InlineData(7, "frame read")]
+    public async Task NativePollFailuresAreTyped(
+        int status,
+        string expectedOperation)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeSpoutFixtureControls(FixturePath());
+        controls.Reset();
+        using var source = new PInvokeSpoutVideoSource(FixturePath());
+        controls.FailNextPoll(status);
+        await using var frames = source
+            .ObserveFramesAsync(CancellationToken.None)
+            .GetAsyncEnumerator();
+
+        var exception = await Assert.ThrowsAsync<NativeSpoutSourceException>(
+            () => frames.MoveNextAsync().AsTask());
+
+        Assert.Contains(expectedOperation, exception.Message);
+    }
+
     public enum SpoutTextFailure
     {
         ZeroSize,
@@ -420,6 +490,9 @@ public sealed class PInvokeSpoutVideoSourceTests
         private readonly VoidDelegate _releasePoll;
         private readonly CountDelegate _activeSourceCount;
         private readonly CountDelegate _destroyCount;
+        private readonly StatusDelegate _failNextCreate;
+        private readonly StatusDelegate _failNextSnapshot;
+        private readonly StatusDelegate _failNextPoll;
 
         public NativeSpoutFixtureControls(string path)
         {
@@ -439,6 +512,12 @@ public sealed class PInvokeSpoutVideoSourceTests
                 "vrrec_test_spout_active_source_count");
             _destroyCount = Resolve<CountDelegate>(
                 "vrrec_test_spout_destroy_count");
+            _failNextCreate = Resolve<StatusDelegate>(
+                "vrrec_test_spout_fail_next_create");
+            _failNextSnapshot = Resolve<StatusDelegate>(
+                "vrrec_test_spout_fail_next_snapshot");
+            _failNextPoll = Resolve<StatusDelegate>(
+                "vrrec_test_spout_fail_next_poll");
         }
 
         public void Reset() => _reset();
@@ -482,6 +561,12 @@ public sealed class PInvokeSpoutVideoSourceTests
         }
 
         public void ReleasePoll() => _releasePoll();
+
+        public void FailNextCreate(int status) => _failNextCreate(status);
+
+        public void FailNextSnapshot(int status) => _failNextSnapshot(status);
+
+        public void FailNextPoll(int status) => _failNextPoll(status);
 
         public uint ActiveSourceCount() => _activeSourceCount();
 
@@ -536,5 +621,8 @@ public sealed class PInvokeSpoutVideoSourceTests
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint CountDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void StatusDelegate(int status);
     }
 }

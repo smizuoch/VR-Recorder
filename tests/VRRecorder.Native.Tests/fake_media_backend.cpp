@@ -880,6 +880,9 @@ struct FakeSpoutSourceState {
     bool release_poll = false;
     std::uint32_t active_source_count = 0;
     std::uint32_t destroy_count = 0;
+    vrrec_status_t next_create_status = VRREC_STATUS_OK;
+    vrrec_status_t next_snapshot_status = VRREC_STATUS_OK;
+    vrrec_status_t next_poll_status = VRREC_STATUS_OK;
 };
 
 FakeSpoutSourceState fake_spout_source;
@@ -904,6 +907,12 @@ public:
         std::vector<SpoutSenderSnapshot> &senders) override
     {
         const std::lock_guard lock(fake_spout_source.mutex);
+        const auto status = fake_spout_source.next_snapshot_status;
+        fake_spout_source.next_snapshot_status = VRREC_STATUS_OK;
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+
         senders.clear();
         senders.reserve(fake_spout_source.snapshot.size());
         for (const auto &sender : fake_spout_source.snapshot) {
@@ -929,6 +938,12 @@ public:
             });
             fake_spout_source.block_next_poll = false;
             fake_spout_source.release_poll = false;
+        }
+
+        const auto status = fake_spout_source.next_poll_status;
+        fake_spout_source.next_poll_status = VRREC_STATUS_OK;
+        if (status != VRREC_STATUS_OK) {
+            return status;
         }
 
         if (fake_spout_source.frames.empty() && timeout.count() > 0) {
@@ -1100,7 +1115,15 @@ std::unique_ptr<SpoutSourceBackend> CreateSpoutSourceBackend(
     vrrec_status_t &status)
 {
     (void)config;
-    status = VRREC_STATUS_OK;
+    {
+        const std::lock_guard lock(fake_spout_source.mutex);
+        status = fake_spout_source.next_create_status;
+        fake_spout_source.next_create_status = VRREC_STATUS_OK;
+    }
+    if (status != VRREC_STATUS_OK) {
+        return nullptr;
+    }
+
     return std::make_unique<FakeSpoutSourceBackend>();
 }
 
@@ -1536,6 +1559,27 @@ void ResetSpoutSource()
     fake_spout_source.poll_entered = false;
     fake_spout_source.release_poll = false;
     fake_spout_source.destroy_count = 0;
+    fake_spout_source.next_create_status = VRREC_STATUS_OK;
+    fake_spout_source.next_snapshot_status = VRREC_STATUS_OK;
+    fake_spout_source.next_poll_status = VRREC_STATUS_OK;
+}
+
+void FailNextSpoutCreate(std::int32_t status)
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.next_create_status = status;
+}
+
+void FailNextSpoutSnapshot(std::int32_t status)
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.next_snapshot_status = status;
+}
+
+void FailNextSpoutPoll(std::int32_t status)
+{
+    const std::lock_guard lock(fake_spout_source.mutex);
+    fake_spout_source.next_poll_status = status;
 }
 
 void SetSpoutSnapshot(std::vector<TestSpoutSenderSnapshot> senders)
