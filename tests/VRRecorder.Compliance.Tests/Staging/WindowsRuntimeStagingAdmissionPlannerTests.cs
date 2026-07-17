@@ -133,6 +133,52 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     }
 
     [Fact]
+    public async Task PeImportsMustResolveToStagedOrWindowsSystemLibraries()
+    {
+        using var fixture = Fixture.Create();
+        var binary = WindowsPeImageTestData.Create(
+            isDll: true,
+            subsystem: 2,
+            imports: ["KERNEL32.dll"],
+            payload: Encoding.ASCII.GetBytes(
+                "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
+                IntentSha +
+                "-suffix"),
+            delayImports: ["ambient-evil.dll"]);
+        fixture.Write(fixture.NativeEntry.Source, binary);
+        fixture.WriteEvidence(
+            fullProductionRequired: true,
+            binary: binary);
+        fixture.UseEntries(fixture.RequiredEntries.ToArray());
+
+        AssertIssue("windows-pe-import-not-admitted", await fixture.PlanAsync());
+    }
+
+    [Fact]
+    public async Task PeImportMayResolveToAnExactlyStagedDll()
+    {
+        using var fixture = Fixture.Create();
+        var binary = WindowsPeImageTestData.Create(
+            isDll: true,
+            subsystem: 2,
+            imports: ["KERNEL32.dll", "avcodec-62.dll"],
+            payload: Encoding.ASCII.GetBytes(
+                "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
+                IntentSha +
+                "-suffix"));
+        fixture.Write(fixture.NativeEntry.Source, binary);
+        fixture.WriteEvidence(
+            fullProductionRequired: true,
+            binary: binary);
+        fixture.UseEntries(fixture.RequiredEntries.ToArray());
+
+        var result = await fixture.PlanAsync();
+
+        Assert.True(result.IsAdmitted);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
     public async Task SourceAndRepositoryRootsMustBeExistingCanonicalDirectories()
     {
         using var fixture = Fixture.Create();

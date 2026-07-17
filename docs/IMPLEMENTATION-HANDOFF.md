@@ -100,7 +100,7 @@ desktop production録画、production OpenVR overlay、first-run setup 7／8のp
 このfoundationがまだ証明しないことも明確にする。
 
 - schema v2は`full-production-hardware-validation-v1`、`win-x64`、全entryのdeclared byte length、Legal Bundle ID／manifest SHAを固定し、Release App buildでもstager生成値との一致を要求する。first-party native／factory evidence、FFmpeg 8 runtime majorの4 DLL＋ffprobe、OpenVR runtime／application manifest／action manifest／3 bindingsをexact closureにし、static-link Spout2とOS／driver提供encoder以外のruntime追加を拒否する。
-- DLL／EXEはactual bytesからAMD64 PE32+、subsystem、entrypoint、通常／delay import tableまでparseする。staging closureへのPE admission接続は完了したが、読み取ったimport名とstaged／Windows system DLLのclosure照合は次の独立単位として残る。
+- DLL／EXEはactual bytesからAMD64 PE32+、subsystem、entrypoint、通常／delay import tableまでparseする。読み取ったimportはmanifest内でexactly one staged DLLへ解決するか、明示allowlistのWindows system／API-set DLLである場合だけ認め、ambient PATH上の未登録DLLへは解決しない。
 - actual production registryにはnative artifactが0件で、componentは独立承認待ちである。synthetic first-party fixtureのGreenをactual FFmpeg／OpenVR／Spout admissionと呼ばない。
 - repositoryから`NormalizedComponentGraph`／`ApprovedReleaseGraph`を構築するproduction trust-source、外部CLI、two-invocation publish scriptは未実装である。stagerをApp build中に生成して同じevaluationへimportすることはできない。
 - generated propsはruntime subsetを列挙するが、self-contained .NET／managed output／Legalを含む最終publish directoryのpost-publish inventory sealerは未実装である。

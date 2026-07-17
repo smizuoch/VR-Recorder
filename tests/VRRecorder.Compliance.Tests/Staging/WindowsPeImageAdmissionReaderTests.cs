@@ -41,6 +41,22 @@ public sealed class WindowsPeImageAdmissionReaderTests
         Assert.Equal(["avcodec-62.dll"], admitted.Imports);
     }
 
+    [Fact]
+    public void DelayImportsJoinTheCanonicalImportClosure()
+    {
+        var admitted = WindowsPeImageAdmissionReader.Read(
+            "vrrecorder_native.dll",
+            WindowsPeImageTestData.Create(
+                isDll: true,
+                subsystem: 2,
+                imports: ["KERNEL32.dll"],
+                delayImports: ["avcodec-62.dll"]));
+
+        Assert.Equal(
+            ["avcodec-62.dll", "KERNEL32.dll"],
+            admitted.Imports);
+    }
+
     [Theory]
     [InlineData("VRRecorder.App.dll", false, 2, true)]
     [InlineData("vrrecorder_native.exe", true, 2, true)]

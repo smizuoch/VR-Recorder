@@ -9,6 +9,60 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
     private const string NativeBinaryFileName = "vrrecorder_native.dll";
     private const string FactoryPairSubject =
         FirstPartyComponentId + ":" + NativeBinaryFileName;
+    private static readonly HashSet<string> WindowsSystemLibraries = new(
+        [
+            "advapi32.dll",
+            "avrt.dll",
+            "bcrypt.dll",
+            "bcryptprimitives.dll",
+            "cfgmgr32.dll",
+            "comctl32.dll",
+            "comdlg32.dll",
+            "crypt32.dll",
+            "d3d11.dll",
+            "d3d12.dll",
+            "d3dcompiler_47.dll",
+            "dbghelp.dll",
+            "dnsapi.dll",
+            "dwmapi.dll",
+            "dxgi.dll",
+            "gdi32.dll",
+            "gdi32full.dll",
+            "imm32.dll",
+            "iphlpapi.dll",
+            "kernel32.dll",
+            "kernelbase.dll",
+            "ksuser.dll",
+            "mf.dll",
+            "mfplat.dll",
+            "mfreadwrite.dll",
+            "mfuuid.dll",
+            "mmdevapi.dll",
+            "msvcrt.dll",
+            "normaliz.dll",
+            "ntdll.dll",
+            "ole32.dll",
+            "oleaut32.dll",
+            "powrprof.dll",
+            "propsys.dll",
+            "rpcrt4.dll",
+            "secur32.dll",
+            "setupapi.dll",
+            "shell32.dll",
+            "shcore.dll",
+            "shlwapi.dll",
+            "ucrtbase.dll",
+            "user32.dll",
+            "uxtheme.dll",
+            "version.dll",
+            "winhttp.dll",
+            "winmm.dll",
+            "winspool.drv",
+            "wintrust.dll",
+            "ws2_32.dll",
+            "wtsapi32.dll",
+        ],
+        StringComparer.OrdinalIgnoreCase);
     private readonly IStagingInventoryReader _inventoryReader;
 
     public WindowsRuntimeStagingAdmissionPlanner()
@@ -199,6 +253,9 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
             CancellationToken cancellationToken)
     {
         var issues = new List<ComplianceIssue>();
+        var admittedImages = new List<(
+            WindowsRuntimeStagingEntry Entry,
+            WindowsPeImageAdmission Image)>();
         foreach (var entry in entries.Where(entry =>
                      entry.DeploymentKind is
                          WindowsRuntimeDeploymentKind.NativeLibrary or
@@ -213,9 +270,10 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
                 .ConfigureAwait(false);
             try
             {
-                _ = WindowsPeImageAdmissionReader.Read(
+                var image = WindowsPeImageAdmissionReader.Read(
                     Path.GetFileName(entry.Source),
                     bytes);
+                admittedImages.Add((entry, image));
             }
             catch (InvalidDataException)
             {
@@ -225,8 +283,44 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
             }
         }
 
+        var stagedLibraries = entries
+            .Where(entry => entry.DeploymentKind ==
+                            WindowsRuntimeDeploymentKind.NativeLibrary)
+            .GroupBy(
+                entry => Path.GetFileName(entry.Target),
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Count(),
+                StringComparer.OrdinalIgnoreCase);
+        foreach (var (entry, image) in admittedImages)
+        {
+            foreach (var import in image.Imports)
+            {
+                if (IsWindowsSystemLibrary(import) ||
+                    stagedLibraries.TryGetValue(import, out var count) &&
+                    count == 1)
+                {
+                    continue;
+                }
+
+                issues.Add(new ComplianceIssue(
+                    "windows-pe-import-not-admitted",
+                    $"{entry.Target}:{import}"));
+            }
+        }
+
         return Order(issues);
     }
+
+    private static bool IsWindowsSystemLibrary(string fileName) =>
+        WindowsSystemLibraries.Contains(fileName) ||
+        fileName.StartsWith(
+            "api-ms-win-",
+            StringComparison.OrdinalIgnoreCase) ||
+        fileName.StartsWith(
+            "ext-ms-win-",
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool TryCreateRegistrations(
         WindowsRuntimeStagingManifest manifest,

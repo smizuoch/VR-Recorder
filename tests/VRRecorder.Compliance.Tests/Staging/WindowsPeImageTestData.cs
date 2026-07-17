@@ -17,7 +17,8 @@ internal static class WindowsPeImageTestData
         ushort subsystem,
         IReadOnlyList<string> imports,
         bool hasEntryPoint = true,
-        byte[]? payload = null)
+        byte[]? payload = null,
+        IReadOnlyList<string>? delayImports = null)
     {
         var bytes = new byte[0x800];
         bytes[0] = (byte)'M';
@@ -69,14 +70,37 @@ internal static class WindowsPeImageTestData
             stringOffset += name.Length + 1;
         }
 
+        if (delayImports is { Count: > 0 })
+        {
+            var delayDescriptorRva = SectionRva + 0x200;
+            Write32(bytes, OptionalOffset + 216, (int)delayDescriptorRva);
+            Write32(
+                bytes,
+                OptionalOffset + 220,
+                (delayImports.Count + 1) * 32);
+            descriptorOffset = RawOffset + 0x200;
+            stringOffset = RawOffset + 0x400;
+            foreach (var import in delayImports)
+            {
+                Write32(bytes, descriptorOffset, 1);
+                var nameRva = SectionRva + (uint)(stringOffset - RawOffset);
+                Write32(bytes, descriptorOffset + 4, (int)nameRva);
+                var name = Encoding.ASCII.GetBytes(import);
+                name.CopyTo(bytes, stringOffset);
+                bytes[stringOffset + name.Length] = 0;
+                descriptorOffset += 32;
+                stringOffset += name.Length + 1;
+            }
+        }
+
         if (payload is not null)
         {
-            if (payload.Length > bytes.Length - 0x600)
+            if (payload.Length > bytes.Length - 0x700)
             {
                 throw new ArgumentOutOfRangeException(nameof(payload));
             }
 
-            payload.CopyTo(bytes, 0x600);
+            payload.CopyTo(bytes, 0x700);
         }
 
         return bytes;

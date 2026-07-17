@@ -16,7 +16,7 @@
 - [x] Releaseで`NativeMediaLibraryPath`／`FfprobeExecutablePath`／`FfmpegRuntimeDirectory`の直接指定を拒否する
 - [x] manifest v2のfull-production profile／RID／declared length／Legal anchorでfirst-party native、FFmpeg 4 DLL、ffprobe、OpenVR runtime／application manifest／action manifest／bindings、Spout／encoder runtimeのrequired closureとruntime majorを固定する
 - [ ] canonical repository evidenceからApprovedGraphを発行するbuilder、external staging CLI、two-invocation publish scriptを実装し、手書きprops／別digest directory差替えを拒否する
-- [ ] DLL／EXEを実PE bytesとしてparseし、PE32+／AMD64 machine／subsystem／entrypoint／import closureを検証して拡張子だけのkind判定をrelease gateにしない
+- [x] DLL／EXEを実PE bytesとしてparseし、PE32+／AMD64 machine／subsystem／entrypoint／import closureを検証して拡張子だけのkind判定をrelease gateにしない
 - [ ] authenticated Legal Bundle admission、ambient PATH排除、手動copy回避、publish後の全managed／native／self-contained .NET／asset／Legal inventory sealerを通す
 - [ ] Windows上でalternate data stream／reparse HILを実行し、portable injection testだけで合格にしない
 - [ ] Legal Bundle ID／manifest hashをpayload identityへ取り込む
