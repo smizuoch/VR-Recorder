@@ -63,6 +63,7 @@ public sealed class FileSystemCameraLeaseStoreTests
     [InlineData("{\"schemaVersion\":1,\"schemaVersion\":1}")]
     [InlineData("{\"schemaVersion\":1,\"unexpected\":true}")]
     [InlineData("not-json")]
+    [InlineData("[]")]
     public async Task InvalidDocumentFailsClosedWithoutDestroyingEvidence(
         string content)
     {
@@ -148,6 +149,233 @@ public sealed class FileSystemCameraLeaseStoreTests
 
         Assert.False(File.Exists(missingTarget));
         Assert.Equal(missingTarget, new FileInfo(link).LinkTarget);
+    }
+
+    [Fact]
+    public async Task UnknownCameraStateRoundTripsAsExplicitNulls()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "camera-lease.json");
+        using var store = new FileSystemCameraLeaseStore(path);
+        var lease = new CameraLease(
+            "session-a",
+            "service-a",
+            1234,
+            new DateTimeOffset(2026, 7, 10, 0, 0, 0, TimeSpan.Zero),
+            ObservedCameraValue.Unknown<CameraMode>(),
+            ObservedCameraValue.Unknown<bool>(),
+            changedModeByRecorder: false,
+            changedStreamingByRecorder: false);
+
+        await store.SaveAsync(lease, CancellationToken.None);
+        var loaded = Assert.IsType<CameraLease>(
+            await store.LoadAsync(CancellationToken.None));
+
+        Assert.False(loaded.PreviousMode.IsKnown);
+        Assert.False(loaded.PreviousStreaming.IsKnown);
+        var content = await File.ReadAllTextAsync(path);
+        Assert.Contains("\"previousMode\": null", content);
+        Assert.Contains("\"previousStreaming\": null", content);
+    }
+
+    [Fact]
+    public async Task MatchingDeleteAndRepeatedDeleteAreIdempotent()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "camera-lease.json");
+        using var store = new FileSystemCameraLeaseStore(path);
+        var lease = Lease("session-a", "service-a", processId: 1234);
+        await store.SaveAsync(lease, CancellationToken.None);
+
+        await store.DeleteAsync(lease, CancellationToken.None);
+        await store.DeleteAsync(lease, CancellationToken.None);
+
+        Assert.False(File.Exists(path));
+    }
+
+    [Theory]
+    [InlineData(InvalidLeaseDocument.SchemaVersionString)]
+    [InlineData(InvalidLeaseDocument.SchemaVersionFraction)]
+    [InlineData(InvalidLeaseDocument.UnknownModeWithValue)]
+    [InlineData(InvalidLeaseDocument.UnknownStreamingWithValue)]
+    [InlineData(InvalidLeaseDocument.InvalidCreationTime)]
+    [InlineData(InvalidLeaseDocument.NonUtcCreationTime)]
+    [InlineData(InvalidLeaseDocument.NumericDefinedMode)]
+    [InlineData(InvalidLeaseDocument.BlankSessionId)]
+    [InlineData(InvalidLeaseDocument.NonStringSessionId)]
+    [InlineData(InvalidLeaseDocument.NonBooleanChangedMode)]
+    [InlineData(InvalidLeaseDocument.NestedArrayDuplicate)]
+    [InlineData(InvalidLeaseDocument.NestedArrayWithoutDuplicate)]
+    public async Task InvalidFieldShapesFailClosed(
+        InvalidLeaseDocument invalidDocument)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "camera-lease.json");
+        using var store = new FileSystemCameraLeaseStore(path);
+        var usesUnknownState = invalidDocument is
+            InvalidLeaseDocument.UnknownModeWithValue or
+            InvalidLeaseDocument.UnknownStreamingWithValue;
+        var lease = usesUnknownState
+            ? new CameraLease(
+                "session-a",
+                "service-a",
+                1234,
+                new DateTimeOffset(2026, 7, 10, 0, 0, 0, TimeSpan.Zero),
+                ObservedCameraValue.Unknown<CameraMode>(),
+                ObservedCameraValue.Unknown<bool>(),
+                changedModeByRecorder: false,
+                changedStreamingByRecorder: false)
+            : Lease("session-a", "service-a", processId: 1234);
+        await store.SaveAsync(lease, CancellationToken.None);
+        var valid = await File.ReadAllTextAsync(path);
+        var invalid = invalidDocument switch
+        {
+            InvalidLeaseDocument.SchemaVersionString => valid.Replace(
+                "\"schemaVersion\": 1",
+                "\"schemaVersion\": \"1\"",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.SchemaVersionFraction => valid.Replace(
+                "\"schemaVersion\": 1",
+                "\"schemaVersion\": 1.5",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.UnknownModeWithValue => valid.Replace(
+                "\"previousMode\": null",
+                "\"previousMode\": \"Photo\"",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.UnknownStreamingWithValue => valid.Replace(
+                "\"previousStreaming\": null",
+                "\"previousStreaming\": true",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.InvalidCreationTime => valid.Replace(
+                "2026-07-10T00:00:00.0000000\\u002B00:00",
+                "invalid",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.NonUtcCreationTime => valid.Replace(
+                "2026-07-10T00:00:00.0000000\\u002B00:00",
+                "2026-07-10T09:00:00.0000000\\u002B09:00",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.NumericDefinedMode => valid.Replace(
+                "\"previousMode\": \"Photo\"",
+                "\"previousMode\": \"1\"",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.BlankSessionId => valid.Replace(
+                "\"sessionId\": \"session-a\"",
+                "\"sessionId\": \" \"",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.NonStringSessionId => valid.Replace(
+                "\"sessionId\": \"session-a\"",
+                "\"sessionId\": 1",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.NonBooleanChangedMode => valid.Replace(
+                "\"changedModeByRecorder\": true",
+                "\"changedModeByRecorder\": null",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.NestedArrayDuplicate => valid.Replace(
+                "\"previousMode\": \"Photo\"",
+                "\"previousMode\": [{\"item\":1,\"item\":2}]",
+                StringComparison.Ordinal),
+            InvalidLeaseDocument.NestedArrayWithoutDuplicate => valid.Replace(
+                "\"previousMode\": \"Photo\"",
+                "\"previousMode\": [{\"item\":1}]",
+                StringComparison.Ordinal),
+            _ => throw new InvalidOperationException(
+                "The invalid lease document case is not supported."),
+        };
+        await File.WriteAllTextAsync(path, invalid);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.LoadAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InvalidUtf8FailsClosed()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "camera-lease.json");
+        await File.WriteAllBytesAsync(path, [0xff]);
+        using var store = new FileSystemCameraLeaseStore(path);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.LoadAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LinkedParentDirectoryIsRejected()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var target = Path.Combine(directory.Path, "target");
+        var link = Path.Combine(directory.Path, "linked-parent");
+        Directory.CreateDirectory(target);
+        Directory.CreateSymbolicLink(link, target);
+        using var store = new FileSystemCameraLeaseStore(
+            Path.Combine(link, "camera-lease.json"));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(
+                Lease("session-a", "service-a", processId: 1234),
+                CancellationToken.None));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(target));
+    }
+
+    [Fact]
+    public async Task RejectsRelativePathInvalidLeaseAndDisposedUse()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new FileSystemCameraLeaseStore("camera-lease.json"));
+
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "camera-lease.json");
+        var store = new FileSystemCameraLeaseStore(path);
+        var nonPersistent = new CameraLease(
+            ObservedCameraValue.Unknown<bool>(),
+            changedStreamingByRecorder: false);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.SaveAsync(nonPersistent, CancellationToken.None));
+        var undefinedMode = new CameraLease(
+            "session-a",
+            "service-a",
+            1234,
+            new DateTimeOffset(2026, 7, 10, 0, 0, 0, TimeSpan.Zero),
+            ObservedCameraValue.Known((CameraMode)(-1)),
+            ObservedCameraValue.Known(false),
+            changedModeByRecorder: true,
+            changedStreamingByRecorder: true);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.SaveAsync(undefinedMode, CancellationToken.None));
+
+        store.Dispose();
+        store.Dispose();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.LoadAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.SaveAsync(
+                Lease("session-a", "service-a", processId: 1234),
+                CancellationToken.None));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.DeleteAsync(
+                Lease("session-a", "service-a", processId: 1234),
+                CancellationToken.None));
+    }
+
+    public enum InvalidLeaseDocument
+    {
+        SchemaVersionString,
+        SchemaVersionFraction,
+        UnknownModeWithValue,
+        UnknownStreamingWithValue,
+        InvalidCreationTime,
+        NonUtcCreationTime,
+        NumericDefinedMode,
+        BlankSessionId,
+        NonStringSessionId,
+        NonBooleanChangedMode,
+        NestedArrayDuplicate,
+        NestedArrayWithoutDuplicate,
     }
 
     private static CameraLease Lease(
