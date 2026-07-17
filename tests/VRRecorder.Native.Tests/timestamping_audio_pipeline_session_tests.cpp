@@ -1,7 +1,10 @@
 #include "timestamping_audio_pipeline_session.hpp"
 
+#include "allocation_failure_test_support.hpp"
+
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 namespace {
 
@@ -126,6 +129,30 @@ void DoesNotStartCaptureWhenTheClockFails()
     CHECK(inner.start_calls == 0);
 }
 
+void DoesNotStartCaptureForAnInvalidEpochOrAllocationFailure()
+{
+    FakeSession inner;
+    FakeClock clock;
+    TimestampingStereoAudioPipelineSession session(inner, clock);
+
+    clock.now = -1;
+    CHECK(session.Start({"desktop", "microphone", 0}, 1'024) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(inner.start_calls == 0);
+
+    clock.now = 123'456;
+    const StereoAudioCaptureSessionConfig large_config {
+        std::string(1'024, 'd'),
+        std::string(1'024, 'm'),
+        0,
+    };
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = session.Start(large_config, 1'024);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(inner.start_calls == 0);
+}
+
 void DelegatesLifecycleAndStatistics()
 {
     FakeSession inner;
@@ -155,6 +182,7 @@ int main()
 {
     CapturesEpochAtStartAndPreservesOtherConfiguration();
     DoesNotStartCaptureWhenTheClockFails();
+    DoesNotStartCaptureForAnInvalidEpochOrAllocationFailure();
     DelegatesLifecycleAndStatistics();
     return 0;
 }
