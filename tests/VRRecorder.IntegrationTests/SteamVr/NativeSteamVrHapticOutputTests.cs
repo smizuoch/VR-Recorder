@@ -7,6 +7,49 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class NativeSteamVrHapticOutputTests
 {
+    [Fact]
+    public void RejectsUnsupportedHapticHandBeforeNativeInitialization()
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new NativeSteamVrHapticOutput(
+                "unused-native-library",
+                "unused-install-root",
+                (VrHand)99));
+
+        Assert.Equal("hand", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task DisposeIsIdempotentAndPreventsLaterPulses()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrHapticFixtureControls(
+            FixturePath());
+        var output = new NativeSteamVrHapticOutput(
+            FixturePath(),
+            install.Path,
+            VrHand.Left);
+        Assert.Equal(0u, controls.TriggerCount());
+
+        output.Dispose();
+        output.Dispose();
+
+        Assert.False(controls.IsActive());
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            output.PlayAsync(
+                new WristHapticPattern(
+                    TimeSpan.FromMilliseconds(20),
+                    pulseCount: 1,
+                    frequencyHertz: 120,
+                    amplitude: 0.5F),
+                CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(VrHand.Left, "/user/hand/left")]
     [InlineData(VrHand.Right, "/user/hand/right")]
