@@ -19,7 +19,13 @@ public sealed class RepositoryComplianceTests
             .Descendants("Configuration")
             .Single();
 
-        Assert.Equal("[VRRecorder.*]*", configuration.Element("Include")?.Value);
+        Assert.Equal(
+            "[VRRecorder.Domain]*," +
+            "[VRRecorder.Application]*," +
+            "[VRRecorder.Infrastructure.*]*," +
+            "[VRRecorder.Presentation.Wrist]*," +
+            "[VRRecorder.Compliance]*",
+            configuration.Element("Include")?.Value);
         Assert.Equal(
             "[VRRecorder.*.Tests]*",
             configuration.Element("Exclude")?.Value);
