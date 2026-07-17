@@ -1601,6 +1601,42 @@ void QueueOwnershipAllocationFailureIsTerminal()
     CHECK(downstream.abort_calls == 1);
 }
 
+void DescriptorBatchCopyAllocationFailureIsTerminal()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    auto descriptor = VideoDescriptor();
+    descriptor.codec_extradata.assign(256, std::byte {1});
+    const std::vector packets {
+        Packet(MediaStreamKind::Video, 0, std::byte {1})};
+
+    allocation_failure::fail_on_allocation = 5;
+    const auto result = coordinator.SubmitVideoDescriptorBatch(
+        &encoder_identity,
+        descriptor,
+        packets);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(result == Mp4MuxResult::MuxFailed);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+    CHECK(coordinator.QueuedPacketCountForTesting() == 0);
+    CHECK(downstream.start_calls == 0);
+    CHECK(downstream.submit_calls == 0);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+}
+
 void HeaderConfigurationAllocationFailureIsTerminal()
 {
     RecordingDownstream downstream;
@@ -1826,6 +1862,7 @@ int main()
     EncoderFailureIsForwardedOnlyWhileActive();
     DescriptorPublicationAllocationFailureIsTerminal();
     QueueOwnershipAllocationFailureIsTerminal();
+    DescriptorBatchCopyAllocationFailureIsTerminal();
     HeaderConfigurationAllocationFailureIsTerminal();
     CancellationSignalClosesEveryPreHeaderEntryPoint();
     EqualDtsDrainPrefersVideoAndPreservesBatchOrder();
