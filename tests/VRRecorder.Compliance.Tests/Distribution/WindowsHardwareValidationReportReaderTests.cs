@@ -118,7 +118,96 @@ public sealed class WindowsHardwareValidationReportReaderTests
             StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("\"profile\": \"windows-11\"", "\"profile\": \"windows-10-22h2\"")]
+    [InlineData("\"vendor\": \"nvidia\"", "\"vendor\": \"amd\"")]
+    [InlineData("\"vendor\": \"nvidia\"", "\"vendor\": \"intel\"")]
+    [InlineData("\"deviceId\": \"10de:2684\"", "\"deviceId\": \"ABCxyz09._-:&\"")]
+    [InlineData("\"driverVersion\": \"32.0.15.7652\"", "\"driverVersion\": \"1A_a-+\"")]
+    [InlineData("\"mode\": \"hardware\",\n          \"api\": \"nvenc\"", "\"mode\": \"hardware\",\n          \"api\": \"amf\"")]
+    [InlineData("\"mode\": \"hardware\",\n          \"api\": \"nvenc\"", "\"mode\": \"hardware\",\n          \"api\": \"qsv\"")]
+    [InlineData("\"mode\": \"hardware\",\n          \"api\": \"nvenc\"", "\"mode\": \"software\",\n          \"api\": \"media-foundation\"")]
+    [InlineData("\"runtimeVersion\": \"2.10.0\",\n          \"hmdModel\": \"PICO 4\",\n          \"leftController\": \"PICO Controller\",\n          \"rightController\": \"PICO Controller\"", "\"runtimeVersion\": \"not-connected\",\n          \"hmdModel\": \"not-connected\",\n          \"leftController\": \"not-connected\",\n          \"rightController\": \"not-connected\"")]
+    [InlineData("\"status\": \"pass\"", "\"status\": \"fail\"")]
+    [InlineData("\"status\": \"pass\"", "\"status\": \"skip\"")]
+    [InlineData("\"kind\": \"diagnostic\"", "\"kind\": \"media\"")]
+    [InlineData("\"kind\": \"diagnostic\"", "\"kind\": \"screenshot\"")]
+    [InlineData("\"kind\": \"diagnostic\"", "\"kind\": \"oracle\"")]
+    [InlineData("\"kind\": \"diagnostic\"", "\"kind\": \"log\"")]
+    public void SupportedContractAlternativesAreAccepted(
+        string oldValue,
+        string newValue)
+    {
+        var report = WindowsHardwareValidationReportReader.Read(
+            Encoding.UTF8.GetBytes(Replace(oldValue, newValue)));
+
+        Assert.Single(report.Runs);
+    }
+
+    [Theory]
+    [InlineData("\"matrixProfile\": \"full-production-hardware-validation-v1\"", "\"matrixProfile\": \"other\"")]
+    [InlineData("\"payloadIdentitySha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"", "\"payloadIdentitySha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"")]
+    [InlineData("\"payloadIdentitySha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"", "\"payloadIdentitySha256\": \"Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"")]
+    [InlineData("\"runs\": [", "\"runs\": {")]
+    [InlineData("\"runs\": [\n    {", "\"runs\": [\n  ]\n}\n\n{\"unused\": [\n    {")]
+    [InlineData("\"runId\": \"01234567-89ab-4cde-8fab-0123456789ab\"", "\"runId\": \"invalid\"")]
+    [InlineData("\"runId\": \"01234567-89ab-4cde-8fab-0123456789ab\"", "\"runId\": \"01234567-89AB-4CDE-8FAB-0123456789AB\"")]
+    [InlineData("\"runnerId\": \"local-hil-runner\"", "\"runnerId\": \"Uppercase\"")]
+    [InlineData("\"runnerId\": \"local-hil-runner\"", "\"runnerId\": \"bad/path\"")]
+    [InlineData("\"capturedAtUtc\": \"2026-07-17T00:00:00Z\"", "\"capturedAtUtc\": \"2026-07-17\"")]
+    [InlineData("\"cases\": [", "\"cases\": {")]
+    [InlineData("\"profile\": \"windows-11\"", "\"profile\": \"windows-12\"")]
+    [InlineData("\"build\": \"10.0.26100.4652\"", "\"build\": \"x10.0\"")]
+    [InlineData("\"build\": \"10.0.26100.4652\"", "\"build\": \"10/0\"")]
+    [InlineData("\"architecture\": \"x64\"", "\"architecture\": \"arm64\"")]
+    [InlineData("\"vendor\": \"nvidia\"", "\"vendor\": \"other\"")]
+    [InlineData("\"deviceId\": \"10de:2684\"", "\"deviceId\": \"bad value\"")]
+    [InlineData("\"driverVersion\": \"32.0.15.7652\"", "\"driverVersion\": \"bad/version\"")]
+    [InlineData("\"mode\": \"hardware\"", "\"mode\": \"other\"")]
+    [InlineData("\"api\": \"nvenc\"", "\"api\": \"other\"")]
+    [InlineData("\"api\": \"nvenc\"", "\"api\": \"media-foundation\"")]
+    [InlineData("\"name\": \"NVIDIA NVENC H.264\"", "\"name\": \"unsafe\\u001f\"")]
+    [InlineData("\"hmdModel\": \"PICO 4\"", "\"hmdModel\": \"not-connected\"")]
+    [InlineData("\"leftController\": \"PICO Controller\"", "\"leftController\": \"not-connected\"")]
+    [InlineData("\"rightController\": \"PICO Controller\"", "\"rightController\": \"not-connected\"")]
+    [InlineData("\"runtimeVersion\": \"2.10.0\"", "\"runtimeVersion\": \"unsafe\\u001f\"")]
+    [InlineData("\"id\": \"launch-first-run-legal\"", "\"id\": \"Uppercase\"")]
+    [InlineData("\"id\": \"launch-first-run-legal\"", "\"id\": \"bad/path\"")]
+    [InlineData("\"artifacts\": [", "\"artifacts\": {")]
+    [InlineData("\"kind\": \"diagnostic\"", "\"kind\": \"other\"")]
+    [InlineData("\"length\": 123", "\"length\": -1")]
+    [InlineData("\"sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"", "\"sha256\": \"gBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"")]
+    [InlineData("\"schemaVersion\": 1", "\"schemaVersion\": \"1\"")]
+    [InlineData("\"runnerId\": \"local-hil-runner\"", "\"runnerId\": null")]
+    [InlineData("\"length\": 123", "\"length\": \"123\"")]
+    public void InvalidContractBoundariesAreRejected(
+        string oldValue,
+        string newValue)
+    {
+        AssertInvalid(Replace(oldValue, newValue));
+    }
+
+    [Fact]
+    public void EmptyAndNonUtf8ReportsAreRejected()
+    {
+        Assert.Throws<InvalidDataException>(() =>
+            WindowsHardwareValidationReportReader.Read([]));
+        Assert.Throws<InvalidDataException>(() =>
+            WindowsHardwareValidationReportReader.Read([0xff]));
+    }
+
     private static byte[] Bytes() => Encoding.UTF8.GetBytes(Json());
+
+    private static string Replace(string oldValue, string newValue)
+    {
+        var json = Json();
+        var replaced = json.Replace(
+            oldValue,
+            newValue,
+            StringComparison.Ordinal);
+        Assert.NotEqual(json, replaced);
+        return replaced;
+    }
 
     private static string Json() => $$"""
         {
