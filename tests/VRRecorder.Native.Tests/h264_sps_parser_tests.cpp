@@ -338,6 +338,68 @@ void RejectsMalformedOrOutOfRangePpsIdentifiers()
           VRREC_STATUS_INVALID_ARGUMENT);
 }
 
+void ClassifiesEverySingleByteSpsAndPpsMutation()
+{
+    const auto sps = MakeSps(SpsSettings {});
+    for (std::size_t index = 0; index < sps.size(); ++index) {
+        for (std::uint32_t replacement = 0; replacement <= 0xffU;
+             ++replacement) {
+            auto mutated = sps;
+            mutated[index] = static_cast<std::byte>(replacement);
+
+            H264SpsInfo result {};
+            result.width = 1'920;
+            result.height = 1'080;
+            const auto status = ParseH264Sps(mutated, result);
+            CHECK(status == VRREC_STATUS_OK ||
+                  status == VRREC_STATUS_INVALID_ARGUMENT);
+            if (status == VRREC_STATUS_OK) {
+                CHECK(result.width > 0);
+                CHECK(result.height > 0);
+                CHECK(result.chroma_format_idc <= 3);
+                CHECK(result.bit_depth_luma >= 8);
+                CHECK(result.bit_depth_luma <= 14);
+                CHECK(result.bit_depth_chroma >= 8);
+                CHECK(result.bit_depth_chroma <= 14);
+            } else {
+                CHECK(result.sequence_parameter_set_id == 0);
+                CHECK(result.profile_idc == 0);
+                CHECK(result.profile_compatibility == 0);
+                CHECK(result.level_idc == 0);
+                CHECK(result.chroma_format_idc == 1);
+                CHECK(result.bit_depth_luma == 8);
+                CHECK(result.bit_depth_chroma == 8);
+                CHECK(result.width == 0);
+                CHECK(result.height == 0);
+                CHECK(result.frame_mbs_only);
+            }
+        }
+    }
+
+    const auto pps = MakePps(PpsSettings {});
+    for (std::size_t index = 0; index < pps.size(); ++index) {
+        for (std::uint32_t replacement = 0; replacement <= 0xffU;
+             ++replacement) {
+            auto mutated = pps;
+            mutated[index] = static_cast<std::byte>(replacement);
+
+            H264PpsInfo result {};
+            result.picture_parameter_set_id = 7;
+            result.sequence_parameter_set_id = 3;
+            const auto status = ParseH264Pps(mutated, result);
+            CHECK(status == VRREC_STATUS_OK ||
+                  status == VRREC_STATUS_INVALID_ARGUMENT);
+            if (status == VRREC_STATUS_OK) {
+                CHECK(result.picture_parameter_set_id <= 255);
+                CHECK(result.sequence_parameter_set_id <= 31);
+            } else {
+                CHECK(result.picture_parameter_set_id == 0);
+                CHECK(result.sequence_parameter_set_id == 0);
+            }
+        }
+    }
+}
+
 void ReportsSpsAndPpsRbspAllocationFailureWithoutPartialResults()
 {
     const auto sps = MakeSps(SpsSettings {});
@@ -376,6 +438,7 @@ int main()
     RejectsMalformedOrImpossibleSps();
     RejectsEverySpsSyntaxLimit();
     RejectsMalformedOrOutOfRangePpsIdentifiers();
+    ClassifiesEverySingleByteSpsAndPpsMutation();
     ReportsSpsAndPpsRbspAllocationFailureWithoutPartialResults();
     return 0;
 }
