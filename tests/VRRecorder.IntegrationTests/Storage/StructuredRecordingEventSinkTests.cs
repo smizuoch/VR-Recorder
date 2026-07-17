@@ -301,6 +301,314 @@ public sealed class StructuredRecordingEventSinkTests
         Assert.Equal("audio.input_status", writer.Entries[1].EventName);
     }
 
+    [Fact]
+    public void RecordsRemainingQueuedEventPayloads()
+    {
+        var writer = new CapturingDiagnosticLogWriter();
+        using var sink = new StructuredRecordingEventSink(
+            writer,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        ((IAudioSessionEventSink)sink).Publish(new AudioSessionStatus(
+            AudioSessionStatusKind.EndpointRediscoveryScheduled,
+            AudioInput.Desktop,
+            FramePosition: 12_000,
+            RediscoveryBudget: TimeSpan.FromMilliseconds(250.5)));
+        ((IRecordingMediaEventSink)sink).Publish(new RecordingAvDriftEvent(
+            VideoPts: TimeSpan.FromMicroseconds(12_345),
+            AudioPts: TimeSpan.FromMicroseconds(12_390),
+            AbsoluteDrift: TimeSpan.FromMicroseconds(45)));
+        ((IOscOperationEventSink)sink).Publish(new OscOperationEvent(
+            OscOperation.CapabilityProbe,
+            OscOperationOutcome.Succeeded));
+        sink.Dispose();
+
+        Assert.Collection(
+            writer.Entries,
+            entry =>
+            {
+                Assert.Equal("audio.input_status", entry.EventName);
+                Assert.Equal(
+                    "250.5",
+                    entry.Fields["rediscoveryBudgetMilliseconds"]);
+            },
+            entry =>
+            {
+                Assert.Equal(DiagnosticLogLevel.Warning, entry.Level);
+                Assert.Equal("recording.av_drift_exceeded", entry.EventName);
+                Assert.Equal("12345", entry.Fields["videoPtsMicroseconds"]);
+                Assert.Equal("12390", entry.Fields["audioPtsMicroseconds"]);
+                Assert.Equal("45", entry.Fields["absoluteDriftMicroseconds"]);
+            },
+            entry =>
+            {
+                Assert.Equal(DiagnosticLogLevel.Information, entry.Level);
+                Assert.Equal("osc.operation", entry.EventName);
+                Assert.Equal("capability_probe", entry.Fields["operation"]);
+                Assert.Equal("succeeded", entry.Fields["outcome"]);
+            });
+    }
+
+    [Fact]
+    public async Task RecordsHealthyStorageAsInformation()
+    {
+        var writer = new CapturingDiagnosticLogWriter();
+        using var sink = new StructuredRecordingEventSink(
+            writer,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        await ((IRecordingStorageStatusSink)sink).PublishAsync(
+            new RecordingStorageSnapshot(
+                new StorageSpace(1),
+                RecordingStorageState.Healthy,
+                TimeSpan.FromSeconds(1)),
+            CancellationToken.None);
+
+        var entry = Assert.Single(writer.Entries);
+        Assert.Equal(DiagnosticLogLevel.Information, entry.Level);
+        Assert.Equal("healthy", entry.Fields["state"]);
+    }
+
+    [Theory]
+    [InlineData(ExpectedLogFailure.UnauthorizedAccess)]
+    [InlineData(ExpectedLogFailure.InvalidData)]
+    [InlineData(ExpectedLogFailure.ObjectDisposed)]
+    public async Task IgnoresEveryExpectedDiagnosticStorageFailure(
+        ExpectedLogFailure failure)
+    {
+        var writer = new AlwaysThrowingDiagnosticLogWriter(failure);
+        using var sink = new StructuredRecordingEventSink(
+            writer,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        await ((ISavedRecordingSink)sink).PublishAsync(
+            new FinalizedRecording("recording.mp4"),
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PropagatesCancellationRaisedByDiagnosticWriter()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var writer = new CancelingDiagnosticLogWriter(cancellation);
+        using var sink = new StructuredRecordingEventSink(
+            writer,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ((ISavedRecordingSink)sink).PublishAsync(
+                new FinalizedRecording("recording.mp4"),
+                cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(RecordingStorageState.Healthy, "healthy")]
+    [InlineData(RecordingStorageState.Warning, "warning")]
+    [InlineData(RecordingStorageState.StopRequired, "stop_required")]
+    public void MapsEveryStorageState(
+        RecordingStorageState value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.StorageStateName(value));
+    }
+
+    [Theory]
+    [InlineData(CameraRestoreWarningReason.RecordingCompleted,
+        "recording_completed")]
+    [InlineData(CameraRestoreWarningReason.StartCanceled, "start_canceled")]
+    [InlineData(CameraRestoreWarningReason.NoSignal, "no_signal")]
+    [InlineData(CameraRestoreWarningReason.InsufficientStorage,
+        "insufficient_storage")]
+    [InlineData(CameraRestoreWarningReason.StartFailed, "start_failed")]
+    [InlineData(CameraRestoreWarningReason.StaleLeaseRecovery,
+        "stale_lease_recovery")]
+    public void MapsEveryCameraWarningReason(
+        CameraRestoreWarningReason value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.CameraWarningReasonName(value));
+    }
+
+    [Theory]
+    [InlineData(RecordingProcessArchitecture.X64, "x64")]
+    [InlineData(RecordingProcessArchitecture.Arm64, "arm64")]
+    public void MapsEveryProcessArchitecture(
+        RecordingProcessArchitecture value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.ArchitectureName(value));
+    }
+
+    [Theory]
+    [InlineData(RecordingRecoveryReason.FinalizationFailed,
+        "finalization_failed")]
+    [InlineData(RecordingRecoveryReason.ValidationFailed,
+        "validation_failed")]
+    public void MapsEveryRecoveryReason(
+        RecordingRecoveryReason value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.RecoveryReasonName(value));
+    }
+
+    [Theory]
+    [InlineData(OscOperation.CapabilityProbe, "capability_probe")]
+    [InlineData(OscOperation.CameraWrite, "camera_write")]
+    public void MapsEveryOscOperation(OscOperation value, string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.OscOperationName(value));
+    }
+
+    [Theory]
+    [InlineData(OscOperationOutcome.Succeeded, "succeeded")]
+    [InlineData(OscOperationOutcome.Failed, "failed")]
+    public void MapsEveryOscOutcome(
+        OscOperationOutcome value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.OscOutcomeName(value));
+    }
+
+    [Theory]
+    [InlineData(AudioBufferHealthKind.Underrun, "buffer_underrun")]
+    [InlineData(AudioBufferHealthKind.Overrun, "buffer_overrun")]
+    public void MapsEveryAudioBufferHealthKind(
+        AudioBufferHealthKind value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.AudioBufferHealthName(value));
+    }
+
+    [Theory]
+    [InlineData(AudioInput.Desktop, "desktop")]
+    [InlineData(AudioInput.Microphone, "microphone")]
+    public void MapsEveryAudioInput(AudioInput value, string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.AudioInputName(value));
+    }
+
+    [Theory]
+    [InlineData(AudioSessionWarningKind.InputUnavailable,
+        "input_unavailable")]
+    [InlineData(AudioSessionWarningKind.EndpointRediscoveryFailed,
+        "endpoint_rediscovery_failed")]
+    public void MapsEveryAudioWarningKind(
+        AudioSessionWarningKind value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.AudioWarningKindName(value));
+    }
+
+    [Theory]
+    [InlineData(AudioSessionStatusKind.EndpointRediscoveryScheduled,
+        "endpoint_rediscovery_scheduled")]
+    [InlineData(AudioSessionStatusKind.InputRecovered, "input_recovered")]
+    public void MapsEveryAudioStatusKind(
+        AudioSessionStatusKind value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.AudioStatusKindName(value));
+    }
+
+    [Theory]
+    [InlineData(EncoderKind.Nvenc, "nvenc")]
+    [InlineData(EncoderKind.Amf, "amf")]
+    [InlineData(EncoderKind.Qsv, "qsv")]
+    [InlineData(EncoderKind.MediaFoundationSoftware,
+        "media_foundation_software")]
+    public void MapsEveryEncoder(EncoderKind value, string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.EncoderName(value));
+    }
+
+    [Theory]
+    [InlineData(GpuVendor.Unknown, "unknown")]
+    [InlineData(GpuVendor.Nvidia, "nvidia")]
+    [InlineData(GpuVendor.Amd, "amd")]
+    [InlineData(GpuVendor.Intel, "intel")]
+    public void MapsEveryGpuVendor(GpuVendor value, string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.GpuVendorName(value));
+    }
+
+    [Theory]
+    [InlineData(VideoPixelFormat.Bgra8, "bgra8")]
+    [InlineData(VideoPixelFormat.Rgba8, "rgba8")]
+    [InlineData(VideoPixelFormat.Nv12, "nv12")]
+    public void MapsEveryPixelFormat(
+        VideoPixelFormat value,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            StructuredRecordingEventSink.PixelFormatName(value));
+    }
+
+    [Fact]
+    public void RejectsEveryUnsupportedEventFieldValue()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.StorageStateName(
+                (RecordingStorageState)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.CameraWarningReasonName(
+                (CameraRestoreWarningReason)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.ArchitectureName(
+                (RecordingProcessArchitecture)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.RecoveryReasonName(
+                (RecordingRecoveryReason)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.OscOperationName(
+                (OscOperation)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.OscOutcomeName(
+                (OscOperationOutcome)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.AudioBufferHealthName(
+                (AudioBufferHealthKind)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.AudioInputName((AudioInput)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.AudioWarningKindName(
+                (AudioSessionWarningKind)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.AudioStatusKindName(
+                (AudioSessionStatusKind)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.EncoderName((EncoderKind)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.GpuVendorName((GpuVendor)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            StructuredRecordingEventSink.PixelFormatName(
+                (VideoPixelFormat)(-1)));
+    }
+
     private sealed class FixedWallClock(DateTimeOffset localNow) : IWallClock
     {
         public DateTimeOffset LocalNow { get; } = localNow;
@@ -354,6 +662,60 @@ public sealed class StructuredRecordingEventSinkTests
                 ? Task.FromException(new IOException(
                     "diagnostic storage unavailable"))
                 : Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingDiagnosticLogWriter : IDiagnosticLogWriter
+    {
+        public List<DiagnosticLogEntry> Entries { get; } = [];
+
+        public Task WriteAsync(
+            DiagnosticLogEntry entry,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Entries.Add(entry);
+            return Task.CompletedTask;
+        }
+    }
+
+    public enum ExpectedLogFailure
+    {
+        UnauthorizedAccess,
+        InvalidData,
+        ObjectDisposed,
+    }
+
+    private sealed class AlwaysThrowingDiagnosticLogWriter(
+        ExpectedLogFailure failure) : IDiagnosticLogWriter
+    {
+        public Task WriteAsync(
+            DiagnosticLogEntry entry,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromException(failure switch
+            {
+                ExpectedLogFailure.UnauthorizedAccess =>
+                    new UnauthorizedAccessException(),
+                ExpectedLogFailure.InvalidData => new InvalidDataException(),
+                ExpectedLogFailure.ObjectDisposed =>
+                    new ObjectDisposedException("diagnostic log"),
+                _ => throw new InvalidOperationException(
+                    "The expected log failure is not supported."),
+            });
+        }
+    }
+
+    private sealed class CancelingDiagnosticLogWriter(
+        CancellationTokenSource cancellation) : IDiagnosticLogWriter
+    {
+        public Task WriteAsync(
+            DiagnosticLogEntry entry,
+            CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            return Task.FromCanceled(cancellationToken);
         }
     }
 

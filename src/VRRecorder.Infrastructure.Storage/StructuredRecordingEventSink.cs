@@ -370,7 +370,7 @@ public sealed class StructuredRecordingEventSink
     private DateTimeOffset TimestampUtc() =>
         _clock.LocalNow.ToUniversalTime();
 
-    private static string StorageStateName(
+    internal static string StorageStateName(
         Domain.Storage.RecordingStorageState state) => state switch
         {
             Domain.Storage.RecordingStorageState.Healthy => "healthy",
@@ -383,7 +383,7 @@ public sealed class StructuredRecordingEventSink
                 "The recording storage state is not supported."),
         };
 
-    private static string CameraWarningReasonName(
+    internal static string CameraWarningReasonName(
         CameraRestoreWarningReason reason) => reason switch
         {
             CameraRestoreWarningReason.RecordingCompleted =>
@@ -401,7 +401,7 @@ public sealed class StructuredRecordingEventSink
                 "The camera warning reason is not supported."),
         };
 
-    private static string ArchitectureName(
+    internal static string ArchitectureName(
         RecordingProcessArchitecture architecture) => architecture switch
         {
             RecordingProcessArchitecture.X64 => "x64",
@@ -412,7 +412,7 @@ public sealed class StructuredRecordingEventSink
                 "The recording process architecture is not supported."),
         };
 
-    private static string RecoveryReasonName(
+    internal static string RecoveryReasonName(
         RecordingRecoveryReason reason) => reason switch
         {
             RecordingRecoveryReason.FinalizationFailed =>
@@ -424,7 +424,7 @@ public sealed class StructuredRecordingEventSink
                 "The recording recovery reason is not supported."),
         };
 
-    private static string OscOperationName(OscOperation operation) =>
+    internal static string OscOperationName(OscOperation operation) =>
         operation switch
         {
             OscOperation.CapabilityProbe => "capability_probe",
@@ -435,7 +435,7 @@ public sealed class StructuredRecordingEventSink
                 "The OSC operation is not supported."),
         };
 
-    private static string OscOutcomeName(OscOperationOutcome outcome) =>
+    internal static string OscOutcomeName(OscOperationOutcome outcome) =>
         outcome switch
         {
             OscOperationOutcome.Succeeded => "succeeded",
@@ -446,7 +446,7 @@ public sealed class StructuredRecordingEventSink
                 "The OSC operation outcome is not supported."),
         };
 
-    private static string AudioBufferHealthName(
+    internal static string AudioBufferHealthName(
         AudioBufferHealthKind health) => health switch
         {
             AudioBufferHealthKind.Underrun => "buffer_underrun",
@@ -457,7 +457,7 @@ public sealed class StructuredRecordingEventSink
                 "The audio buffer health kind is not supported."),
         };
 
-    private static string AudioInputName(AudioInput input) => input switch
+    internal static string AudioInputName(AudioInput input) => input switch
     {
         AudioInput.Desktop => "desktop",
         AudioInput.Microphone => "microphone",
@@ -467,7 +467,7 @@ public sealed class StructuredRecordingEventSink
             "The audio input is not supported."),
     };
 
-    private static string AudioWarningKindName(
+    internal static string AudioWarningKindName(
         AudioSessionWarningKind kind) => kind switch
         {
             AudioSessionWarningKind.InputUnavailable => "input_unavailable",
@@ -479,7 +479,7 @@ public sealed class StructuredRecordingEventSink
                 "The audio warning kind is not supported."),
         };
 
-    private static string AudioStatusKindName(
+    internal static string AudioStatusKindName(
         AudioSessionStatusKind kind) => kind switch
         {
             AudioSessionStatusKind.EndpointRediscoveryScheduled =>
@@ -491,7 +491,7 @@ public sealed class StructuredRecordingEventSink
                 "The audio status kind is not supported."),
         };
 
-    private static string EncoderName(EncoderKind encoder) => encoder switch
+    internal static string EncoderName(EncoderKind encoder) => encoder switch
     {
         EncoderKind.Nvenc => "nvenc",
         EncoderKind.Amf => "amf",
@@ -503,7 +503,7 @@ public sealed class StructuredRecordingEventSink
             "The encoder kind is not supported."),
     };
 
-    private static string GpuVendorName(GpuVendor vendor) => vendor switch
+    internal static string GpuVendorName(GpuVendor vendor) => vendor switch
     {
         GpuVendor.Unknown => "unknown",
         GpuVendor.Nvidia => "nvidia",
@@ -515,7 +515,7 @@ public sealed class StructuredRecordingEventSink
             "The GPU vendor is not supported."),
     };
 
-    private static string PixelFormatName(VideoPixelFormat format) =>
+    internal static string PixelFormatName(VideoPixelFormat format) =>
         format switch
         {
             VideoPixelFormat.Bgra8 => "bgra8",
