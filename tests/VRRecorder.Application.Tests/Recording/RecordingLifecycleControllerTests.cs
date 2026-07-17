@@ -377,14 +377,21 @@ public sealed class RecordingLifecycleControllerTests
             ["snapshot:read", "lease:save", "mode:Stream", "streaming:true"],
             events);
 
-        await Assert.IsAssignableFrom<IRecordingSessionCompletionSink>(
-                sessions.CompletionSink)
-            .CompleteAsync(
+        var completionSink = Assert.IsAssignableFrom<
+            IRecordingSessionCompletionSink>(sessions.CompletionSink);
+        await completionSink.CompleteAsync(
                 new RecordingSessionCompletion(
                     handle,
                     RecordingStopReason.UserRequested,
                     RecorderState.Ready),
                 CancellationToken.None);
+
+        await completionSink.CompleteAsync(
+            new RecordingSessionCompletion(
+                handle,
+                RecordingStopReason.UserRequested,
+                RecorderState.Ready),
+            CancellationToken.None);
 
         Assert.Equal(
             [
@@ -406,6 +413,91 @@ public sealed class RecordingLifecycleControllerTests
             RecorderState.Starting,
             RecorderState.Recording,
             RecorderState.Ready);
+    }
+
+    [Fact]
+    public async Task InvalidCameraSnapshotsFailClosedAcrossGatewayLifetimes()
+    {
+        IVrChatCameraGateway[] gateways =
+        [
+            new NullSnapshotDisposableGateway(),
+            new InvalidSnapshotCameraGateway(),
+            new ThrowingDisposeSnapshotGateway(),
+        ];
+
+        for (var index = 0; index < gateways.Length; index++)
+        {
+            var candidate = Candidate($"invalid-snapshot-{index}", 9100 + index);
+            using var lifecycle = new RecordingLifecycleController(
+                new VrChatCameraConnectionUseCase(
+                    new VrChatTargetResolver(new StubDiscovery([candidate])),
+                    new FixedGatewayFactory(gateways[index])),
+                new InMemoryCameraLeaseStore(),
+                CreateStartRecording(
+                    new UnexpectedVideoSignalGateway(),
+                    new FakeRecordingFileReservation(),
+                    new FakeRecordingEngine()),
+                new FakeStopRequestSink(),
+                new FakeCameraRestoreWarningSink());
+
+            var result = await lifecycle.StartAsync(
+                candidate.ServiceId,
+                StartCommand(),
+                CancellationToken.None);
+
+            Assert.Equal(RecorderState.Ready, result.State);
+            Assert.NotNull(result.SnapshotFailure);
+            Assert.Null(result.Recording);
+        }
+
+        Assert.True(((NullSnapshotDisposableGateway)gateways[0]).Disposed);
+        Assert.True(((ThrowingDisposeSnapshotGateway)gateways[2])
+            .DisposeAttempted);
+    }
+
+    [Fact]
+    public async Task LifecyclePublicGuardsRejectMissingDependenciesAndInactiveVideo()
+    {
+        var candidate = Candidate("inactive-video", 9200);
+        var connections = new VrChatCameraConnectionUseCase(
+            new VrChatTargetResolver(new StubDiscovery([candidate])),
+            new FixedGatewayFactory(new UnexpectedCameraGateway()));
+        var leases = new InMemoryCameraLeaseStore();
+        var start = CreateStartRecording(
+            new UnexpectedVideoSignalGateway(),
+            new FakeRecordingFileReservation(),
+            new FakeRecordingEngine());
+        var stops = new FakeStopRequestSink();
+        var warnings = new FakeCameraRestoreWarningSink();
+        Assert.Throws<ArgumentNullException>(() =>
+            new RecordingLifecycleController(
+                null!, leases, start, stops, warnings));
+        Assert.Throws<ArgumentNullException>(() =>
+            new RecordingLifecycleController(
+                connections, null!, start, stops, warnings));
+        using var lifecycle = new RecordingLifecycleController(
+            connections,
+            leases,
+            start,
+            stops,
+            warnings);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            lifecycle.StartAsync(null, null!, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            lifecycle.ObserveFreshVideoFrameAsync(
+                null!,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            lifecycle.ObserveFreshVideoFrameAsync(
+                new VideoFrameObservation(
+                    MonotonicTimestamp.FromElapsed(TimeSpan.Zero),
+                    isBlack: false),
+                CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            lifecycle.EvaluateVideoSignalAsync(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero),
+                CancellationToken.None));
     }
 
     [Fact]
@@ -1190,6 +1282,77 @@ public sealed class RecordingLifecycleControllerTests
             bool enabled,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Camera writes were not expected.");
+    }
+
+    private sealed class NullSnapshotDisposableGateway
+        : IVrChatCameraGateway,
+          IDisposable
+    {
+        public bool Disposed { get; private set; }
+
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<CameraSnapshot>(null!);
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public void Dispose() => Disposed = true;
+    }
+
+    private sealed class InvalidSnapshotCameraGateway
+        : IVrChatCameraGateway
+    {
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new CameraSnapshot(
+                ObservedCameraValue.Known((CameraMode)int.MaxValue),
+                ObservedCameraValue.Known(false)));
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class ThrowingDisposeSnapshotGateway
+        : IVrChatCameraGateway,
+          IAsyncDisposable
+    {
+        public bool DisposeAttempted { get; private set; }
+
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<CameraSnapshot>(null!);
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeAttempted = true;
+            return ValueTask.FromException(
+                new InvalidOperationException("dispose failed"));
+        }
     }
 
     private sealed class UnexpectedVideoSignalGateway : IVideoSignalGateway
