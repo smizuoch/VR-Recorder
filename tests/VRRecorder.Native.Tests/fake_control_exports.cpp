@@ -114,6 +114,24 @@ extern "C" VRREC_TEST_API void vrrec_test_emit_audio_buffer_health(
 }
 
 extern "C" VRREC_TEST_API void
+vrrec_test_fault_next_video_layout_update(void)
+{
+    vrrecorder::native::testing::FaultDuringNextVideoLayoutUpdate();
+}
+
+extern "C" VRREC_TEST_API void
+vrrec_test_fault_next_audio_routing_update(void)
+{
+    vrrecorder::native::testing::FaultDuringNextAudioRoutingUpdate();
+}
+
+extern "C" VRREC_TEST_API void vrrec_test_fail_next_media_stop(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::FailNextMediaStop(status);
+}
+
+extern "C" VRREC_TEST_API void
 vrrec_test_set_desktop_audio_endpoint_available(
     std::uint8_t available,
     std::uint64_t frame_position)

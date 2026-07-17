@@ -301,7 +301,7 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
     private static TimeSpan Microseconds(long value) =>
         TimeSpan.FromTicks(checked(value * 10));
 
-    private static NativeCanvasBackground ToNativeBackground(
+    internal static NativeCanvasBackground ToNativeBackground(
         VideoCanvasBackground background) => background switch
         {
             VideoCanvasBackground.Black => NativeCanvasBackground.Black,
@@ -311,7 +311,7 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
                 "The canvas background is unsupported by the native ABI."),
         };
 
-    private static NativeAudioRouting ToNativeAudioRouting(
+    internal static NativeAudioRouting ToNativeAudioRouting(
         AudioRouting routing) => routing switch
         {
             AudioRouting.Mixed => NativeAudioRouting.Mixed,
@@ -324,7 +324,7 @@ internal sealed class PInvokeNativeRecordingSession : INativeRecordingSession
                 "The audio routing is unsupported by the native ABI."),
         };
 
-    private static NativeVideoRotation ToNativeRotation(
+    internal static NativeVideoRotation ToNativeRotation(
         VideoRotation rotation) => rotation switch
         {
             VideoRotation.None => NativeVideoRotation.None,

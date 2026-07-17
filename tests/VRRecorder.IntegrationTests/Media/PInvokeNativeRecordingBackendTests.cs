@@ -1033,6 +1033,121 @@ public sealed class PInvokeNativeRecordingBackendTests
         }
     }
 
+    [Fact]
+    public async Task NativeSessionLifecycleHonorsCancellationAndIsIdempotent()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var session = await backend.OpenAsync(
+            CreatePlan(),
+            new NativeRecordingCallbacks(() => { }, _ => { }),
+            CancellationToken.None);
+        var canceled = new CancellationToken(canceled: true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.AbortAsync(canceled));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.UpdateVideoLayoutAsync(
+                CreatePlan().VideoLayout.CurrentLayout,
+                canceled));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.UpdateAudioRoutingAsync(AudioRouting.Mixed, canceled));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.GetStatisticsAsync(canceled));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.StopAsync(canceled));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            session.UpdateVideoLayoutAsync(null!, CancellationToken.None));
+
+        var firstStop = session.StopAsync(CancellationToken.None);
+        var repeatedStop = session.StopAsync(canceled);
+        controls.CompleteTrailerFlushClose(1, 1);
+
+        Assert.Same(firstStop, repeatedStop);
+        await firstStop;
+        await session.AbortAsync(CancellationToken.None);
+        await session.AbortAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task NativeSessionOperationFailuresAreTypedAndReleaseLease()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        var callbacks = new NativeRecordingCallbacks(() => { }, _ => { });
+
+        var layoutSession = await backend.OpenAsync(
+            CreatePlan(),
+            callbacks,
+            CancellationToken.None);
+        controls.FaultNextVideoLayoutUpdate();
+        var layoutException = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => layoutSession.UpdateVideoLayoutAsync(
+                CreatePlan().VideoLayout.CurrentLayout,
+                CancellationToken.None));
+        await layoutSession.AbortAsync(CancellationToken.None);
+
+        var audioSession = await backend.OpenAsync(
+            CreatePlan(),
+            callbacks,
+            CancellationToken.None);
+        controls.FaultNextAudioRoutingUpdate();
+        var audioException = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => audioSession.UpdateAudioRoutingAsync(
+                AudioRouting.DesktopOnly,
+                CancellationToken.None));
+        await audioSession.AbortAsync(CancellationToken.None);
+
+        var stopSession = await backend.OpenAsync(
+            CreatePlan(),
+            callbacks,
+            CancellationToken.None);
+        controls.FailNextStop(status: 6);
+        var failedStop = stopSession.StopAsync(CancellationToken.None);
+        var repeatedStop = stopSession.StopAsync(CancellationToken.None);
+        var stopException = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => failedStop);
+
+        Assert.Equal(6, layoutException.Fault.Status);
+        Assert.Equal(
+            "Native recording update video layout failed with status 6.",
+            layoutException.Fault.Message);
+        Assert.Equal(6, audioException.Fault.Status);
+        Assert.Equal(
+            "Native recording update audio routing failed with status 6.",
+            audioException.Fault.Message);
+        Assert.Same(failedStop, repeatedStop);
+        Assert.Equal(6, stopException.Fault.Status);
+        Assert.Equal(
+            "Native recording request stop failed with status 6.",
+            stopException.Fault.Message);
+        Assert.Null(Record.Exception(backend.Dispose));
+    }
+
+    [Fact]
+    public void NativeSessionAbiMappingsRejectUnknownValues()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingSession.ToNativeBackground(
+                (VideoCanvasBackground)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingSession.ToNativeAudioRouting(
+                (AudioRouting)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeNativeRecordingSession.ToNativeRotation(
+                (VideoRotation)999));
+    }
+
     private static RecordingPlan CreatePlan() => new(
         new StableVideoSignal(320, 180),
         new PendingRecording(
@@ -1088,6 +1203,9 @@ public sealed class PInvokeNativeRecordingBackendTests
         private readonly UIntDelegate _audioRoutingUpdateCount;
         private readonly AvDriftDelegate _avDrift;
         private readonly AudioBufferHealthDelegate _audioBufferHealth;
+        private readonly VoidDelegate _faultNextVideoLayoutUpdate;
+        private readonly VoidDelegate _faultNextAudioRoutingUpdate;
+        private readonly StatusDelegate _failNextStop;
 
         public NativeFixtureControls(string path)
         {
@@ -1162,6 +1280,20 @@ public sealed class PInvokeNativeRecordingBackendTests
                 AudioBufferHealthDelegate>(NativeLibrary.GetExport(
                     _library,
                     "vrrec_test_emit_audio_buffer_health"));
+            _faultNextVideoLayoutUpdate =
+                Marshal.GetDelegateForFunctionPointer<VoidDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_fault_next_video_layout_update"));
+            _faultNextAudioRoutingUpdate =
+                Marshal.GetDelegateForFunctionPointer<VoidDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_fault_next_audio_routing_update"));
+            _failNextStop = Marshal.GetDelegateForFunctionPointer<StatusDelegate>(
+                NativeLibrary.GetExport(
+                    _library,
+                    "vrrec_test_fail_next_media_stop"));
         }
 
         public void CommitMuxedVideoPacket() => _commit();
@@ -1186,6 +1318,14 @@ public sealed class PInvokeNativeRecordingBackendTests
             uint health,
             ulong framePosition) =>
             _audioBufferHealth(role, health, framePosition);
+
+        public void FaultNextVideoLayoutUpdate() =>
+            _faultNextVideoLayoutUpdate();
+
+        public void FaultNextAudioRoutingUpdate() =>
+            _faultNextAudioRoutingUpdate();
+
+        public void FailNextStop(int status) => _failNextStop(status);
 
         public void SetDesktopAudioEndpointAvailable(
             bool available,
@@ -1307,6 +1447,12 @@ public sealed class PInvokeNativeRecordingBackendTests
         private delegate void FailDelegate(
             int status,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void VoidDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void StatusDelegate(int status);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint EncoderKindDelegate();

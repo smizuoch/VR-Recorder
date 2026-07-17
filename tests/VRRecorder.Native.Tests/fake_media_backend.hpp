@@ -70,6 +70,7 @@ void BlockNextMediaStart(std::int32_t status);
 bool WaitUntilMediaStartEntered(std::chrono::milliseconds timeout);
 void ReleaseMediaStart();
 void BlockNextMediaStop(std::int32_t status);
+void FailNextMediaStop(std::int32_t status);
 bool WaitUntilMediaStopEntered(std::chrono::milliseconds timeout);
 void ReleaseMediaStop();
 bool WaitUntilAbiStopWaiter(

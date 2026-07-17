@@ -243,6 +243,12 @@ public:
         release_stop_ = false;
     }
 
+    void FailNextStop(vrrec_status_t status) noexcept
+    {
+        const std::lock_guard lock(control_mutex_);
+        stop_status_ = status;
+    }
+
     bool WaitUntilStopEntered(
         std::chrono::milliseconds timeout) noexcept
     {
@@ -1130,6 +1136,11 @@ void ReleaseMediaStart()
 void BlockNextMediaStop(std::int32_t status)
 {
     FakeMediaBackend::Active()->BlockNextStop(status);
+}
+
+void FailNextMediaStop(std::int32_t status)
+{
+    FakeMediaBackend::Active()->FailNextStop(status);
 }
 
 bool WaitUntilMediaStopEntered(std::chrono::milliseconds timeout)
