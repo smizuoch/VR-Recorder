@@ -90,6 +90,89 @@ public sealed class OscQueryCameraSnapshotReaderTests
             reader.ReadAsync(CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://127.0.0.1:19000/?HOST_INFO")]
+    [InlineData("http://203.0.113.10:19000/?HOST_INFO")]
+    [InlineData("http://127.0.0.1:19001/?HOST_INFO")]
+    [InlineData("http://127.0.0.1:19000/wrong")]
+    public async Task RejectsUntrustedEffectiveResponseUri(string? effectiveUri)
+    {
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            ValidHostInfoJson,
+            "application/json",
+            effectiveUri is null ? null : new Uri(effectiveUri)));
+        var reader = new OscQueryCameraSnapshotReader(Candidate(), invoker);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            reader.ReadAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RejectsNonJsonSnapshotResponse()
+    {
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            ValidHostInfoJson,
+            "text/plain",
+            new Uri("http://127.0.0.1:19000/?HOST_INFO")));
+        var reader = new OscQueryCameraSnapshotReader(Candidate(), invoker);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            reader.ReadAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RejectsDeclaredOrStreamedResponseAboveSixtyFourKiB(
+        bool declareLength)
+    {
+        var bytes = new byte[(64 * 1024) + 1];
+        HttpContent content = declareLength
+            ? new ByteArrayContent(bytes)
+            : new UnknownLengthContent(bytes);
+        content.Headers.ContentType = new("application/json");
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            content,
+            new Uri("http://127.0.0.1:19000/?HOST_INFO")));
+        var reader = new OscQueryCameraSnapshotReader(Candidate(), invoker);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            reader.ReadAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("root")]
+    [InlineData("nested")]
+    public async Task RejectsDuplicateSnapshotJsonProperties(string location)
+    {
+        var json = location == "root"
+            ? $$"""
+                {
+                  "HOST_INFO": {{ValidHostInfoObject}},
+                  "HOST_INFO": {{ValidHostInfoObject}}
+                }
+                """
+            : """
+                {
+                  "HOST_INFO": {
+                    "NAME": "VRChat-Client-test",
+                    "NAME": "VRChat-Client-test",
+                    "OSC_IP": "127.0.0.1",
+                    "OSC_PORT": 9000
+                  }
+                }
+                """;
+        using var invoker = new HttpMessageInvoker(new FirstResponseHandler(
+            json,
+            "application/json",
+            new Uri("http://127.0.0.1:19000/?HOST_INFO")));
+        var reader = new OscQueryCameraSnapshotReader(Candidate(), invoker);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            reader.ReadAsync(CancellationToken.None));
+    }
+
     private static VrChatInstanceCandidate Candidate(
         Uri? endpoint = null,
         string oscHost = "127.0.0.1") => new(
@@ -98,6 +181,21 @@ public sealed class OscQueryCameraSnapshotReaderTests
         endpoint ?? new Uri("http://127.0.0.1:19000/"),
         oscHost,
         9000);
+
+    private const string ValidHostInfoObject = """
+        {
+          "NAME": "VRChat-Client-test",
+          "OSC_IP": "127.0.0.1",
+          "OSC_PORT": 9000,
+          "OSC_TRANSPORT": "UDP"
+        }
+        """;
+
+    private const string ValidHostInfoJson = $$"""
+        {
+          "HOST_INFO": {{ValidHostInfoObject}}
+        }
+        """;
 
     private static string InvalidModeJson(string mutation) => mutation switch
     {
@@ -194,5 +292,58 @@ public sealed class OscQueryCameraSnapshotReaderTests
                     "application/json"),
             });
         }
+    }
+
+    private sealed class FirstResponseHandler : HttpMessageHandler
+    {
+        private readonly HttpContent _content;
+        private readonly Uri? _effectiveUri;
+
+        public FirstResponseHandler(
+            string content,
+            string mediaType,
+            Uri? effectiveUri)
+            : this(
+                new StringContent(content, Encoding.UTF8, mediaType),
+                effectiveUri)
+        {
+        }
+
+        public FirstResponseHandler(HttpContent content, Uri? effectiveUri)
+        {
+            _content = content;
+            _effectiveUri = effectiveUri;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = _effectiveUri is null
+                    ? null
+                    : new HttpRequestMessage(HttpMethod.Get, _effectiveUri),
+                Content = _content,
+            });
+        }
+    }
+
+    private sealed class UnknownLengthContent(byte[] bytes) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context) =>
+            stream.WriteAsync(bytes).AsTask();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync() =>
+            Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
     }
 }
