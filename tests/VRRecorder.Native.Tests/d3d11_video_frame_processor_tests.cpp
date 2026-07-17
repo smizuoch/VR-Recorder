@@ -235,6 +235,136 @@ void RejectsAMismatchedPlanBeforeCallingThePort()
     CHECK(port.abort_calls == 0);
 }
 
+void RejectsEveryInvalidSourceAndPlanBoundaryBeforeConversion()
+{
+    FakeD3d11VideoProcessorPort port;
+    const auto source = Surface(VRREC_SOURCE_PIXEL_FORMAT_RGBA8);
+    const auto valid = Plan(source);
+    D3d11VideoFrameProcessor processor(port);
+    std::shared_ptr<VideoSurface> output = source;
+
+    CHECK(processor.Process(nullptr, valid, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(!output);
+    source->native_handle = nullptr;
+    CHECK(processor.Process(source, valid, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    source->native_handle = reinterpret_cast<void *>(1);
+
+    const auto rejects = [&](const auto mutate) {
+        auto plan = valid;
+        mutate(plan);
+        output = source;
+        CHECK(processor.Process(source, plan, output) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(!output);
+    };
+    rejects([](auto &value) { ++value.adapter_luid; });
+    rejects([](auto &value) { ++value.source_generation_id; });
+    rejects([](auto &value) { ++value.source_width; });
+    rejects([](auto &value) { ++value.source_height; });
+    rejects([](auto &value) { ++value.normalized_source_width; });
+    rejects([](auto &value) { ++value.normalized_source_height; });
+    rejects([](auto &value) {
+        value.input_pixel_format = VRREC_SOURCE_PIXEL_FORMAT_BGRA8;
+    });
+    rejects([](auto &value) {
+        value.output_pixel_format = VRREC_SOURCE_PIXEL_FORMAT_RGBA8;
+    });
+    rejects([](auto &value) { value.output_width = 0; });
+    rejects([](auto &value) { value.output_height = 0; });
+    rejects([](auto &value) { --value.output_width; });
+    rejects([](auto &value) { --value.output_height; });
+    rejects([](auto &value) { value.destination_width = 0; });
+    rejects([](auto &value) { value.destination_height = 0; });
+    rejects([](auto &value) { value.offset_x = value.output_width + 1; });
+    rejects([](auto &value) { value.offset_y = value.output_height + 1; });
+    rejects([](auto &value) {
+        value.offset_x = 1;
+        value.destination_width = value.output_width;
+    });
+    rejects([](auto &value) {
+        value.offset_y = 1;
+        value.destination_height = value.output_height;
+    });
+
+    const auto no_adapter = Surface(
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8, 7, 0);
+    auto no_adapter_plan = valid;
+    no_adapter_plan.adapter_luid = 0;
+    CHECK(processor.Process(no_adapter, no_adapter_plan, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    const auto no_generation = Surface(
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8, 0, 42);
+    auto no_generation_plan = valid;
+    no_generation_plan.source_generation_id = 0;
+    CHECK(processor.Process(no_generation, no_generation_plan, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(port.convert_calls == 0);
+}
+
+void RejectsEveryInvalidConvertedSurfaceBoundary()
+{
+    const auto source = Surface(VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+    const auto plan = Plan(source);
+    const auto rejects = [&](std::shared_ptr<VideoSurface> candidate) {
+        FakeD3d11VideoProcessorPort port;
+        port.next_output = std::move(candidate);
+        D3d11VideoFrameProcessor processor(port);
+        std::shared_ptr<VideoSurface> output = source;
+        CHECK(processor.Process(source, plan, output) ==
+              VRREC_STATUS_INTERNAL_ERROR);
+        CHECK(!output);
+        CHECK(port.abort_calls == 1);
+    };
+
+    rejects(nullptr);
+    rejects(source);
+    auto no_handle = Surface(VRREC_SOURCE_PIXEL_FORMAT_NV12);
+    no_handle->native_handle = nullptr;
+    rejects(no_handle);
+    rejects(Surface(VRREC_SOURCE_PIXEL_FORMAT_NV12, 7, 43));
+    rejects(Surface(
+        VRREC_SOURCE_PIXEL_FORMAT_NV12, 7, 42, 1'280, 1'080));
+    rejects(Surface(
+        VRREC_SOURCE_PIXEL_FORMAT_NV12, 7, 42, 1'920, 720));
+    rejects(Surface(VRREC_SOURCE_PIXEL_FORMAT_RGBA8));
+    rejects(Surface(VRREC_SOURCE_PIXEL_FORMAT_NV12, 8));
+}
+
+void MapsEveryNonConvertedPortResultToATerminalFailure()
+{
+    struct Expected final {
+        D3d11VideoProcessorResult result;
+        vrrec_status_t status;
+        D3d11VideoProcessorResult last_result;
+    };
+    for (const auto expected : {
+             Expected {D3d11VideoProcessorResult::None,
+                       VRREC_STATUS_INTERNAL_ERROR,
+                       D3d11VideoProcessorResult::Failed},
+             Expected {D3d11VideoProcessorResult::Failed,
+                       VRREC_STATUS_INTERNAL_ERROR,
+                       D3d11VideoProcessorResult::Failed},
+             Expected {D3d11VideoProcessorResult::Aborted,
+                       VRREC_STATUS_INVALID_STATE,
+                       D3d11VideoProcessorResult::Aborted},
+             Expected {static_cast<D3d11VideoProcessorResult>(99),
+                       VRREC_STATUS_INTERNAL_ERROR,
+                       D3d11VideoProcessorResult::Failed},
+         }) {
+        FakeD3d11VideoProcessorPort port;
+        port.result = expected.result;
+        const auto source = Surface(VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+        D3d11VideoFrameProcessor processor(port);
+        std::shared_ptr<VideoSurface> output;
+        CHECK(processor.Process(source, Plan(source), output) ==
+              expected.status);
+        CHECK(processor.LastResult() == expected.last_result);
+        CHECK(port.abort_calls == 1);
+    }
+}
+
 void AbortDuringConvertReleasesTheLateOutputAndThePortOnce()
 {
     std::size_t destructions = 0;
@@ -289,6 +419,9 @@ int main()
     DistinguishesDeviceRemovedAndResetAsTerminalFailures();
     RejectsAndReleasesAnOutputFromTheWrongGeneration();
     RejectsAMismatchedPlanBeforeCallingThePort();
+    RejectsEveryInvalidSourceAndPlanBoundaryBeforeConversion();
+    RejectsEveryInvalidConvertedSurfaceBoundary();
+    MapsEveryNonConvertedPortResultToATerminalFailure();
     AbortDuringConvertReleasesTheLateOutputAndThePortOnce();
     MapsPortOutOfMemoryWithoutLeakingAnOutput();
     return 0;
