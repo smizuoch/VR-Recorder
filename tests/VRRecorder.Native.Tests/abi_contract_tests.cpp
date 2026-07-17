@@ -1852,7 +1852,31 @@ bool RejectsInvalidRuntimeLayoutAbiInputs()
     CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     layout = ValidRuntimeLayout();
+    layout.source_height = 0;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.canvas_width = 0;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.canvas_height = 0;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.canvas_width = 1919;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
     layout.canvas_height = 1079;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_width = 0;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_height = 0;
     CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     layout = ValidRuntimeLayout();
@@ -1860,7 +1884,24 @@ bool RejectsInvalidRuntimeLayoutAbiInputs()
     CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     layout = ValidRuntimeLayout();
+    layout.destination_height = 1079;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_x = 1921;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_y = 1081;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
     layout.destination_x = 1315;
+    CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    layout = ValidRuntimeLayout();
+    layout.destination_y = 2;
+    layout.destination_height = 1080;
     CHECK(vrrec_session_update_video_layout_v1(session, &layout) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     layout = ValidRuntimeLayout();
