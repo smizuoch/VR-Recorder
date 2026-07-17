@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
@@ -10,6 +11,165 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(0.17F)]
+    [InlineData(0.33F)]
+    public void RejectsOverlayWidthOutsideSupportedRange(float widthInMeters)
+    {
+        using var install = TemporaryInstall.Create();
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new NativeSteamVrOverlayLifecycle(
+                FixturePath(),
+                install.Path,
+                widthInMeters));
+
+        Assert.Equal("widthInMeters", exception.ParamName);
+    }
+
+    [Fact]
+    public void RejectsUnsupportedPlacementEnumsBeforeCallingNativeCode()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        var transform = new OverlayTransform([0, 0, 0], [0, 0, 0]);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            overlay.ApplyPlacement(
+                (VrHand)99,
+                OverlayPlacementMode.WristDock,
+                transform));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            overlay.ApplyPlacement(
+                VrHand.Left,
+                (OverlayPlacementMode)99,
+                transform));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            overlay.ConvertPlacement(
+                (VrHand)99,
+                OverlayPlacementMode.WristDock));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            overlay.ConvertPlacement(
+                VrHand.Left,
+                (OverlayPlacementMode)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            overlay.ReadDeviceProfile((VrHand)99));
+    }
+
+    [Fact]
+    public void CopiesNonArrayBackedTextureBeforeNativePublish()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        using var pixels = new NonArrayMemoryManager(
+            new byte[NativeSteamVrOverlayLifecycle.TexturePixelBytesSize]);
+        pixels.GetSpan()[0] = 0x12;
+        pixels.GetSpan()[^1] = 0x34;
+
+        overlay.UpdateBgraTexture(
+            pixels.Memory,
+            NativeSteamVrOverlayLifecycle.TexturePixelWidth,
+            NativeSteamVrOverlayLifecycle.TexturePixelHeight,
+            NativeSteamVrOverlayLifecycle.TextureStrideBytes);
+
+        Assert.Equal(1u, controls.TextureUpdateCount());
+        Assert.Equal(0x12, controls.TextureFirstByte());
+        Assert.Equal(0x34, controls.TextureLastByte());
+    }
+
+    [Theory]
+    [InlineData(99u, 10u, 20u, 0u)]
+    [InlineData(1u, 10u, 20u, 99u)]
+    [InlineData(2u, 1024u, 20u, 1u)]
+    [InlineData(2u, 10u, 512u, 1u)]
+    public void RejectsMalformedNativePointerEvents(
+        uint kind,
+        uint pixelX,
+        uint pixelY,
+        uint button)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        controls.PushPointerEvent(kind, pixelX, pixelY, button, cursorIndex: 0);
+
+        var exception = Assert.Throws<SteamVrOverlayException>(
+            () => overlay.PollPointerEvent());
+
+        Assert.Equal(6, exception.Status);
+        Assert.Equal("poll pointer event", exception.Operation);
+    }
+
+    [Fact]
+    public void RoundTripsLeftWristDockAndConvertsWorldPoseBackToDock()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrOverlayFixtureControls(
+            FixturePath());
+        controls.Reset();
+        using var overlay = new NativeSteamVrOverlayLifecycle(
+            FixturePath(),
+            install.Path);
+        var transform = new OverlayTransform(
+            [-0.04, 0.06, -0.09],
+            [15, 5, -8]);
+
+        overlay.ApplyPlacement(
+            VrHand.Left,
+            OverlayPlacementMode.WristDock,
+            transform);
+        var readback = overlay.ReadPlacement();
+        var converted = overlay.ConvertPlacement(
+            VrHand.Left,
+            OverlayPlacementMode.WristDock);
+
+        Assert.Equal(VrHand.Left, readback.DockHand);
+        Assert.Equal(
+            WristOverlayPoseContract.ToOpenVrMatrix34(transform).ToArray(),
+            converted.ToArray());
+        Assert.Equal(
+            new VrDeviceProfile(
+                "lighthouse",
+                "Valve Index",
+                "{indexcontroller}/input/index_controller_profile.json"),
+            overlay.ReadDeviceProfile(VrHand.Left));
+    }
+
     [Fact]
     public async Task ProductionLifecycleDrivesPlacementCoordinatorPort()
     {
@@ -469,6 +629,23 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         {
             mask = new WristAlphaMask(1, 1, [byte.MaxValue]);
             return true;
+        }
+    }
+
+    private sealed class NonArrayMemoryManager(byte[] pixels)
+        : MemoryManager<byte>
+    {
+        public override Span<byte> GetSpan() => pixels;
+
+        public override MemoryHandle Pin(int elementIndex = 0) =>
+            throw new NotSupportedException();
+
+        public override void Unpin()
+        {
+        }
+
+        protected override void Dispose(bool disposing)
+        {
         }
     }
 
