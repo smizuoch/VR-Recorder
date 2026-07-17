@@ -1145,6 +1145,27 @@ void MapsDeviceLossAgainstAnAbortedTimeline()
     CHECK(pump.PumpOne() == AudioCapturePumpResult::Aborted);
 }
 
+void RecoveryConfigurationAllocationFailureStopsBeforeSourceCreation()
+{
+    ScriptedSourceProvider provider;
+    RecordingRecoveryWaiter waiter;
+    RecordingInputStartSink starts;
+    StereoCaptureTimeline timeline(8);
+    AudioCaptureInputRunner runner(provider, waiter, timeline);
+    auto config = Config();
+    config.endpoint_id_utf8.assign(256, 'x');
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto result = runner.Run(config, starts);
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(result == AudioCaptureInputResult::Failed);
+    CHECK(starts.statuses ==
+          std::vector<vrrec_status_t> {VRREC_STATUS_INTERNAL_ERROR});
+    CHECK(provider.create_calls == 0);
+    CHECK(waiter.wait_calls == 0);
+}
+
 }
 
 int main()
@@ -1172,5 +1193,6 @@ int main()
     AbortsTheTimelineWhenSilentPacketExpansionFails();
     RejectsInvalidRecoveryAndAbortsFailedAppliedRecovery();
     MapsDeviceLossAgainstAnAbortedTimeline();
+    RecoveryConfigurationAllocationFailureStopsBeforeSourceCreation();
     return 0;
 }
