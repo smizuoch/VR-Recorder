@@ -118,6 +118,10 @@ void RejectsEverySingleFilePlanBoundary()
         Source(1, std::numeric_limits<std::uint32_t>::max() - 1U),
         2,
         2);
+    rejects(
+        Source(std::numeric_limits<std::uint32_t>::max() - 1U, 1),
+        2,
+        2);
 
     for (const auto format : {
              VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
