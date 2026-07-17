@@ -17,6 +17,55 @@ public sealed class RecordingPartRollover(
     private readonly RecordingFileFinalizationUseCase _finalization =
         finalization ?? throw new ArgumentNullException(nameof(finalization));
 
+    public Task<RecordingPlan> PrepareSoftwareStartRetryAsync(
+        RecordingPlan failedPlan,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(failedPlan);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (failedPlan.Encoder == EncoderKind.MediaFoundationSoftware)
+        {
+            throw new InvalidOperationException(
+                "A software recording start cannot fall back to itself.");
+        }
+
+        var recording = failedPlan.Output;
+        if (File.Exists(recording.FinalPath))
+        {
+            throw new IOException(
+                "The reserved final recording path already exists.");
+        }
+
+        try
+        {
+            File.Delete(recording.TemporaryPath);
+            using var stream = new FileStream(
+                recording.TemporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None);
+            stream.Flush(flushToDisk: true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(recording.TemporaryPath);
+            }
+            catch (Exception)
+            {
+                // Preserve the reset failure that owns this start attempt.
+            }
+
+            throw;
+        }
+
+        return Task.FromResult(failedPlan with
+        {
+            Encoder = EncoderKind.MediaFoundationSoftware,
+        });
+    }
+
     public async Task<RecordingPlan> ReserveNextSoftwarePartAsync(
         RecordingPlan currentPlan,
         int segmentNumber,

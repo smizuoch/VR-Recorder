@@ -230,6 +230,46 @@ public sealed class NativeRecordingEngineTests
     }
 
     [Fact]
+    public async Task HardwareFailureBeforeFirstPacketRetriesCleanSoftwarePart()
+    {
+        var hardwarePlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var softwarePlan = hardwarePlan with
+        {
+            Encoder = EncoderKind.MediaFoundationSoftware,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var rollover = new StubRecordingPartRollover(softwarePlan);
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(2))),
+            runtimeFaults,
+            rollover);
+
+        var starting = engine.StartAsync(
+            hardwarePlan,
+            CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFault(
+            partIndex: 0,
+            new NativeRecordingFault(6, "NVENC produced no packet"));
+        await backend.WaitUntilOpenedAsync(2);
+
+        Assert.False(starting.IsCompleted);
+        Assert.Equal(1, backend.Sessions[0].AbortCallCount);
+        Assert.Equal(hardwarePlan, Assert.Single(rollover.StartRetries));
+        Assert.Equal(softwarePlan, backend.OpenedPlans[1]);
+        Assert.Equal(hardwarePlan.Output, backend.OpenedPlans[1].Output);
+
+        backend.SignalFirstVideoPacketMuxed(partIndex: 1);
+        var handle = await starting;
+
+        Assert.Equal("native-part-002", handle.Id);
+        Assert.Empty(runtimeFaults.Reports);
+    }
+
+    [Fact]
     public async Task FaultAfterFirstPacketIsReportedToRuntimeFaultSink()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -661,7 +701,11 @@ public sealed class NativeRecordingEngineTests
                 {
                     while (Sessions.Count < count)
                     {
-                        Monitor.Wait(_gate);
+                        if (!Monitor.Wait(_gate, TimeSpan.FromSeconds(2)))
+                        {
+                            throw new TimeoutException(
+                                $"Only {Sessions.Count} native parts opened.");
+                        }
                     }
                 }
             });
@@ -674,18 +718,28 @@ public sealed class NativeRecordingEngineTests
             int partIndex,
             NativeRecordingFault fault) =>
             _callbacks[partIndex].VideoEncoderFailed!(fault);
+
+        public void SignalFault(
+            int partIndex,
+            NativeRecordingFault fault) =>
+            _callbacks[partIndex].Faulted(fault);
     }
 
     private sealed class PartNativeRecordingSession(
         string id,
         PendingRecording output) : INativeRecordingSession
     {
+        public int AbortCallCount { get; private set; }
+
         public int StopCallCount { get; private set; }
 
         public string Id { get; } = id;
 
-        public Task AbortAsync(CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task AbortAsync(CancellationToken cancellationToken)
+        {
+            AbortCallCount++;
+            return Task.CompletedTask;
+        }
 
         public Task UpdateAudioRoutingAsync(
             AudioRouting routing,
@@ -713,6 +767,8 @@ public sealed class NativeRecordingEngineTests
 
         public List<RecordingStopResult> FinalizedParts { get; } = [];
 
+        public List<RecordingPlan> StartRetries { get; } = [];
+
         public Task FinalizationCompleted => _finalizationCompleted.Task;
 
         public Task<RecordingPlan> ReserveNextSoftwarePartAsync(
@@ -732,6 +788,14 @@ public sealed class NativeRecordingEngineTests
             FinalizedParts.Add(stopped);
             _finalizationCompleted.TrySetResult();
             return Task.CompletedTask;
+        }
+
+        public Task<RecordingPlan> PrepareSoftwareStartRetryAsync(
+            RecordingPlan failedPlan,
+            CancellationToken cancellationToken)
+        {
+            StartRetries.Add(failedPlan);
+            return Task.FromResult(nextPlan);
         }
     }
 

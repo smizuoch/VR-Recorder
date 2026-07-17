@@ -5,6 +5,10 @@ namespace VRRecorder.Infrastructure.Media;
 
 public interface IRecordingPartRollover
 {
+    Task<RecordingPlan> PrepareSoftwareStartRetryAsync(
+        RecordingPlan failedPlan,
+        CancellationToken cancellationToken);
+
     Task<RecordingPlan> ReserveNextSoftwarePartAsync(
         RecordingPlan currentPlan,
         int segmentNumber,

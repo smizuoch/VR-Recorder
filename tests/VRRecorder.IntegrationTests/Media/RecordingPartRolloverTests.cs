@@ -87,6 +87,52 @@ public sealed class RecordingPartRolloverTests
             Assert.Single(saved.Recordings));
     }
 
+    [Fact]
+    public async Task SoftwareStartRetryRecreatesTheSameEmptyReservation()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"vrrecorder-rollover-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var pending = new PendingRecording(
+            Path.Combine(directory, "take.recording.mp4"),
+            Path.Combine(directory, "take.mp4"));
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                pending.TemporaryPath,
+                "partial hardware descriptor and packets");
+            var plan = new RecordingPlan(
+                new StableVideoSignal(320, 180),
+                pending,
+                new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+                new FrameRate(30),
+                EncoderKind.Nvenc);
+            var rollover = new RecordingPartRollover(
+                new CapturingReservation(pending),
+                new RecordingFileFinalizationUseCase(
+                    new CapturingFinalizer(),
+                    new CapturingValidator(),
+                    new UnexpectedRecoveryStore(),
+                    new CapturingSavedRecordingSink()));
+
+            var retry = await rollover.PrepareSoftwareStartRetryAsync(
+                plan,
+                CancellationToken.None);
+
+            Assert.Equal(pending, retry.Output);
+            Assert.Equal(EncoderKind.MediaFoundationSoftware, retry.Encoder);
+            Assert.True(File.Exists(pending.TemporaryPath));
+            Assert.Equal(0, new FileInfo(pending.TemporaryPath).Length);
+            Assert.False(File.Exists(pending.FinalPath));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private sealed class CapturingReservation(PendingRecording result)
         : IRecordingFileReservation
     {

@@ -108,6 +108,19 @@ public sealed class NativeRecordingEngine
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        return await StartCoreAsync(
+                plan,
+                allowSoftwareFallback:
+                    plan.Encoder != EncoderKind.MediaFoundationSoftware,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<RecordingHandle> StartCoreAsync(
+        RecordingPlan plan,
+        bool allowSoftwareFallback,
+        CancellationToken cancellationToken)
+    {
         var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var runtimeFaultContext = new RuntimeFaultContext(_runtimeFaults);
@@ -118,28 +131,27 @@ public sealed class NativeRecordingEngine
             firstPacket,
             runtimeFaultContext,
             rolloverContext.Report);
-        var session = await _backend
-            .OpenAsync(
-                plan,
-                callbacks,
-                cancellationToken)
-            .ConfigureAwait(false);
-        ArgumentException.ThrowIfNullOrWhiteSpace(session.Id);
-        var activeSession = new ActiveSession(
-            session,
-            plan,
-            runtimeFaultContext);
-        if (!_sessions.TryAdd(session.Id, activeSession))
-        {
-            await session
-                .AbortAsync(CancellationToken.None)
-                .ConfigureAwait(false);
-            throw new InvalidOperationException(
-                $"Native recording session {session.Id} already exists.");
-        }
-
+        INativeRecordingSession? session = null;
+        ActiveSession? activeSession = null;
         try
         {
+            session = await _backend
+                .OpenAsync(
+                    plan,
+                    callbacks,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            ArgumentException.ThrowIfNullOrWhiteSpace(session.Id);
+            activeSession = new ActiveSession(
+                session,
+                plan,
+                runtimeFaultContext);
+            if (!_sessions.TryAdd(session.Id, activeSession))
+            {
+                throw new InvalidOperationException(
+                    $"Native recording session {session.Id} already exists.");
+            }
+
             var committedAt = await firstPacket.Task
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -149,12 +161,33 @@ public sealed class NativeRecordingEngine
             PublishMediaBestEffort(plan);
             return handle;
         }
-        catch
+        catch (Exception exception)
         {
-            _sessions.TryRemove(session.Id, out _);
-            await session
-                .AbortAsync(CancellationToken.None)
-                .ConfigureAwait(false);
+            if (session is not null)
+            {
+                _sessions.TryRemove(session.Id, out _);
+                await session
+                    .AbortAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+
+            if (allowSoftwareFallback &&
+                _partRollover is not null &&
+                exception is NativeRecordingException &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                var fallbackPlan = await _partRollover
+                    .PrepareSoftwareStartRetryAsync(
+                        plan,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return await StartCoreAsync(
+                        fallbackPlan,
+                        allowSoftwareFallback: false,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             throw;
         }
     }
