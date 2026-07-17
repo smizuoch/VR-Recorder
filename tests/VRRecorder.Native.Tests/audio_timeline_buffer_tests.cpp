@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -56,10 +57,75 @@ void ReassemblesPacketBoundariesAndZeroFillsTimelineGaps()
     }
 }
 
+void RejectsEveryInvalidWriteAndReadBoundary()
+{
+    using vrrecorder::native::StereoAudioTimelineBuffer;
+    const std::vector<float> one_frame {0.25F, -0.25F};
+    StereoAudioTimelineBuffer zero_capacity(0);
+    CHECK(zero_capacity.Write(0, one_frame) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    std::vector<float> output(2);
+    CHECK(zero_capacity.Read(0, 1, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    StereoAudioTimelineBuffer overflow_capacity(
+        std::numeric_limits<std::size_t>::max());
+    CHECK(overflow_capacity.Write(0, one_frame) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    StereoAudioTimelineBuffer buffer(4);
+    CHECK(buffer.Write(0, {}) == VRREC_STATUS_INVALID_ARGUMENT);
+    const std::vector<float> odd_samples {0.25F};
+    CHECK(buffer.Write(0, odd_samples) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(buffer.Write(
+              std::numeric_limits<std::uint64_t>::max(),
+              std::vector<float> {0.0F, 0.0F, 0.0F, 0.0F}) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    for (const auto invalid_sample : {
+             std::numeric_limits<float>::quiet_NaN(),
+             std::numeric_limits<float>::infinity(),
+         }) {
+        CHECK(buffer.Write(0, std::vector<float> {invalid_sample, 0.0F}) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    }
+
+    CHECK(buffer.Read(0, 0, {}) == VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(buffer.Read(0, 1, std::span<float> {}) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    std::vector<float> overflow_output(4);
+    CHECK(buffer.Read(
+              std::numeric_limits<std::uint64_t>::max(),
+              2,
+              overflow_output) == VRREC_STATUS_INVALID_ARGUMENT);
+}
+
+void ReportsAndResetsMissingFrameEvidence()
+{
+    vrrecorder::native::StereoAudioTimelineBuffer buffer(2);
+    const std::vector<float> first {0.1F, 0.2F};
+    CHECK(buffer.Write(10, first) == VRREC_STATUS_OK);
+    std::vector<float> output(4, -1.0F);
+    auto had_missing_frames = false;
+    CHECK(buffer.Read(10, 2, output, had_missing_frames) == VRREC_STATUS_OK);
+    CHECK(had_missing_frames);
+    CHECK(NearlyEqual(output[0], 0.1F));
+    CHECK(NearlyEqual(output[1], 0.2F));
+    CHECK(NearlyEqual(output[2], 0.0F));
+    CHECK(NearlyEqual(output[3], 0.0F));
+
+    const std::vector<float> second {0.3F, 0.4F};
+    CHECK(buffer.Write(11, second) == VRREC_STATUS_OK);
+    had_missing_frames = true;
+    CHECK(buffer.Read(10, 2, output, had_missing_frames) == VRREC_STATUS_OK);
+    CHECK(!had_missing_frames);
+}
+
 }
 
 int main()
 {
     ReassemblesPacketBoundariesAndZeroFillsTimelineGaps();
+    RejectsEveryInvalidWriteAndReadBoundary();
+    ReportsAndResetsMissingFrameEvidence();
     return 0;
 }
