@@ -328,10 +328,196 @@ public sealed class WristOverlayInteractionHostTests
         Assert.Empty(drags.Releases);
     }
 
+    [Fact]
+    public async Task RejectsConcurrentTicksAndHonorsPreCanceledCalls()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new BlockingCommands();
+        var snapshot = Snapshot(20);
+        var target = Assert.Single(
+            WristTextureLayoutEngine.Layout(
+                snapshot,
+                WristLayoutOptions.Default).HitTargets,
+            item => item.Command == UiCommandId.ToggleRecording);
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            target.Bounds.Left + 1,
+            target.Bounds.Top + 1,
+            WristPointerButton.Primary,
+            CursorIndex: 20));
+        var host = Host(publisher, source, commands);
+
+        var active = host.TickAsync(
+            snapshot,
+            TimeSpan.Zero,
+            CancellationToken.None);
+        await commands.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            host.TickAsync(
+                snapshot,
+                TimeSpan.FromMilliseconds(1),
+                CancellationToken.None));
+        commands.Release.TrySetResult();
+        Assert.True((await active).ActionDispatched);
+
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            host.TickAsync(
+                Snapshot(21),
+                TimeSpan.FromMilliseconds(2),
+                canceled.Token));
+    }
+
+    [Fact]
+    public async Task IgnoresSecondaryButtonsAndPrimaryHitsOutsideTheLayout()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new CapturingCommands(calls);
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            0,
+            0,
+            WristPointerButton.Secondary,
+            CursorIndex: 22));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonDown,
+            0,
+            0,
+            WristPointerButton.Primary,
+            CursorIndex: 23));
+        source.Events.Enqueue(new WristPointerEvent(
+            WristPointerEventKind.ButtonUp,
+            0,
+            0,
+            WristPointerButton.Primary,
+            CursorIndex: 24));
+        var host = Host(publisher, source, commands);
+
+        var result = await host.TickAsync(
+            Snapshot(22),
+            TimeSpan.Zero,
+            CancellationToken.None);
+
+        Assert.Equal(3, result.PointerEventsPolled);
+        Assert.False(result.ActionDispatched);
+        Assert.Empty(commands.Commands);
+    }
+
+    [Fact]
+    public async Task CommandDispatchSuppressesAnEarlierMoveGestureRelease()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new CapturingCommands(calls);
+        var drags = new CapturingDragCommands();
+        var snapshot = Snapshot(23);
+        var layout = WristTextureLayoutEngine.Layout(
+            snapshot,
+            WristLayoutOptions.Default);
+        var move = Assert.Single(layout.HitTargets, item =>
+            item.Command == UiCommandId.OpenOverlayPositioning);
+        var start = Assert.Single(layout.HitTargets, item =>
+            item.Command == UiCommandId.ToggleRecording);
+        source.Events.Enqueue(Down(move, 25));
+        source.Events.Enqueue(Down(start, 26));
+        source.Events.Enqueue(Down(move, 25) with
+        {
+            Kind = WristPointerEventKind.ButtonUp,
+        });
+        var host = Host(publisher, source, commands, drags);
+
+        var result = await host.TickAsync(
+            snapshot,
+            TimeSpan.Zero,
+            CancellationToken.None);
+
+        Assert.True(result.ActionDispatched);
+        Assert.Equal(
+            [(UiCommandId.ToggleRecording, UiActivationKind.WristRay)],
+            commands.Commands);
+        Assert.Empty(drags.Releases);
+    }
+
+    [Fact]
+    public async Task GestureReleaseDoesNotRepeatACommandedPresentationRevision()
+    {
+        var calls = new List<string>();
+        var publisher = new FakePublisher(calls);
+        var source = new FakePointerSource(calls);
+        var commands = new CapturingCommands(calls);
+        var drags = new CapturingDragCommands();
+        var host = Host(publisher, source, commands, drags);
+        var original = Snapshot(24);
+        var originalLayout = WristTextureLayoutEngine.Layout(
+            original,
+            WristLayoutOptions.Default);
+        var originalStart = Assert.Single(originalLayout.HitTargets, item =>
+            item.Command == UiCommandId.ToggleRecording);
+        source.Events.Enqueue(Down(originalStart, 27));
+        Assert.True((await host.TickAsync(
+            original,
+            TimeSpan.Zero,
+            CancellationToken.None)).ActionDispatched);
+
+        var next = original with { PresentationRevision = 1 };
+        var nextLayout = WristTextureLayoutEngine.Layout(
+            next,
+            WristLayoutOptions.Default);
+        var move = Assert.Single(nextLayout.HitTargets, item =>
+            item.Command == UiCommandId.OpenOverlayPositioning);
+        var start = Assert.Single(nextLayout.HitTargets, item =>
+            item.Command == UiCommandId.ToggleRecording);
+        source.Events.Enqueue(Down(originalStart, 27) with
+        {
+            Kind = WristPointerEventKind.ButtonUp,
+        });
+        source.Events.Enqueue(Down(move, 28));
+        Assert.False((await host.TickAsync(
+            next,
+            TimeSpan.FromMilliseconds(1),
+            CancellationToken.None)).ActionDispatched);
+
+        source.Events.Enqueue(Down(start, 29));
+        Assert.True((await host.TickAsync(
+            next,
+            TimeSpan.FromMilliseconds(2),
+            CancellationToken.None)).ActionDispatched);
+
+        source.Events.Enqueue(Down(move, 28) with
+        {
+            Kind = WristPointerEventKind.ButtonUp,
+        });
+        var release = await host.TickAsync(
+            next,
+            TimeSpan.FromMilliseconds(3),
+            CancellationToken.None);
+
+        Assert.False(release.ActionDispatched);
+        Assert.Equal(2, commands.Commands.Count);
+        Assert.Empty(drags.Releases);
+    }
+
+    private static WristPointerEvent Down(
+        WristHitTarget target,
+        uint cursorIndex) =>
+        new(
+            WristPointerEventKind.ButtonDown,
+            target.Bounds.Left + 1,
+            target.Bounds.Top + 1,
+            WristPointerButton.Primary,
+            cursorIndex);
+
     private static WristOverlayInteractionHost Host(
         FakePublisher publisher,
         FakePointerSource source,
-        CapturingCommands commands,
+        IUiCommandDispatcher commands,
         CapturingDragCommands? drags = null) => new(
             new WristTextureUpdateHost(
                 new WristTextureRenderer(
@@ -444,6 +630,24 @@ public sealed class WristOverlayInteractionHostTests
             calls.Add("dispatch");
             Commands.Add((command, activationKind));
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingCommands : IUiCommandDispatcher
+    {
+        public TaskCompletionSource Entered { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task DispatchAsync(
+            UiCommandId command,
+            UiActivationKind activationKind,
+            CancellationToken cancellationToken)
+        {
+            Entered.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
         }
     }
 
