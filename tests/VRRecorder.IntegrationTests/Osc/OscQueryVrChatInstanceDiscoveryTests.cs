@@ -138,6 +138,73 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
     }
 
     [Fact]
+    public async Task HostNameMismatchProducesNoCandidate()
+    {
+        var advertisement = Advertisement("name-mismatch", httpPort: 19024);
+        var fixture = new Fixture(
+            advertisement.InstanceName,
+            OscPort: 9024,
+            HostInfoJson: """
+                {
+                  "HOST_INFO": {
+                    "NAME": "VRChat-Client-other",
+                    "OSC_IP": "127.0.0.1",
+                    "OSC_PORT": 9024
+                  }
+                }
+                """);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = fixture,
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Empty(await discovery.DiscoverAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("missing-path")]
+    [InlineData("wrong-path")]
+    [InlineData("missing-type")]
+    [InlineData("blank-type")]
+    [InlineData("type-not-string")]
+    [InlineData("missing-access")]
+    [InlineData("access-not-number")]
+    [InlineData("access-read-only")]
+    [InlineData("wrong-mode-type")]
+    [InlineData("invalid-boolean-type")]
+    public async Task InvalidCapabilityContractProducesNoCandidate(
+        string mutation)
+    {
+        var advertisement = Advertisement("invalid-cap", httpPort: 19025);
+        var invalidJson = InvalidCapabilityJson(mutation);
+        var fixture = new Fixture(
+            advertisement.InstanceName,
+            OscPort: 9025,
+            ModeJson: mutation == "invalid-boolean-type"
+                ? null
+                : invalidJson,
+            StreamingJson: mutation == "invalid-boolean-type"
+                ? invalidJson
+                : null);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = fixture,
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Empty(await discovery.DiscoverAsync(CancellationToken.None));
+    }
+
+    [Fact]
     [Trait("Scenario", "IT-021")]
     public async Task MultipleTargetsCreateAndSendNothingUntilExactSelection()
     {
@@ -507,6 +574,46 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                 """;
     }
 
+    private static string InvalidCapabilityJson(string mutation) =>
+        mutation switch
+        {
+            "missing-path" => """
+                { "TYPE": "i", "ACCESS": 3 }
+                """,
+            "wrong-path" => CapabilityEndpoint("/usercamera/Wrong", "i"),
+            "missing-type" => """
+                { "FULL_PATH": "/usercamera/Mode", "ACCESS": 3 }
+                """,
+            "blank-type" => CapabilityEndpoint("/usercamera/Mode", " "),
+            "type-not-string" => """
+                { "FULL_PATH": "/usercamera/Mode", "TYPE": 1, "ACCESS": 3 }
+                """,
+            "missing-access" => """
+                { "FULL_PATH": "/usercamera/Mode", "TYPE": "i" }
+                """,
+            "access-not-number" => """
+                { "FULL_PATH": "/usercamera/Mode", "TYPE": "i", "ACCESS": "3" }
+                """,
+            "access-read-only" => """
+                { "FULL_PATH": "/usercamera/Mode", "TYPE": "i", "ACCESS": 1 }
+                """,
+            "wrong-mode-type" => CapabilityEndpoint("/usercamera/Mode", "f"),
+            "invalid-boolean-type" => CapabilityEndpoint(
+                "/usercamera/Streaming",
+                "i"),
+            _ => throw new InvalidOperationException(mutation),
+        };
+
+    private static string CapabilityEndpoint(
+        string path,
+        string type) => $$"""
+        {
+          "FULL_PATH": "{{path}}",
+          "TYPE": "{{type}}",
+          "ACCESS": 3
+        }
+        """;
+
     private static void AssertCandidate(
         VrChatInstanceCandidate candidate,
         OscQueryServiceAdvertisement advertisement,
@@ -628,16 +735,17 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
                       }
                     }
                     """,
-                "/usercamera/Mode" => Endpoint(
+                "/usercamera/Mode" => fixture.ModeJson ?? Endpoint(
                     "/usercamera/Mode",
                     "i",
                     "\"VALUE\": [1]"),
-                "/usercamera/Streaming" => Endpoint(
+                "/usercamera/Streaming" => fixture.StreamingJson ?? Endpoint(
                     "/usercamera/Streaming",
                     "F"),
-                "/usercamera/OrientationIsLandscape" => Endpoint(
-                    "/usercamera/OrientationIsLandscape",
-                    "T"),
+                "/usercamera/OrientationIsLandscape" =>
+                    fixture.OrientationJson ?? Endpoint(
+                        "/usercamera/OrientationIsLandscape",
+                        "T"),
                 _ => throw new InvalidOperationException(
                     $"Unexpected OSCQuery request {uri.PathAndQuery}."),
             };
@@ -714,5 +822,8 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         string? HostInfoJson = null,
         string? MissingPath = null,
         string? RedirectedPath = null,
-        Uri? EffectiveRequestUri = null);
+        Uri? EffectiveRequestUri = null,
+        string? ModeJson = null,
+        string? StreamingJson = null,
+        string? OrientationJson = null);
 }
