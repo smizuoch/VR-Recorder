@@ -74,10 +74,14 @@ struct SpsSettings final {
     std::uint32_t bit_depth_chroma_minus8 = 0;
     bool separate_colour_plane = false;
     bool scaling_matrix_present = false;
+    std::int32_t first_scaling_list_delta = 0;
     std::uint32_t sequence_parameter_set_id = 0;
     std::uint32_t log2_max_frame_num_minus4 = 0;
     std::uint32_t pic_order_count_type = 0;
     std::uint32_t log2_max_pic_order_count_lsb_minus4 = 0;
+    std::int32_t offset_for_non_ref_pic = 0;
+    std::int32_t offset_for_top_to_bottom_field = 0;
+    std::int32_t offset_for_ref_frame = 0;
     std::uint32_t pic_order_cycle_length = 0;
     std::uint32_t pic_width_in_mbs_minus1 = 0;
     std::uint32_t pic_height_in_map_units_minus1 = 0;
@@ -156,8 +160,25 @@ inline std::vector<std::byte> MakeSps(const SpsSettings &settings)
             for (std::uint32_t list = 0; list < list_count; ++list) {
                 writer.Bit(list == 0 ? 1U : 0U);
                 if (list == 0) {
+                    auto last_scale = std::int32_t {8};
+                    auto next_scale = std::int32_t {8};
                     for (std::uint32_t index = 0; index < 16U; ++index) {
-                        writer.SignedExpGolomb(0);
+                        if (next_scale != 0) {
+                            const auto delta = index == 0
+                                ? settings.first_scaling_list_delta
+                                : 0;
+                            writer.SignedExpGolomb(delta);
+                            const auto sum =
+                                static_cast<std::int64_t>(last_scale) +
+                                delta + 256;
+                            next_scale = static_cast<std::int32_t>(sum % 256);
+                            if (next_scale < 0) {
+                                next_scale += 256;
+                            }
+                        }
+                        last_scale = next_scale == 0
+                            ? last_scale
+                            : next_scale;
                     }
                 }
             }
@@ -171,13 +192,13 @@ inline std::vector<std::byte> MakeSps(const SpsSettings &settings)
             settings.log2_max_pic_order_count_lsb_minus4);
     } else if (settings.pic_order_count_type == 1) {
         writer.Bit(0); // delta_pic_order_always_zero_flag
-        writer.SignedExpGolomb(0); // offset_for_non_ref_pic
-        writer.SignedExpGolomb(0); // offset_for_top_to_bottom_field
+        writer.SignedExpGolomb(settings.offset_for_non_ref_pic);
+        writer.SignedExpGolomb(settings.offset_for_top_to_bottom_field);
         writer.UnsignedExpGolomb(settings.pic_order_cycle_length);
         for (std::uint32_t index = 0;
              index < settings.pic_order_cycle_length;
              ++index) {
-            writer.SignedExpGolomb(0);
+            writer.SignedExpGolomb(settings.offset_for_ref_frame);
         }
     }
     writer.UnsignedExpGolomb(1); // max_num_ref_frames

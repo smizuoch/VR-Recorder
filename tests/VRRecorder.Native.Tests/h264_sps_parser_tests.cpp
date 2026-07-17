@@ -126,6 +126,84 @@ void ParsesChromaPocScalingAndInterlacedVariants()
     scaling_matrix.scaling_matrix_present = true;
     CHECK(ParseH264Sps(MakeSps(scaling_matrix), result) ==
           VRREC_STATUS_OK);
+
+    scaling_matrix.first_scaling_list_delta = -8;
+    CHECK(ParseH264Sps(MakeSps(scaling_matrix), result) ==
+          VRREC_STATUS_OK);
+    scaling_matrix.first_scaling_list_delta = -265;
+    CHECK(ParseH264Sps(MakeSps(scaling_matrix), result) ==
+          VRREC_STATUS_OK);
+
+    poc_type_one.offset_for_non_ref_pic = -1;
+    poc_type_one.offset_for_top_to_bottom_field = 1;
+    poc_type_one.offset_for_ref_frame = -1;
+    CHECK(ParseH264Sps(MakeSps(poc_type_one), result) ==
+          VRREC_STATUS_OK);
+
+    for (const auto chroma_format : {0U, 1U, 2U, 3U}) {
+        SpsSettings cropped;
+        cropped.chroma_format_idc = chroma_format;
+        cropped.separate_colour_plane = chroma_format == 3U;
+        cropped.pic_width_in_mbs_minus1 = 1;
+        cropped.pic_height_in_map_units_minus1 = 1;
+        cropped.crop = true;
+        cropped.crop_left = 1;
+        cropped.crop_top = 1;
+        CHECK(ParseH264Sps(MakeSps(cropped), result) ==
+              VRREC_STATUS_OK);
+    }
+}
+
+void RejectsEveryTruncatedSpsAndPpsPrefix()
+{
+    H264SpsInfo sps_result {};
+    const auto sps = MakeSps(SpsSettings {});
+    for (std::size_t size = 0; size < sps.size(); ++size) {
+        CHECK(ParseH264Sps(
+                  std::span<const std::byte>(sps).first(size),
+                  sps_result) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(sps_result.width == 0);
+    }
+
+    H264PpsInfo pps_result {};
+    const auto pps = MakePps(PpsSettings {});
+    for (std::size_t size = 0; size < 2U && size < pps.size(); ++size) {
+        CHECK(ParseH264Pps(
+                  std::span<const std::byte>(pps).first(size),
+                  pps_result) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(pps_result.picture_parameter_set_id == 0);
+    }
+}
+
+void RejectsEmulationPreventionAndTrailingBitCorruption()
+{
+    H264SpsInfo result {};
+    const std::vector<std::byte> invalid_emulation_followup {
+        std::byte {0x67},
+        std::byte {0x00},
+        std::byte {0x00},
+        std::byte {0x03},
+        std::byte {0x04},
+    };
+    CHECK(ParseH264Sps(invalid_emulation_followup, result) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    auto missing_stop_bit = MakeSps(SpsSettings {});
+    missing_stop_bit.back() = std::byte {0x00};
+    CHECK(ParseH264Sps(missing_stop_bit, result) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    auto nonzero_trailing_bit = MakeSps(SpsSettings {});
+    nonzero_trailing_bit.back() |= std::byte {0x01};
+    CHECK(ParseH264Sps(nonzero_trailing_bit, result) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    for (const auto compatibility : {2U, 3U}) {
+        SpsSettings reserved;
+        reserved.compatibility = static_cast<std::uint8_t>(compatibility);
+        CHECK(ParseH264Sps(MakeSps(reserved), result) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+    }
 }
 
 void ParsesEncoderSpsWithEmulationPreventionBytesAndVui()
@@ -267,6 +345,8 @@ int main()
     ParsesMainProfileWithoutExtendedSyntax();
     ParsesEveryExtendedProfileVariant();
     ParsesChromaPocScalingAndInterlacedVariants();
+    RejectsEveryTruncatedSpsAndPpsPrefix();
+    RejectsEmulationPreventionAndTrailingBitCorruption();
     ParsesEncoderSpsWithEmulationPreventionBytesAndVui();
     RejectsMalformedOrImpossibleSps();
     RejectsEverySpsSyntaxLimit();
