@@ -2371,6 +2371,8 @@ bool RejectsInvalidSteamVrAbiInputs()
     CHECK(vrrec_steamvr_input_create_v1(nullptr, &input) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(input == nullptr);
+    CHECK(vrrec_steamvr_input_create_v1(&config, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
 
     config.struct_size = sizeof(config) - 1;
     CHECK(vrrec_steamvr_input_create_v1(&config, &input) ==
@@ -2383,12 +2385,42 @@ bool RejectsInvalidSteamVrAbiInputs()
           VRREC_STATUS_UNSUPPORTED_ABI);
     CHECK(input == nullptr);
 
+    const auto rejected = [&](vrrec_steamvr_input_config_v1 invalid) {
+        input = reinterpret_cast<vrrec_steamvr_input_t *>(UINTPTR_MAX);
+        return vrrec_steamvr_input_create_v1(&invalid, &input) ==
+                   VRREC_STATUS_INVALID_ARGUMENT &&
+            input == nullptr;
+    };
+    config = ValidSteamVrConfig();
+    config.action_manifest_path_utf8 = nullptr;
+    CHECK(rejected(config));
+    config = ValidSteamVrConfig();
+    config.action_manifest_path_utf8 = "";
+    CHECK(rejected(config));
     config = ValidSteamVrConfig();
     config.action_manifest_path_utf8 = "relative/actions.json";
-    CHECK(vrrec_steamvr_input_create_v1(&config, &input) ==
-          VRREC_STATUS_INVALID_ARGUMENT);
-    CHECK(input == nullptr);
+    CHECK(rejected(config));
+    for (const auto invalid_path :
+         std::array<const char *, 3> {nullptr, "", "/"}) {
+        config = ValidSteamVrConfig();
+        config.action_set_path_utf8 = invalid_path;
+        CHECK(rejected(config));
+        config = ValidSteamVrConfig();
+        config.digital_action_path_utf8 = invalid_path;
+        CHECK(rejected(config));
+    }
+
     CHECK(vrrec_steamvr_input_poll_v1(nullptr, nullptr) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    vrrec_steamvr_digital_state_v1 state {
+        sizeof(vrrec_steamvr_digital_state_v1),
+        VRREC_ABI_V1,
+        0,
+        0,
+        0,
+        0,
+    };
+    CHECK(vrrec_steamvr_input_poll_v1(nullptr, &state) ==
           VRREC_STATUS_INVALID_ARGUMENT);
     vrrec_steamvr_input_destroy_v1(nullptr);
     return true;
