@@ -1,13 +1,16 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <future>
 #include <limits>
 #include <iostream>
 #include <mutex>
+#include <new>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -66,6 +69,61 @@ static_assert(sizeof(vrrec_encoder_probe_result_v2) == 96);
 static_assert(VRREC_ENCODER_INPUT_SYSTEM_MEMORY_NV12 == 1);
 static_assert(VRREC_ENCODER_INPUT_D3D11_NV12 == 2);
 static_assert(VRREC_ENCODER_INPUT_QSV_NV12 == 3);
+
+namespace allocation_failure {
+
+std::atomic<std::size_t> fail_on_allocation {0};
+
+bool ShouldFail() noexcept
+{
+    auto remaining = fail_on_allocation.load();
+    while (remaining != 0) {
+        if (fail_on_allocation.compare_exchange_weak(
+                remaining,
+                remaining - 1)) {
+            return remaining == 1;
+        }
+    }
+    return false;
+}
+
+}
+
+void *operator new(std::size_t size)
+{
+    if (allocation_failure::ShouldFail()) {
+        throw std::bad_alloc {};
+    }
+    if (auto *allocation = std::malloc(size); allocation != nullptr) {
+        return allocation;
+    }
+    throw std::bad_alloc {};
+}
+
+void *operator new[](std::size_t size)
+{
+    return ::operator new(size);
+}
+
+void operator delete(void *allocation) noexcept
+{
+    std::free(allocation);
+}
+
+void operator delete[](void *allocation) noexcept
+{
+    ::operator delete(allocation);
+}
+
+void operator delete(void *allocation, std::size_t) noexcept
+{
+    ::operator delete(allocation);
+}
+
+void operator delete[](void *allocation, std::size_t) noexcept
+{
+    ::operator delete[](allocation);
+}
 
 namespace {
 
@@ -3698,6 +3756,83 @@ vrrec_encoder_probe_result_v2 EmptyEncoderProbeResult(
     return result;
 }
 
+bool ReportsOutOfMemoryAcrossOwnedAbiCreationBoundaries()
+{
+    const auto fail_next_allocation = [](auto &&operation) {
+        allocation_failure::fail_on_allocation = 1;
+        const auto status = operation();
+        allocation_failure::fail_on_allocation = 0;
+        return status;
+    };
+
+    EventLog log;
+    const auto session_config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    auto *session = reinterpret_cast<vrrec_session_t *>(UINTPTR_MAX);
+    CHECK(fail_next_allocation([&] {
+              return vrrec_session_create_v1(
+                  &session_config,
+                  &callbacks,
+                  &session);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(session == nullptr);
+
+    const auto input_config = ValidSteamVrConfig();
+    auto *input = reinterpret_cast<vrrec_steamvr_input_t *>(UINTPTR_MAX);
+    CHECK(fail_next_allocation([&] {
+              return vrrec_steamvr_input_create_v1(&input_config, &input);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(input == nullptr);
+
+    const auto haptic_config = ValidSteamVrHapticConfig();
+    auto *haptic = reinterpret_cast<vrrec_steamvr_haptic_t *>(UINTPTR_MAX);
+    CHECK(fail_next_allocation([&] {
+              return vrrec_steamvr_haptic_create_v1(
+                  &haptic_config,
+                  &haptic);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(haptic == nullptr);
+
+    const auto overlay_config = ValidSteamVrOverlayConfig();
+    auto *overlay = reinterpret_cast<vrrec_steamvr_overlay_t *>(UINTPTR_MAX);
+    CHECK(fail_next_allocation([&] {
+              return vrrec_steamvr_overlay_create_v1(
+                  &overlay_config,
+                  &overlay);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(overlay == nullptr);
+
+    const auto spout_config = ValidSpoutSourceConfig();
+    auto *source = reinterpret_cast<vrrec_spout_source_t *>(UINTPTR_MAX);
+    CHECK(fail_next_allocation([&] {
+              return vrrec_spout_source_create_v1(&spout_config, &source);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(source == nullptr);
+
+    const auto probe_config = ValidEncoderProbeConfig();
+    auto packet_produced = std::uint8_t {UINT8_MAX};
+    CHECK(fail_next_allocation([&] {
+              return vrrec_encoder_probe_v1(
+                  &probe_config,
+                  &packet_produced);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(packet_produced == 0);
+
+    auto result = EmptyEncoderProbeResult();
+    auto required_size = UINT32_MAX;
+    CHECK(fail_next_allocation([&] {
+              return vrrec_encoder_probe_v2(
+                  &probe_config,
+                  &result,
+                  nullptr,
+                  0,
+                  &required_size);
+          }) == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(required_size == 0);
+    CHECK(result.actual_encoder_kind == 0);
+    return true;
+}
+
 bool ReturnsStructuredEncoderEvidenceThroughSizedUtf8Buffer()
 {
     using vrrecorder::native::testing::EncoderProbeCallCount;
@@ -4064,6 +4199,7 @@ int main(int argc, char **argv)
         !DestroyWaitsForActiveSpoutPollAndIsIdempotent() ||
         !ProbesSixteenFramesAndReportsOnlyProducedPacket() ||
         !RejectsInvalidEncoderProbeAbiInputs() ||
+        !ReportsOutOfMemoryAcrossOwnedAbiCreationBoundaries() ||
         !ReturnsStructuredEncoderEvidenceThroughSizedUtf8Buffer() ||
         !AcceptsEveryFixedEncoderProbeIdentity() ||
         !RejectsUnverifiedOrMismatchedStructuredEncoderEvidence() ||
