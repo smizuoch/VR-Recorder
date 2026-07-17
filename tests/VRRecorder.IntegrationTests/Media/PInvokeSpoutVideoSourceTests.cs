@@ -460,6 +460,76 @@ public sealed class PInvokeSpoutVideoSourceTests
         Assert.Contains(expectedOperation, exception.Message);
     }
 
+    [Fact]
+    public void NativeLibraryRejectsInvalidPathsAndMissingExports()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        Assert.Throws<ArgumentException>(() =>
+            new NativeSpoutSourceLibrary("relative-native-library.so"));
+        var missing = Path.Combine(
+            Path.GetTempPath(),
+            $"missing-spout-{Guid.NewGuid():N}.so");
+        var missingException = Assert.Throws<FileNotFoundException>(() =>
+            new NativeSpoutSourceLibrary(missing));
+        Assert.Equal(Path.GetFullPath(missing), missingException.FileName);
+
+        Assert.Throws<EntryPointNotFoundException>(() =>
+            new NativeSpoutSourceLibrary(
+                "/lib/x86_64-linux-gnu/libc.so.6"));
+
+        var library = new NativeSpoutSourceLibrary(FixturePath());
+        library.Dispose();
+        library.Dispose();
+    }
+
+    [Fact]
+    public void NativeLibraryAcceptsEmptyBuffersWithoutPinning()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeSpoutFixtureControls(FixturePath());
+        controls.Reset();
+        using var library = new NativeSpoutSourceLibrary(FixturePath());
+        var config = new NativeSpoutSourceConfigV1
+        {
+            StructSize = checked(
+                (uint)Marshal.SizeOf<NativeSpoutSourceConfigV1>()),
+            AbiVersion = NativeSpoutSourceLibrary.SupportedAbiVersion,
+        };
+        Assert.Equal(
+            NativeStatus.Ok,
+            library.CreateSource(ref config, out var source));
+
+        var snapshotStatus = library.Snapshot(
+            source,
+            [],
+            [],
+            out var entryCount,
+            out var requiredUtf8Size);
+        var frame = PInvokeSpoutVideoSource.CreateFrameOutput();
+        var frameStatus = library.PollFrame(
+            source,
+            timeoutMilliseconds: 0,
+            ref frame,
+            [],
+            out var requiredFrameUtf8Size);
+        library.DestroySource(ref source);
+
+        Assert.Equal(NativeStatus.Ok, snapshotStatus);
+        Assert.Equal(0u, entryCount);
+        Assert.Equal(0u, requiredUtf8Size);
+        Assert.Equal(NativeStatus.Timeout, frameStatus);
+        Assert.Equal(0u, requiredFrameUtf8Size);
+        Assert.Equal(0, source);
+    }
+
     public enum SpoutTextFailure
     {
         ZeroSize,
