@@ -5,17 +5,17 @@
 - [x] promotion入力のentrypoint種別としてunpackaged `.exe`だけを許可する
 - [x] Hardware Validation Payloadを一般公開可能と判定しない
 - [x] MSIXをunpackaged実機検証targetとして受理しない
-- [ ] self-contained `win-x64` publish directoryを再現可能に生成する
+- [x] self-contained `win-x64` publish directoryを再現可能に生成する
 - [ ] existing root directoryとroot内normalized relative entrypointを読み取り、traversal／reparse／inventory非所属を拒否する
 - [ ] publish directory全fileのpath／length／SHA-256／kindからcanonical inventory digestを生成する
-- [x] strict `WindowsRuntimeStagingManifest` v1でsource／target、role、component、platform、deployment kind、SHA-256を読み、unknown／duplicate field、absolute／traversal／ADS記法／device name、Windows case-fold duplicate／親子衝突を拒否する
+- [x] strict `WindowsRuntimeStagingManifest` v2でprofile／RID／Legal anchor／source／target、role、component、platform、deployment kind、length／SHA-256を読み、unknown／duplicate field、absolute／traversal／ADS記法／device name、Windows case-fold duplicate／親子衝突を拒否する
 - [x] dedicated input rootのmissing／extra file、hash、kind、reparse point、ApprovedGraph owner／runtime scope、native registryをfail-closed検査する
 - [x] factory-selection evidenceのproduction 4 family、binary filename／length／SHA-256、intent marker、evidence SHA-256をactual staged input bytesと照合する
 - [x] sibling temporary directoryへCreateNew copy・再hash・length／kind／exact inventory検証し、mid-copy／tamper／extra／commit／cancellation失敗時に既存immutable payloadを維持する
 - [x] stagerが決定的`ApprovedWindowsRuntime.props`を生成し、Release Appは明示されたpropsだけをimportしてsource／target一覧を配置する
 - [x] Releaseで`NativeMediaLibraryPath`／`FfprobeExecutablePath`／`FfmpegRuntimeDirectory`の直接指定を拒否する
 - [x] manifest v2のfull-production profile／RID／declared length／Legal anchorでfirst-party native、FFmpeg 4 DLL、ffprobe、OpenVR runtime／application manifest／action manifest／bindings、Spout／encoder runtimeのrequired closureとruntime majorを固定する
-- [ ] canonical repository evidenceからApprovedGraphを発行するbuilder、external staging CLI、two-invocation publish scriptを実装し、手書きprops／別digest directory差替えを拒否する
+- [x] canonical repository evidenceからApprovedGraphを発行するbuilder、external staging CLI、two-invocation publish scriptを実装し、手書きprops／別digest directory差替えを拒否する
 - [x] DLL／EXEを実PE bytesとしてparseし、PE32+／AMD64 machine／subsystem／entrypoint／import closureを検証して拡張子だけのkind判定をrelease gateにしない
 - [ ] authenticated Legal Bundle admission、ambient PATH排除、手動copy回避、publish後の全managed／native／self-contained .NET／asset／Legal inventory sealerを通す
 - [ ] Windows上でalternate data stream／reparse HILを実行し、portable injection testだけで合格にしない

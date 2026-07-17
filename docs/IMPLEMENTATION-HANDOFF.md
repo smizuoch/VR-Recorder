@@ -102,9 +102,9 @@ desktop production録画、production OpenVR overlay、first-run setup 7／8のp
 - schema v2は`full-production-hardware-validation-v1`、`win-x64`、全entryのdeclared byte length、Legal Bundle ID／manifest SHAを固定し、Release App buildでもstager生成値との一致を要求する。first-party native／factory evidence、FFmpeg 8 runtime majorの4 DLL＋ffprobe、OpenVR runtime／application manifest／action manifest／3 bindingsをexact closureにし、static-link Spout2とOS／driver提供encoder以外のruntime追加を拒否する。
 - DLL／EXEはactual bytesからAMD64 PE32+、subsystem、entrypoint、通常／delay import tableまでparseする。読み取ったimportはmanifest内でexactly one staged DLLへ解決するか、明示allowlistのWindows system／API-set DLLである場合だけ認め、ambient PATH上の未登録DLLへは解決しない。
 - actual production registryにはnative artifactが0件で、componentは独立承認待ちである。synthetic first-party fixtureのGreenをactual FFmpeg／OpenVR／Spout admissionと呼ばない。
-- repositoryから`NormalizedComponentGraph`／`ApprovedReleaseGraph`を構築するproduction trust-source、外部CLI、two-invocation publish scriptは未実装である。stagerをApp build中に生成して同じevaluationへimportすることはできない。
+- repository registry／license bytes／approval requester・reviewerから`NormalizedComponentGraph`を構築し、release eligibilityがGreenの場合だけ`ApprovedReleaseGraph`を発行するproduction trust-sourceと外部CLIを実装した。`publish-windows-hardware-validation.ps1`はCLI stagingとRelease self-contained `win-x64` publishを別invocationにし、callerから手書きpropsを受け取らず、props filenameとcontent-addressed directory名をApp buildでも照合する。現canonical registryはpending independent reviewのため実行時にffmpeg／openvr／spout2でfail-closedになる。
 - generated propsはruntime subsetを列挙するが、self-contained .NET／managed output／Legalを含む最終publish directoryのpost-publish inventory sealerは未実装である。
-- Appはprops内のmarkerとdigest書式を検査するが、props file自体をstager発行capabilityへ結合していない。手書きpropsやstaging後の改変をbuild単体では認証できないため、CLIが発行したcontent-address identityとpost-publish sealerの結果を次のprocessへ渡す境界が必要である。
+- official publish scriptはstaging CLIが返したexact propsだけを受け取り、別digest directory差替えを拒否する。ただし最終publish directory全体の再scanとidentity発行はまだないため、staging後／publish後改変の最終判定はpost-publish sealerで閉じる。
 - `Directory.Move`成功をcommit pointにしているが、power-loss durabilityや既存非空directoryのatomic replacementは主張しない。既存directoryは置換せずcontent-addressedに並置する。
 - Windows ADS実テストはWindows上でだけ有効であり、今回のLinux runではP/Invoke callsite registrationとportable injection境界までの証拠である。
 

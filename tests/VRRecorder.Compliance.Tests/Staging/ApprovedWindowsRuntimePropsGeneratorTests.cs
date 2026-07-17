@@ -71,6 +71,12 @@ public sealed class ApprovedWindowsRuntimePropsGeneratorTests
         Assert.Equal(
             ShaB,
             Property(project, "VRRecorderApprovedLegalManifestSha256"));
+        Assert.Equal(
+            LegalBundleId,
+            Property(project, "LegalBundleId"));
+        Assert.Equal(
+            ShaB,
+            Property(project, "LegalManifestSha256"));
 
         var contents = project.Descendants("Content").ToArray();
         Assert.Equal(2, contents.Length);

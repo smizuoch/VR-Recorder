@@ -116,6 +116,10 @@
            Text="ApprovedWindowsRuntimeProps must be an absolute path." />
     <Error Condition="'$(ApprovedWindowsRuntimeProps)' != '' and $([System.IO.Path]::IsPathFullyQualified('$(ApprovedWindowsRuntimeProps)')) and !Exists('$(ApprovedWindowsRuntimeProps)')"
            Text="ApprovedWindowsRuntimeProps does not exist." />
+    <Error Condition="'$([System.IO.Path]::GetFileName('$(ApprovedWindowsRuntimeProps)'))' != 'ApprovedWindowsRuntime.props'"
+           Text="ApprovedWindowsRuntimeProps must be the exact stager-generated props file." />
+    <Error Condition="'$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('$(ApprovedWindowsRuntimeProps)'))))' != 'windows-runtime-$(VRRecorderApprovedWindowsRuntimeInventorySha256)'"
+           Text="ApprovedWindowsRuntimeProps directory does not match its immutable inventory digest." />
     <Error Condition="'$(VRRecorderApprovedWindowsRuntimeImported)' != 'true'"
            Text="ApprovedWindowsRuntimeProps is missing the validated runtime import marker." />
     <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(VRRecorderApprovedWindowsRuntimeManifestSha256)', '^[0-9a-f]{64}$'))"

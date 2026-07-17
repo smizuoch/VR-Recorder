@@ -970,6 +970,16 @@ public sealed class WpfHostProjectContractTests
             condition.Contains(
                 "$(LegalManifestSha256)",
                 StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "ApprovedWindowsRuntime.props",
+                StringComparison.Ordinal) &&
+            condition.Contains("GetFileName", StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "windows-runtime-$(VRRecorderApprovedWindowsRuntimeInventorySha256)",
+                StringComparison.Ordinal) &&
+            condition.Contains("GetDirectoryName", StringComparison.Ordinal));
 
         foreach (var property in legacyProperties)
         {

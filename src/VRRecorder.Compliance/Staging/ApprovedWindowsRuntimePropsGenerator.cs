@@ -106,6 +106,12 @@ internal static class ApprovedWindowsRuntimePropsGenerator
             writer.WriteElementString(
                 "VRRecorderApprovedLegalManifestSha256",
                 legalManifestSha256);
+            writer.WriteElementString(
+                "LegalBundleId",
+                manifest.LegalBundle.BundleId);
+            writer.WriteElementString(
+                "LegalManifestSha256",
+                legalManifestSha256);
             writer.WriteEndElement();
 
             writer.WriteStartElement("ItemGroup");
