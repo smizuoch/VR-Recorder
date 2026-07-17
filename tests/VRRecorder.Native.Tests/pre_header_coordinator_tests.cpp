@@ -1591,6 +1591,87 @@ void CancellationSignalClosesEveryPreHeaderEntryPoint()
     }
 }
 
+void EqualDtsDrainPrefersVideoAndPreservesBatchOrder()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector audio {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    const std::vector video {
+        Packet(MediaStreamKind::Video, 0, std::byte {0xB0}),
+        Packet(MediaStreamKind::Video, 0, std::byte {0xB1}),
+    };
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+    auto video_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Video, video);
+    });
+    WaitForQueuedPackets(coordinator, 3);
+
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              VideoDescriptor()) == VRREC_STATUS_OK);
+
+    CHECK(audio_result.get() == Mp4MuxResult::Written);
+    CHECK(video_result.get() == Mp4MuxResult::Written);
+    CHECK(downstream.submitted_packets.size() == 3);
+    CHECK(downstream.submitted_packets[0].stream == MediaStreamKind::Video);
+    CHECK(downstream.submitted_packets[0].payload[0] == std::byte {0xB0});
+    CHECK(downstream.submitted_packets[1].stream == MediaStreamKind::Video);
+    CHECK(downstream.submitted_packets[1].payload[0] == std::byte {0xB1});
+    CHECK(downstream.submitted_packets[2].stream == MediaStreamKind::Audio);
+    CHECK(downstream.submitted_packets[2].payload[0] == std::byte {0xA0});
+}
+
+void PreHeaderDrainFailureWakesEveryQueuedProducer()
+{
+    RecordingDownstream downstream;
+    downstream.submit_result = Mp4MuxResult::MuxFailed;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Video) ==
+          VRREC_STATUS_OK);
+    CHECK(coordinator.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    const std::vector audio {
+        Packet(MediaStreamKind::Audio, 0, std::byte {0xA0})};
+    auto audio_result = std::async(std::launch::async, [&] {
+        return coordinator.SubmitBatch(MediaStreamKind::Audio, audio);
+    });
+    WaitForQueuedPackets(coordinator, 1);
+
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              VideoDescriptor()) == VRREC_STATUS_INTERNAL_ERROR);
+
+    CHECK(audio_result.get() == Mp4MuxResult::MuxFailed);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+    CHECK(coordinator.QueuedPacketCountForTesting() == 0);
+    CHECK(downstream.start_calls == 1);
+    CHECK(downstream.submit_calls == 1);
+    CHECK(downstream.request_abort_calls == 1);
+    CHECK(downstream.abort_calls == 1);
+}
+
 }
 
 int main()
@@ -1626,5 +1707,7 @@ int main()
     QueueOwnershipAllocationFailureIsTerminal();
     HeaderConfigurationAllocationFailureIsTerminal();
     CancellationSignalClosesEveryPreHeaderEntryPoint();
+    EqualDtsDrainPrefersVideoAndPreservesBatchOrder();
+    PreHeaderDrainFailureWakesEveryQueuedProducer();
     return 0;
 }
