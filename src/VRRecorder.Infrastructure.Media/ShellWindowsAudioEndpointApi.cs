@@ -23,18 +23,14 @@ public sealed class ShellWindowsAudioEndpointApi : IWindowsAudioEndpointApi
                 "Windows Core Audio endpoint enumeration requires Windows.");
         }
 
-        if (!Enum.IsDefined(input))
-        {
-            throw new ArgumentOutOfRangeException(nameof(input));
-        }
-
+        var dataFlow = DataFlow(input);
         var type = Type.GetTypeFromCLSID(EnumeratorClassId, throwOnError: true)!;
         var enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(type)!;
         IMMDeviceCollection? collection = null;
         try
         {
             Marshal.ThrowExceptionForHR(enumerator.EnumAudioEndpoints(
-                input == AudioInput.Desktop ? 0 : 1,
+                dataFlow,
                 DeviceStateActive,
                 out collection));
             Marshal.ThrowExceptionForHR(collection.GetCount(out var count));
@@ -73,15 +69,7 @@ public sealed class ShellWindowsAudioEndpointApi : IWindowsAudioEndpointApi
             Marshal.ThrowExceptionForHR(properties.GetValue(ref key, out var value));
             try
             {
-                if (value.Type != 31 || value.Pointer == 0)
-                {
-                    throw new InvalidDataException(
-                        "The Windows audio endpoint has no friendly name.");
-                }
-
-                return new WindowsAudioEndpoint(
-                    id,
-                    Marshal.PtrToStringUni(value.Pointer) ?? string.Empty);
+                return CreateEndpoint(id, value.Type, value.Pointer);
             }
             finally
             {
@@ -94,7 +82,33 @@ public sealed class ShellWindowsAudioEndpointApi : IWindowsAudioEndpointApi
         }
     }
 
-    private static void Release(object? value)
+    internal static int DataFlow(AudioInput input)
+    {
+        if (!Enum.IsDefined(input))
+        {
+            throw new ArgumentOutOfRangeException(nameof(input));
+        }
+
+        return input == AudioInput.Desktop ? 0 : 1;
+    }
+
+    internal static WindowsAudioEndpoint CreateEndpoint(
+        string id,
+        ushort valueType,
+        nint pointer)
+    {
+        if (valueType != 31 || pointer == 0)
+        {
+            throw new InvalidDataException(
+                "The Windows audio endpoint has no friendly name.");
+        }
+
+        return new WindowsAudioEndpoint(
+            id,
+            Marshal.PtrToStringUni(pointer) ?? string.Empty);
+    }
+
+    internal static void Release(object? value)
     {
         if (value is not null && Marshal.IsComObject(value))
         {
