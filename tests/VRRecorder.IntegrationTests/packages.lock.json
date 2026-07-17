@@ -171,6 +171,12 @@
           "VRRecorder.Domain": "[1.0.0, )"
         }
       },
+      "vrrecorder.releasetool": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Compliance": "[1.0.0, )"
+        }
+      },
       "JsonSchema.Net": {
         "type": "CentralTransitive",
         "requested": "[8.0.5, )",

@@ -22,6 +22,31 @@
     <ProjectReference Include="../../src/VRRecorder.Infrastructure.Storage/VRRecorder.Infrastructure.Storage.csproj" />
     <ProjectReference Include="../../src/VRRecorder.Infrastructure.SteamVr/VRRecorder.Infrastructure.SteamVr.csproj" />
     <ProjectReference Include="../../src/VRRecorder.Presentation.Wrist/VRRecorder.Presentation.Wrist.csproj" />
+    <ProjectReference Include="../../src/VRRecorder.ReleaseTool/VRRecorder.ReleaseTool.csproj" />
+  </ItemGroup>
+
+  <!--
+    The release coverage gate executes this project alone. Reuse the focused
+    behavior scenarios in the same test assembly while retaining their small
+    source projects for the fast Red/Green developer loop.
+  -->
+  <ItemGroup>
+    <Compile Include="../VRRecorder.Domain.Tests/**/*.cs"
+             Exclude="../VRRecorder.Domain.Tests/bin/**;../VRRecorder.Domain.Tests/obj/**">
+      <Link>ReleaseGate/Domain/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="../VRRecorder.Application.Tests/**/*.cs"
+             Exclude="../VRRecorder.Application.Tests/bin/**;../VRRecorder.Application.Tests/obj/**">
+      <Link>ReleaseGate/Application/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="../VRRecorder.Compliance.Tests/**/*.cs"
+             Exclude="../VRRecorder.Compliance.Tests/bin/**;../VRRecorder.Compliance.Tests/obj/**">
+      <Link>ReleaseGate/Compliance/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="../VRRecorder.Presentation.Tests/**/*.cs"
+             Exclude="../VRRecorder.Presentation.Tests/bin/**;../VRRecorder.Presentation.Tests/obj/**">
+      <Link>ReleaseGate/Presentation/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
