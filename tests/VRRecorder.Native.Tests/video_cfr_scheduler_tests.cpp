@@ -75,6 +75,7 @@ void RejectsNonMonotonicInputAndOutputWithoutChangingStatistics()
 {
     VideoCfrScheduler scheduler;
     ScheduledVideoFrame output {};
+    CHECK(scheduler.Push({1, -1}) == VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(scheduler.Push({40, 4'000'000}) == VRREC_STATUS_OK);
     CHECK(scheduler.Push({40, 4'010'000}) ==
           VRREC_STATUS_INVALID_ARGUMENT);
