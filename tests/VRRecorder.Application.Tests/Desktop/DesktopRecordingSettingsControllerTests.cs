@@ -3,7 +3,9 @@ using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Audio;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Storage;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Application.Tests.Desktop;
 
@@ -312,6 +314,156 @@ public sealed class DesktopRecordingSettingsControllerTests
         Assert.Equal(9201, store.Current.Osc.FallbackReceivePort);
     }
 
+    [Fact]
+    public async Task RejectsEveryUnsupportedEditableSettingBeforeSaving()
+    {
+        var events = new List<string>();
+        var store = new TrackingSettingsStore(
+            VRRecorderSettings.CreateDefault(),
+            events);
+        var controller = new DesktopRecordingSettingsController(
+            store,
+            new RecordingOutputPathResolver(
+                new FixedDefaultOutputPathProvider(AbsolutePath("downloads"))),
+            new TrackingLegalBundleOutputMirror(events));
+        var valid = await controller.LoadAsync(CancellationToken.None);
+        var invalidDrafts = new[]
+        {
+            valid with { SelfTimerSeconds = 1 },
+            valid with { AutoStopSeconds = 2 },
+            valid with
+            {
+                ResolutionChangePolicy = (ResolutionChangePolicy)int.MaxValue,
+            },
+            valid with { FrameRate = 0 },
+            valid with { Encoder = (EncoderPreference)int.MaxValue },
+            valid with { QualityPreset = (VideoQualityPreset)int.MaxValue },
+            valid with { AudioRouting = (AudioRouting)int.MaxValue },
+            valid with { DesktopEndpointId = " " },
+            valid with { DesktopEndpointId = "render\nendpoint" },
+            valid with { MicrophoneEndpointId = " " },
+            valid with { MicrophoneEndpointId = "capture\nendpoint" },
+            valid with { UiLocale = (UiLocale)int.MaxValue },
+            valid with { VrHand = (VrHand)int.MaxValue },
+            valid with
+            {
+                OverlayPlacement = (OverlayPlacementMode)int.MaxValue,
+            },
+            valid with { OscFallbackHost = "192.0.2.1" },
+            valid with { OscFallbackHost = "not-an-address" },
+            valid with { OscFallbackSendPort = 0 },
+            valid with { OscFallbackSendPort = 65_536 },
+            valid with { OscFallbackReceivePort = 0 },
+            valid with { OscFallbackReceivePort = 65_536 },
+            valid with { DesktopGainDb = double.NaN },
+            valid with { DesktopGainDb = -96.01 },
+            valid with { DesktopGainDb = 24.01 },
+            valid with { MicrophoneGainDb = double.PositiveInfinity },
+            valid with { MicrophoneGainDb = -96.01 },
+            valid with { MicrophoneGainDb = 24.01 },
+        };
+        events.Clear();
+
+        foreach (var invalid in invalidDrafts)
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() =>
+                controller.SaveAsync(
+                    valid,
+                    invalid,
+                    CancellationToken.None));
+        }
+
+        Assert.Equal(0, store.SaveCount);
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task EndpointOptionsFallbackAndCatalogFailuresAreExplicit()
+    {
+        var events = new List<string>();
+        var defaults = VRRecorderSettings.CreateDefault();
+        var store = new TrackingSettingsStore(defaults, events);
+        var resolver = new RecordingOutputPathResolver(
+            new FixedDefaultOutputPathProvider(AbsolutePath("downloads")));
+        var mirror = new TrackingLegalBundleOutputMirror(events);
+        var withoutCatalog = new DesktopRecordingSettingsController(
+            store,
+            resolver,
+            mirror);
+        var draft = await withoutCatalog.LoadAsync(CancellationToken.None);
+
+        var fallback = await withoutCatalog.LoadAudioEndpointOptionsAsync(
+            draft,
+            CancellationToken.None);
+        Assert.Equal(draft.DesktopEndpointId, Assert.Single(fallback.Desktop).Id);
+        Assert.Equal(
+            draft.MicrophoneEndpointId,
+            Assert.Single(fallback.Microphone).Id);
+
+        var nullCatalog = new DesktopRecordingSettingsController(
+            store,
+            resolver,
+            mirror,
+            new StubAudioEndpointCatalog(null!, []));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            nullCatalog.LoadAudioEndpointOptionsAsync(
+                draft,
+                CancellationToken.None));
+
+        var nullOption = new DesktopRecordingSettingsController(
+            store,
+            resolver,
+            mirror,
+            new StubAudioEndpointCatalog([null!], []));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            nullOption.LoadAudioEndpointOptionsAsync(
+                draft,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ConstructionLoadingAndChoiceCatalogsEnforceContracts()
+    {
+        var events = new List<string>();
+        var resolver = new RecordingOutputPathResolver(
+            new FixedDefaultOutputPathProvider(AbsolutePath("downloads")));
+        var mirror = new TrackingLegalBundleOutputMirror(events);
+        var store = new TrackingSettingsStore(
+            VRRecorderSettings.CreateDefault(),
+            events);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new DesktopRecordingSettingsController(null!, resolver, mirror));
+        Assert.Throws<ArgumentNullException>(() =>
+            new DesktopRecordingSettingsController(store, null!, mirror));
+        Assert.Throws<ArgumentNullException>(() =>
+            new DesktopRecordingSettingsController(store, resolver, null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            new DesktopRecordingSettingsController(store, resolver, mirror)
+                .LoadAudioEndpointOptionsAsync(null!, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new DesktopRecordingSettingsController(
+                new NullSettingsStore(),
+                resolver,
+                mirror).LoadAsync(CancellationToken.None));
+
+        Assert.Equal([0, 3, 5, 10],
+            DesktopRecordingSettingsController.SupportedSelfTimerSeconds);
+        Assert.Equal([null, 3, 5, 10, 30, 60],
+            DesktopRecordingSettingsController.SupportedAutoStopSeconds);
+        Assert.Equal([30, 60, 90, 120],
+            DesktopRecordingSettingsController.SupportedFrameRates);
+        Assert.Contains(EncoderPreference.MediaFoundationSoftware,
+            DesktopRecordingSettingsController.SupportedEncoders);
+        Assert.Contains(AudioRouting.Muted,
+            DesktopRecordingSettingsController.SupportedAudioRoutings);
+        Assert.Contains(ResolutionChangePolicy.ExactFollowSegments,
+            DesktopRecordingSettingsController
+                .SupportedResolutionChangePolicies);
+        Assert.Contains(VideoQualityPreset.High,
+            DesktopRecordingSettingsController.SupportedQualityPresets);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-settings-controller-tests",
@@ -345,6 +497,18 @@ public sealed class DesktopRecordingSettingsControllerTests
             Current = settings;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class NullSettingsStore : ISettingsStore
+    {
+        public Task<VRRecorderSettings> LoadAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<VRRecorderSettings>(null!);
+
+        public Task SaveAsync(
+            VRRecorderSettings settings,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class StubAudioEndpointCatalog(
