@@ -10,6 +10,7 @@
 #include <mutex>
 #include <span>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -94,6 +95,7 @@ public:
 
     void EncoderFailed(MediaStreamKind) noexcept override
     {
+        ++encoder_failed_calls;
     }
 
     void RequestAbort() noexcept override
@@ -113,6 +115,7 @@ public:
     std::size_t start_calls = 0;
     std::size_t submit_calls = 0;
     std::size_t encoder_finished_calls = 0;
+    std::size_t encoder_failed_calls = 0;
     std::size_t request_abort_calls = 0;
     std::size_t abort_calls = 0;
 };
@@ -1011,6 +1014,257 @@ void AbortBeforeReadinessPreventsHeaderStart()
     CHECK(coordinator.State() == PreHeaderState::Aborted);
 }
 
+void RejectsEveryInvalidPrimingContract()
+{
+    int encoder_identity = 0;
+    const auto rejects_audio = [&](const auto mutate) {
+        RecordingDownstream downstream;
+        auto audio = AudioDescriptor();
+        mutate(audio);
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            std::move(audio),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(coordinator.State() == PreHeaderState::Failed);
+    };
+    rejects_audio([](auto &value) { value.packet_time_base.numerator = 2; });
+    rejects_audio([](auto &value) { value.sample_rate = 44'100; });
+    rejects_audio([](auto &value) { value.channel_count = 1; });
+    rejects_audio([](auto &value) { value.frame_size = 0; });
+    rejects_audio([](auto &value) { value.frame_size = 0x8000'0000U; });
+    rejects_audio([](auto &value) {
+        value.initial_padding_samples = 0x8000'0000U;
+    });
+    rejects_audio([](auto &value) {
+        value.profile = static_cast<AacProfile>(1);
+    });
+    rejects_audio([](auto &value) {
+        value.channel_layout = static_cast<AudioChannelLayout>(1);
+    });
+    rejects_audio([](auto &value) {
+        value.packet_format = static_cast<AacPacketFormat>(1);
+    });
+    rejects_audio([](auto &value) { value.codec_extradata.clear(); });
+    rejects_audio([](auto &value) { value.bitrate_bits_per_second--; });
+
+    const auto rejects_constructor = [&](std::int64_t epoch,
+                                         const void *identity,
+                                         FragmentedMp4FragmentPolicy policy,
+                                         PreHeaderQueueLimits limits) {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            policy,
+            identity,
+            limits);
+        CHECK(coordinator.BeginPriming(epoch) ==
+              VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(coordinator.State() == PreHeaderState::Failed);
+    };
+    rejects_constructor(
+        -1,
+        &encoder_identity,
+        DefaultFragmentedMp4FragmentPolicy,
+        DefaultPreHeaderQueueLimits);
+    rejects_constructor(
+        0,
+        nullptr,
+        DefaultFragmentedMp4FragmentPolicy,
+        DefaultPreHeaderQueueLimits);
+    auto policy = DefaultFragmentedMp4FragmentPolicy;
+    policy.minimum_duration_microseconds++;
+    rejects_constructor(
+        0,
+        &encoder_identity,
+        policy,
+        DefaultPreHeaderQueueLimits);
+    auto limits = DefaultPreHeaderQueueLimits;
+    limits.maximum_packets_per_stream = 0;
+    rejects_constructor(
+        0,
+        &encoder_identity,
+        DefaultFragmentedMp4FragmentPolicy,
+        limits);
+    limits = DefaultPreHeaderQueueLimits;
+    limits.maximum_bytes_per_stream = 0;
+    rejects_constructor(
+        0,
+        &encoder_identity,
+        DefaultFragmentedMp4FragmentPolicy,
+        limits);
+    limits = DefaultPreHeaderQueueLimits;
+    limits.maximum_dts_span_microseconds_per_stream = -1;
+    rejects_constructor(
+        0,
+        &encoder_identity,
+        DefaultFragmentedMp4FragmentPolicy,
+        limits);
+}
+
+void RejectsEveryInvalidVideoDescriptor()
+{
+    int encoder_identity = 0;
+    const auto rejects = [&](const auto mutate) {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+        auto descriptor = VideoDescriptor();
+        mutate(descriptor);
+        CHECK(coordinator.PublishVideoDescriptor(
+                  &encoder_identity,
+                  descriptor) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(coordinator.State() == PreHeaderState::Failed);
+    };
+    rejects([](auto &value) { value.packet_time_base.denominator--; });
+    rejects([](auto &value) { value.width = 0; });
+    rejects([](auto &value) { value.height = 0; });
+    rejects([](auto &value) { value.width = 16'386; });
+    rejects([](auto &value) { value.height = 16'386; });
+    rejects([](auto &value) { value.width = 1'919; });
+    rejects([](auto &value) { value.height = 1'079; });
+    rejects([](auto &value) {
+        value.profile = static_cast<H264Profile>(2);
+    });
+    rejects([](auto &value) {
+        value.packet_format = H264PacketFormat::AnnexB;
+    });
+    rejects([](auto &value) { value.codec_extradata.clear(); });
+
+    RecordingDownstream downstream;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    auto main_profile = VideoDescriptor();
+    main_profile.profile = H264Profile::Main;
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              main_profile) == VRREC_STATUS_OK);
+}
+
+void RejectsEveryMalformedPreHeaderPacket()
+{
+    int encoder_identity = 0;
+    const auto rejects = [&](MediaStreamKind producer,
+                             std::vector<EncodedMediaPacket> packets) {
+        RecordingDownstream downstream;
+        PreHeaderCoordinator coordinator(
+            downstream,
+            downstream,
+            AudioDescriptor(),
+            DefaultFragmentedMp4FragmentPolicy,
+            &encoder_identity);
+        CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+        CHECK(coordinator.SubmitBatch(producer, packets) ==
+              Mp4MuxResult::InvalidPacket);
+        CHECK(coordinator.State() == PreHeaderState::Failed);
+    };
+
+    rejects(MediaStreamKind::Video, {});
+    rejects(
+        static_cast<MediaStreamKind>(2),
+        {Packet(MediaStreamKind::Video, 0, std::byte {1})});
+    auto packet = Packet(MediaStreamKind::Video, 0, std::byte {1});
+    packet.stream = MediaStreamKind::Audio;
+    rejects(MediaStreamKind::Video, {packet});
+    packet = Packet(MediaStreamKind::Video, 0, std::byte {1});
+    packet.payload.clear();
+    rejects(MediaStreamKind::Video, {packet});
+    packet = Packet(MediaStreamKind::Video, 0, std::byte {1});
+    packet.pts_microseconds = UnknownMediaTimestamp;
+    rejects(MediaStreamKind::Video, {packet});
+    packet = Packet(MediaStreamKind::Video, 0, std::byte {1});
+    packet.dts_microseconds = UnknownMediaTimestamp;
+    rejects(MediaStreamKind::Video, {packet});
+    packet = Packet(MediaStreamKind::Video, 0, std::byte {1});
+    packet.pts_microseconds = -1;
+    rejects(MediaStreamKind::Video, {packet});
+    packet = Packet(MediaStreamKind::Video, 0, std::byte {1});
+    packet.duration_microseconds = 0;
+    rejects(MediaStreamKind::Video, {packet});
+}
+
+void RejectsDuplicateAndUnknownProducerLifecycleEvents()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_INVALID_STATE);
+
+    RecordingDownstream unknown_downstream;
+    PreHeaderCoordinator unknown(
+        unknown_downstream,
+        unknown_downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(unknown.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(unknown.ProducerStarted(static_cast<MediaStreamKind>(2)) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    RecordingDownstream duplicate_downstream;
+    PreHeaderCoordinator duplicate(
+        duplicate_downstream,
+        duplicate_downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(duplicate.BeginPriming(0) == VRREC_STATUS_OK);
+    CHECK(duplicate.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_OK);
+    CHECK(duplicate.ProducerStarted(MediaStreamKind::Audio) ==
+          VRREC_STATUS_INVALID_STATE);
+}
+
+void EncoderFailureIsForwardedOnlyWhileActive()
+{
+    RecordingDownstream downstream;
+    int encoder_identity = 0;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(coordinator.BeginPriming(0) == VRREC_STATUS_OK);
+    coordinator.EncoderFailed(MediaStreamKind::Audio);
+    CHECK(coordinator.State() == PreHeaderState::Failed);
+    CHECK(downstream.encoder_failed_calls == 1);
+    coordinator.EncoderFailed(MediaStreamKind::Video);
+    CHECK(downstream.encoder_failed_calls == 1);
+
+    RecordingDownstream aborted_downstream;
+    PreHeaderCoordinator aborted(
+        aborted_downstream,
+        aborted_downstream,
+        AudioDescriptor(),
+        DefaultFragmentedMp4FragmentPolicy,
+        &encoder_identity);
+    CHECK(aborted.BeginPriming(0) == VRREC_STATUS_OK);
+    aborted.Abort();
+    aborted.EncoderFailed(MediaStreamKind::Video);
+    CHECK(aborted_downstream.encoder_failed_calls == 0);
+}
+
 }
 
 int main()
@@ -1034,5 +1288,10 @@ int main()
     RejectsAnIncompleteVideoDescriptorBeforeHeaderReadiness();
     HeaderFailureIsTerminalAndDoesNotRetry();
     AbortBeforeReadinessPreventsHeaderStart();
+    RejectsEveryInvalidPrimingContract();
+    RejectsEveryInvalidVideoDescriptor();
+    RejectsEveryMalformedPreHeaderPacket();
+    RejectsDuplicateAndUnknownProducerLifecycleEvents();
+    EncoderFailureIsForwardedOnlyWhileActive();
     return 0;
 }
