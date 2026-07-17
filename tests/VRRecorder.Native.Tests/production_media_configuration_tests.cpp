@@ -212,6 +212,25 @@ void RejectsEveryInvalidProductionBoundary()
     rejects([](auto &value) {
         value.temporary_output_path_utf8 = "1:\\pending.mp4";
     });
+    rejects([](auto &value) { value.temporary_output_path_utf8 = "C:"; });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "@:\\pending.mp4";
+    });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "[:\\pending.mp4";
+    });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "{:\\pending.mp4";
+    });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "C-\\pending.mp4";
+    });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "C:pending.mp4";
+    });
+    rejects([](auto &value) {
+        value.temporary_output_path_utf8 = "\\single-root";
+    });
     rejects([](auto &value) { value.desktop_endpoint_id_utf8 = nullptr; });
     rejects([](auto &value) { value.microphone_endpoint_id_utf8 = ""; });
     rejects([](auto &value) { value.spout_sender_identity_utf8 = ""; });
