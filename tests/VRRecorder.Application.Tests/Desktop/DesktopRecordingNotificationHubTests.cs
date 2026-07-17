@@ -134,6 +134,106 @@ public sealed class DesktopRecordingNotificationHubTests
         Assert.Equal(2, notifications.Count);
     }
 
+    [Fact]
+    public async Task RejectsMissingInputsCanceledPublishAndLateSubscriptions()
+    {
+        var hub = new DesktopRecordingNotificationHub();
+        Assert.Throws<ArgumentNullException>(() => hub.Subscribe(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            ((ISavedRecordingSink)hub).PublishAsync(
+                null!,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            ((ICameraRestoreWarningSink)hub).PublishAsync(
+                null!,
+                CancellationToken.None));
+        Assert.Throws<ArgumentNullException>(() =>
+            ((IAudioSessionEventSink)hub).Publish((AudioSessionWarning)null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            ((IAudioSessionEventSink)hub).Publish((AudioSessionStatus)null!));
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ((ISavedRecordingSink)hub).PublishAsync(
+                new FinalizedRecording(AbsolutePath("canceled.mp4")),
+                cancellation.Token));
+
+        hub.Dispose();
+        hub.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => hub.Subscribe(_ => { }));
+    }
+
+    [Fact]
+    public async Task DisposingSubscriptionWaitsForForeignCallback()
+    {
+        using var hub = new DesktopRecordingNotificationHub();
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var subscription = hub.Subscribe(_ =>
+        {
+            entered.TrySetResult();
+            release.Task.GetAwaiter().GetResult();
+        });
+        var publish = Task.Run(() =>
+            ((ISavedRecordingSink)hub).PublishAsync(
+                new FinalizedRecording(AbsolutePath("blocked.mp4")),
+                CancellationToken.None));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var disposal = Task.Run(subscription.Dispose);
+        await Task.Yield();
+        Assert.False(disposal.IsCompleted);
+        release.TrySetResult();
+
+        await Task.WhenAll(publish, disposal).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task CallbackCanReenterDisposeWhileForeignDisposeWaits()
+    {
+        var hub = new DesktopRecordingNotificationHub();
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReentrantDispose = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = hub.Subscribe(_ =>
+        {
+            entered.TrySetResult();
+            allowReentrantDispose.Task.GetAwaiter().GetResult();
+            hub.Dispose();
+        });
+        var publish = Task.Run(() =>
+            ((ISavedRecordingSink)hub).PublishAsync(
+                new FinalizedRecording(AbsolutePath("reentrant.mp4")),
+                CancellationToken.None));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var disposal = Task.Run(hub.Dispose);
+
+        var observedDisposing = false;
+        for (var attempt = 0; attempt < 1_000; attempt++)
+        {
+            try
+            {
+                hub.Subscribe(_ => { }).Dispose();
+                await Task.Yield();
+            }
+            catch (ObjectDisposedException)
+            {
+                observedDisposing = true;
+                break;
+            }
+        }
+        Assert.True(observedDisposing);
+        Assert.False(disposal.IsCompleted);
+        allowReentrantDispose.TrySetResult();
+
+        await Task.WhenAll(publish, disposal).WaitAsync(TimeSpan.FromSeconds(5));
+        hub.Dispose();
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-notification-tests",
