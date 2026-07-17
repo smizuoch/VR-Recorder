@@ -307,7 +307,9 @@ public:
         std::string_view path,
         std::uint64_t &handle) noexcept override
     {
-        state_->calls.emplace_back("action:" + std::string(path));
+        if (record_digital_handle_calls) {
+            state_->calls.emplace_back("action:" + std::string(path));
+        }
         handle = zero_digital_action_handle
             ? 0
             : (path.ends_with("/mic") ? 33 : 22);
@@ -384,6 +386,7 @@ public:
     std::uint64_t action_set_handle = 11;
     vrrec_status_t digital_action_status = VRREC_STATUS_OK;
     bool zero_digital_action_handle = false;
+    bool record_digital_handle_calls = true;
     vrrec_status_t haptic_action_status = VRREC_STATUS_OK;
     std::uint64_t haptic_action_handle = 44;
     vrrec_status_t input_source_status = VRREC_STATUS_OK;
@@ -1340,6 +1343,40 @@ void ReportsOutOfMemoryFromProcessRuntimeFactories()
     (void)raw;
 }
 
+void ReportsOutOfMemoryFromRuntimeOwnedStateCopies()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto input = Client(runtime);
+    CHECK(input->Initialize() == VRREC_STATUS_OK);
+    const std::string long_path(512, 'a');
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto manifest_status = input->SetActionManifestPath(long_path);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(manifest_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(state->manifest_calls == 0);
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto application_status = input->AddApplicationManifest(
+        long_path,
+        true);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(application_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(state->application_manifest_calls == 0);
+
+    raw->record_digital_handle_calls = false;
+    auto handle = UINT64_MAX;
+    allocation_failure::fail_on_allocation = 1;
+    const auto handle_status = input->GetDigitalActionHandle(
+        "/actions/vrrecorder/in/toggle_recording",
+        handle);
+    allocation_failure::fail_on_allocation = 0;
+    CHECK(handle_status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(handle == 0);
+}
+
 }
 
 int main()
@@ -1364,5 +1401,6 @@ int main()
     RejectsInvalidOverlayFactoryArguments();
     FailsClosedBeforeAcquiringAReference();
     ReportsOutOfMemoryFromProcessRuntimeFactories();
+    ReportsOutOfMemoryFromRuntimeOwnedStateCopies();
     return 0;
 }
