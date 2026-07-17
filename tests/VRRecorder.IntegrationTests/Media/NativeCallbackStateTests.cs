@@ -339,6 +339,46 @@ public sealed class NativeCallbackStateTests
             videoPacketCount: (ulong)long.MaxValue + 1)));
     }
 
+    [Fact]
+    public void OptionalCallbacksMayBeOmittedAndInvalidPayloadsAreIgnored()
+    {
+        var state = new NativeCallbackState(
+            Plan(),
+            new NativeRecordingCallbacks(() => { }, _ => { }));
+
+        state.Process(Event(
+            NativeEventKind.DesktopAudioDeviceLost,
+            sequence: 1,
+            audioPacketCount: 1));
+        state.Process(Event(
+            NativeEventKind.DesktopAudioDeviceRecovered,
+            sequence: 2,
+            audioPacketCount: 2));
+        state.Process(Event(
+            NativeEventKind.AudioVideoDriftExceeded,
+            sequence: 3,
+            videoPacketCount: 3,
+            audioPacketCount: 2));
+        state.Process(Event(
+            NativeEventKind.DesktopAudioBufferUnderrun,
+            sequence: 4,
+            audioPacketCount: 4));
+        state.Process(Event(
+            NativeEventKind.VideoEncoderFailedPartReady,
+            sequence: 5,
+            status: NativeStatus.InternalError));
+        state.Process(Event(
+            NativeEventKind.DesktopAudioDeviceRecovered,
+            sequence: 6,
+            status: NativeStatus.InternalError));
+        state.Process(Event(
+            NativeEventKind.DesktopAudioBufferUnderrun,
+            sequence: 7,
+            status: NativeStatus.InternalError));
+
+        Assert.False(state.Stopped.Task.IsCompleted);
+    }
+
     public enum InvalidAudioPayload
     {
         Status,
