@@ -396,6 +396,96 @@ public sealed class WristOverlayPlacementCoordinatorTests
         Assert.Same(settings, store.Current);
     }
 
+    [Fact]
+    public async Task ConstructionModeAndDisposedStateEnforceContracts()
+    {
+        var settings = VRRecorderSettings.CreateDefault();
+        var store = new TrackingSettingsStore(settings);
+        var runtime = new TrackingRuntime(Device());
+        Assert.Throws<ArgumentNullException>(() =>
+            new WristOverlayPlacementCoordinator(null!, runtime));
+        Assert.Throws<ArgumentNullException>(() =>
+            new WristOverlayPlacementCoordinator(store, null!));
+        var coordinator = new WristOverlayPlacementCoordinator(store, runtime);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            coordinator.SetPlacementModeAsync(
+                (OverlayPlacementMode)int.MaxValue,
+                CancellationToken.None));
+        var unchanged = await coordinator.SetPlacementModeAsync(
+            OverlayPlacementMode.WristDock,
+            CancellationToken.None);
+        Assert.Equal(OverlayPlacementMode.WristDock, unchanged.PlacementMode);
+        Assert.Empty(runtime.Conversions);
+
+        coordinator.Dispose();
+        coordinator.Dispose();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            coordinator.ApplySavedAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task MissingSettingsDeviceAndInvalidHandFailBeforeApplying()
+    {
+        var runtime = new TrackingRuntime(Device());
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            new WristOverlayPlacementCoordinator(
+                new NullSettingsStore(),
+                runtime).ApplySavedAsync(CancellationToken.None));
+
+        var defaults = VRRecorderSettings.CreateDefault();
+        var invalidHand = defaults with
+        {
+            Vr = defaults.Vr with { Hand = (VrHand)int.MaxValue },
+        };
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new WristOverlayPlacementCoordinator(
+                new TrackingSettingsStore(invalidHand),
+                runtime).ApplySavedAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            new WristOverlayPlacementCoordinator(
+                new TrackingSettingsStore(defaults),
+                new NullDeviceRuntime()).ApplySavedAsync(
+                    CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ConversionFailureSurvivesBestEffortRestoreFailure()
+    {
+        var settings = VRRecorderSettings.CreateDefault();
+        var failure = new InvalidOperationException("conversion failed");
+        var runtime = new TrackingRuntime(Device())
+        {
+            ConversionException = failure,
+            ApplyFailureCall = 2,
+        };
+        var coordinator = new WristOverlayPlacementCoordinator(
+            new TrackingSettingsStore(settings),
+            runtime);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.DragReleaseAsync(
+                new WristOverlayDragDelta(0.12, 0),
+                CancellationToken.None));
+
+        Assert.Same(failure, thrown);
+        Assert.Single(runtime.Applied);
+    }
+
+    [Fact]
+    public async Task NullRuntimeReadbackFailsBeforePersistence()
+    {
+        var store = new TrackingSettingsStore(VRRecorderSettings.CreateDefault());
+        var coordinator = new WristOverlayPlacementCoordinator(
+            store,
+            new TrackingRuntime(Device()) { ReturnNullReadback = true });
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            coordinator.ApplySavedAsync(CancellationToken.None));
+
+        Assert.Equal(0, store.SaveCount);
+    }
+
     private static VrDeviceProfile Device() =>
         new(
             "lighthouse",
@@ -451,6 +541,36 @@ public sealed class WristOverlayPlacementCoordinatorTests
         }
     }
 
+    private sealed class NullSettingsStore : ISettingsStore
+    {
+        public Task<VRRecorderSettings> LoadAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<VRRecorderSettings>(null!);
+
+        public Task SaveAsync(
+            VRRecorderSettings settings,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class NullDeviceRuntime : IWristOverlayPlacementRuntime
+    {
+        public VrDeviceProfile ReadDeviceProfile(VrHand hand) => null!;
+
+        public void ApplyPlacement(
+            VrHand hand,
+            OverlayPlacementMode placementMode,
+            OverlayTransform transform) => throw new NotSupportedException();
+
+        public WristOverlayPlacementReadback ReadPlacement() =>
+            throw new NotSupportedException();
+
+        public OpenVrMatrix34 ConvertPlacement(
+            VrHand hand,
+            OverlayPlacementMode placementMode) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class TrackingRuntime(VrDeviceProfile device)
         : IWristOverlayPlacementRuntime
     {
@@ -470,6 +590,12 @@ public sealed class WristOverlayPlacementCoordinatorTests
 
         public Exception? ConversionException { get; init; }
 
+        public int? ApplyFailureCall { get; init; }
+
+        public bool ReturnNullReadback { get; init; }
+
+        private int _applyCallCount;
+
         public ReadbackMismatch Mismatch { get; init; }
 
         public VrDeviceProfile ReadDeviceProfile(VrHand hand) => device;
@@ -479,6 +605,11 @@ public sealed class WristOverlayPlacementCoordinatorTests
             OverlayPlacementMode placementMode,
             OverlayTransform transform)
         {
+            _applyCallCount++;
+            if (_applyCallCount == ApplyFailureCall)
+            {
+                throw new InvalidOperationException("apply failed");
+            }
             Applied.Add((hand, placementMode, transform));
             var matrix = WristOverlayPoseContract.ToOpenVrMatrix34(transform);
             if (Mismatch == ReadbackMismatch.Transform)
@@ -510,7 +641,9 @@ public sealed class WristOverlayPlacementCoordinatorTests
         }
 
         public WristOverlayPlacementReadback ReadPlacement() =>
-            _readback ?? throw new InvalidOperationException(
+            ReturnNullReadback
+                ? null!
+                : _readback ?? throw new InvalidOperationException(
                 "No placement was applied.");
 
         public OpenVrMatrix34 ConvertPlacement(
