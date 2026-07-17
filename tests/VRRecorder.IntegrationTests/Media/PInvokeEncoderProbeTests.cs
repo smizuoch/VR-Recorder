@@ -1,8 +1,10 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using VRRecorder.Application.Encoding;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Video;
 using VRRecorder.Infrastructure.Media;
+using VRRecorder.Infrastructure.Media.Native;
 
 namespace VRRecorder.IntegrationTests.Media;
 
@@ -138,6 +140,325 @@ public sealed class PInvokeEncoderProbeTests
         Assert.Equal(1u, controls.CallCount());
     }
 
+    [Fact]
+    public void EvidenceParserAcceptsEveryEncoderContract()
+    {
+        foreach (var encoder in Enum.GetValues<EncoderKind>())
+        {
+            using var fixture = new NativeEvidenceFixture(encoder);
+
+            var evidence = PInvokeEncoderProbe.ReadEvidence(
+                fixture.Request,
+                fixture.Native,
+                fixture.Buffer,
+                fixture.BufferSize);
+
+            Assert.Equal(encoder, evidence.ActualEncoder);
+            Assert.Equal(
+                encoder != EncoderKind.MediaFoundationSoftware,
+                evidence.HardwareAccelerated);
+            Assert.Equal(fixture.ExpectedCodec, evidence.CodecName);
+        }
+    }
+
+    [Theory]
+    [InlineData(EvidenceMismatch.StructSize)]
+    [InlineData(EvidenceMismatch.AbiVersion)]
+    [InlineData(EvidenceMismatch.Reserved)]
+    [InlineData(EvidenceMismatch.ActualEncoder)]
+    [InlineData(EvidenceMismatch.InvalidActualEncoder)]
+    [InlineData(EvidenceMismatch.HardwareRange)]
+    [InlineData(EvidenceMismatch.HardwareFlag)]
+    [InlineData(EvidenceMismatch.Adapter)]
+    [InlineData(EvidenceMismatch.InputFormat)]
+    [InlineData(EvidenceMismatch.InvalidInputFormat)]
+    [InlineData(EvidenceMismatch.Width)]
+    [InlineData(EvidenceMismatch.Height)]
+    [InlineData(EvidenceMismatch.FrameRateNumerator)]
+    [InlineData(EvidenceMismatch.FrameRateDenominator)]
+    [InlineData(EvidenceMismatch.Validation)]
+    public void EvidenceParserRejectsEveryMismatchedField(
+        EvidenceMismatch mismatch)
+    {
+        using var fixture = new NativeEvidenceFixture(EncoderKind.Nvenc);
+        switch (mismatch)
+        {
+            case EvidenceMismatch.StructSize:
+                fixture.Native.StructSize--;
+                break;
+            case EvidenceMismatch.AbiVersion:
+                fixture.Native.AbiVersion++;
+                break;
+            case EvidenceMismatch.Reserved:
+                fixture.Native.Reserved = 1;
+                break;
+            case EvidenceMismatch.ActualEncoder:
+                fixture.Native.ActualEncoderKind = NativeEncoderKind.Amf;
+                break;
+            case EvidenceMismatch.InvalidActualEncoder:
+                fixture.Native.ActualEncoderKind = (NativeEncoderKind)999;
+                break;
+            case EvidenceMismatch.HardwareRange:
+                fixture.Native.HardwareAccelerated = 2;
+                break;
+            case EvidenceMismatch.HardwareFlag:
+                fixture.Native.HardwareAccelerated = 0;
+                break;
+            case EvidenceMismatch.Adapter:
+                fixture.Native.AdapterLuid++;
+                break;
+            case EvidenceMismatch.InputFormat:
+                fixture.Native.OpenedInputFormat =
+                    NativeEncoderInputFormat.QsvNv12;
+                break;
+            case EvidenceMismatch.InvalidInputFormat:
+                fixture.Native.OpenedInputFormat =
+                    (NativeEncoderInputFormat)999;
+                break;
+            case EvidenceMismatch.Width:
+                fixture.Native.Width++;
+                break;
+            case EvidenceMismatch.Height:
+                fixture.Native.Height++;
+                break;
+            case EvidenceMismatch.FrameRateNumerator:
+                fixture.Native.FramesPerSecondNumerator++;
+                break;
+            case EvidenceMismatch.FrameRateDenominator:
+                fixture.Native.FramesPerSecondDenominator++;
+                break;
+            case EvidenceMismatch.Validation:
+                fixture.Native.ValidationFlags =
+                    NativeEncoderProbeValidation.None;
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "The evidence mismatch is not supported.");
+        }
+
+        Assert.Throws<NativeEncoderProbeException>(() =>
+            PInvokeEncoderProbe.ReadEvidence(
+                fixture.Request,
+                fixture.Native,
+                fixture.Buffer,
+                fixture.BufferSize));
+    }
+
+    [Fact]
+    public void EvidenceParserRejectsWrongCodecAndTrailingPayload()
+    {
+        using (var wrongCodec = new NativeEvidenceFixture(
+                   EncoderKind.MediaFoundationSoftware,
+                   codecName: "invalid"))
+        {
+            Assert.Throws<NativeEncoderProbeException>(() =>
+                PInvokeEncoderProbe.ReadEvidence(
+                    wrongCodec.Request,
+                    wrongCodec.Native,
+                    wrongCodec.Buffer,
+                    wrongCodec.BufferSize));
+        }
+
+        using var trailing = new NativeEvidenceFixture(EncoderKind.Nvenc);
+        Assert.Throws<NativeEncoderProbeException>(() =>
+            PInvokeEncoderProbe.ReadEvidence(
+                trailing.Request,
+                trailing.Native,
+                trailing.Buffer,
+                trailing.BufferSize + 1));
+    }
+
+    [Theory]
+    [InlineData(EvidenceTextFailure.ZeroSize)]
+    [InlineData(EvidenceTextFailure.OffsetMismatch)]
+    [InlineData(EvidenceTextFailure.OffsetBeyondBuffer)]
+    [InlineData(EvidenceTextFailure.SizeBeyondBuffer)]
+    [InlineData(EvidenceTextFailure.InvalidUtf8)]
+    [InlineData(EvidenceTextFailure.Whitespace)]
+    [InlineData(EvidenceTextFailure.ControlCharacter)]
+    public void EvidenceParserRejectsInvalidText(
+        EvidenceTextFailure failure)
+    {
+        byte[] bytes = failure switch
+        {
+            EvidenceTextFailure.InvalidUtf8 => [0xff],
+            EvidenceTextFailure.Whitespace => " "u8.ToArray(),
+            EvidenceTextFailure.ControlCharacter => "a\n"u8.ToArray(),
+            _ => "x"u8.ToArray(),
+        };
+        var buffer = Marshal.AllocCoTaskMem(bytes.Length);
+        try
+        {
+            Marshal.Copy(bytes, 0, buffer, bytes.Length);
+            uint nextOffset = failure switch
+            {
+                EvidenceTextFailure.OffsetMismatch => 1,
+                EvidenceTextFailure.OffsetBeyondBuffer => 2,
+                _ => 0,
+            };
+            uint offset = failure == EvidenceTextFailure.OffsetBeyondBuffer
+                ? 2u
+                : 0u;
+            uint size = failure switch
+            {
+                EvidenceTextFailure.ZeroSize => 0,
+                EvidenceTextFailure.SizeBeyondBuffer =>
+                    checked((uint)bytes.Length + 1),
+                _ => checked((uint)bytes.Length),
+            };
+
+            Assert.Throws<NativeEncoderProbeException>(() =>
+                PInvokeEncoderProbe.ReadText(
+                    buffer,
+                    checked((uint)bytes.Length),
+                    ref nextOffset,
+                    offset,
+                    size,
+                    "test field"));
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(buffer);
+        }
+    }
+
+    [Fact]
+    public void NativeMappingsCoverEveryValueAndRejectUnknowns()
+    {
+        Assert.Equal(
+            EncoderKind.Nvenc,
+            PInvokeEncoderProbe.ConvertEncoder(NativeEncoderKind.Nvenc));
+        Assert.Equal(
+            EncoderKind.Amf,
+            PInvokeEncoderProbe.ConvertEncoder(NativeEncoderKind.Amf));
+        Assert.Equal(
+            EncoderKind.Qsv,
+            PInvokeEncoderProbe.ConvertEncoder(NativeEncoderKind.Qsv));
+        Assert.Equal(
+            EncoderKind.MediaFoundationSoftware,
+            PInvokeEncoderProbe.ConvertEncoder(
+                NativeEncoderKind.MediaFoundationSoftware));
+        Assert.Equal(
+            EncoderInputFormat.SystemMemoryNv12,
+            PInvokeEncoderProbe.ConvertInputFormat(
+                NativeEncoderInputFormat.SystemMemoryNv12));
+        Assert.Equal(
+            EncoderInputFormat.D3d11Nv12,
+            PInvokeEncoderProbe.ConvertInputFormat(
+                NativeEncoderInputFormat.D3d11Nv12));
+        Assert.Equal(
+            EncoderInputFormat.QsvNv12,
+            PInvokeEncoderProbe.ConvertInputFormat(
+                NativeEncoderInputFormat.QsvNv12));
+        foreach (var encoder in Enum.GetValues<EncoderKind>())
+        {
+            _ = PInvokeEncoderProbe.ConvertEncoder(encoder);
+            _ = PInvokeEncoderProbe.ExpectedCodec(encoder);
+        }
+
+        Assert.True(PInvokeEncoderProbe.IsFallbackStatus(
+            NativeStatus.BackendUnavailable));
+        Assert.True(PInvokeEncoderProbe.IsFallbackStatus(
+            NativeStatus.InternalError));
+        Assert.True(PInvokeEncoderProbe.IsFallbackStatus(NativeStatus.Timeout));
+        Assert.False(PInvokeEncoderProbe.IsFallbackStatus(NativeStatus.Ok));
+        Assert.Throws<NativeEncoderProbeException>(() =>
+            PInvokeEncoderProbe.ConvertEncoder((NativeEncoderKind)999));
+        Assert.Throws<NativeEncoderProbeException>(() =>
+            PInvokeEncoderProbe.ConvertInputFormat(
+                (NativeEncoderInputFormat)999));
+        Assert.Throws<NativeEncoderProbeException>(() =>
+            PInvokeEncoderProbe.ExpectedCodec((EncoderKind)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PInvokeEncoderProbe.ConvertEncoder((EncoderKind)999));
+    }
+
+    [Fact]
+    public async Task CancellationWhileNativeProbeRunsReturnsToCaller()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeEncoderProbeFixtureControls(FixturePath());
+        controls.Reset();
+        controls.SetResult(status: 0, packetProduced: true);
+        controls.SetVerifiedSoftwareEvidence(Request());
+        controls.BlockNextProbe();
+        await using var probe = new PInvokeEncoderProbe(FixturePath());
+        using var cancellation = new CancellationTokenSource();
+        var probing = probe.ProbeAsync(Request(), cancellation.Token);
+        await controls.WaitUntilProbeEnteredAsync()
+            .WaitAsync(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            await cancellation.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                probing).WaitAsync(TimeSpan.FromSeconds(1));
+        }
+        finally
+        {
+            controls.ReleaseProbe();
+        }
+
+        await probe.DisposeAsync();
+        Assert.Equal(1u, controls.CallCount());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(7)]
+    public async Task UnexpectedNativeSizeQueryStatusFailsClosed(int status)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var controls = new NativeEncoderProbeFixtureControls(FixturePath());
+        controls.Reset();
+        controls.SetResult(status, packetProduced: false);
+        using var probe = new PInvokeEncoderProbe(FixturePath());
+
+        await Assert.ThrowsAsync<NativeEncoderProbeException>(() =>
+            probe.ProbeAsync(Request(), CancellationToken.None));
+    }
+
+    public enum EvidenceMismatch
+    {
+        StructSize,
+        AbiVersion,
+        Reserved,
+        ActualEncoder,
+        InvalidActualEncoder,
+        HardwareRange,
+        HardwareFlag,
+        Adapter,
+        InputFormat,
+        InvalidInputFormat,
+        Width,
+        Height,
+        FrameRateNumerator,
+        FrameRateDenominator,
+        Validation,
+    }
+
+    public enum EvidenceTextFailure
+    {
+        ZeroSize,
+        OffsetMismatch,
+        OffsetBeyondBuffer,
+        SizeBeyondBuffer,
+        InvalidUtf8,
+        Whitespace,
+        ControlCharacter,
+    }
+
     private static EncoderProbeRequest Request() => new(
         EncoderKind.MediaFoundationSoftware,
         adapterLuid: 1,
@@ -145,6 +466,116 @@ public sealed class PInvokeEncoderProbeTests
         1280,
         720,
         new FrameRate(30));
+
+    private sealed class NativeEvidenceFixture : IDisposable
+    {
+        public NativeEvidenceFixture(
+            EncoderKind encoder,
+            string? codecName = null)
+        {
+            Request = new EncoderProbeRequest(
+                encoder,
+                adapterLuid: 42,
+                "evidence-adapter",
+                1280,
+                720,
+                new FrameRate(30));
+            var nativeEncoder = encoder switch
+            {
+                EncoderKind.Nvenc => NativeEncoderKind.Nvenc,
+                EncoderKind.Amf => NativeEncoderKind.Amf,
+                EncoderKind.Qsv => NativeEncoderKind.Qsv,
+                EncoderKind.MediaFoundationSoftware =>
+                    NativeEncoderKind.MediaFoundationSoftware,
+                _ => throw new ArgumentOutOfRangeException(nameof(encoder)),
+            };
+            var inputFormat = encoder switch
+            {
+                EncoderKind.Nvenc or EncoderKind.Amf =>
+                    NativeEncoderInputFormat.D3d11Nv12,
+                EncoderKind.Qsv => NativeEncoderInputFormat.QsvNv12,
+                EncoderKind.MediaFoundationSoftware =>
+                    NativeEncoderInputFormat.SystemMemoryNv12,
+                _ => throw new ArgumentOutOfRangeException(nameof(encoder)),
+            };
+            ExpectedCodec = encoder switch
+            {
+                EncoderKind.Nvenc => "h264_nvenc",
+                EncoderKind.Amf => "h264_amf",
+                EncoderKind.Qsv => "h264_qsv",
+                EncoderKind.MediaFoundationSoftware => "h264_mf",
+                _ => throw new ArgumentOutOfRangeException(nameof(encoder)),
+            };
+            var values = new[]
+            {
+                codecName ?? ExpectedCodec,
+                "driver|identity",
+                "ffmpeg|identity",
+                "high",
+                "device|identity",
+            };
+            var encoded = values.Select(Encoding.UTF8.GetBytes).ToArray();
+            var bytes = encoded.SelectMany(value => value).ToArray();
+            BufferSize = checked((uint)bytes.Length);
+            Buffer = Marshal.AllocCoTaskMem(bytes.Length);
+            Marshal.Copy(bytes, 0, Buffer, bytes.Length);
+            uint offset = 0;
+            (uint Offset, uint Size) Next(byte[] value)
+            {
+                var result = (offset, checked((uint)value.Length));
+                offset = checked(offset + result.Item2);
+                return result;
+            }
+
+            var codec = Next(encoded[0]);
+            var driver = Next(encoded[1]);
+            var ffmpeg = Next(encoded[2]);
+            var profile = Next(encoded[3]);
+            var device = Next(encoded[4]);
+            var hardware = encoder != EncoderKind.MediaFoundationSoftware;
+            Native = new NativeEncoderProbeResultV2
+            {
+                StructSize = checked((uint)Marshal.SizeOf<
+                    NativeEncoderProbeResultV2>()),
+                AbiVersion = NativeEncoderProbeLibrary.SupportedAbiVersion,
+                ActualEncoderKind = nativeEncoder,
+                HardwareAccelerated = hardware ? 1u : 0u,
+                AdapterLuid = Request.AdapterLuid,
+                OpenedInputFormat = inputFormat,
+                Width = checked((uint)Request.Width),
+                Height = checked((uint)Request.Height),
+                FramesPerSecondNumerator =
+                    checked((uint)Request.FrameRate.Value),
+                FramesPerSecondDenominator = 1,
+                ValidationFlags = (NativeEncoderProbeValidation)(uint)(
+                    hardware
+                        ? EncoderProbeValidation.CompleteHardwarePacket
+                        : EncoderProbeValidation.CompleteSoftwarePacket),
+                CodecNameOffset = codec.Offset,
+                CodecNameSize = codec.Size,
+                DriverIdentityOffset = driver.Offset,
+                DriverIdentitySize = driver.Size,
+                FfmpegBuildIdentityOffset = ffmpeg.Offset,
+                FfmpegBuildIdentitySize = ffmpeg.Size,
+                ProfileOffset = profile.Offset,
+                ProfileSize = profile.Size,
+                DeviceIdentityOffset = device.Offset,
+                DeviceIdentitySize = device.Size,
+            };
+        }
+
+        public EncoderProbeRequest Request { get; }
+
+        public string ExpectedCodec { get; }
+
+        public NativeEncoderProbeResultV2 Native;
+
+        public nint Buffer { get; }
+
+        public uint BufferSize { get; }
+
+        public void Dispose() => Marshal.FreeCoTaskMem(Buffer);
+    }
 
     private static string FixturePath() => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory,

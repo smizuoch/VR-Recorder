@@ -175,12 +175,12 @@ public sealed class PInvokeEncoderProbe
         AbiVersion = NativeEncoderProbeLibrary.SupportedAbiVersion,
     };
 
-    private static bool IsFallbackStatus(NativeStatus status) =>
+    internal static bool IsFallbackStatus(NativeStatus status) =>
         status is NativeStatus.BackendUnavailable or
             NativeStatus.InternalError or
             NativeStatus.Timeout;
 
-    private static EncoderProbeEvidence ReadEvidence(
+    internal static EncoderProbeEvidence ReadEvidence(
         EncoderProbeRequest request,
         NativeEncoderProbeResultV2 native,
         nint utf8Buffer,
@@ -283,7 +283,7 @@ public sealed class PInvokeEncoderProbe
             deviceIdentity);
     }
 
-    private static string ReadText(
+    internal static string ReadText(
         nint buffer,
         uint bufferSize,
         ref uint nextOffset,
@@ -327,7 +327,7 @@ public sealed class PInvokeEncoderProbe
         return value;
     }
 
-    private static EncoderKind ConvertEncoder(NativeEncoderKind encoder) =>
+    internal static EncoderKind ConvertEncoder(NativeEncoderKind encoder) =>
         encoder switch
         {
             NativeEncoderKind.Nvenc => EncoderKind.Nvenc,
@@ -340,7 +340,7 @@ public sealed class PInvokeEncoderProbe
                 "invalid actual encoder kind"),
         };
 
-    private static EncoderInputFormat ConvertInputFormat(
+    internal static EncoderInputFormat ConvertInputFormat(
         NativeEncoderInputFormat inputFormat) => inputFormat switch
         {
             NativeEncoderInputFormat.SystemMemoryNv12 =>
@@ -353,7 +353,7 @@ public sealed class PInvokeEncoderProbe
                 "invalid encoder input format"),
         };
 
-    private static string ExpectedCodec(EncoderKind encoder) => encoder switch
+    internal static string ExpectedCodec(EncoderKind encoder) => encoder switch
     {
         EncoderKind.Nvenc => "h264_nvenc",
         EncoderKind.Amf => "h264_amf",
@@ -392,7 +392,7 @@ public sealed class PInvokeEncoderProbe
         }
     }
 
-    private static NativeEncoderKind ConvertEncoder(EncoderKind encoder) =>
+    internal static NativeEncoderKind ConvertEncoder(EncoderKind encoder) =>
         encoder switch
         {
             EncoderKind.Nvenc => NativeEncoderKind.Nvenc,
