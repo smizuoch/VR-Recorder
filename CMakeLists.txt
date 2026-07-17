@@ -174,6 +174,15 @@ if(BUILD_TESTING)
             "-DPRODUCTION_MEDIA_H264_ATTACHMENT_WORK_ROOT=${CMAKE_CURRENT_BINARY_DIR}/production-media-h264-attachment-contract"
             -P
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/production_media_h264_attachment_contract.cmake")
+    if(NOT WIN32)
+        add_test(NAME vrrecorder_native_gcov_collector_contract
+            COMMAND
+                "${CMAKE_COMMAND}"
+                "-DCOVERAGE_COLLECTOR=${CMAKE_CURRENT_SOURCE_DIR}/tests/VRRecorder.Native.Tests/collect_gcov_json.cmake"
+                "-DCONTRACT_WORK_ROOT=${CMAKE_CURRENT_BINARY_DIR}/gcov-collector-contract"
+                -P
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/VRRecorder.Native.Tests/collect_gcov_json_contract.cmake")
+    endif()
     set_tests_properties(
         vrrecorder_native_pinned_ffmpeg_contract
         vrrecorder_native_windows_ffmpeg_oracle_contract
