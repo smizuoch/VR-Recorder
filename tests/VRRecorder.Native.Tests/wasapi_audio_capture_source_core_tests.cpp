@@ -1,4 +1,5 @@
 #include "wasapi_audio_capture_source_core.hpp"
+#include "allocation_failure_test_support.hpp"
 
 #include <chrono>
 #include <condition_variable>
@@ -447,6 +448,136 @@ void StartFailureClosesExactlyOnce()
     CHECK(state->start_thread == state->close_thread);
 }
 
+void RejectsEveryInvalidStartStateAndAcceptsBothRoles()
+{
+    {
+        auto source = std::make_unique<WasapiAudioCaptureSourceCore>(nullptr);
+        CHECK(source->Start(Config()) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(source->Read().result == AudioCaptureReadResult::Failed);
+        source->Abort();
+    }
+    {
+        auto state = std::make_shared<PortState>();
+        auto source = Source(state);
+        CHECK(source->Start(Config()) == VRREC_STATUS_OK);
+        CHECK(source->Start(Config()) == VRREC_STATUS_INVALID_ARGUMENT);
+    }
+    {
+        auto state = std::make_shared<PortState>();
+        auto source = Source(state);
+        source->Abort();
+        CHECK(source->Start(Config()) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(state->start_calls == 0);
+    }
+    {
+        auto state = std::make_shared<PortState>();
+        auto source = Source(state);
+        auto config = Config();
+        config.session_start_qpc_100ns = -1;
+        CHECK(source->Start(config) == VRREC_STATUS_INVALID_ARGUMENT);
+        config = Config();
+        config.role = static_cast<AudioCaptureRole>(UINT32_MAX);
+        CHECK(source->Start(config) == VRREC_STATUS_INVALID_ARGUMENT);
+        CHECK(state->start_calls == 0);
+    }
+    {
+        auto state = std::make_shared<PortState>();
+        auto source = Source(state);
+        auto config = Config();
+        config.role = AudioCaptureRole::Microphone;
+        CHECK(source->Start(config) == VRREC_STATUS_OK);
+    }
+}
+
+void MapsEveryPortStartFailureAndClosesOnce()
+{
+    using Case = std::pair<WasapiCapturePortResult, vrrec_status_t>;
+    for (const auto &[port_result, expected] : {
+             Case {WasapiCapturePortResult::OutOfMemory,
+                   VRREC_STATUS_OUT_OF_MEMORY},
+             Case {WasapiCapturePortResult::InvalidArgument,
+                   VRREC_STATUS_INVALID_ARGUMENT},
+             Case {WasapiCapturePortResult::DeviceLost,
+                   VRREC_STATUS_BACKEND_UNAVAILABLE},
+             Case {WasapiCapturePortResult::BackendUnavailable,
+                   VRREC_STATUS_BACKEND_UNAVAILABLE},
+             Case {WasapiCapturePortResult::Empty,
+                   VRREC_STATUS_INTERNAL_ERROR},
+             Case {WasapiCapturePortResult::Aborted,
+                   VRREC_STATUS_INTERNAL_ERROR},
+             Case {WasapiCapturePortResult::Failed,
+                   VRREC_STATUS_INTERNAL_ERROR},
+         }) {
+        auto state = std::make_shared<PortState>();
+        state->start_result = port_result;
+        {
+            auto source = Source(state);
+            CHECK(source->Start(Config()) == expected);
+            CHECK(source->Start(Config()) == VRREC_STATUS_INVALID_ARGUMENT);
+        }
+        CHECK(state->start_calls == 1);
+        CHECK(state->close_calls == 1);
+    }
+}
+
+void MapsRemainingAcquireAndReleaseFailures()
+{
+    {
+        auto state = std::make_shared<PortState>();
+        state->steps.push_back({
+            WasapiCapturePortResult::Aborted,
+            0,
+            1'000'000,
+            0,
+            {},
+        });
+        auto source = Source(state);
+        CHECK(source->Start(Config()) == VRREC_STATUS_OK);
+        CHECK(source->Read().result == AudioCaptureReadResult::Aborted);
+        CHECK(state->released_frames.empty());
+    }
+    {
+        auto state = std::make_shared<PortState>();
+        auto source = Source(state);
+        CHECK(source->Start(Config()) == VRREC_STATUS_OK);
+        CHECK(source->Read().result == AudioCaptureReadResult::Failed);
+        CHECK(state->released_frames.empty());
+    }
+    {
+        auto state = std::make_shared<PortState>();
+        state->steps.push_back({
+            WasapiCapturePortResult::Ok,
+            0,
+            1'000'000,
+            2,
+            FloatBytes({0.0F, 0.0F, 0.0F, 0.0F}),
+            false,
+            false,
+            false,
+            WasapiCapturePortResult::Failed,
+        });
+        auto source = Source(state);
+        CHECK(source->Start(Config()) == VRREC_STATUS_OK);
+        CHECK(source->Read().result == AudioCaptureReadResult::Failed);
+        CHECK(state->released_frames == std::vector<std::uint32_t> {2});
+    }
+}
+
+void ReportsNormalizerAllocationFailureAndClosesOnce()
+{
+    auto state = std::make_shared<PortState>();
+    auto source = Source(state);
+
+    allocation_failure::fail_on_allocation = 1;
+    const auto status = source->Start(Config());
+    allocation_failure::fail_on_allocation = 0;
+
+    CHECK(status == VRREC_STATUS_OUT_OF_MEMORY);
+    CHECK(state->start_calls == 1);
+    CHECK(state->close_calls == 1);
+    CHECK(source->Read().result == AudioCaptureReadResult::Failed);
+}
+
 }
 
 int main()
@@ -458,5 +589,9 @@ int main()
     RejectsCrossThreadReadAndCleansUpOnTheCaptureThread();
     AbortWakesAcquireAndCleanupRemainsOnTheCaptureThread();
     StartFailureClosesExactlyOnce();
+    RejectsEveryInvalidStartStateAndAcceptsBothRoles();
+    MapsEveryPortStartFailureAndClosesOnce();
+    MapsRemainingAcquireAndReleaseFailures();
+    ReportsNormalizerAllocationFailureAndClosesOnce();
     return 0;
 }
