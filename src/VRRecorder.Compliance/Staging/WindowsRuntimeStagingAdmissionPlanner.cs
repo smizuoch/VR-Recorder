@@ -112,6 +112,7 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
 
         byte[] nativeBinary;
         byte[] factoryEvidence;
+        IReadOnlyList<ComplianceIssue> peImageIssues;
         try
         {
             nativeBinary = await File.ReadAllBytesAsync(
@@ -124,6 +125,11 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
                     WindowsRuntimeRelativePath.Resolve(
                         canonicalSourceRoot,
                         pair.Evidence.Source),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            peImageIssues = await ValidatePeImagesAsync(
+                    canonicalSourceRoot,
+                    manifest.Entries,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -143,6 +149,7 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
             pair.Evidence.Sha256,
             NativeBinaryFileName,
             nativeBinary));
+        issues.AddRange(peImageIssues);
         if (issues.Count != 0)
         {
             return Reject(issues);
@@ -173,6 +180,42 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
                 canonicalSourceRoot,
                 admittedFiles),
             []);
+    }
+
+    private static async Task<IReadOnlyList<ComplianceIssue>>
+        ValidatePeImagesAsync(
+            string sourceRoot,
+            IReadOnlyList<WindowsRuntimeStagingEntry> entries,
+            CancellationToken cancellationToken)
+    {
+        var issues = new List<ComplianceIssue>();
+        foreach (var entry in entries.Where(entry =>
+                     entry.DeploymentKind is
+                         WindowsRuntimeDeploymentKind.NativeLibrary or
+                         WindowsRuntimeDeploymentKind.Executable))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var bytes = await File.ReadAllBytesAsync(
+                    WindowsRuntimeRelativePath.Resolve(
+                        sourceRoot,
+                        entry.Source),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            try
+            {
+                _ = WindowsPeImageAdmissionReader.Read(
+                    Path.GetFileName(entry.Source),
+                    bytes);
+            }
+            catch (InvalidDataException)
+            {
+                issues.Add(new ComplianceIssue(
+                    "invalid-windows-pe-image",
+                    entry.Source));
+            }
+        }
+
+        return Order(issues);
     }
 
     private static bool TryCreateRegistrations(

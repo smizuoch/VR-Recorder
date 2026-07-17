@@ -321,10 +321,14 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
         public void UseExactFirstPartyRuntime()
         {
             File.Delete(Path.Combine(SourceRoot, "asset.txt"));
-            var native = Encoding.ASCII.GetBytes(
-                "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
-                FactoryIntentSha +
-                "-suffix");
+            var native = WindowsPeImageTestData.Create(
+                isDll: true,
+                subsystem: 2,
+                imports: ["KERNEL32.dll"],
+                payload: Encoding.ASCII.GetBytes(
+                    "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
+                    FactoryIntentSha +
+                    "-suffix"));
             var nativePath = Path.Combine(
                 SourceRoot,
                 "native",

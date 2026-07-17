@@ -81,6 +81,25 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
     }
 
     [Fact]
+    public async Task NativeLibraryMustBeAStructurallyValidAmd64PeImage()
+    {
+        using var fixture = Fixture.Create();
+        var malformed = Encoding.ASCII.GetBytes(
+            "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
+            IntentSha +
+            "-suffix");
+        fixture.Write(fixture.NativeEntry.Source, malformed);
+        fixture.WriteEvidence(
+            fullProductionRequired: true,
+            binary: malformed);
+        fixture.UseEntries(
+            fixture.NativeEntry,
+            fixture.EvidenceEntry);
+
+        AssertIssue("invalid-windows-pe-image", await fixture.PlanAsync());
+    }
+
+    [Fact]
     public async Task SourceAndRepositoryRootsMustBeExistingCanonicalDirectories()
     {
         using var fixture = Fixture.Create();
@@ -399,10 +418,14 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             SourceRoot = Path.Combine(root, "source");
             Directory.CreateDirectory(RepositoryRoot);
             Directory.CreateDirectory(SourceRoot);
-            Binary = Encoding.ASCII.GetBytes(
-                "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
-                IntentSha +
-                "-suffix");
+            Binary = WindowsPeImageTestData.Create(
+                isDll: true,
+                subsystem: 2,
+                imports: ["KERNEL32.dll"],
+                payload: Encoding.ASCII.GetBytes(
+                    "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
+                    IntentSha +
+                    "-suffix"));
             NativeEntry = new TestEntry(
                 "native/vrrecorder_native.dll",
                 "vrrecorder_native.dll",
@@ -477,10 +500,12 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
 
         public void WriteEvidence(
             bool fullProductionRequired,
-            long? declaredBinaryLength = null)
+            long? declaredBinaryLength = null,
+            byte[]? binary = null)
         {
+            binary ??= Binary;
             var json = $$$"""
-                {"schemaVersion":1,"evidenceKind":"linked-native-factory-selection","selectionIntentSha256":"{{{IntentSha}}}","fullProductionRequired":{{{fullProductionRequired.ToString().ToLowerInvariant()}}},"nativeBinary":{"file":"vrrecorder_native.dll","length":{{{declaredBinaryLength ?? Binary.LongLength}}},"sha256":"{{{Sha256(Binary)}}}"},"media":{"variant":"PRODUCTION","source":"production_media_backend.cpp"},"encoderProbe":{"variant":"PRODUCTION","source":"production_encoder_probe_backend.cpp"},"spout":{"variant":"PRODUCTION","source":"spout2_source_backend.cpp"},"steamVr":{"variant":"PRODUCTION","source":"openvr_steamvr_input_backend.cpp"}}
+                {"schemaVersion":1,"evidenceKind":"linked-native-factory-selection","selectionIntentSha256":"{{{IntentSha}}}","fullProductionRequired":{{{fullProductionRequired.ToString().ToLowerInvariant()}}},"nativeBinary":{"file":"vrrecorder_native.dll","length":{{{declaredBinaryLength ?? binary.LongLength}}},"sha256":"{{{Sha256(binary)}}}"},"media":{"variant":"PRODUCTION","source":"production_media_backend.cpp"},"encoderProbe":{"variant":"PRODUCTION","source":"production_encoder_probe_backend.cpp"},"spout":{"variant":"PRODUCTION","source":"spout2_source_backend.cpp"},"steamVr":{"variant":"PRODUCTION","source":"openvr_steamvr_input_backend.cpp"}}
                 """;
             Write(EvidenceEntry.Source, Encoding.UTF8.GetBytes(json));
         }
