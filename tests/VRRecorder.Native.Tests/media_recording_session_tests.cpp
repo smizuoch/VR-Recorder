@@ -447,6 +447,101 @@ void MuxHeaderFailureDoesNotStartEitherStream()
     CHECK(events.stopped_calls == 0);
 }
 
+void VideoStartFailureDoesNotStartAudio()
+{
+    std::vector<int> order;
+    FakeStreamPipeline video(order, 0), audio(order, 10);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    video.start_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    MediaRecordingSession session(
+        video, audio, mux, TestMp4Streams(), events);
+
+    CHECK(session.Start() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(order == std::vector<int>({21, 1, 23}));
+    CHECK(audio.start_status == VRREC_STATUS_OK);
+    CHECK(events.stopped_calls == 0);
+}
+
+void RejectsOutOfOrderAndRepeatedLifecycleOperations()
+{
+    std::vector<int> order;
+    FakeStreamPipeline video(order, 0), audio(order, 10);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(
+        video, audio, mux, TestMp4Streams(), events);
+
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.Join() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.Start() == VRREC_STATUS_OK);
+    CHECK(session.Start() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.Join() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.RequestStop() == VRREC_STATUS_OK);
+    CHECK(session.Join() == VRREC_STATUS_OK);
+    CHECK(session.Join() == VRREC_STATUS_INVALID_STATE);
+    CHECK(session.RequestStop() == VRREC_STATUS_INVALID_STATE);
+}
+
+void PropagatesEachGracefulStopAndJoinFailure()
+{
+    for (const auto video_stop_fails : {true, false}) {
+        std::vector<int> order;
+        FakeStreamPipeline video(order, 0), audio(order, 10);
+        FakeMuxSession mux(order);
+        RecordingEvents events;
+        if (video_stop_fails) {
+            video.stop_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        } else {
+            audio.stop_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        MediaRecordingSession session(
+            video, audio, mux, TestMp4Streams(), events);
+        CHECK(session.Start() == VRREC_STATUS_OK);
+        CHECK(session.RequestStop() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+        CHECK(mux.request_abort_calls == 1);
+        CHECK(mux.abort_calls == 1);
+        CHECK(events.stopped_calls == 0);
+    }
+
+    std::vector<int> order;
+    FakeStreamPipeline video(order, 0), audio(order, 10);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    audio.join_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    MediaRecordingSession session(
+        video, audio, mux, TestMp4Streams(), events);
+    CHECK(session.Start() == VRREC_STATUS_OK);
+    CHECK(session.RequestStop() == VRREC_STATUS_OK);
+    CHECK(session.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(events.fault_calls == 1);
+    CHECK(events.fault_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(events.stopped_calls == 0);
+    CHECK(mux.abort_calls == 1);
+}
+
+void AbortBeforeStartCleansOnlyTheMuxAndIsIdempotent()
+{
+    std::vector<int> order;
+    FakeStreamPipeline video(order, 0), audio(order, 10);
+    FakeMuxSession mux(order);
+    RecordingEvents events;
+    MediaRecordingSession session(
+        video, audio, mux, TestMp4Streams(), events);
+
+    session.RequestAbort();
+    session.RequestAbort();
+    session.JoinAfterAbort();
+    session.JoinAfterAbort();
+    CHECK(mux.request_abort_calls == 1);
+    CHECK(mux.abort_calls == 1);
+    CHECK(video.request_abort_calls == 0);
+    CHECK(audio.request_abort_calls == 0);
+    CHECK(video.join_after_abort_calls == 0);
+    CHECK(audio.join_after_abort_calls == 0);
+    CHECK(session.Start() == VRREC_STATUS_INVALID_STATE);
+}
+
 void StreamFailureAbortsPeerAndMuxWithoutStoppedEvent()
 {
     std::vector<int> order;
@@ -843,6 +938,10 @@ int main()
 {
     GracefulStopOrdersVideoBeforeAudioAndPublishesFinalCounts();
     MuxHeaderFailureDoesNotStartEitherStream();
+    VideoStartFailureDoesNotStartAudio();
+    RejectsOutOfOrderAndRepeatedLifecycleOperations();
+    PropagatesEachGracefulStopAndJoinFailure();
+    AbortBeforeStartCleansOnlyTheMuxAndIsIdempotent();
     AudioStartFailureRollsBackVideoAndMux();
     StreamFailureAbortsPeerAndMuxWithoutStoppedEvent();
     AbortDuringJoinSuppressesSuccessfulStoppedCompletion();
