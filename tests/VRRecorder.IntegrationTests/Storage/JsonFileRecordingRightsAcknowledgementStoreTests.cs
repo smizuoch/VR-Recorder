@@ -11,9 +11,7 @@ public sealed class JsonFileRecordingRightsAcknowledgementStoreTests
     {
         using var directory = TemporaryDirectory.Create();
         var path = Path.Combine(directory.Path, "recording-rights.json");
-        var store = new JsonFileRecordingRightsAcknowledgementStore(
-            path,
-            new FixedWallClock(DateTimeOffset.UnixEpoch));
+        using var store = new JsonFileRecordingRightsAcknowledgementStore(path);
 
         Assert.Null(await store.LoadAsync(CancellationToken.None));
 
@@ -81,6 +79,167 @@ public sealed class JsonFileRecordingRightsAcknowledgementStoreTests
             "recording-rights.corrupt-20260711T040506789Z.json");
         Assert.True(File.Exists(backup));
         Assert.Contains("unexpected", await File.ReadAllTextAsync(backup));
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "noticeVersion": 1,
+          "unexpected": "same property count"
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 2,
+          "noticeVersion": 1,
+          "acknowledgedAtUtc": "2026-07-11T01:02:03+00:00"
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "noticeVersion": 1,
+          "acknowledgedAtUtc": null
+        }
+        """)]
+    [InlineData("""
+        {
+          "schemaVersion": 1,
+          "noticeVersion": 1,
+          "acknowledgedAtUtc": "invalid"
+        }
+        """)]
+    public async Task EveryInvalidDocumentShapeIsBackedUp(string content)
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "recording-rights.json");
+        await File.WriteAllTextAsync(path, content);
+        using var store = new JsonFileRecordingRightsAcknowledgementStore(
+            path,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        Assert.Null(await store.LoadAsync(CancellationToken.None));
+
+        Assert.False(File.Exists(path));
+        Assert.Single(Directory.GetFiles(
+            directory.Path,
+            "recording-rights.corrupt-*.json"));
+    }
+
+    [Fact]
+    public async Task ExistingCorruptBackupIsPreservedAtNextOrdinal()
+    {
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "recording-rights.json");
+        var firstBackup = Path.Combine(
+            directory.Path,
+            "recording-rights.corrupt-19700101T000000000Z.json");
+        var secondBackup = Path.Combine(
+            directory.Path,
+            "recording-rights.corrupt-19700101T000000000Z_002.json");
+        await File.WriteAllTextAsync(path, "invalid current evidence");
+        await File.WriteAllTextAsync(firstBackup, "earlier evidence");
+        using var store = new JsonFileRecordingRightsAcknowledgementStore(
+            path,
+            new FixedWallClock(DateTimeOffset.UnixEpoch));
+
+        Assert.Null(await store.LoadAsync(CancellationToken.None));
+
+        Assert.Equal(
+            "earlier evidence",
+            await File.ReadAllTextAsync(firstBackup));
+        Assert.Equal(
+            "invalid current evidence",
+            await File.ReadAllTextAsync(secondBackup));
+    }
+
+    [Fact]
+    public async Task RejectsRelativePathAndUseAfterDisposal()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new JsonFileRecordingRightsAcknowledgementStore(
+                "recording-rights.json"));
+        using var directory = TemporaryDirectory.Create();
+        var path = Path.Combine(directory.Path, "recording-rights.json");
+        var store = new JsonFileRecordingRightsAcknowledgementStore(path);
+        var acknowledgement = new RecordingRightsAcknowledgement(
+            RecordingRightsNotice.CurrentVersion,
+            DateTimeOffset.UnixEpoch);
+
+        store.Dispose();
+        store.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.LoadAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            store.SaveAsync(acknowledgement, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DanglingDocumentLinkIsRejectedWithoutReplacingIt()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var target = Path.Combine(directory.Path, "missing.json");
+        var link = Path.Combine(directory.Path, "recording-rights.json");
+        File.CreateSymbolicLink(link, target);
+        using var store = new JsonFileRecordingRightsAcknowledgementStore(link);
+        var acknowledgement = new RecordingRightsAcknowledgement(
+            RecordingRightsNotice.CurrentVersion,
+            DateTimeOffset.UnixEpoch);
+
+        await Assert.ThrowsAsync<IOException>(() => store.SaveAsync(
+            acknowledgement,
+            CancellationToken.None));
+
+        Assert.False(File.Exists(target));
+        Assert.Equal(target, new FileInfo(link).LinkTarget);
+    }
+
+    [Fact]
+    public async Task LinkedDocumentAndParentDirectoryAreRejected()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var directory = TemporaryDirectory.Create();
+        var targetFile = Path.Combine(directory.Path, "target.json");
+        var linkedFile = Path.Combine(directory.Path, "recording-rights.json");
+        await File.WriteAllTextAsync(targetFile, "outside evidence");
+        File.CreateSymbolicLink(linkedFile, targetFile);
+        using (var store = new JsonFileRecordingRightsAcknowledgementStore(
+                   linkedFile))
+        {
+            await Assert.ThrowsAsync<IOException>(() =>
+                store.LoadAsync(CancellationToken.None));
+        }
+
+        var targetDirectory = Path.Combine(directory.Path, "target-directory");
+        var linkedDirectory = Path.Combine(directory.Path, "linked-directory");
+        Directory.CreateDirectory(targetDirectory);
+        Directory.CreateSymbolicLink(linkedDirectory, targetDirectory);
+        using var linkedParentStore =
+            new JsonFileRecordingRightsAcknowledgementStore(Path.Combine(
+                linkedDirectory,
+                "recording-rights.json"));
+        var acknowledgement = new RecordingRightsAcknowledgement(
+            RecordingRightsNotice.CurrentVersion,
+            DateTimeOffset.UnixEpoch);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            linkedParentStore.SaveAsync(
+                acknowledgement,
+                CancellationToken.None));
+        Assert.Equal("outside evidence", await File.ReadAllTextAsync(targetFile));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(targetDirectory));
     }
 
     private sealed class FixedWallClock(DateTimeOffset localNow) : IWallClock
