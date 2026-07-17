@@ -30,7 +30,11 @@ internal sealed record RegistryComponent(
 
 internal sealed record RegistryRepository(string Url, string? Commit);
 
-internal sealed record RegistryApproval(string Status, string? Id, string? Reviewer);
+internal sealed record RegistryApproval(
+    string Status,
+    string? Id,
+    string? Reviewer,
+    string? RequestedBy = null);
 
 internal sealed record RegistryPackage(
     string Id,
