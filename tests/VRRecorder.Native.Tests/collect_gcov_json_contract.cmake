@@ -44,3 +44,5 @@ if(NOT artifact_count EQUAL 2)
     message(FATAL_ERROR
         "Expected both same-named coverage artifacts, found ${artifact_count}")
 endif()
+
+file(REMOVE_RECURSE "${CONTRACT_WORK_ROOT}")
