@@ -133,6 +133,109 @@ public sealed class RecordingPartRolloverTests
         }
     }
 
+    [Fact]
+    public void ConstructorRejectsMissingDependencies()
+    {
+        var finalization = CreateFinalization();
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new RecordingPartRollover(null!, finalization));
+        Assert.Throws<ArgumentNullException>(() =>
+            new RecordingPartRollover(
+                new CapturingReservation(CreatePending(Path.GetTempPath())),
+                null!));
+    }
+
+    [Fact]
+    public async Task SoftwareStartRetryRejectsUnsafeReservationReuse()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"vrrecorder-rollover-reject-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var pending = CreatePending(directory);
+        var rollover = new RecordingPartRollover(
+            new CapturingReservation(pending),
+            CreateFinalization());
+
+        try
+        {
+            var softwarePlan = CreatePlan(
+                pending,
+                EncoderKind.MediaFoundationSoftware);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                rollover.PrepareSoftwareStartRetryAsync(
+                    softwarePlan,
+                    CancellationToken.None));
+
+            await File.WriteAllTextAsync(pending.FinalPath, "occupied");
+            var hardwarePlan = CreatePlan(pending, EncoderKind.Nvenc);
+            await Assert.ThrowsAsync<IOException>(() =>
+                rollover.PrepareSoftwareStartRetryAsync(
+                    hardwarePlan,
+                    CancellationToken.None));
+            File.Delete(pending.FinalPath);
+
+            Directory.CreateDirectory(pending.TemporaryPath);
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                rollover.PrepareSoftwareStartRetryAsync(
+                    hardwarePlan,
+                    CancellationToken.None));
+            Assert.True(Directory.Exists(pending.TemporaryPath));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RolloverOperationsRejectInvalidContracts()
+    {
+        var pending = CreatePending(Path.GetTempPath());
+        var rollover = new RecordingPartRollover(
+            new CapturingReservation(pending),
+            CreateFinalization());
+        var plan = CreatePlan(pending, EncoderKind.Nvenc);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            rollover.ReserveNextSoftwarePartAsync(
+                plan,
+                segmentNumber: 1,
+                AudioRouting.Mixed,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            rollover.ReserveNextSoftwarePartAsync(
+                null!,
+                segmentNumber: 2,
+                AudioRouting.Mixed,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            rollover.FinalizeIntermediatePartAsync(
+                null!,
+                CancellationToken.None));
+    }
+
+    private static RecordingFileFinalizationUseCase CreateFinalization() =>
+        new(
+            new CapturingFinalizer(),
+            new CapturingValidator(),
+            new UnexpectedRecoveryStore(),
+            new CapturingSavedRecordingSink());
+
+    private static PendingRecording CreatePending(string directory) => new(
+        Path.Combine(directory, "take.recording.mp4"),
+        Path.Combine(directory, "take.mp4"));
+
+    private static RecordingPlan CreatePlan(
+        PendingRecording pending,
+        EncoderKind encoder) => new(
+        new StableVideoSignal(320, 180),
+        pending,
+        new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+        new FrameRate(30),
+        encoder);
+
     private sealed class CapturingReservation(PendingRecording result)
         : IRecordingFileReservation
     {
