@@ -178,6 +178,144 @@ public sealed class WristOverlayPoseContractTests
             WristOverlayPoseContract.CreateDefaultWristDockTransform()));
     }
 
+    [Fact]
+    public void EveryNudgeDirectionMovesByTheSelectedContractDistance()
+    {
+        var start = new OverlayTransform([0, 0, 0], [1, 2, 3]);
+
+        Assert.Equal(
+            [0, WristOverlayPoseContract.SmallNudgeMeters, 0],
+            WristOverlayPoseContract.Nudge(
+                start,
+                WristOverlayNudgeDirection.Up,
+                WristOverlayNudgeSize.Small).Position);
+        Assert.Equal(
+            [0, -WristOverlayPoseContract.LargeNudgeMeters, 0],
+            WristOverlayPoseContract.Nudge(
+                start,
+                WristOverlayNudgeDirection.Down,
+                WristOverlayNudgeSize.Large).Position);
+        Assert.Equal(
+            [-WristOverlayPoseContract.SmallNudgeMeters, 0, 0],
+            WristOverlayPoseContract.Nudge(
+                start,
+                WristOverlayNudgeDirection.Left,
+                WristOverlayNudgeSize.Small).Position);
+        Assert.Equal(
+            [WristOverlayPoseContract.LargeNudgeMeters, 0, 0],
+            WristOverlayPoseContract.Nudge(
+                start,
+                WristOverlayNudgeDirection.Right,
+                WristOverlayNudgeSize.Large).Position);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristOverlayPoseContract.Nudge(
+                start,
+                (WristOverlayNudgeDirection)int.MaxValue,
+                WristOverlayNudgeSize.Small));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristOverlayPoseContract.Nudge(
+                start,
+                WristOverlayNudgeDirection.Up,
+                (WristOverlayNudgeSize)int.MaxValue));
+    }
+
+    [Fact]
+    public void DragOperationsRejectInvalidModesDeltasAndRuntimeRange()
+    {
+        var start = WristOverlayPoseContract.CreateDefaultWristDockTransform();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristOverlayPoseContract.ResolveDragReleaseMode(
+                (OverlayPlacementMode)int.MaxValue,
+                0));
+        foreach (var distance in new[]
+                 {
+                     double.NaN,
+                     double.PositiveInfinity,
+                     -0.001,
+                 })
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                WristOverlayPoseContract.ResolveDragReleaseMode(
+                    OverlayPlacementMode.WristDock,
+                    distance));
+        }
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristOverlayPoseContract.ApplyDragDelta(
+                start,
+                new WristOverlayDragDelta(double.NaN, 0)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristOverlayPoseContract.ApplyDragDelta(
+                start,
+                new WristOverlayDragDelta(0, double.NegativeInfinity)));
+        Assert.Throws<InvalidDataException>(() =>
+            WristOverlayPoseContract.ApplyDragDelta(
+                new OverlayTransform([100, 0, 0], [0, 0, 0]),
+                new WristOverlayDragDelta(0.001, 0)));
+    }
+
+    [Fact]
+    public void StoredAndRuntimeTransformsRejectMalformedVectors()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            WristOverlayPoseContract.ValidateStoredTransform(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            WristOverlayPoseContract.ValidateStoredTransform(
+                new OverlayTransform(null!, [0, 0, 0])));
+        Assert.Throws<InvalidDataException>(() =>
+            WristOverlayPoseContract.ValidateStoredTransform(
+                new OverlayTransform([0, 0], [0, 0, 0])));
+        Assert.Throws<InvalidDataException>(() =>
+            WristOverlayPoseContract.ValidateStoredTransform(
+                new OverlayTransform([0, 0, 0], [0, double.NaN, 0])));
+
+        foreach (var position in new[]
+                 {
+                     new[] { 100.001, 0d, 0d },
+                     new[] { 0d, -100.001, 0d },
+                     new[] { 0d, 0d, 100.001 },
+                 })
+        {
+            Assert.Throws<InvalidDataException>(() =>
+                WristOverlayPoseContract.ToOpenVrMatrix34(
+                    new OverlayTransform(position, [0, 0, 0])));
+        }
+    }
+
+    [Fact]
+    public void OpenVrMatrixValidationRejectsNonFiniteRangeAndInvalidRotation()
+    {
+        var identity = WristOverlayPoseContract.ToOpenVrMatrix34(
+            new OverlayTransform([0, 0, 0], [0, 0, 0]));
+        var gimbalLocked = WristOverlayPoseContract.FromOpenVrMatrix34(
+            WristOverlayPoseContract.ToOpenVrMatrix34(
+                new OverlayTransform([0, 0, 0], [20, 90, 0])));
+        Assert.Equal(90, gimbalLocked.RotationEuler[1], precision: 4);
+
+        foreach (var matrix in new[]
+                 {
+                     identity with { M00 = float.NaN },
+                     identity with { M03 = 100.001f },
+                     identity with { M13 = -100.001f },
+                     identity with { M23 = 100.001f },
+                     identity with { M00 = 2 },
+                     identity with { M10 = 1 },
+                     identity with { M22 = -1 },
+                 })
+        {
+            Assert.Throws<InvalidDataException>(() =>
+                WristOverlayPoseContract.FromOpenVrMatrix34(matrix));
+        }
+
+        Assert.False(WristOverlayPoseContract.MatchesReadback(
+            identity with { M00 = float.NaN },
+            WristOverlayPoseContract.CreateDefaultWristDockTransform()));
+        Assert.False(WristOverlayPoseContract.MatchesReadback(
+            identity,
+            new OverlayTransform([double.NaN, 0, 0], [0, 0, 0])));
+    }
+
     public static TheoryData<double[], float[]> AxisRotations =>
         new()
         {
