@@ -24,13 +24,15 @@ public sealed class RecordingInputParityIntegrationTests
         await recordingInputs.DispatchAsync(
             UiActivationKind.DesktopTray,
             CancellationToken.None);
-        var wristAction = Assert.Single(new WristUiProjector(
+        var wristActions = new WristUiProjector(
                 EnglishUiLocalizer.Instance)
             .Project(new RecorderStatusSnapshot(
                 Revision: 1,
                 State: RecorderState.Ready,
                 AvailableActions: RecorderAvailableActions.Start))
-            .Actions);
+            .Actions;
+        var wristAction = Assert.Single(wristActions, action =>
+            action.Command == UiCommandId.ToggleRecording);
         await new WristInputAdapter(commands).ActivateAsync(
             wristAction,
             CancellationToken.None);
