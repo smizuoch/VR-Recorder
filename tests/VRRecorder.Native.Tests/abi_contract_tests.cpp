@@ -1834,6 +1834,70 @@ bool EmitsPrivacySafeNonterminalAudioBufferHealthEvents()
     return true;
 }
 
+bool GatesEveryRemainingNonterminalMediaEvent()
+{
+    using vrrecorder::native::AudioBufferHealth;
+    using vrrecorder::native::AudioEndpointRole;
+    using vrrecorder::native::testing::EmitAudioBufferHealth;
+    using vrrecorder::native::testing::EmitAvDrift;
+    using vrrecorder::native::testing::EmitVideoEncoderFailed;
+
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+
+    EmitVideoEncoderFailed(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "ignored before the first packet");
+    CHECK(log.events.empty());
+
+    EmitAvDrift(100'000, 190'000);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_AUDIO_VIDEO_DRIFT_EXCEEDED);
+    CHECK(log.events[0].sequence == 1);
+    CHECK(log.events[0].video_packet_count == 100'000);
+    CHECK(log.events[0].audio_packet_count == 190'000);
+
+    EmitAudioBufferHealth(
+        static_cast<AudioEndpointRole>(99),
+        AudioBufferHealth::Underrun,
+        24'000);
+    CHECK(log.events.size() == 1);
+
+    vrrecorder::native::testing::CommitMuxedVideoPacket();
+    EmitVideoEncoderFailed(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "sealed part ready");
+    CHECK(log.events.size() == 3);
+    CHECK(log.events[1].kind == VRREC_EVENT_FIRST_VIDEO_PACKET_MUXED);
+    CHECK(log.events[1].sequence == 2);
+    CHECK(log.events[2].kind ==
+          VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY);
+    CHECK(log.events[2].sequence == 3);
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    EmitAvDrift(200'000, 290'000);
+    EmitAudioBufferHealth(
+        AudioEndpointRole::Desktop,
+        AudioBufferHealth::Overrun,
+        28'800);
+    EmitVideoEncoderFailed(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "ignored while stopping");
+    CHECK(log.events.size() == 3);
+
+    vrrecorder::native::testing::CompleteTrailerFlushClose(45, 72);
+    CHECK(log.events.size() == 4);
+    CHECK(log.events[3].kind == VRREC_EVENT_STOPPED);
+    CHECK(log.events[3].sequence == 4);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool UpdatesStableLayoutWithoutChangingTheOutputCanvas()
 {
     EventLog log;
@@ -4331,6 +4395,7 @@ int main(int argc, char **argv)
         !FaultDuringStopWinsAndIsSharedByAllCallers() ||
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
+        !GatesEveryRemainingNonterminalMediaEvent() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !SealedVideoEncoderFailureIsNonterminalAndCanStop() ||
         !RejectsInvalidSteamVrAbiInputs() ||
