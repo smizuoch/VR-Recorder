@@ -82,6 +82,129 @@ public sealed class WristUiProjectorTests
     }
 
     [Fact]
+    public void TelemetryFormatsMultiHourElapsedTime()
+    {
+        var telemetry = CreateTelemetry(
+            elapsed: TimeSpan.FromHours(27) + TimeSpan.FromMinutes(3) +
+                     TimeSpan.FromSeconds(4));
+
+        Assert.Equal("27:03:04", telemetry.ElapsedText);
+    }
+
+    [Theory]
+    [InlineData(-1, 1080)]
+    [InlineData(16_385, 1080)]
+    [InlineData(1920, 0)]
+    [InlineData(1920, 16_385)]
+    public void TelemetryRejectsInvalidCanvasDimensions(
+        int width,
+        int height)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(width: width, height: height));
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(-0.01)]
+    [InlineData(1000.01)]
+    public void TelemetryRejectsInvalidActualFramesPerSecond(double fps)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(actualFramesPerSecond: fps));
+    }
+
+    [Fact]
+    public void TelemetryRejectsInvalidIdentityAndEnumValues()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(elapsed: TimeSpan.FromTicks(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(spoutSignal: (WristSignalHealth)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(
+                desktopAudioSignal: (WristSignalHealth)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(
+                microphoneSignal: (WristSignalHealth)int.MaxValue));
+        Assert.Throws<ArgumentException>(() =>
+            CreateTelemetry(encoderDisplayName: " "));
+        Assert.Throws<ArgumentException>(() =>
+            CreateTelemetry(encoderDisplayName: new string('e', 129)));
+        Assert.Throws<ArgumentException>(() =>
+            CreateTelemetry(encoderDisplayName: "encoder\nname"));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateTelemetry(
+                placementMode: (OverlayPlacementMode)int.MaxValue));
+    }
+
+    [Fact]
+    public void TelemetryRejectsInvalidAlertCollections()
+    {
+        var alerts = Enumerable.Range(0, 9)
+            .Select(index => Alert($"alert.{index}"))
+            .ToArray();
+        Assert.Throws<ArgumentNullException>(() =>
+            new WristTelemetrySnapshot(
+                TimeSpan.Zero,
+                1920,
+                1080,
+                30,
+                0,
+                WristSignalHealth.Available,
+                WristSignalHealth.Available,
+                WristSignalHealth.Available,
+                "H.264",
+                OverlayPlacementMode.WristDock,
+                null!));
+        Assert.Throws<ArgumentException>(() =>
+            CreateTelemetry(alerts: alerts));
+        Assert.Throws<ArgumentException>(() =>
+            CreateTelemetry(alerts: [Alert("alert.one"), null!]));
+        Assert.Throws<ArgumentException>(() =>
+            CreateTelemetry(alerts: [Alert("alert.same"), Alert("alert.same")]));
+    }
+
+    [Fact]
+    public void AlertRejectsInvalidTextSeverityAndMessage()
+    {
+        var message = new LocalizedText("alert.message", "Alert message");
+        Assert.Throws<ArgumentException>(() =>
+            new WristAlertSnapshot(" ", WristAlertSeverity.Warning, message));
+        Assert.Throws<ArgumentException>(() =>
+            new WristAlertSnapshot(
+                new string('a', 129),
+                WristAlertSeverity.Warning,
+                message));
+        Assert.Throws<ArgumentException>(() =>
+            new WristAlertSnapshot(
+                "alert\ninvalid",
+                WristAlertSeverity.Warning,
+                message));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new WristAlertSnapshot(
+                "alert.invalid",
+                (WristAlertSeverity)int.MaxValue,
+                message));
+        Assert.Throws<ArgumentNullException>(() =>
+            new WristAlertSnapshot(
+                "alert.invalid",
+                WristAlertSeverity.Fault,
+                null!));
+        Assert.Throws<ArgumentException>(() =>
+            new WristAlertSnapshot(
+                "alert.invalid",
+                WristAlertSeverity.Fault,
+                new LocalizedText(new string('r', 257), "message")));
+        Assert.Throws<ArgumentException>(() =>
+            new WristAlertSnapshot(
+                "alert.invalid",
+                WristAlertSeverity.Fault,
+                new LocalizedText("alert.message", new string('m', 1025))));
+    }
+
+    [Fact]
     public void RecordingMainProjectsStopAudioAndPositioningControls()
     {
         var projector = new WristUiProjector(EnglishUiLocalizer.Instance);
@@ -125,6 +248,36 @@ public sealed class WristUiProjectorTests
         Assert.Equal("Move overlay", move.AccessibleName.Value);
         Assert.True(move.MinimumTargetDp >= 56);
     }
+
+    private static WristAlertSnapshot Alert(string semanticId) =>
+        new(
+            semanticId,
+            WristAlertSeverity.Warning,
+            new LocalizedText($"{semanticId}.message", "Alert"));
+
+    private static WristTelemetrySnapshot CreateTelemetry(
+        TimeSpan? elapsed = null,
+        int width = 1920,
+        int height = 1080,
+        double actualFramesPerSecond = 30,
+        WristSignalHealth spoutSignal = WristSignalHealth.Available,
+        WristSignalHealth desktopAudioSignal = WristSignalHealth.Available,
+        WristSignalHealth microphoneSignal = WristSignalHealth.Available,
+        string encoderDisplayName = "H.264",
+        OverlayPlacementMode placementMode = OverlayPlacementMode.WristDock,
+        IEnumerable<WristAlertSnapshot>? alerts = null) =>
+        new(
+            elapsed ?? TimeSpan.Zero,
+            width,
+            height,
+            30,
+            actualFramesPerSecond,
+            spoutSignal,
+            desktopAudioSignal,
+            microphoneSignal,
+            encoderDisplayName,
+            placementMode,
+            alerts ?? []);
 
     [Fact]
     public void MutedRecordingRetainsMicrophoneRestoreSelection()
