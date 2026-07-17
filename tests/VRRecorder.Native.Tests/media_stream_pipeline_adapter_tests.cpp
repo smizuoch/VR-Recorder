@@ -83,6 +83,18 @@ void AdaptsConfiguredVideoSession()
     CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
     session.join_result = VideoPipelineResult::SurfaceDeviceReset;
     CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    session.join_result = VideoPipelineResult::SurfaceAbandoned;
+    CHECK(adapter.Join() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    session.join_result = VideoPipelineResult::Aborted;
+    CHECK(adapter.Join() == VRREC_STATUS_INVALID_STATE);
+    session.join_result = VideoPipelineResult::InvalidState;
+    CHECK(adapter.Join() == VRREC_STATUS_INVALID_STATE);
+    session.join_result = VideoPipelineResult::CaptureFailed;
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = VideoPipelineResult::Failed;
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = static_cast<VideoPipelineResult>(999);
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
 }
 
 void AdaptsConfiguredAudioSession()
@@ -105,6 +117,18 @@ void AdaptsConfiguredAudioSession()
     adapter.Abort();
     CHECK(session.abort_calls == 1);
     session.join_result = StereoAudioEncodingWorkerResult::MuxFailed;
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = StereoAudioEncodingWorkerResult::Aborted;
+    CHECK(adapter.Join() == VRREC_STATUS_INVALID_STATE);
+    session.join_result = StereoAudioEncodingWorkerResult::InvalidState;
+    CHECK(adapter.Join() == VRREC_STATUS_INVALID_STATE);
+    session.join_result = StereoAudioEncodingWorkerResult::CaptureFailed;
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = StereoAudioEncodingWorkerResult::EncoderFailed;
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = StereoAudioEncodingWorkerResult::Failed;
+    CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
+    session.join_result = static_cast<StereoAudioEncodingWorkerResult>(999);
     CHECK(adapter.Join() == VRREC_STATUS_INTERNAL_ERROR);
 }
 
