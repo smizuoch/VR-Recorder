@@ -254,6 +254,153 @@ OpenVrOverlayPose WristPose()
     };
 }
 
+void ValidatesEveryPoseAndDeviceProfileBoundary()
+{
+    auto wrist = WristPose();
+    CHECK(IsValidOpenVrOverlayPose(wrist));
+    wrist.hand = OpenVrHand::Right;
+    CHECK(IsValidOpenVrOverlayPose(wrist));
+
+    const auto world = OpenVrOverlayPose {
+        OpenVrOverlayPlacementMode::WorldPin,
+        OpenVrHand::None,
+        OpenVrTrackingOrigin::Standing,
+        OpenVrMatrix34 {{
+            1, 0, 0, 100,
+            0, 1, 0, -100,
+            0, 0, 1, 100,
+        }},
+    };
+    CHECK(IsValidOpenVrOverlayPose(world));
+
+    const auto rejects_pose = [](const OpenVrOverlayPose &pose) {
+        CHECK(!IsValidOpenVrOverlayPose(pose));
+    };
+    for (const auto invalid_case : std::array<std::size_t, 6> {0, 1, 2, 3, 4, 5}) {
+        auto pose = WristPose();
+        if (invalid_case == 0) {
+            pose.placement_mode = static_cast<OpenVrOverlayPlacementMode>(99);
+        } else if (invalid_case == 1) {
+            pose.hand = OpenVrHand::None;
+        } else if (invalid_case == 2) {
+            pose.tracking_origin = OpenVrTrackingOrigin::Standing;
+        } else if (invalid_case == 3) {
+            pose = world;
+            pose.hand = OpenVrHand::Left;
+        } else if (invalid_case == 4) {
+            pose = world;
+            pose.tracking_origin = OpenVrTrackingOrigin::None;
+        } else {
+            pose = world;
+            pose.hand = OpenVrHand::Right;
+        }
+        rejects_pose(pose);
+    }
+
+    for (std::size_t index = 0; index < 12; ++index) {
+        auto pose = WristPose();
+        pose.transform.values[index] =
+            std::numeric_limits<float>::quiet_NaN();
+        rejects_pose(pose);
+    }
+    for (const auto index : std::array<std::size_t, 3> {3, 7, 11}) {
+        for (const auto value : {-100.001F, 100.001F}) {
+            auto pose = WristPose();
+            pose.transform.values[index] = value;
+            rejects_pose(pose);
+        }
+    }
+    for (const auto row_start : std::array<std::size_t, 3> {0, 4, 8}) {
+        auto pose = WristPose();
+        pose.transform.values[row_start] = 2.0F;
+        rejects_pose(pose);
+    }
+    {
+        auto pose = WristPose();
+        pose.transform.values[4] = 1;
+        pose.transform.values[5] = 0;
+        rejects_pose(pose);
+    }
+    {
+        auto pose = WristPose();
+        pose.transform.values[8] = 1;
+        pose.transform.values[10] = 0;
+        rejects_pose(pose);
+    }
+    {
+        auto pose = WristPose();
+        pose.transform.values[9] = 1;
+        pose.transform.values[10] = 0;
+        rejects_pose(pose);
+    }
+    {
+        auto pose = WristPose();
+        pose.transform.values[10] = -1;
+        rejects_pose(pose);
+    }
+
+    const auto valid_profile = OpenVrDeviceProfile {
+        "lighthouse",
+        "Valve Index",
+        "{indexcontroller}/input/index_controller_profile.json",
+    };
+    CHECK(IsValidOpenVrDeviceProfile(valid_profile));
+    auto maximum_profile = valid_profile;
+    maximum_profile.tracking_system_name.assign(
+        MaximumOpenVrDeviceProfileTextBytes, 't');
+    maximum_profile.hmd_model_number.assign(
+        MaximumOpenVrDeviceProfileTextBytes, 'h');
+    maximum_profile.controller_input_profile_path.assign(
+        MaximumOpenVrDeviceProfileTextBytes, 'p');
+    CHECK(IsValidOpenVrDeviceProfile(maximum_profile));
+
+    for (std::size_t field = 0; field < 3; ++field) {
+        for (std::size_t invalid_case = 0; invalid_case < 3; ++invalid_case) {
+            auto profile = valid_profile;
+            auto *value = field == 0
+                ? &profile.tracking_system_name
+                : field == 1
+                    ? &profile.hmd_model_number
+                    : &profile.controller_input_profile_path;
+            if (invalid_case == 0) {
+                value->clear();
+            } else if (invalid_case == 1) {
+                value->assign(MaximumOpenVrDeviceProfileTextBytes + 1, 'x');
+            } else {
+                *value = std::string("valid\0suffix", 12);
+            }
+            CHECK(!IsValidOpenVrDeviceProfile(profile));
+        }
+    }
+
+    CHECK(wrist == wrist);
+    for (const auto field : std::array<std::size_t, 4> {0, 1, 2, 3}) {
+        auto changed = wrist;
+        if (field == 0) {
+            changed.placement_mode = OpenVrOverlayPlacementMode::WorldPin;
+        } else if (field == 1) {
+            changed.hand = OpenVrHand::Left;
+        } else if (field == 2) {
+            changed.tracking_origin = OpenVrTrackingOrigin::Standing;
+        } else {
+            changed.transform.values[11] += 1;
+        }
+        CHECK(!(wrist == changed));
+    }
+    CHECK(valid_profile == valid_profile);
+    for (const auto field : std::array<std::size_t, 3> {0, 1, 2}) {
+        auto changed = valid_profile;
+        if (field == 0) {
+            changed.tracking_system_name += 'x';
+        } else if (field == 1) {
+            changed.hmd_model_number += 'x';
+        } else {
+            changed.controller_input_profile_path += 'x';
+        }
+        CHECK(!(valid_profile == changed));
+    }
+}
+
 std::unique_ptr<OpenVrOverlayLifecycle> Create(
     std::unique_ptr<FakePort> port,
     vrrec_status_t &status)
@@ -1000,6 +1147,7 @@ void RejectsMissingPortsAndReportsEveryFactoryAllocationFailure()
 
 int main()
 {
+    ValidatesEveryPoseAndDeviceProfileBoundary();
     CreatesHiddenOverlayAndTransitionsIdempotently();
     RejectsInvalidConfigurationBeforeCallingThePort();
     RollsBackExactlyOnceWhenCreationCannotBeCompleted();
