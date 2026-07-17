@@ -146,6 +146,21 @@ void DoesNotConsumeATickWhenTheWaitFails()
     CHECK(waiter.deadlines[0] == waiter.deadlines[1]);
 }
 
+void FailsWhenTheNextDeadlineExceedsTheSteadyClockRange()
+{
+    RecordingDeadlineWaiter waiter;
+    waiter.epoch = VideoCfrTimePoint::max() - 1ns;
+    SteadyVideoCfrClock clock(60, waiter);
+    std::uint64_t tick = 77;
+
+    CHECK(clock.WaitNext(tick) == VideoCfrClockResult::Tick);
+    CHECK(tick == 0);
+    tick = 77;
+    CHECK(clock.WaitNext(tick) == VideoCfrClockResult::Failed);
+    CHECK(tick == 77);
+    CHECK(waiter.deadlines.size() == 1);
+}
+
 void AbortWakesAWaitAndIsForwardedExactlyOnce()
 {
     BlockingDeadlineWaiter waiter;
@@ -183,6 +198,7 @@ int main()
     StartsAtTickZeroAndDoesNotAccumulateRoundingDrift();
     RejectsAnInvalidFrameRateWithoutWaiting();
     DoesNotConsumeATickWhenTheWaitFails();
+    FailsWhenTheNextDeadlineExceedsTheSteadyClockRange();
     AbortWakesAWaitAndIsForwardedExactlyOnce();
     ProductionWaiterProvidesTheImmediateFirstTick();
     return 0;
