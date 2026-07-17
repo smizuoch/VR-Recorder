@@ -10,6 +10,63 @@ namespace VRRecorder.IntegrationTests.Osc;
 public sealed class CameraOscEndpointFirstRunSetupProbeTests
 {
     [Fact]
+    public async Task OtherStepDoesNotDiscoverOrCreateGateway()
+    {
+        var discovery = new CountingDiscovery();
+        var factory = new StubFactory(new PlainGateway());
+        var probe = new CameraOscEndpointFirstRunSetupProbe(
+            discovery,
+            factory);
+
+        Assert.False(await probe.VerifyAsync(
+            FirstRunSetupStep.WristOverlayPlacement,
+            CancellationToken.None));
+        Assert.Equal(0, discovery.CallCount);
+        Assert.Null(factory.Candidate);
+    }
+
+    [Fact]
+    public async Task NullDiscoveryResultIsRejected()
+    {
+        var probe = new CameraOscEndpointFirstRunSetupProbe(
+            new NullDiscovery(),
+            new StubFactory(new PlainGateway()));
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            probe.VerifyAsync(
+                FirstRunSetupStep.CameraOscEndpoint,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SynchronousGatewayIsDisposedAfterVerification()
+    {
+        var gateway = new SyncDisposableGateway();
+        var probe = new CameraOscEndpointFirstRunSetupProbe(
+            new StubDiscovery([Candidate("sync-dispose")]),
+            new StubFactory(gateway));
+
+        Assert.True(await probe.VerifyAsync(
+            FirstRunSetupStep.CameraOscEndpoint,
+            CancellationToken.None));
+        Assert.True(gateway.Disposed);
+    }
+
+    [Fact]
+    public async Task GatewayWithoutDisposalContractCanStillVerify()
+    {
+        var gateway = new PlainGateway();
+        var probe = new CameraOscEndpointFirstRunSetupProbe(
+            new StubDiscovery([Candidate("plain")]),
+            new StubFactory(gateway));
+
+        Assert.True(await probe.VerifyAsync(
+            FirstRunSetupStep.CameraOscEndpoint,
+            CancellationToken.None));
+        Assert.Equal([CameraMode.Photo], gateway.WrittenModes);
+    }
+
+    [Fact]
     public async Task SingleCandidateReadsAndWritesBackSameModeWithConfirmation()
     {
         var candidate = Candidate("only");
@@ -87,6 +144,25 @@ public sealed class CameraOscEndpointFirstRunSetupProbeTests
             CancellationToken cancellationToken) => Task.FromResult(candidates);
     }
 
+    private sealed class CountingDiscovery : IVrChatInstanceDiscovery
+    {
+        public int CallCount { get; private set; }
+
+        public Task<IReadOnlyList<VrChatInstanceCandidate>> DiscoverAsync(
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult<IReadOnlyList<VrChatInstanceCandidate>>([]);
+        }
+    }
+
+    private sealed class NullDiscovery : IVrChatInstanceDiscovery
+    {
+        public Task<IReadOnlyList<VrChatInstanceCandidate>> DiscoverAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<VrChatInstanceCandidate>>(null!);
+    }
+
     private sealed class StubFactory(IVrChatCameraGateway gateway)
         : IVrChatCameraGatewayFactory
     {
@@ -126,5 +202,35 @@ public sealed class CameraOscEndpointFirstRunSetupProbeTests
             Disposed = true;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private class PlainGateway : IVrChatCameraGateway
+    {
+        public List<CameraMode> WrittenModes { get; } = [];
+
+        public Task<CameraSnapshot> ReadSnapshotAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new CameraSnapshot(
+                ObservedCameraValue.Known(CameraMode.Photo),
+                ObservedCameraValue.Known(false)));
+
+        public Task SetModeAsync(
+            CameraMode mode,
+            CancellationToken cancellationToken)
+        {
+            WrittenModes.Add(mode);
+            return Task.CompletedTask;
+        }
+
+        public Task SetStreamingAsync(
+            bool enabled,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class SyncDisposableGateway : PlainGateway, IDisposable
+    {
+        public bool Disposed { get; private set; }
+
+        public void Dispose() => Disposed = true;
     }
 }
