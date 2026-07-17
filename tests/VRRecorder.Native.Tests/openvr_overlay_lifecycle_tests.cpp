@@ -796,6 +796,104 @@ void ReadsOnlyValidatedDeviceProfilesForASelectedHand()
     CHECK(profile == OpenVrDeviceProfile {});
 }
 
+void PropagatesPortFailuresAndRejectsEveryOperationAfterClose()
+{
+    auto state = std::make_shared<FakeState>();
+    auto lifecycle_port = std::make_unique<FakePort>(state);
+    auto texture_port = std::make_unique<FakeTexturePort>(state);
+    auto event_port = std::make_unique<FakeEventPort>(state);
+    auto pose_port = std::make_unique<FakePosePort>(state);
+    auto *raw_texture = texture_port.get();
+    auto *raw_event = event_port.get();
+    auto *raw_pose = pose_port.get();
+    auto status = VRREC_STATUS_INTERNAL_ERROR;
+    auto overlay = CreateOpenVrOverlayLifecycle(
+        Config(),
+        std::move(lifecycle_port),
+        std::move(texture_port),
+        std::move(event_port),
+        std::move(pose_port),
+        status);
+    CHECK(overlay != nullptr);
+    CHECK(status == VRREC_STATUS_OK);
+
+    const std::vector<std::uint8_t> pixels(2'097'152, 0x80);
+    const OpenVrBgraTextureFrame frame {
+        pixels.data(),
+        pixels.size(),
+        1024,
+        512,
+        4096,
+    };
+    raw_texture->set_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(overlay->UpdateBgraTexture(frame) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    raw_texture->set_status = VRREC_STATUS_OK;
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_OK);
+    raw_texture->clear_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(overlay->ClearTexture() == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    raw_texture->clear_status = VRREC_STATUS_OK;
+    CHECK(overlay->ClearTexture() == VRREC_STATUS_OK);
+
+    auto event = OpenVrOverlayPointerEvent {
+        OpenVrOverlayPointerEventKind::Move,
+        0,
+        1,
+        1,
+    };
+    auto has_event = true;
+    raw_event->poll_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    CHECK(overlay->PollPointerEvent(event, has_event) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(!has_event);
+    CHECK(event == OpenVrOverlayPointerEvent {});
+    raw_event->poll_status = VRREC_STATUS_OK;
+    raw_event->publish_event = true;
+    for (const auto pointer_event : {
+             OpenVrOverlayPointerEvent {
+                 OpenVrOverlayPointerEventKind::ButtonDown, 2, 1, 1},
+             OpenVrOverlayPointerEvent {
+                 OpenVrOverlayPointerEventKind::ButtonUp, 4, 1, 1},
+         }) {
+        raw_event->next_event = pointer_event;
+        CHECK(overlay->PollPointerEvent(event, has_event) ==
+              VRREC_STATUS_OK);
+        CHECK(has_event);
+        CHECK(event == pointer_event);
+    }
+
+    raw_pose->current_pose = WristPose();
+    raw_pose->get_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    auto pose = WristPose();
+    CHECK(overlay->GetPose(pose) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(pose == OpenVrOverlayPose {});
+    raw_pose->get_status = VRREC_STATUS_OK;
+    raw_pose->converted_pose = WristPose();
+    CHECK(overlay->ConvertPose(
+              OpenVrOverlayPlacementMode::WorldPin,
+              OpenVrHand::Right,
+              pose) == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(pose == OpenVrOverlayPose {});
+
+    raw_pose->profile_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+    auto profile = raw_pose->current_profile;
+    CHECK(overlay->GetDeviceProfile(OpenVrHand::Left, profile) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(profile == OpenVrDeviceProfile {});
+
+    CHECK(overlay->Show() == VRREC_STATUS_OK);
+    CHECK(overlay->Close() == VRREC_STATUS_OK);
+    CHECK(overlay->Hide() == VRREC_STATUS_INVALID_STATE);
+    CHECK(overlay->UpdateBgraTexture(frame) == VRREC_STATUS_INVALID_STATE);
+    CHECK(overlay->ClearTexture() == VRREC_STATUS_INVALID_STATE);
+    event = raw_event->next_event;
+    has_event = true;
+    CHECK(overlay->PollPointerEvent(event, has_event) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(!has_event);
+    CHECK(event == OpenVrOverlayPointerEvent {});
+}
+
 }
 
 int main()
@@ -815,5 +913,6 @@ int main()
     AppliesAndReadsOnlyValidatedOverlayPoses();
     ConvertsOnlyValidatedOverlayPosesForASelectedHand();
     ReadsOnlyValidatedDeviceProfilesForASelectedHand();
+    PropagatesPortFailuresAndRejectsEveryOperationAfterClose();
     return 0;
 }
