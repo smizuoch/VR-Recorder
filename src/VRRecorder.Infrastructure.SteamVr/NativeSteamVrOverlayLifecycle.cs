@@ -452,7 +452,7 @@ public sealed class NativeSteamVrOverlayLifecycle
         NativeSteamVrStatus status,
         string operation) => new((int)status, operation);
 
-    private static bool TryMapPointerEvent(
+    internal static bool TryMapPointerEvent(
         NativeSteamVrOverlayPointerEventV1 nativeEvent,
         out SteamVrOverlayPointerEvent pointerEvent)
     {
@@ -516,7 +516,7 @@ public sealed class NativeSteamVrOverlayLifecycle
             M23 = matrix.M23,
         };
 
-    private static bool TryMapPose(
+    internal static bool TryMapPose(
         NativeSteamVrOverlayPoseV1 pose,
         out SteamVrOverlayPoseReadback readback)
     {
@@ -574,7 +574,7 @@ public sealed class NativeSteamVrOverlayLifecycle
             Hand = hand == VrHand.Left ? 1u : 2u,
         };
 
-    private static bool TryMapDeviceProfile(
+    internal static bool TryMapDeviceProfile(
         VrHand hand,
         NativeSteamVrDeviceProfileV1 profile,
         byte[] utf8,

@@ -1,16 +1,121 @@
 using System.Buffers;
 using System.Runtime.InteropServices;
+using System.Text;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Presentation;
 using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Recording;
 using VRRecorder.Infrastructure.SteamVr;
+using VRRecorder.Infrastructure.SteamVr.Native;
 using VRRecorder.Presentation.Wrist;
 
 namespace VRRecorder.IntegrationTests.SteamVr;
 
 public sealed class NativeSteamVrOverlayLifecycleTests
 {
+    [Fact]
+    public void RejectsMalformedNativePointerMappings()
+    {
+        foreach (var nativeEvent in new[]
+                 {
+                     PointerEvent(kind: 99, button: 0),
+                     PointerEvent(kind: 1, button: 99),
+                     PointerEvent(kind: 1, button: 1),
+                     PointerEvent(kind: 2, button: 0),
+                 })
+        {
+            Assert.False(NativeSteamVrOverlayLifecycle.TryMapPointerEvent(
+                nativeEvent,
+                out _));
+        }
+
+        Assert.True(NativeSteamVrOverlayLifecycle.TryMapPointerEvent(
+            PointerEvent(kind: 3, button: 4),
+            out var mapped));
+        Assert.Equal(SteamVrOverlayPointerEventKind.ButtonUp, mapped.Kind);
+        Assert.Equal(SteamVrOverlayPointerButton.Middle, mapped.Button);
+    }
+
+    [Fact]
+    public void RejectsMalformedNativePoseMappings()
+    {
+        foreach (var pose in new[]
+                 {
+                     Pose(mode: 1, hand: 1, origin: 0, reserved: 1),
+                     Pose(mode: 1, hand: 1, origin: 0, m00: float.NaN),
+                     Pose(mode: 1, hand: 1, origin: 1),
+                     Pose(mode: 1, hand: 0, origin: 0),
+                     Pose(mode: 2, hand: 1, origin: 1),
+                     Pose(mode: 2, hand: 0, origin: 0),
+                     Pose(mode: 99, hand: 0, origin: 0),
+                 })
+        {
+            Assert.False(NativeSteamVrOverlayLifecycle.TryMapPose(
+                pose,
+                out _));
+        }
+    }
+
+    [Fact]
+    public void RejectsMalformedNativeDeviceProfileLayout()
+    {
+        var utf8 = Encoding.UTF8.GetBytes("trackinghmdcontroller");
+        var valid = DeviceProfile();
+        var malformed = new[]
+        {
+            DeviceProfile(reserved: 1),
+            DeviceProfile(hand: 2),
+            DeviceProfile(trackingOffset: 1),
+            DeviceProfile(hmdOffset: 9),
+            DeviceProfile(controllerOffset: 12),
+            DeviceProfile(controllerSize: 9),
+        };
+
+        Assert.True(NativeSteamVrOverlayLifecycle.TryMapDeviceProfile(
+            VrHand.Left,
+            valid,
+            utf8,
+            out var mapped));
+        Assert.Equal("tracking", mapped.TrackingSystemName);
+        foreach (var profile in malformed)
+        {
+            Assert.False(NativeSteamVrOverlayLifecycle.TryMapDeviceProfile(
+                VrHand.Left,
+                profile,
+                utf8,
+                out _));
+        }
+    }
+
+    [Fact]
+    public void RejectsMalformedNativeDeviceProfileText()
+    {
+        var invalidUtf8 = new byte[] { 0xff, (byte)'h', (byte)'c' };
+        var invalidUtf8Profile = DeviceProfile(
+            trackingSize: 1,
+            hmdOffset: 1,
+            hmdSize: 1,
+            controllerOffset: 2,
+            controllerSize: 1);
+        var emptyTrackingProfile = DeviceProfile(
+            trackingSize: 0,
+            hmdOffset: 0,
+            hmdSize: 1,
+            controllerOffset: 1,
+            controllerSize: 2);
+
+        Assert.False(NativeSteamVrOverlayLifecycle.TryMapDeviceProfile(
+            VrHand.Left,
+            invalidUtf8Profile,
+            invalidUtf8,
+            out _));
+        Assert.False(NativeSteamVrOverlayLifecycle.TryMapDeviceProfile(
+            VrHand.Left,
+            emptyTrackingProfile,
+            Encoding.UTF8.GetBytes("thc"),
+            out _));
+    }
+
     [Theory]
     [InlineData(float.NaN)]
     [InlineData(0.17F)]
@@ -579,6 +684,53 @@ public sealed class NativeSteamVrOverlayLifecycleTests
         "VRRecorder.Native.Tests",
         "build",
         "libvrrecorder_native_test.so");
+
+    private static NativeSteamVrOverlayPointerEventV1 PointerEvent(
+        uint kind,
+        uint button) => new()
+        {
+            HasEvent = 1,
+            Kind = kind,
+            PixelX = 10,
+            PixelY = 20,
+            Button = button,
+        };
+
+    private static NativeSteamVrOverlayPoseV1 Pose(
+        uint mode,
+        uint hand,
+        uint origin,
+        uint reserved = 0,
+        float m00 = 1) => new()
+        {
+            PlacementMode = mode,
+            Hand = hand,
+            TrackingOrigin = origin,
+            ReservedV1 = reserved,
+            M00 = m00,
+            M11 = 1,
+            M22 = 1,
+        };
+
+    private static NativeSteamVrDeviceProfileV1 DeviceProfile(
+        uint hand = 1,
+        uint reserved = 0,
+        uint trackingOffset = 0,
+        uint trackingSize = 8,
+        uint hmdOffset = 8,
+        uint hmdSize = 3,
+        uint controllerOffset = 11,
+        uint controllerSize = 10) => new()
+        {
+            Hand = hand,
+            ReservedV1 = reserved,
+            TrackingSystemNameOffset = trackingOffset,
+            TrackingSystemNameSize = trackingSize,
+            HmdModelNumberOffset = hmdOffset,
+            HmdModelNumberSize = hmdSize,
+            ControllerInputProfilePathOffset = controllerOffset,
+            ControllerInputProfilePathSize = controllerSize,
+        };
 
     private static WristTextureFrame RenderFrame(long revision) =>
         new WristTextureRenderer(
