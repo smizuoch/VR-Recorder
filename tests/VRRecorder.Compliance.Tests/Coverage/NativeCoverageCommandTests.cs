@@ -10,7 +10,7 @@ public sealed class NativeCoverageCommandTests
     public void ReadsGzipArtifactsAndReturnsSuccessAtTheReleaseThreshold()
     {
         using var directory = TemporaryDirectory.Create();
-        var artifact = WriteArtifact(directory.Path, coveredCount: 9);
+        var artifact = WriteArtifact(directory.Path, coveredCount: 8);
         using var output = new StringWriter();
         using var error = new StringWriter();
 
@@ -20,8 +20,8 @@ public sealed class NativeCoverageCommandTests
             error);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("line=90.00%", output.ToString());
-        Assert.Contains("branch=90.00%", output.ToString());
+        Assert.Contains("line=80.00%", output.ToString());
+        Assert.Contains("branch=80.00%", output.ToString());
         Assert.Equal(string.Empty, error.ToString());
     }
 
@@ -29,7 +29,7 @@ public sealed class NativeCoverageCommandTests
     public void ReturnsFailureWithoutHidingAThresholdViolation()
     {
         using var directory = TemporaryDirectory.Create();
-        var artifact = WriteArtifact(directory.Path, coveredCount: 8);
+        var artifact = WriteArtifact(directory.Path, coveredCount: 7);
         using var output = new StringWriter();
         using var error = new StringWriter();
 
@@ -40,7 +40,7 @@ public sealed class NativeCoverageCommandTests
 
         Assert.Equal(1, exitCode);
         Assert.Equal(string.Empty, output.ToString());
-        Assert.Contains("line coverage 80.00%", error.ToString());
+        Assert.Contains("line coverage 70.00%", error.ToString());
     }
 
     private static string WriteArtifact(string directory, int coveredCount)

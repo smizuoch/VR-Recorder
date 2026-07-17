@@ -46,7 +46,7 @@ public static class NativeCoverageCommand
             {
                 error.WriteLine(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{report}; line coverage {summary.LinePercentage:0.00}% is below 90.00%."));
+                    $"{report}; line coverage {summary.LinePercentage:0.00}% is below {NativeGcovCoverageGate.ReleaseThresholdPercentage:0.00}%."));
                 return 1;
             }
 
@@ -56,7 +56,7 @@ public static class NativeCoverageCommand
             {
                 error.WriteLine(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{report}; branch coverage {summary.BranchPercentage:0.00}% is below 90.00%."));
+                    $"{report}; branch coverage {summary.BranchPercentage:0.00}% is below {NativeGcovCoverageGate.ReleaseThresholdPercentage:0.00}%."));
                 return 1;
             }
 

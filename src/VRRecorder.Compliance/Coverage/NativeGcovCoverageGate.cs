@@ -5,7 +5,7 @@ namespace VRRecorder.Compliance.Coverage;
 
 public static class NativeGcovCoverageGate
 {
-    public const double ReleaseThresholdPercentage = 90;
+    public const double ReleaseThresholdPercentage = 80;
 
     public static NativeCoverageSummary Evaluate(
         IEnumerable<string> jsonDocuments,

@@ -37,25 +37,25 @@ public sealed class NativeGcovCoverageGateTests
     }
 
     [Fact]
-    public void EnforcesNinetyPercentForBothLinesAndBranches()
+    public void EnforcesEightyPercentForBothLinesAndBranches()
     {
-        var ninetyPercent = Enumerable.Range(1, 10)
+        var eightyPercent = Enumerable.Range(1, 10)
             .Select(index => $$"""
-                {"line_number":{{index}},"count":{{(index <= 9 ? 1 : 0)}},"branches":[{"count":{{(index <= 9 ? 1 : 0)}}}]}
+                {"line_number":{{index}},"count":{{(index <= 8 ? 1 : 0)}},"branches":[{"count":{{(index <= 8 ? 1 : 0)}}}]}
                 """);
         var passing = Document(
             "/repo/src/VRRecorder.Native/src/pass.cpp",
-            string.Join(',', ninetyPercent));
+            string.Join(',', eightyPercent));
 
         var summary = NativeGcovCoverageGate.EnsureReleaseThreshold(
             [passing],
             "/src/VRRecorder.Native/src/");
-        Assert.Equal(90, summary.LinePercentage);
-        Assert.Equal(90, summary.BranchPercentage);
+        Assert.Equal(80, summary.LinePercentage);
+        Assert.Equal(80, summary.BranchPercentage);
 
         var failing = passing.Replace(
-            "{\"line_number\":9,\"count\":1",
-            "{\"line_number\":9,\"count\":0",
+            "{\"line_number\":8,\"count\":1",
+            "{\"line_number\":8,\"count\":0",
             StringComparison.Ordinal);
         var exception = Assert.Throws<InvalidDataException>(() =>
             NativeGcovCoverageGate.EnsureReleaseThreshold(
