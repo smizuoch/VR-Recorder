@@ -161,6 +161,41 @@ public sealed class DesktopAudioAvailabilityUiControllerTests
         Assert.Null(controller.Current);
     }
 
+    [Fact]
+    public void RejectsUnknownStatusWarningAndInputContracts()
+    {
+        var controller = new DesktopAudioAvailabilityUiController();
+        Assert.Throws<ArgumentNullException>(() =>
+            controller.Apply((RecorderStatusSnapshot)null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            controller.Apply((DesktopRecordingNotification.AudioWarning)null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            controller.Apply((DesktopRecordingNotification.AudioRecovered)null!));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            controller.Apply(Status(1, (RecorderState)int.MaxValue)));
+
+        controller = new DesktopAudioAvailabilityUiController();
+        Assert.Null(controller.Apply(Status(1, RecorderState.Ready)));
+        controller.Apply(Status(2, RecorderState.Recording));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            controller.Apply(Warning(
+                1,
+                AudioInput.Desktop,
+                (AudioSessionWarningKind)int.MaxValue)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            controller.Apply(Warning(2, (AudioInput)int.MaxValue)));
+
+        Assert.Null(controller.Apply(new DesktopRecordingNotification.AudioRecovered(
+            3,
+            new AudioSessionStatus(
+                AudioSessionStatusKind.EndpointRediscoveryScheduled,
+                AudioInput.Desktop,
+                FramePosition: 9_600,
+                RediscoveryBudget: TimeSpan.FromSeconds(1)))));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            controller.Apply(Recovered(4, (AudioInput)int.MaxValue)));
+    }
+
     private static void AssertSnapshot(
         DesktopAudioAvailabilityUiSnapshot? snapshot,
         AudioInputAvailability expectedUnavailableInputs,
