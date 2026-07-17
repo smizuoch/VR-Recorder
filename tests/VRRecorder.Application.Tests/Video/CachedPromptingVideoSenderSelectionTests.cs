@@ -43,6 +43,99 @@ public sealed class CachedPromptingVideoSenderSelectionTests
         Assert.Equal(0, prompt.CallCount);
     }
 
+    [Fact]
+    public void ConstructorRejectsMissingSelectionDependencies()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new CachedPromptingVideoSenderSelection(
+                null!,
+                new CapturingSelectionPrompt(null)));
+        Assert.Throws<ArgumentNullException>(() =>
+            new CachedPromptingVideoSenderSelection(
+                new StubSelectionStore(null),
+                null!));
+    }
+
+    [Fact]
+    public async Task InvalidCandidateSetsFailBeforeReadingCache()
+    {
+        var store = new StubSelectionStore(null);
+        var selection = new CachedPromptingVideoSenderSelection(
+            store,
+            new CapturingSelectionPrompt(null));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            selection.SelectAsync(" ", [Signal("sender")], CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            selection.SelectAsync("service", null!, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            selection.SelectAsync("service", [], CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            selection.SelectAsync(
+                "service",
+                [Signal("sender"), null!],
+                CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            selection.SelectAsync(
+                "service",
+                [Signal("sender"), Signal("sender")],
+                CancellationToken.None));
+
+        Assert.Empty(store.LoadedServiceIds);
+    }
+
+    [Fact]
+    public async Task SingleCandidateIsCachedWithoutPrompting()
+    {
+        var store = new StubSelectionStore("stale-sender");
+        var prompt = new CapturingSelectionPrompt(null);
+        var selection = new CachedPromptingVideoSenderSelection(store, prompt);
+
+        var selected = await selection.SelectAsync(
+            "service",
+            [Signal("only-sender")],
+            CancellationToken.None);
+
+        Assert.Equal("only-sender", selected);
+        Assert.Equal([("service", "only-sender")], store.SavedSelections);
+        Assert.Equal(0, prompt.CallCount);
+    }
+
+    [Fact]
+    public async Task PromptSelectionMustBeOfferedAndIsPersistedInSortedOrder()
+    {
+        var canceledPrompt = new CapturingSelectionPrompt(null);
+        var canceledStore = new StubSelectionStore(null);
+        var canceled = new CachedPromptingVideoSenderSelection(
+            canceledStore,
+            canceledPrompt);
+        Assert.Null(await canceled.SelectAsync(
+            "service",
+            [Signal("sender-b"), Signal("sender-a")],
+            CancellationToken.None));
+        Assert.Empty(canceledStore.SavedSelections);
+        Assert.Equal(["sender-a", "sender-b"], canceledPrompt.LastSenderIds);
+
+        var invalid = new CachedPromptingVideoSenderSelection(
+            new StubSelectionStore(null),
+            new CapturingSelectionPrompt("not-offered"));
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            invalid.SelectAsync(
+                "service",
+                [Signal("sender-b"), Signal("sender-a")],
+                CancellationToken.None));
+
+        var selectedStore = new StubSelectionStore(null);
+        var selected = new CachedPromptingVideoSenderSelection(
+            selectedStore,
+            new CapturingSelectionPrompt("sender-b"));
+        Assert.Equal("sender-b", await selected.SelectAsync(
+            "service",
+            [Signal("sender-b"), Signal("sender-a")],
+            CancellationToken.None));
+        Assert.Equal([("service", "sender-b")], selectedStore.SavedSelections);
+    }
+
     private static StableVideoSignal Signal(string senderId) => new(
         senderId,
         adapterLuid: 42,
@@ -86,12 +179,16 @@ public sealed class CachedPromptingVideoSenderSelectionTests
     {
         public int CallCount { get; private set; }
 
+        public IReadOnlyList<string> LastSenderIds { get; private set; } = [];
+
         public Task<string?> SelectAsync(
             IReadOnlyList<StableVideoSignal> candidates,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
+            LastSenderIds = candidates.Select(candidate => candidate.SenderId)
+                .ToArray();
             return Task.FromResult(selectedSenderId);
         }
     }
