@@ -21,6 +21,123 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
     ];
 
     [Fact]
+    public void RejectsNonPositiveOrInfiniteDiscoveryTimeout()
+    {
+        using var invoker = new HttpMessageInvoker(
+            new NeverCompletingHttpHandler());
+        foreach (var timeout in new[]
+                 {
+                     TimeSpan.Zero,
+                     TimeSpan.FromMilliseconds(-1),
+                     Timeout.InfiniteTimeSpan,
+                 })
+        {
+            var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new OscQueryVrChatInstanceDiscovery(
+                    new StubOscQueryServiceBrowser([]),
+                    invoker,
+                    timeout));
+            Assert.Equal("timeout", exception.ParamName);
+        }
+    }
+
+    [Fact]
+    public async Task IneligibleAdvertisementsAreIgnoredWithoutHttpProbe()
+    {
+        var wrongPrefix = new OscQueryServiceAdvertisement(
+            "Other._oscjson._tcp.local.",
+            "Other",
+            IPAddress.Loopback,
+            19020);
+        var external = new OscQueryServiceAdvertisement(
+            "VRChat-Client-external._oscjson._tcp.local.",
+            "VRChat-Client-external",
+            IPAddress.Parse("203.0.113.10"),
+            19021);
+        var browser = new StubOscQueryServiceBrowser(
+            [null!, wrongPrefix, external]);
+        using var invoker = new HttpMessageInvoker(
+            new RejectEveryHttpRequestHandler());
+        var events = new CapturingOscOperationEventSink();
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1),
+            events);
+
+        var candidates = await discovery.DiscoverAsync(CancellationToken.None);
+
+        Assert.Empty(candidates);
+        Assert.Equal(
+            [new OscOperationEvent(
+                OscOperation.CapabilityProbe,
+                OscOperationOutcome.Failed)],
+            events.Events);
+    }
+
+    [Fact]
+    public async Task DiagnosticSinkFailureCannotDiscardValidCandidate()
+    {
+        var advertisement = Advertisement("sink-failure", httpPort: 19022);
+        var browser = new StubOscQueryServiceBrowser([advertisement]);
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = new Fixture(
+                    advertisement.InstanceName,
+                    OscPort: 9022),
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            browser,
+            invoker,
+            TimeSpan.FromSeconds(1),
+            new ThrowingOscOperationEventSink());
+
+        var candidate = Assert.Single(await discovery.DiscoverAsync(
+            CancellationToken.None));
+
+        Assert.Equal(advertisement.ServiceId, candidate.ServiceId);
+    }
+
+    [Theory]
+    [InlineData("missing-host-info")]
+    [InlineData("host-info-not-object")]
+    [InlineData("missing-name")]
+    [InlineData("blank-name")]
+    [InlineData("missing-osc-ip")]
+    [InlineData("invalid-osc-ip")]
+    [InlineData("external-osc-ip")]
+    [InlineData("missing-osc-port")]
+    [InlineData("osc-port-not-number")]
+    [InlineData("osc-port-zero")]
+    [InlineData("osc-port-too-large")]
+    [InlineData("transport-not-string")]
+    [InlineData("transport-not-udp")]
+    public async Task InvalidHostInfoProducesNoCandidate(string mutation)
+    {
+        var advertisement = Advertisement("invalid-host", httpPort: 19023);
+        var fixture = new Fixture(
+            advertisement.InstanceName,
+            OscPort: 9023,
+            HostInfoJson: InvalidHostInfoJson(
+                mutation,
+                advertisement.InstanceName));
+        using var invoker = new HttpMessageInvoker(
+            new OscQueryFixtureHandler(new Dictionary<int, Fixture>
+            {
+                [advertisement.HttpPort] = fixture,
+            }));
+        var discovery = new OscQueryVrChatInstanceDiscovery(
+            new StubOscQueryServiceBrowser([advertisement]),
+            invoker,
+            TimeSpan.FromSeconds(1));
+
+        var candidates = await discovery.DiscoverAsync(CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
     [Trait("Scenario", "IT-021")]
     public async Task MultipleTargetsCreateAndSendNothingUntilExactSelection()
     {
@@ -340,6 +457,56 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
             httpPort: httpPort);
     }
 
+    private static string InvalidHostInfoJson(
+        string mutation,
+        string expectedName)
+    {
+        var body = mutation switch
+        {
+            "missing-host-info" => null,
+            "host-info-not-object" => "[]",
+            "missing-name" => """
+                { "OSC_IP": "127.0.0.1", "OSC_PORT": 9023 }
+                """,
+            "blank-name" => """
+                { "NAME": " ", "OSC_IP": "127.0.0.1", "OSC_PORT": 9023 }
+                """,
+            "missing-osc-ip" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_PORT": 9023 }
+                """,
+            "invalid-osc-ip" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "invalid", "OSC_PORT": 9023 }
+                """,
+            "external-osc-ip" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "203.0.113.10", "OSC_PORT": 9023 }
+                """,
+            "missing-osc-port" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "127.0.0.1" }
+                """,
+            "osc-port-not-number" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "127.0.0.1", "OSC_PORT": "9023" }
+                """,
+            "osc-port-zero" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "127.0.0.1", "OSC_PORT": 0 }
+                """,
+            "osc-port-too-large" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "127.0.0.1", "OSC_PORT": 65536 }
+                """,
+            "transport-not-string" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "127.0.0.1", "OSC_PORT": 9023, "OSC_TRANSPORT": 1 }
+                """,
+            "transport-not-udp" => $$"""
+                { "NAME": "{{expectedName}}", "OSC_IP": "127.0.0.1", "OSC_PORT": 9023, "OSC_TRANSPORT": "TCP" }
+                """,
+            _ => throw new InvalidOperationException(mutation),
+        };
+        return body is null
+            ? "{}"
+            : $$"""
+                { "HOST_INFO": {{body}} }
+                """;
+    }
+
     private static void AssertCandidate(
         VrChatInstanceCandidate candidate,
         OscQueryServiceAdvertisement advertisement,
@@ -516,6 +683,15 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
         }
     }
 
+    private sealed class RejectEveryHttpRequestHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "An ineligible advertisement reached the HTTP probe.");
+    }
+
     private sealed class CapturingOscOperationEventSink
         : IOscOperationEventSink
     {
@@ -523,6 +699,13 @@ public sealed class OscQueryVrChatInstanceDiscoveryTests
 
         public void Publish(OscOperationEvent operation) =>
             Events.Add(operation);
+    }
+
+    private sealed class ThrowingOscOperationEventSink
+        : IOscOperationEventSink
+    {
+        public void Publish(OscOperationEvent operation) =>
+            throw new InvalidOperationException("diagnostics unavailable");
     }
 
     private sealed record Fixture(
