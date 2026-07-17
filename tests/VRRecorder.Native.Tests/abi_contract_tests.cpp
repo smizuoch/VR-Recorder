@@ -809,6 +809,86 @@ bool RejectsTruncatedOrInvalidExtendedSessionConfig()
     return true;
 }
 
+bool AcceptsEveryExtendedSessionConfigurationBoundary()
+{
+    EventLog log;
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    const auto accepted = [&](vrrec_session_config_v1 config) {
+        session = nullptr;
+        if (vrrec_session_create_v1(&config, &callbacks, &session) !=
+                VRREC_STATUS_OK ||
+            session == nullptr) {
+            return false;
+        }
+
+        vrrec_session_destroy_v1(session);
+        session = nullptr;
+        return true;
+    };
+
+    for (const auto encoder_kind : std::array<vrrec_encoder_kind_t, 4> {
+             VRREC_ENCODER_NVENC,
+             VRREC_ENCODER_AMF,
+             VRREC_ENCODER_QSV,
+             VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE,
+         }) {
+        auto config = ValidConfig();
+        config.encoder_kind = encoder_kind;
+        CHECK(accepted(config));
+    }
+
+    for (const auto routing : std::array<vrrec_audio_routing_t, 4> {
+             VRREC_AUDIO_ROUTING_MIXED,
+             VRREC_AUDIO_ROUTING_DESKTOP_ONLY,
+             VRREC_AUDIO_ROUTING_MIC_ONLY,
+             VRREC_AUDIO_ROUTING_MUTED,
+         }) {
+        auto config = ValidConfig();
+        config.audio_routing = routing;
+        CHECK(accepted(config));
+    }
+
+    for (const auto quality : std::array<vrrec_quality_preset_t, 2> {
+             VRREC_QUALITY_PRESET_STANDARD,
+             VRREC_QUALITY_PRESET_HIGH,
+         }) {
+        auto config = ValidConfig();
+        config.quality_preset = quality;
+        CHECK(accepted(config));
+    }
+
+    for (const auto pixel_format : std::array<vrrec_source_pixel_format_t, 3> {
+             VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+             VRREC_SOURCE_PIXEL_FORMAT_RGBA8,
+             VRREC_SOURCE_PIXEL_FORMAT_NV12,
+         }) {
+        auto config = ValidConfig();
+        config.source_pixel_format = pixel_format;
+        CHECK(accepted(config));
+    }
+
+    for (const auto gain : std::array {-96.0, 24.0}) {
+        auto config = ValidConfig();
+        config.desktop_gain_db = gain;
+        config.microphone_gain_db = gain;
+        CHECK(accepted(config));
+    }
+
+    const std::array<std::string, 3> valid_utf8_boundaries {
+        std::string("\xC2\xA2", 2),
+        std::string("\xE3\x81\x82", 3),
+        std::string("\xF0\x9F\x98\x80", 4),
+    };
+    for (const auto &text : valid_utf8_boundaries) {
+        auto config = ValidConfig();
+        config.spout_sender_identity_utf8 = text.c_str();
+        CHECK(accepted(config));
+    }
+
+    return true;
+}
+
 bool EmitsMuxAndStoppedEventsOnlyAfterBackendMilestones()
 {
     EventLog log;
@@ -3896,6 +3976,7 @@ int main(int argc, char **argv)
         !LegacySessionConfigsReceiveDeterministicMediaDefaults() ||
         !LegacyMediaSessionConfigDefaultsSourceFormat() ||
         !RejectsTruncatedOrInvalidExtendedSessionConfig() ||
+        !AcceptsEveryExtendedSessionConfigurationBoundary() ||
         !UpdatesStableLayoutWithoutChangingTheOutputCanvas() ||
         !RejectsInvalidRuntimeLayoutAbiInputs() ||
         !SynchronousLayoutFaultDoesNotDeadlockTheAbi() ||
