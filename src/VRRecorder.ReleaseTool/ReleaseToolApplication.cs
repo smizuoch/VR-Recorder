@@ -1,4 +1,5 @@
 using VRRecorder.Compliance;
+using VRRecorder.Compliance.Distribution;
 using VRRecorder.Compliance.Staging;
 
 namespace VRRecorder.ReleaseTool;
@@ -14,6 +15,55 @@ internal interface IWindowsRuntimeStagingRunner
     Task<WindowsRuntimeStagingCommandResult> ExecuteAsync(
         WindowsRuntimeStagingArguments arguments,
         CancellationToken cancellationToken);
+}
+
+internal sealed record WindowsPayloadSealingArguments(
+    string PublishRoot,
+    string ApprovedPropsPath,
+    string IdentityOutputPath);
+
+internal sealed record WindowsPayloadSealingCommandResult(
+    string? IdentityPath,
+    IReadOnlyList<ComplianceIssue> Issues)
+{
+    public bool IsSealed => IdentityPath is not null && Issues.Count == 0;
+}
+
+internal interface IWindowsPayloadSealingRunner
+{
+    Task<WindowsPayloadSealingCommandResult> ExecuteAsync(
+        WindowsPayloadSealingArguments arguments,
+        CancellationToken cancellationToken);
+}
+
+internal sealed class WindowsPayloadSealingRunner
+    : IWindowsPayloadSealingRunner
+{
+    public async Task<WindowsPayloadSealingCommandResult> ExecuteAsync(
+        WindowsPayloadSealingArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var seal = await new WindowsPostPublishPayloadSealer()
+            .SealAsync(
+                arguments.PublishRoot,
+                arguments.ApprovedPropsPath,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!seal.IsSealed || seal.Payload is null)
+        {
+            return new WindowsPayloadSealingCommandResult(null, seal.Issues);
+        }
+
+        var publication = await WindowsApplicationPayloadIdentityPublisher
+            .PublishAsync(
+                seal.Payload,
+                arguments.IdentityOutputPath,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new WindowsPayloadSealingCommandResult(
+            publication.IdentityPath,
+            publication.Issues);
+    }
 }
 
 internal sealed class WindowsRuntimeStagingRunner
@@ -35,32 +85,64 @@ internal static class ReleaseToolApplication
     private const string Usage =
         "Usage: VRRecorder.ReleaseTool stage-windows-runtime " +
         "--repository-root <path> --manifest <path> " +
-        "--source-root <path> --output-parent <path>";
+        "--source-root <path> --output-parent <path>" +
+        " OR VRRecorder.ReleaseTool seal-windows-payload " +
+        "--publish-root <path> --approved-props <path> " +
+        "--identity-output <path>";
 
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
         TextWriter standardOutput,
         TextWriter standardError,
-        IWindowsRuntimeStagingRunner runner,
+        IWindowsRuntimeStagingRunner stagingRunner,
+        IWindowsPayloadSealingRunner sealingRunner,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(standardOutput);
         ArgumentNullException.ThrowIfNull(standardError);
-        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(stagingRunner);
+        ArgumentNullException.ThrowIfNull(sealingRunner);
 
-        if (!TryParse(args, out var stagingArguments))
+        if (TryParseStaging(args, out var stagingArguments))
         {
-            await standardError.WriteLineAsync(Usage).ConfigureAwait(false);
-            return 2;
+            var stagingResult = await stagingRunner
+                .ExecuteAsync(stagingArguments, cancellationToken)
+                .ConfigureAwait(false);
+            return await CompleteAsync(
+                    stagingResult.ApprovedPropsPath,
+                    stagingResult.Issues,
+                    standardOutput,
+                    standardError)
+                .ConfigureAwait(false);
         }
 
-        var result = await runner
-            .ExecuteAsync(stagingArguments, cancellationToken)
-            .ConfigureAwait(false);
-        if (!result.IsStaged || result.ApprovedPropsPath is null)
+        if (TryParseSealing(args, out var sealingArguments))
         {
-            foreach (var issue in result.Issues
+            var sealingResult = await sealingRunner
+                .ExecuteAsync(sealingArguments, cancellationToken)
+                .ConfigureAwait(false);
+            return await CompleteAsync(
+                    sealingResult.IdentityPath,
+                    sealingResult.Issues,
+                    standardOutput,
+                    standardError)
+                .ConfigureAwait(false);
+        }
+
+        await standardError.WriteLineAsync(Usage).ConfigureAwait(false);
+        return 2;
+    }
+
+    private static async Task<int> CompleteAsync(
+        string? successPath,
+        IReadOnlyList<ComplianceIssue> issues,
+        TextWriter standardOutput,
+        TextWriter standardError)
+    {
+        if (successPath is null || issues.Count != 0)
+        {
+            foreach (var issue in issues
                          .OrderBy(issue => issue.Code, StringComparer.Ordinal)
                          .ThenBy(issue => issue.Subject, StringComparer.Ordinal))
             {
@@ -73,12 +155,12 @@ internal static class ReleaseToolApplication
         }
 
         await standardOutput
-            .WriteLineAsync(Path.GetFullPath(result.ApprovedPropsPath))
+            .WriteLineAsync(Path.GetFullPath(successPath))
             .ConfigureAwait(false);
         return 0;
     }
 
-    private static bool TryParse(
+    private static bool TryParseStaging(
         IReadOnlyList<string> args,
         out WindowsRuntimeStagingArguments parsed)
     {
@@ -119,6 +201,45 @@ internal static class ReleaseToolApplication
             values["--manifest"],
             values["--source-root"],
             values["--output-parent"]);
+        return true;
+    }
+
+    private static bool TryParseSealing(
+        IReadOnlyList<string> args,
+        out WindowsPayloadSealingArguments parsed)
+    {
+        parsed = null!;
+        if (args.Count != 7 ||
+            args[0] != "seal-windows-payload")
+        {
+            return false;
+        }
+
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var index = 1; index < args.Count; index += 2)
+        {
+            var option = args[index];
+            var value = args[index + 1];
+            if (option is not (
+                    "--publish-root" or
+                    "--approved-props" or
+                    "--identity-output") ||
+                string.IsNullOrWhiteSpace(value) ||
+                !values.TryAdd(option, value))
+            {
+                return false;
+            }
+        }
+
+        if (values.Count != 3)
+        {
+            return false;
+        }
+
+        parsed = new WindowsPayloadSealingArguments(
+            values["--publish-root"],
+            values["--approved-props"],
+            values["--identity-output"]);
         return true;
     }
 }

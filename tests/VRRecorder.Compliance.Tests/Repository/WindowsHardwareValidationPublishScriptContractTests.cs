@@ -16,8 +16,12 @@ public sealed class WindowsHardwareValidationPublishScriptContractTests
         var publish = script.IndexOf(
             "dotnet publish",
             StringComparison.Ordinal);
+        var seal = script.IndexOf(
+            "seal-windows-payload",
+            StringComparison.Ordinal);
         Assert.True(staging >= 0);
         Assert.True(publish > staging);
+        Assert.True(seal > publish);
         Assert.Contains("--self-contained", script, StringComparison.Ordinal);
         Assert.Contains("win-x64", script, StringComparison.Ordinal);
         Assert.Contains(
@@ -28,6 +32,10 @@ public sealed class WindowsHardwareValidationPublishScriptContractTests
             "ApprovedWindowsRuntimeProps",
             script,
             StringComparison.Ordinal);
+        Assert.Contains("rev-parse --verify HEAD", script);
+        Assert.Contains("SourceRevisionId", script);
+        Assert.Contains("--identity-output", script);
+        Assert.Contains("application-payload-identity.v1.json", script);
         Assert.DoesNotContain(
             "NativeMediaLibraryPath",
             script,
@@ -46,6 +54,8 @@ public sealed class WindowsHardwareValidationPublishScriptContractTests
             "ApprovedWindowsRuntimeProps",
             parameterBlock,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("SourceRevision", parameterBlock);
+        Assert.DoesNotContain("ProductVersion", parameterBlock);
     }
 
     private static string FindRepositoryRoot()

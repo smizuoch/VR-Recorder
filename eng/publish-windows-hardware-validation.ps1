@@ -55,12 +55,34 @@ if (-not [System.IO.File]::Exists($manifestPath)) {
     throw "RuntimeManifest must be an existing file: $manifestPath"
 }
 
+$sourceRevisionOutput = @(
+    & git -C $repositoryRoot rev-parse --verify HEAD
+)
+if ($LASTEXITCODE -ne 0 -or
+    $sourceRevisionOutput.Count -ne 1 -or
+    $sourceRevisionOutput[0] -cnotmatch '^[0-9a-f]{40}([0-9a-f]{24})?$') {
+    throw 'Repository HEAD must resolve to one canonical source revision.'
+}
+$sourceRevision = $sourceRevisionOutput[0]
+$repositoryStatus = @(
+    & git -C $repositoryRoot status --porcelain=v1 --untracked-files=all
+)
+if ($LASTEXITCODE -ne 0 -or $repositoryStatus.Count -ne 0) {
+    throw 'Release publish requires a clean repository working tree.'
+}
+
 $stagingParent = [System.IO.Path]::GetFullPath($StagingOutputParent)
 [System.IO.Directory]::CreateDirectory($stagingParent) | Out-Null
 $publishDirectory = [System.IO.Path]::GetFullPath($PublishOutput)
+$identityOutput = [System.IO.Path]::GetFullPath(
+    "$publishDirectory.application-payload-identity.v1.json")
 if ([System.IO.Directory]::Exists($publishDirectory) -or
     [System.IO.File]::Exists($publishDirectory)) {
     throw "PublishOutput must not already exist: $publishDirectory"
+}
+if ([System.IO.Directory]::Exists($identityOutput) -or
+    [System.IO.File]::Exists($identityOutput)) {
+    throw "Payload identity output must not already exist: $identityOutput"
 }
 
 $releaseToolProject = Join-Path `
@@ -109,6 +131,7 @@ $appProject = Join-Path `
     --self-contained true `
     --output $publishDirectory `
     -p:RestoreLockedMode=true `
+    "-p:SourceRevisionId=$sourceRevision" `
     "-p:ApprovedWindowsRuntimeProps=$approvedProps" `
     "-p:LegalBundleDirectory=$legalRoot"
 if ($LASTEXITCODE -ne 0) {
@@ -120,4 +143,44 @@ if (-not [System.IO.File]::Exists($entryPoint)) {
     throw "Release publish did not produce VRRecorder.App.exe: $entryPoint"
 }
 
-Write-Output $publishDirectory
+$postPublishRevision = @(
+    & git -C $repositoryRoot rev-parse --verify HEAD
+)
+if ($LASTEXITCODE -ne 0 -or
+    $postPublishRevision.Count -ne 1 -or
+    $postPublishRevision[0] -cne $sourceRevision) {
+    throw 'Repository HEAD changed during Release publish.'
+}
+$postPublishStatus = @(
+    & git -C $repositoryRoot status --porcelain=v1 --untracked-files=all
+)
+if ($LASTEXITCODE -ne 0 -or $postPublishStatus.Count -ne 0) {
+    throw 'Repository working tree changed during Release publish.'
+}
+
+$sealOutput = @(
+    & dotnet run `
+        --project $releaseToolProject `
+        --configuration Release `
+        --no-launch-profile `
+        -p:RestoreLockedMode=true `
+        -- `
+        seal-windows-payload `
+        --publish-root $publishDirectory `
+        --approved-props $approvedProps `
+        --identity-output $identityOutput
+)
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows payload sealing failed with exit code $LASTEXITCODE."
+}
+
+$identityCandidates = @($sealOutput | Where-Object {
+    $_ -is [string] -and
+    [System.IO.Path]::GetFullPath($_) -ceq $identityOutput -and
+    [System.IO.File]::Exists($_)
+})
+if ($identityCandidates.Count -ne 1) {
+    throw 'The sealing CLI did not return exactly one payload identity path.'
+}
+
+Write-Output $identityOutput

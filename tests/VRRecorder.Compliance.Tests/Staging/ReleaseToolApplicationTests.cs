@@ -1,4 +1,5 @@
 using VRRecorder.Compliance.Staging;
+using VRRecorder.Compliance.Distribution;
 using VRRecorder.ReleaseTool;
 
 namespace VRRecorder.Compliance.Tests.Staging;
@@ -25,6 +26,7 @@ public sealed class ReleaseToolApplicationTests
             output,
             error,
             runner,
+            RejectingSealingRunner.Instance,
             CancellationToken.None);
 
         Assert.Equal(0, exitCode);
@@ -61,6 +63,7 @@ public sealed class ReleaseToolApplicationTests
             output,
             error,
             runner,
+            RejectingSealingRunner.Instance,
             CancellationToken.None);
 
         Assert.Equal(1, exitCode);
@@ -94,11 +97,51 @@ public sealed class ReleaseToolApplicationTests
             output,
             error,
             runner,
+            RejectingSealingRunner.Instance,
             CancellationToken.None);
 
         Assert.Equal(2, exitCode);
         Assert.Equal(string.Empty, output.ToString());
         Assert.StartsWith("Usage:", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExactSealCommandPrintsOnlyTheIdentityPath()
+    {
+        WindowsPayloadSealingArguments? observed = null;
+        var runner = new CallbackSealingRunner(arguments =>
+        {
+            observed = arguments;
+            return new WindowsPayloadSealingCommandResult(
+                Path.Combine("out", "payload-identity.json"),
+                []);
+        });
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await ReleaseToolApplication.RunAsync(
+            [
+                "seal-windows-payload",
+                "--publish-root", "publish",
+                "--approved-props", "ApprovedWindowsRuntime.props",
+                "--identity-output", "payload-identity.json",
+            ],
+            output,
+            error,
+            new CallbackRunner(_ => throw new InvalidOperationException()),
+            runner,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(observed);
+        Assert.Equal("publish", observed.PublishRoot);
+        Assert.Equal("ApprovedWindowsRuntime.props", observed.ApprovedPropsPath);
+        Assert.Equal("payload-identity.json", observed.IdentityOutputPath);
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine("out", "payload-identity.json")) +
+            Environment.NewLine,
+            output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     private static string[] Arguments() =>
@@ -119,5 +162,27 @@ public sealed class ReleaseToolApplicationTests
             WindowsRuntimeStagingArguments arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult(callback(arguments));
+    }
+
+    private sealed class CallbackSealingRunner(
+        Func<WindowsPayloadSealingArguments,
+            WindowsPayloadSealingCommandResult> callback)
+        : IWindowsPayloadSealingRunner
+    {
+        public Task<WindowsPayloadSealingCommandResult> ExecuteAsync(
+            WindowsPayloadSealingArguments arguments,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(callback(arguments));
+    }
+
+    private sealed class RejectingSealingRunner : IWindowsPayloadSealingRunner
+    {
+        public static RejectingSealingRunner Instance { get; } = new();
+
+        public Task<WindowsPayloadSealingCommandResult> ExecuteAsync(
+            WindowsPayloadSealingArguments arguments,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+            "sealing runner must not execute");
     }
 }

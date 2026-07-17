@@ -8,5 +8,6 @@ internal static class Program
             Console.Out,
             Console.Error,
             new WindowsRuntimeStagingRunner(),
+            new WindowsPayloadSealingRunner(),
             CancellationToken.None);
 }
