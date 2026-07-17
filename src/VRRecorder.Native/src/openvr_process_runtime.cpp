@@ -132,7 +132,10 @@ public:
         }
         const auto status = api_->GetActionSetHandle(action_set_path, handle);
         if (status != VRREC_STATUS_OK || handle == 0) {
-            return status;
+            handle = 0;
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
         }
         if (action_set_handle_ != 0 && action_set_handle_ != handle) {
             handle = 0;
@@ -154,7 +157,10 @@ public:
         }
         const auto status = api_->GetDigitalActionHandle(action_path, handle);
         if (status != VRREC_STATUS_OK || handle == 0) {
-            return status;
+            handle = 0;
+            return status == VRREC_STATUS_OK
+                ? VRREC_STATUS_INTERNAL_ERROR
+                : status;
         }
         try {
             action_snapshots_.try_emplace(handle);

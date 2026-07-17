@@ -226,8 +226,8 @@ public:
         std::uint64_t &handle) noexcept override
     {
         state_->calls.emplace_back("set:" + std::string(path));
-        handle = 11;
-        return VRREC_STATUS_OK;
+        handle = action_set_handle;
+        return action_set_status;
     }
 
     vrrec_status_t GetDigitalActionHandle(
@@ -235,8 +235,10 @@ public:
         std::uint64_t &handle) noexcept override
     {
         state_->calls.emplace_back("action:" + std::string(path));
-        handle = path.ends_with("/mic") ? 33 : 22;
-        return VRREC_STATUS_OK;
+        handle = zero_digital_action_handle
+            ? 0
+            : (path.ends_with("/mic") ? 33 : 22);
+        return digital_action_status;
     }
 
     vrrec_status_t GetHapticActionHandle(
@@ -244,8 +246,8 @@ public:
         std::uint64_t &handle) noexcept override
     {
         state_->calls.emplace_back("haptic-action:" + std::string(path));
-        handle = 44;
-        return VRREC_STATUS_OK;
+        handle = haptic_action_handle;
+        return haptic_action_status;
     }
 
     vrrec_status_t GetInputSourceHandle(
@@ -253,8 +255,8 @@ public:
         std::uint64_t &handle) noexcept override
     {
         state_->calls.emplace_back("source:" + std::string(path));
-        handle = 55;
-        return VRREC_STATUS_OK;
+        handle = input_source_handle;
+        return input_source_status;
     }
 
     vrrec_status_t TriggerHapticVibrationAction(
@@ -302,6 +304,14 @@ public:
     vrrec_status_t initialize_status = VRREC_STATUS_OK;
     vrrec_status_t application_manifest_status = VRREC_STATUS_OK;
     vrrec_status_t manifest_status = VRREC_STATUS_OK;
+    vrrec_status_t action_set_status = VRREC_STATUS_OK;
+    std::uint64_t action_set_handle = 11;
+    vrrec_status_t digital_action_status = VRREC_STATUS_OK;
+    bool zero_digital_action_handle = false;
+    vrrec_status_t haptic_action_status = VRREC_STATUS_OK;
+    std::uint64_t haptic_action_handle = 44;
+    vrrec_status_t input_source_status = VRREC_STATUS_OK;
+    std::uint64_t input_source_handle = 55;
 
 private:
     std::shared_ptr<RawState> state_;
@@ -1016,6 +1026,134 @@ void RegistersAgainOnlyAfterACompleteRuntimeGeneration()
     (void)raw;
 }
 
+void RejectsClientStateAndZeroRawHandles()
+{
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    auto input = Client(runtime);
+    std::uint64_t set = 99;
+    std::uint64_t action = 99;
+    OpenVrDigitalActionData data {true, true, true};
+
+    CHECK(input->AddApplicationManifest("C:/app/app.vrmanifest", true) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(input->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(input->GetDigitalActionHandle("/actions/main/in/rec", action) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(input->UpdateActionState(11) == VRREC_STATUS_INVALID_STATE);
+    CHECK(input->GetDigitalActionData(22, data) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(!data.is_active && !data.state && !data.changed);
+
+    CHECK(input->Initialize() == VRREC_STATUS_OK);
+    CHECK(input->Initialize() == VRREC_STATUS_INVALID_STATE);
+    raw->manifest_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(input->SetActionManifestPath("C:/app/actions.json") ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    raw->manifest_status = VRREC_STATUS_OK;
+    CHECK(input->SetActionManifestPath("C:/app/actions.json") ==
+          VRREC_STATUS_OK);
+    CHECK(input->AddApplicationManifest("C:/app/app.vrmanifest", true) ==
+          VRREC_STATUS_OK);
+    CHECK(input->AddApplicationManifest("C:/app/app.vrmanifest", false) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+
+    raw->action_set_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(input->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    raw->action_set_status = VRREC_STATUS_OK;
+    raw->action_set_handle = 0;
+    CHECK(input->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(set == 0);
+    raw->action_set_handle = 11;
+    CHECK(input->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_OK);
+    raw->action_set_handle = 12;
+    CHECK(input->GetActionSetHandle("/actions/main", set) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(set == 0);
+    raw->action_set_handle = 11;
+
+    raw->digital_action_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(input->GetDigitalActionHandle("/actions/main/in/rec", action) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    raw->digital_action_status = VRREC_STATUS_OK;
+    raw->zero_digital_action_handle = true;
+    CHECK(input->GetDigitalActionHandle("/actions/main/in/rec", action) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(action == 0);
+    raw->zero_digital_action_handle = false;
+    CHECK(input->GetDigitalActionHandle("/actions/main/in/rec", action) ==
+          VRREC_STATUS_OK);
+    CHECK(input->UpdateActionState(0) == VRREC_STATUS_INVALID_STATE);
+    CHECK(input->UpdateActionState(12) == VRREC_STATUS_INVALID_STATE);
+    CHECK(input->UpdateActionState(11) == VRREC_STATUS_OK);
+    CHECK(input->GetDigitalActionData(action + 1, data) ==
+          VRREC_STATUS_INVALID_STATE);
+    input->Shutdown();
+    CHECK(input->SetActionManifestPath("C:/app/actions.json") ==
+          VRREC_STATUS_INVALID_STATE);
+
+    auto haptic = HapticClient(runtime);
+    std::uint64_t handle = 99;
+    CHECK(haptic->GetHapticActionHandle("/actions/main/out/haptic", handle) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(haptic->GetInputSourceHandle("/user/hand/right", handle) ==
+          VRREC_STATUS_INVALID_STATE);
+    CHECK(haptic->Initialize() == VRREC_STATUS_OK);
+    CHECK(haptic->Initialize() == VRREC_STATUS_INVALID_STATE);
+    raw->haptic_action_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(haptic->GetHapticActionHandle(
+              "/actions/main/out/haptic",
+              handle) == VRREC_STATUS_INTERNAL_ERROR);
+    raw->haptic_action_status = VRREC_STATUS_OK;
+    raw->haptic_action_handle = 0;
+    CHECK(haptic->GetHapticActionHandle(
+              "/actions/main/out/haptic",
+              handle) == VRREC_STATUS_INTERNAL_ERROR);
+    raw->input_source_status = VRREC_STATUS_INTERNAL_ERROR;
+    CHECK(haptic->GetInputSourceHandle("/user/hand/right", handle) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    raw->input_source_status = VRREC_STATUS_OK;
+    raw->input_source_handle = 0;
+    CHECK(haptic->GetInputSourceHandle("/user/hand/right", handle) ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    haptic->Shutdown();
+    haptic->Shutdown();
+}
+
+void RejectsInvalidOverlayFactoryArguments()
+{
+    auto status = VRREC_STATUS_OK;
+    CHECK(CreateOpenVrProcessOverlayLifecyclePort(nullptr, status) == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+    CHECK(CreateOpenVrProcessOverlayLifecycle(
+              nullptr,
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              config,
+              status) == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+
+    auto state = std::make_shared<RawState>();
+    FakeRawApi *raw = nullptr;
+    auto runtime = Runtime(state, raw);
+    CHECK(CreateOpenVrProcessOverlayLifecycle(
+              runtime,
+              "",
+              config,
+              status) == nullptr);
+    CHECK(status == VRREC_STATUS_INVALID_ARGUMENT);
+    (void)raw;
+}
+
 void FailsClosedBeforeAcquiringAReference()
 {
     auto state = std::make_shared<RawState>();
@@ -1057,6 +1195,8 @@ int main()
     RoutesHapticsThroughTheSharedRuntimeGeneration();
     HapticPortRejectsInvalidPulseBeforeCallingTheRawApi();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
+    RejectsClientStateAndZeroRawHandles();
+    RejectsInvalidOverlayFactoryArguments();
     FailsClosedBeforeAcquiringAReference();
     return 0;
 }
