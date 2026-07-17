@@ -82,7 +82,7 @@ public:
         state_->calls.emplace_back(
             "overlay-create:" + std::string(key) + ':' + std::string(name));
         handle = 91;
-        return VRREC_STATUS_OK;
+        return overlay_create_status;
     }
 
     vrrec_status_t SetOverlayWidthInMeters(
@@ -92,7 +92,7 @@ public:
         state_->calls.emplace_back(
             "overlay-width:" + std::to_string(handle) + ':' +
             std::to_string(width));
-        return VRREC_STATUS_OK;
+        return overlay_width_status;
     }
 
     vrrec_status_t ShowOverlay(std::uint64_t handle) noexcept override
@@ -147,7 +147,7 @@ public:
             "overlay-input:" + std::to_string(handle) + ':' +
             std::to_string(pixel_width) + 'x' +
             std::to_string(pixel_height));
-        return VRREC_STATUS_OK;
+        return overlay_pointer_input_status;
     }
 
     vrrec_status_t PollNextOverlayPointerEvent(
@@ -303,6 +303,9 @@ public:
 
     vrrec_status_t initialize_status = VRREC_STATUS_OK;
     vrrec_status_t application_manifest_status = VRREC_STATUS_OK;
+    vrrec_status_t overlay_create_status = VRREC_STATUS_OK;
+    vrrec_status_t overlay_width_status = VRREC_STATUS_OK;
+    vrrec_status_t overlay_pointer_input_status = VRREC_STATUS_OK;
     vrrec_status_t manifest_status = VRREC_STATUS_OK;
     vrrec_status_t action_set_status = VRREC_STATUS_OK;
     std::uint64_t action_set_handle = 11;
@@ -424,6 +427,12 @@ void HapticPortRejectsInvalidPulseBeforeCallingTheRawApi()
     auto haptic = HapticClient(runtime);
     const auto valid = OpenVrHapticPulse {0.03F, 120.0F, 0.65F};
 
+    CHECK(haptic->AddApplicationManifest(
+              "C:/app/OpenVr/steamvr.vrmanifest",
+              true) == VRREC_STATUS_INVALID_STATE);
+    CHECK(haptic->SetActionManifestPath(
+              "C:/app/OpenVr/actions.json") ==
+          VRREC_STATUS_INVALID_STATE);
     CHECK(haptic->TriggerHapticVibrationAction(44, 55, valid) ==
           VRREC_STATUS_INVALID_STATE);
     CHECK(haptic->Initialize() == VRREC_STATUS_OK);
@@ -916,6 +925,50 @@ void ApplicationRegistrationFailureDoesNotCreateAnOverlay()
     (void)raw;
 }
 
+void FailsClosedAtEveryOverlayCompositionStage()
+{
+    const auto config = OpenVrOverlayLifecycleConfig {
+        "com.vrrecorder.desktop.wrist",
+        "VR Recorder Wrist",
+        0.22F,
+    };
+
+    {
+        auto state = std::make_shared<RawState>();
+        FakeRawApi *raw = nullptr;
+        auto runtime = Runtime(state, raw);
+        raw->initialize_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        auto status = VRREC_STATUS_OK;
+        CHECK(CreateOpenVrProcessOverlayLifecyclePort(runtime, status) ==
+              nullptr);
+        CHECK(status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+        CHECK(state->shutdown_calls == 0);
+    }
+
+    for (const auto failed_stage : {0, 1, 2}) {
+        auto state = std::make_shared<RawState>();
+        FakeRawApi *raw = nullptr;
+        auto runtime = Runtime(state, raw);
+        if (failed_stage == 0) {
+            raw->overlay_create_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        } else if (failed_stage == 1) {
+            raw->overlay_width_status = VRREC_STATUS_BACKEND_UNAVAILABLE;
+        } else {
+            raw->overlay_pointer_input_status =
+                VRREC_STATUS_BACKEND_UNAVAILABLE;
+        }
+        auto status = VRREC_STATUS_OK;
+        auto overlay = CreateOpenVrProcessOverlayLifecycle(
+            runtime,
+            "C:/app/OpenVr/steamvr.vrmanifest",
+            config,
+            status);
+        CHECK(overlay == nullptr);
+        CHECK(status == VRREC_STATUS_BACKEND_UNAVAILABLE);
+        CHECK(state->shutdown_calls == 1);
+    }
+}
+
 std::unique_ptr<OpenVrInputPort> Client(
     const std::shared_ptr<OpenVrProcessRuntime> &runtime)
 {
@@ -1195,6 +1248,7 @@ int main()
     RoutesHapticsThroughTheSharedRuntimeGeneration();
     HapticPortRejectsInvalidPulseBeforeCallingTheRawApi();
     ApplicationRegistrationFailureDoesNotCreateAnOverlay();
+    FailsClosedAtEveryOverlayCompositionStage();
     RejectsClientStateAndZeroRawHandles();
     RejectsInvalidOverlayFactoryArguments();
     FailsClosedBeforeAcquiringAReference();
