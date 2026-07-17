@@ -525,8 +525,13 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
     private static WindowsRuntimeStagingManifest RecreateManifest(
         AdmittedWindowsRuntimeStagingPlan plan,
         IReadOnlyList<AdmittedWindowsRuntimeStagingFile> files) => new(
-        SchemaVersion: 1,
+        SchemaVersion: 2,
         plan.ManifestSha256,
+        plan.Profile,
+        plan.RuntimeIdentifier,
+        new WindowsRuntimeLegalBundleAnchor(
+            plan.LegalBundleId,
+            plan.LegalManifestSha256),
         files.Select(file => new WindowsRuntimeStagingEntry(
                 file.Source,
                 file.Target,
@@ -534,7 +539,8 @@ internal sealed class ImmutableWindowsRuntimeStagingPublisher
                 file.ComponentId,
                 "windows-x64",
                 file.DeploymentKind,
-                file.Sha256))
+                file.Sha256,
+                file.Length))
             .ToArray());
 
     private static string ComputeInventorySha256(

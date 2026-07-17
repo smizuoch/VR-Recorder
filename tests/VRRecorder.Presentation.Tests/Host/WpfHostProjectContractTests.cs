@@ -946,6 +946,31 @@ public sealed class WpfHostProjectContractTests
                 condition.Contains("^[0-9a-f]{64}$", StringComparison.Ordinal));
         }
 
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "VRRecorderApprovedWindowsRuntimeProfile",
+                StringComparison.Ordinal) &&
+            condition.Contains(
+                "full-production-hardware-validation-v1",
+                StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "VRRecorderApprovedWindowsRuntimeIdentifier",
+                StringComparison.Ordinal) &&
+            condition.Contains("$(RuntimeIdentifier)", StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "VRRecorderApprovedLegalBundleId",
+                StringComparison.Ordinal) &&
+            condition.Contains("$(LegalBundleId)", StringComparison.Ordinal));
+        Assert.Contains(errorConditions, condition =>
+            condition.Contains(
+                "VRRecorderApprovedLegalManifestSha256",
+                StringComparison.Ordinal) &&
+            condition.Contains(
+                "$(LegalManifestSha256)",
+                StringComparison.Ordinal));
+
         foreach (var property in legacyProperties)
         {
             Assert.Contains(errorConditions, condition =>

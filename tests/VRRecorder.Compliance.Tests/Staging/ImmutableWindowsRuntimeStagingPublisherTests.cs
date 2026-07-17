@@ -403,6 +403,10 @@ public sealed class ImmutableWindowsRuntimeStagingPublisherTests
             exactFile.Kind);
         var badPlan = new AdmittedWindowsRuntimeStagingPlan(
             plan.ManifestSha256,
+            plan.Profile,
+            plan.RuntimeIdentifier,
+            plan.LegalBundleId,
+            plan.LegalManifestSha256,
             plan.SourceRoot,
             [badFile]);
 
@@ -524,6 +528,10 @@ public sealed class ImmutableWindowsRuntimeStagingPublisherTests
 
         return new AdmittedWindowsRuntimeStagingPlan(
             new string('1', 64),
+            "full-production-hardware-validation-v1",
+            "win-x64",
+            "https://example.invalid/spdx/vr-recorder-test",
+            new string('2', 64),
             Path.GetFullPath(sourceRoot),
             files);
     }

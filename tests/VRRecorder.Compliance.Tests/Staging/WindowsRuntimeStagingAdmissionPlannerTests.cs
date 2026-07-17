@@ -21,6 +21,16 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         Assert.Empty(result.Issues);
         var plan = Assert.IsType<AdmittedWindowsRuntimeStagingPlan>(result.Plan);
         Assert.Equal(fixture.Manifest.ManifestSha256, plan.ManifestSha256);
+        Assert.Equal(fixture.Manifest.Profile, plan.Profile);
+        Assert.Equal(
+            fixture.Manifest.RuntimeIdentifier,
+            plan.RuntimeIdentifier);
+        Assert.Equal(
+            fixture.Manifest.LegalBundle.BundleId,
+            plan.LegalBundleId);
+        Assert.Equal(
+            fixture.Manifest.LegalBundle.ManifestSha256,
+            plan.LegalManifestSha256);
         Assert.Equal(fixture.SourceRoot, plan.SourceRoot);
         Assert.Equal(2, plan.Files.Count);
         var native = Assert.Single(
@@ -59,6 +69,20 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
             changed.Resolve(changed.EvidenceEntry.Source),
             "changed");
         AssertIssue("staging-file-hash-mismatch", await changed.PlanAsync());
+    }
+
+    [Fact]
+    public async Task DeclaredLengthMustMatchTheScannedFile()
+    {
+        using var fixture = Fixture.Create();
+        fixture.UseEntries(
+            fixture.NativeEntry with
+            {
+                DeclaredLength = fixture.Binary.LongLength + 1,
+            },
+            fixture.EvidenceEntry);
+
+        AssertIssue("staging-file-length-mismatch", await fixture.PlanAsync());
     }
 
     [Fact]
@@ -407,7 +431,8 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         string Target,
         string Role,
         string ComponentId,
-        string DeploymentKind);
+        string DeploymentKind,
+        long? DeclaredLength = null);
 
     private sealed class Fixture : IDisposable
     {
@@ -486,7 +511,7 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         public void UseEntries(params TestEntry[] entries)
         {
             var json = $$"""
-                {"schemaVersion":1,"entries":[{{string.Join(',', entries.Select(EntryJson))}}]}
+                {"schemaVersion":2,"profile":"full-production-hardware-validation-v1","runtimeIdentifier":"win-x64","legalBundle":{"bundleId":"https://example.invalid/spdx/vr-recorder-test","manifestSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"entries":[{{string.Join(',', entries.Select(EntryJson))}}]}
                 """;
             Manifest = WindowsRuntimeStagingManifestReader.Read(
                 Encoding.UTF8.GetBytes(json));
@@ -531,8 +556,10 @@ public sealed class WindowsRuntimeStagingAdmissionPlannerTests
         private string EntryJson(TestEntry entry)
         {
             var sha256 = Sha256(File.ReadAllBytes(Resolve(entry.Source)));
+            var length = entry.DeclaredLength ??
+                new FileInfo(Resolve(entry.Source)).Length;
             return $$"""
-                {"source":"{{entry.Source}}","target":"{{entry.Target}}","role":"{{entry.Role}}","componentId":"{{entry.ComponentId}}","platform":"windows-x64","deploymentKind":"{{entry.DeploymentKind}}","sha256":"{{sha256}}"}
+                {"source":"{{entry.Source}}","target":"{{entry.Target}}","role":"{{entry.Role}}","componentId":"{{entry.ComponentId}}","platform":"windows-x64","deploymentKind":"{{entry.DeploymentKind}}","sha256":"{{sha256}}","length":{{length}}}
                 """;
         }
     }

@@ -269,7 +269,7 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
             Directory.CreateDirectory(RepositoryRoot);
             File.WriteAllBytes(Path.Combine(SourceRoot, "asset.txt"), _asset);
             var manifest = $$"""
-                {"schemaVersion":1,"entries":[{"source":"asset.txt","target":"asset.txt","role":"application-asset","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"asset","sha256":"{{Sha256(_asset)}}"}]}
+                {"schemaVersion":2,"profile":"full-production-hardware-validation-v1","runtimeIdentifier":"win-x64","legalBundle":{"bundleId":"https://example.invalid/spdx/vr-recorder-test","manifestSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"entries":[{"source":"asset.txt","target":"asset.txt","role":"application-asset","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"asset","sha256":"{{Sha256(_asset)}}","length":{{_asset.LongLength}}}]}
                 """;
             File.WriteAllBytes(
                 ManifestPath,
@@ -307,6 +307,10 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
             WindowsRuntimeStagingManifest manifest,
             string sourceRoot) => new(
             manifest.ManifestSha256,
+            manifest.Profile,
+            manifest.RuntimeIdentifier,
+            manifest.LegalBundle.BundleId,
+            manifest.LegalBundle.ManifestSha256,
             Path.GetFullPath(sourceRoot),
             [new AdmittedWindowsRuntimeStagingFile(
                 "asset.txt",
@@ -346,7 +350,7 @@ public sealed class WindowsRuntimeStagingOrchestratorTests
             Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
             File.WriteAllBytes(evidencePath, evidenceBytes);
             var manifest = $$"""
-                {"schemaVersion":1,"entries":[{"source":"native/vrrecorder_native.dll","target":"vrrecorder_native.dll","role":"first-party-native","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"native-library","sha256":"{{Sha256(native)}}"},{"source":"evidence/native-factory-selection.json","target":"native-factory-selection.json","role":"factory-selection-evidence","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"evidence","sha256":"{{Sha256(evidenceBytes)}}"}]}
+                {"schemaVersion":2,"profile":"full-production-hardware-validation-v1","runtimeIdentifier":"win-x64","legalBundle":{"bundleId":"https://example.invalid/spdx/vr-recorder-test","manifestSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"entries":[{"source":"native/vrrecorder_native.dll","target":"vrrecorder_native.dll","role":"first-party-native","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"native-library","sha256":"{{Sha256(native)}}","length":{{native.LongLength}}},{"source":"evidence/native-factory-selection.json","target":"native-factory-selection.json","role":"factory-selection-evidence","componentId":"vr-recorder","platform":"windows-x64","deploymentKind":"evidence","sha256":"{{Sha256(evidenceBytes)}}","length":{{evidenceBytes.LongLength}}}]}
                 """;
             File.WriteAllBytes(
                 ManifestPath,

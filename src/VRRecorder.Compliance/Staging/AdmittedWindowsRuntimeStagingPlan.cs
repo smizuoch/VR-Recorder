@@ -6,20 +6,40 @@ public sealed class AdmittedWindowsRuntimeStagingPlan
 {
     internal AdmittedWindowsRuntimeStagingPlan(
         string manifestSha256,
+        string profile,
+        string runtimeIdentifier,
+        string legalBundleId,
+        string legalManifestSha256,
         string sourceRoot,
         IReadOnlyList<AdmittedWindowsRuntimeStagingFile> files)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestSha256);
+        ArgumentException.ThrowIfNullOrWhiteSpace(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeIdentifier);
+        ArgumentException.ThrowIfNullOrWhiteSpace(legalBundleId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(legalManifestSha256);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceRoot);
         ArgumentNullException.ThrowIfNull(files);
 
         ManifestSha256 = manifestSha256;
+        Profile = profile;
+        RuntimeIdentifier = runtimeIdentifier;
+        LegalBundleId = legalBundleId;
+        LegalManifestSha256 = legalManifestSha256;
         SourceRoot = sourceRoot;
         Files = new ReadOnlyCollection<AdmittedWindowsRuntimeStagingFile>(
             files.ToArray());
     }
 
     public string ManifestSha256 { get; }
+
+    public string Profile { get; }
+
+    public string RuntimeIdentifier { get; }
+
+    public string LegalBundleId { get; }
+
+    public string LegalManifestSha256 { get; }
 
     public string SourceRoot { get; }
 

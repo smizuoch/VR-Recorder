@@ -10,6 +10,8 @@ public sealed class ApprovedWindowsRuntimePropsGeneratorTests
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private const string ShaB =
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string LegalBundleId =
+        "https://example.invalid/spdx/vr-recorder-test";
 
     [Fact]
     public void GeneratesExplicitApprovedItemsInDeterministicTargetOrder()
@@ -55,6 +57,20 @@ public sealed class ApprovedWindowsRuntimePropsGeneratorTests
             Property(
                 project,
                 "VRRecorderApprovedWindowsRuntimeInventorySha256"));
+        Assert.Equal(
+            "full-production-hardware-validation-v1",
+            Property(project, "VRRecorderApprovedWindowsRuntimeProfile"));
+        Assert.Equal(
+            "win-x64",
+            Property(
+                project,
+                "VRRecorderApprovedWindowsRuntimeIdentifier"));
+        Assert.Equal(
+            LegalBundleId,
+            Property(project, "VRRecorderApprovedLegalBundleId"));
+        Assert.Equal(
+            ShaB,
+            Property(project, "VRRecorderApprovedLegalManifestSha256"));
 
         var contents = project.Descendants("Content").ToArray();
         Assert.Equal(2, contents.Length);
@@ -243,8 +259,13 @@ public sealed class ApprovedWindowsRuntimePropsGeneratorTests
         string manifestSha256,
         params WindowsRuntimeStagingEntry[] entries) =>
         new(
-            SchemaVersion: 1,
+            SchemaVersion: 2,
             ManifestSha256: manifestSha256,
+            Profile: "full-production-hardware-validation-v1",
+            RuntimeIdentifier: "win-x64",
+            LegalBundle: new WindowsRuntimeLegalBundleAnchor(
+                LegalBundleId,
+                ShaB),
             Entries: entries);
 
     private static WindowsRuntimeStagingEntry Entry(
@@ -261,5 +282,6 @@ public sealed class ApprovedWindowsRuntimePropsGeneratorTests
             ComponentId: "ffmpeg",
             Platform: "windows-x64",
             DeploymentKind: deploymentKind,
-            Sha256: sha256);
+            Sha256: sha256,
+            Length: 17);
 }

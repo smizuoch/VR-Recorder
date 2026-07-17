@@ -5,7 +5,10 @@ namespace VRRecorder.Compliance.Staging;
 
 internal static class ApprovedWindowsRuntimePropsGenerator
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
+    private const string Profile =
+        "full-production-hardware-validation-v1";
+    private const string RuntimeIdentifier = "win-x64";
     private const int MaximumEntryCount = 4096;
     private const string PayloadPrefix =
         "$(MSBuildThisFileDirectory)payload/";
@@ -21,11 +24,32 @@ internal static class ApprovedWindowsRuntimePropsGenerator
         var manifestSha256 = NormalizeSha256(manifest.ManifestSha256);
         var normalizedInventorySha256 = NormalizeSha256(inventorySha256);
         if (manifest.SchemaVersion != SchemaVersion ||
+            !string.Equals(
+                manifest.Profile,
+                Profile,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                manifest.RuntimeIdentifier,
+                RuntimeIdentifier,
+                StringComparison.Ordinal) ||
+            manifest.LegalBundle is null ||
             manifest.Entries is null ||
             manifest.Entries.Count is <= 0 or > MaximumEntryCount)
         {
             throw Invalid();
         }
+
+        var legalManifestSha256 = NormalizeSha256(
+            manifest.LegalBundle.ManifestSha256);
+        if (string.IsNullOrWhiteSpace(manifest.LegalBundle.BundleId) ||
+            manifest.LegalBundle.BundleId.Length > 2048 ||
+            manifest.LegalBundle.BundleId.Any(character =>
+                character is < '!' or > '~'))
+        {
+            throw Invalid();
+        }
+
+        RequireXmlText(manifest.LegalBundle.BundleId);
 
         var entries = manifest.Entries.ToArray();
         foreach (var entry in entries)
@@ -70,6 +94,18 @@ internal static class ApprovedWindowsRuntimePropsGenerator
             writer.WriteElementString(
                 "VRRecorderApprovedWindowsRuntimeInventorySha256",
                 normalizedInventorySha256);
+            writer.WriteElementString(
+                "VRRecorderApprovedWindowsRuntimeProfile",
+                manifest.Profile);
+            writer.WriteElementString(
+                "VRRecorderApprovedWindowsRuntimeIdentifier",
+                manifest.RuntimeIdentifier);
+            writer.WriteElementString(
+                "VRRecorderApprovedLegalBundleId",
+                manifest.LegalBundle.BundleId);
+            writer.WriteElementString(
+                "VRRecorderApprovedLegalManifestSha256",
+                legalManifestSha256);
             writer.WriteEndElement();
 
             writer.WriteStartElement("ItemGroup");

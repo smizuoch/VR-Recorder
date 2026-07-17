@@ -9,6 +9,10 @@ public sealed class WindowsRuntimeStagingManifestReaderTests
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private const string ShaB =
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string LegalManifestSha =
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    private const string LegalBundleId =
+        "https://example.invalid/spdx/vr-recorder-test";
 
     [Fact]
     public void ExactManifestIsParsedIntoDeterministicTargetOrder()
@@ -29,7 +33,15 @@ public sealed class WindowsRuntimeStagingManifestReaderTests
                 deploymentKind: "executable",
                 sha256: ShaA)));
 
-        Assert.Equal(1, manifest.SchemaVersion);
+        Assert.Equal(2, manifest.SchemaVersion);
+        Assert.Equal(
+            "full-production-hardware-validation-v1",
+            manifest.Profile);
+        Assert.Equal("win-x64", manifest.RuntimeIdentifier);
+        Assert.Equal(LegalBundleId, manifest.LegalBundle.BundleId);
+        Assert.Equal(
+            LegalManifestSha,
+            manifest.LegalBundle.ManifestSha256);
         Assert.Equal(2, manifest.Entries.Count);
         Assert.Equal("native/z.dll", manifest.Entries[0].Target);
         Assert.Equal("tools/a.exe", manifest.Entries[1].Target);
@@ -37,15 +49,17 @@ public sealed class WindowsRuntimeStagingManifestReaderTests
         Assert.Equal(
             WindowsRuntimeDeploymentKind.Executable,
             manifest.Entries[1].DeploymentKind);
+        Assert.Equal(17, manifest.Entries[1].Length);
     }
 
     [Theory]
     [InlineData(
-        "{\"schemaVersion\":1,\"entries\":[],\"unexpected\":true}")]
+        "{\"schemaVersion\":2,\"entries\":[],\"unexpected\":true}")]
     [InlineData(
-        "{\"schemaVersion\":1,\"schemaVersion\":1,\"entries\":[]}")]
-    [InlineData("{\"schemaVersion\":2,\"entries\":[]}")]
+        "{\"schemaVersion\":2,\"schemaVersion\":2,\"entries\":[]}")]
     [InlineData("{\"schemaVersion\":1,\"entries\":[]}")]
+    [InlineData("{\"schemaVersion\":3,\"entries\":[]}")]
+    [InlineData("{\"schemaVersion\":2,\"entries\":[]}")]
     [InlineData("{\"schemaVersion\":1,\"entries\":null}")]
     [InlineData("{\"schemaVersion\":\"1\",\"entries\":[]}")]
     [InlineData("[]")]
@@ -187,6 +201,41 @@ public sealed class WindowsRuntimeStagingManifestReaderTests
         AssertInvalid(Manifest(Entry(sha256: sha256)));
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(long.MinValue)]
+    public void DeclaredLengthMustBeANonNegativeInt64(long length)
+    {
+        AssertInvalid(Manifest(Entry(length: length)));
+    }
+
+    [Theory]
+    [InlineData("other-profile", "win-x64")]
+    [InlineData("full-production-hardware-validation-v1", "windows-x64")]
+    public void ProfileAndRuntimeIdentifierAreExact(
+        string profile,
+        string runtimeIdentifier)
+    {
+        AssertInvalid(Manifest(
+            [Entry()],
+            profile,
+            runtimeIdentifier));
+    }
+
+    [Theory]
+    [InlineData("", LegalManifestSha)]
+    [InlineData(" bundle", LegalManifestSha)]
+    [InlineData(LegalBundleId, "aa")]
+    public void LegalBundleAnchorIsRequiredAndCanonical(
+        string bundleId,
+        string manifestSha256)
+    {
+        AssertInvalid(Manifest(
+            [Entry()],
+            legalBundleId: bundleId,
+            legalManifestSha256: manifestSha256));
+    }
+
     [Fact]
     public void UnknownOrDuplicateEntryMemberIsRejected()
     {
@@ -202,9 +251,19 @@ public sealed class WindowsRuntimeStagingManifestReaderTests
     private static void AssertInvalid(string json) =>
         Assert.Throws<InvalidDataException>(() => Read(json));
 
-    private static string Manifest(params string[] entries) =>
+    private static string Manifest(params string[] entries) => Manifest(
+        entries,
+        "full-production-hardware-validation-v1",
+        "win-x64");
+
+    private static string Manifest(
+        string[] entries,
+        string profile = "full-production-hardware-validation-v1",
+        string runtimeIdentifier = "win-x64",
+        string legalBundleId = LegalBundleId,
+        string legalManifestSha256 = LegalManifestSha) =>
         $$"""
-        {"schemaVersion":1,"entries":[{{string.Join(',', entries)}}]}
+        {"schemaVersion":2,"profile":"{{profile}}","runtimeIdentifier":"{{runtimeIdentifier}}","legalBundle":{"bundleId":"{{legalBundleId}}","manifestSha256":"{{legalManifestSha256}}"},"entries":[{{string.Join(',', entries)}}]}
         """;
 
     private static string Entry(
@@ -214,8 +273,9 @@ public sealed class WindowsRuntimeStagingManifestReaderTests
         string componentId = "ffmpeg",
         string platform = "windows-x64",
         string deploymentKind = "native-library",
-        string sha256 = ShaA) =>
+        string sha256 = ShaA,
+        long length = 17) =>
         $$"""
-        {"source":"{{source}}","target":"{{target}}","role":"{{role}}","componentId":"{{componentId}}","platform":"{{platform}}","deploymentKind":"{{deploymentKind}}","sha256":"{{sha256}}"}
+        {"source":"{{source}}","target":"{{target}}","role":"{{role}}","componentId":"{{componentId}}","platform":"{{platform}}","deploymentKind":"{{deploymentKind}}","sha256":"{{sha256}}","length":{{length}}}
         """;
 }

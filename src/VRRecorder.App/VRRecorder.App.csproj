@@ -122,5 +122,13 @@
            Text="ApprovedWindowsRuntimeProps must provide a canonical runtime manifest SHA-256." />
     <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(VRRecorderApprovedWindowsRuntimeInventorySha256)', '^[0-9a-f]{64}$'))"
            Text="ApprovedWindowsRuntimeProps must provide a canonical runtime inventory SHA-256." />
+    <Error Condition="'$(VRRecorderApprovedWindowsRuntimeProfile)' != 'full-production-hardware-validation-v1'"
+           Text="ApprovedWindowsRuntimeProps must select the full production hardware-validation profile." />
+    <Error Condition="'$(VRRecorderApprovedWindowsRuntimeIdentifier)' != '$(RuntimeIdentifier)'"
+           Text="ApprovedWindowsRuntimeProps runtime identifier does not match the application RID." />
+    <Error Condition="'$(VRRecorderApprovedLegalBundleId)' != '$(LegalBundleId)'"
+           Text="ApprovedWindowsRuntimeProps Legal Bundle ID does not match the authenticated build input." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(VRRecorderApprovedLegalManifestSha256)', '^[0-9a-f]{64}$')) or '$(VRRecorderApprovedLegalManifestSha256)' != '$(LegalManifestSha256)'"
+           Text="ApprovedWindowsRuntimeProps Legal manifest digest does not match the authenticated build input." />
   </Target>
 </Project>

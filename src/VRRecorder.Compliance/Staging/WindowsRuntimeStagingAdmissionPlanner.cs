@@ -95,6 +95,9 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
         issues.AddRange(ValidateKinds(
             inventory.Files,
             registeredArtifacts));
+        issues.AddRange(ValidateLengths(
+            inventory.Files,
+            manifest.Entries));
         issues.AddRange(ValidateNonNativeOwners(
             manifest,
             approvedGraph));
@@ -177,6 +180,10 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
         return new WindowsRuntimeStagingAdmissionResult(
             new AdmittedWindowsRuntimeStagingPlan(
                 manifest.ManifestSha256,
+                manifest.Profile,
+                manifest.RuntimeIdentifier,
+                manifest.LegalBundle.BundleId,
+                manifest.LegalBundle.ManifestSha256,
                 canonicalSourceRoot,
                 admittedFiles),
             []);
@@ -225,7 +232,7 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
     {
         var registrations = new List<RegisteredStagedArtifact>();
         var failures = new List<ComplianceIssue>();
-        if (manifest.SchemaVersion != 1 ||
+        if (manifest.SchemaVersion != 2 ||
             manifest.Entries is null ||
             manifest.Entries.Count == 0)
         {
@@ -278,6 +285,29 @@ internal sealed class WindowsRuntimeStagingAdmissionPlanner
                 issues.Add(new ComplianceIssue(
                     "staging-file-kind-mismatch",
                     file.RelativePath));
+            }
+        }
+
+        return Order(issues);
+    }
+
+    private static ComplianceIssue[] ValidateLengths(
+        IReadOnlyList<StagedPayloadFile> actualFiles,
+        IReadOnlyList<WindowsRuntimeStagingEntry> entries)
+    {
+        var issues = new List<ComplianceIssue>();
+        foreach (var entry in entries)
+        {
+            var matches = actualFiles.Where(file => string.Equals(
+                    file.RelativePath,
+                    entry.Source,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Length == 1 && matches[0].Length != entry.Length)
+            {
+                issues.Add(new ComplianceIssue(
+                    "staging-file-length-mismatch",
+                    entry.Source));
             }
         }
 

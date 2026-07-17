@@ -6,7 +6,10 @@ namespace VRRecorder.Compliance.Staging;
 
 internal static class WindowsRuntimeStagingManifestReader
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
+    private const string Profile =
+        "full-production-hardware-validation-v1";
+    private const string RuntimeIdentifier = "win-x64";
     private const int MaximumManifestBytes = 1024 * 1024;
     private const int MaximumEntryCount = 4096;
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -15,7 +18,15 @@ internal static class WindowsRuntimeStagingManifestReader
     private static readonly string[] RootProperties =
     [
         "schemaVersion",
+        "profile",
+        "runtimeIdentifier",
+        "legalBundle",
         "entries",
+    ];
+    private static readonly string[] LegalBundleProperties =
+    [
+        "bundleId",
+        "manifestSha256",
     ];
     private static readonly string[] EntryProperties =
     [
@@ -26,6 +37,7 @@ internal static class WindowsRuntimeStagingManifestReader
         "platform",
         "deploymentKind",
         "sha256",
+        "length",
     ];
 
     public static WindowsRuntimeStagingManifest Read(byte[] utf8Content)
@@ -54,6 +66,21 @@ internal static class WindowsRuntimeStagingManifestReader
                 throw Invalid();
             }
 
+            if (!string.Equals(
+                    RequiredString(root, "profile"),
+                    Profile,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    RequiredString(root, "runtimeIdentifier"),
+                    RuntimeIdentifier,
+                    StringComparison.Ordinal))
+            {
+                throw Invalid();
+            }
+
+            var legalBundle = ParseLegalBundle(
+                root.GetProperty("legalBundle"));
+
             var entriesElement = root.GetProperty("entries");
             if (entriesElement.ValueKind != JsonValueKind.Array)
             {
@@ -78,6 +105,9 @@ internal static class WindowsRuntimeStagingManifestReader
             return new WindowsRuntimeStagingManifest(
                 SchemaVersion,
                 manifestHash,
+                Profile,
+                RuntimeIdentifier,
+                legalBundle,
                 entries
                     .OrderBy(entry => entry.Target, StringComparer.Ordinal)
                     .ToArray());
@@ -93,6 +123,25 @@ internal static class WindowsRuntimeStagingManifestReader
                 "The Windows runtime staging manifest is invalid.",
                 exception);
         }
+    }
+
+    private static WindowsRuntimeLegalBundleAnchor ParseLegalBundle(
+        JsonElement element)
+    {
+        RequireExactProperties(element, LegalBundleProperties);
+        var bundleId = RequiredString(element, "bundleId");
+        var manifestSha256 = RequiredString(
+            element,
+            "manifestSha256");
+        if (!IsCanonicalLegalBundleId(bundleId) ||
+            !IsLowerHexSha256(manifestSha256))
+        {
+            throw Invalid();
+        }
+
+        return new WindowsRuntimeLegalBundleAnchor(
+            bundleId,
+            manifestSha256);
     }
 
     private static WindowsRuntimeStagingEntry ParseEntry(JsonElement element)
@@ -133,6 +182,12 @@ internal static class WindowsRuntimeStagingManifestReader
             throw Invalid();
         }
 
+        var length = RequiredInt64(element, "length");
+        if (length < 0)
+        {
+            throw Invalid();
+        }
+
         return new WindowsRuntimeStagingEntry(
             source,
             target,
@@ -140,7 +195,8 @@ internal static class WindowsRuntimeStagingManifestReader
             componentId,
             platform,
             deploymentKind,
-            sha256);
+            sha256,
+            length);
     }
 
     private static void RequireExactProperties(
@@ -185,6 +241,15 @@ internal static class WindowsRuntimeStagingManifestReader
         var property = parent.GetProperty(name);
         return property.ValueKind == JsonValueKind.Number &&
                property.TryGetInt32(out var value)
+            ? value
+            : throw Invalid();
+    }
+
+    private static long RequiredInt64(JsonElement parent, string name)
+    {
+        var property = parent.GetProperty(name);
+        return property.ValueKind == JsonValueKind.Number &&
+               property.TryGetInt64(out var value)
             ? value
             : throw Invalid();
     }
@@ -241,6 +306,10 @@ internal static class WindowsRuntimeStagingManifestReader
         value.All(character =>
             character is >= 'a' and <= 'z' or
                 >= '0' and <= '9' or '.' or '_' or '-');
+
+    private static bool IsCanonicalLegalBundleId(string value) =>
+        value.Length is > 0 and <= 2048 &&
+        value.All(character => character is >= '!' and <= '~');
 
     private static bool IsLowerHexSha256(string value) =>
         value.Length == 64 && value.All(character =>
