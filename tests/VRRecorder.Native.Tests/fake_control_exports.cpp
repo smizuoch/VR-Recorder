@@ -345,6 +345,12 @@ extern "C" VRREC_TEST_API void vrrec_test_set_steamvr_digital_state(
         changed != 0);
 }
 
+extern "C" VRREC_TEST_API void vrrec_test_set_steamvr_poll_status(
+    std::int32_t status)
+{
+    vrrecorder::native::testing::SetSteamVrPollStatus(status);
+}
+
 extern "C" VRREC_TEST_API std::uint8_t vrrec_test_steamvr_input_active(void)
 {
     return vrrecorder::native::testing::HasActiveSteamVrInput() ? 1 : 0;

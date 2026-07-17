@@ -511,7 +511,7 @@ public:
         state.state = state_ ? 1 : 0;
         state.changed = changed_ ? 1 : 0;
         state.reserved = 0;
-        return VRREC_STATUS_OK;
+        return poll_status_;
     }
 
     void SetState(bool is_active, bool state, bool changed) noexcept
@@ -519,6 +519,11 @@ public:
         is_active_ = is_active;
         state_ = state;
         changed_ = changed;
+    }
+
+    void SetPollStatus(std::int32_t status) noexcept
+    {
+        poll_status_ = static_cast<vrrec_status_t>(status);
     }
 
     static FakeSteamVrInputBackend *Active() noexcept
@@ -553,6 +558,7 @@ private:
     bool is_active_ = false;
     bool state_ = false;
     bool changed_ = false;
+    vrrec_status_t poll_status_ = VRREC_STATUS_OK;
     std::uint32_t poll_count_ = 0;
     static FakeSteamVrInputBackend *active_;
 };
@@ -1307,6 +1313,11 @@ void SetSteamVrDigitalState(bool is_active, bool state, bool changed)
         is_active,
         state,
         changed);
+}
+
+void SetSteamVrPollStatus(std::int32_t status)
+{
+    FakeSteamVrInputBackend::Active()->SetPollStatus(status);
 }
 
 std::string_view SteamVrManifestPath()

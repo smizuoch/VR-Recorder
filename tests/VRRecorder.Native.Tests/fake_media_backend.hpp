@@ -124,6 +124,7 @@ std::uint32_t RequestStopCallCount();
 std::uint32_t StatisticsCallCount();
 std::uint32_t RequestAbortCallCount();
 void SetSteamVrDigitalState(bool is_active, bool state, bool changed);
+void SetSteamVrPollStatus(std::int32_t status);
 std::string_view SteamVrManifestPath();
 std::string_view SteamVrActionSetPath();
 std::string_view SteamVrDigitalActionPath();

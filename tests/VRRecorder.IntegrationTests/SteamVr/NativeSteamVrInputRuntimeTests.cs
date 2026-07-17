@@ -7,6 +7,116 @@ namespace VRRecorder.IntegrationTests.SteamVr;
 public sealed class NativeSteamVrInputRuntimeTests
 {
     [Fact]
+    public void RejectsRelativeNativeLibraryPath()
+    {
+        using var install = TemporaryInstall.Create();
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new NativeSteamVrInputRuntime(
+                "vrrecorder_native_test.so",
+                install.Path));
+
+        Assert.Equal("libraryPath", exception.ParamName);
+    }
+
+    [Fact]
+    public void RejectsPollingFasterThanNinetyHertzOrInfiniteDelay()
+    {
+        using var install = TemporaryInstall.Create();
+
+        foreach (var interval in new[]
+                 {
+                     TimeSpan.Zero,
+                     TimeSpan.FromMilliseconds(11),
+                     Timeout.InfiniteTimeSpan,
+                 })
+        {
+            var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new NativeSteamVrInputRuntime(
+                    FixturePath(),
+                    install.Path,
+                    interval));
+            Assert.Equal("pollInterval", exception.ParamName);
+        }
+    }
+
+    [Fact]
+    public async Task RejectsBlankActionPathBeforeCreatingNativeInput()
+    {
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrFixtureControls(FixturePath());
+        var runtime = new NativeSteamVrInputRuntime(FixturePath(), install.Path);
+
+        await using var enumerator = runtime
+            .ObserveDigitalActionAsync(" ", CancellationToken.None)
+            .GetAsyncEnumerator();
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+            await enumerator.MoveNextAsync().AsTask());
+        Assert.False(controls.IsInputActive());
+    }
+
+    [Fact]
+    public async Task HonorsCancellationBeforeCreatingNativeInput()
+    {
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrFixtureControls(FixturePath());
+        var runtime = new NativeSteamVrInputRuntime(FixturePath(), install.Path);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await using var enumerator = runtime
+            .ObserveDigitalActionAsync(
+                RecordingInputContract.SteamVrToggleActionPath,
+                cancellation.Token)
+            .GetAsyncEnumerator(cancellation.Token);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await enumerator.MoveNextAsync().AsTask());
+        Assert.False(controls.IsInputActive());
+    }
+
+    [Theory]
+    [InlineData(4, true)]
+    [InlineData(3, false)]
+    public async Task MapsNativePollFailuresAndReleasesInput(
+        int status,
+        bool isUnavailable)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var install = TemporaryInstall.Create();
+        using var controls = new NativeSteamVrFixtureControls(FixturePath());
+        var runtime = new NativeSteamVrInputRuntime(
+            FixturePath(),
+            install.Path,
+            pollInterval: TimeSpan.FromMilliseconds(12));
+        await using var enumerator = runtime
+            .ObserveDigitalActionAsync(
+                RecordingInputContract.SteamVrToggleActionPath,
+                CancellationToken.None)
+            .GetAsyncEnumerator();
+        Assert.True(await enumerator.MoveNextAsync());
+        controls.SetPollStatus(status);
+
+        var exception = Assert.IsAssignableFrom<SteamVrInputException>(
+            await Record.ExceptionAsync(
+                async () => await enumerator.MoveNextAsync().AsTask()));
+
+        Assert.Equal(status, exception.Status);
+        Assert.Equal("poll", exception.Operation);
+        if (isUnavailable)
+        {
+            Assert.IsType<SteamVrUnavailableException>(exception);
+        }
+        else
+        {
+            Assert.IsType<SteamVrInputException>(exception);
+        }
+    }
+
+    [Fact]
     public async Task PollsVersionedNativeStateAndDestroysInputOnCancellation()
     {
         if (!OperatingSystem.IsLinux())
@@ -83,6 +193,7 @@ public sealed class NativeSteamVrInputRuntimeTests
     {
         private readonly nint _library;
         private readonly SetDigitalStateDelegate _setDigitalState;
+        private readonly SetPollStatusDelegate _setPollStatus;
         private readonly ByteResultDelegate _isInputActive;
         private readonly PointerResultDelegate _manifestPath;
         private readonly PointerResultDelegate _actionSetPath;
@@ -94,6 +205,8 @@ public sealed class NativeSteamVrInputRuntimeTests
             _library = NativeLibrary.Load(path);
             _setDigitalState = Resolve<SetDigitalStateDelegate>(
                 "vrrec_test_set_steamvr_digital_state");
+            _setPollStatus = Resolve<SetPollStatusDelegate>(
+                "vrrec_test_set_steamvr_poll_status");
             _isInputActive = Resolve<ByteResultDelegate>(
                 "vrrec_test_steamvr_input_active");
             _manifestPath = Resolve<PointerResultDelegate>(
@@ -111,6 +224,8 @@ public sealed class NativeSteamVrInputRuntimeTests
                 isActive ? (byte)1 : (byte)0,
                 state ? (byte)1 : (byte)0,
                 changed ? (byte)1 : (byte)0);
+
+        public void SetPollStatus(int status) => _setPollStatus(status);
 
         public bool IsInputActive() => _isInputActive() != 0;
 
@@ -139,6 +254,9 @@ public sealed class NativeSteamVrInputRuntimeTests
             byte isActive,
             byte state,
             byte changed);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void SetPollStatusDelegate(int status);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate byte ByteResultDelegate();
