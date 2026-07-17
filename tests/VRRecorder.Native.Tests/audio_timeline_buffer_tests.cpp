@@ -92,6 +92,10 @@ void RejectsEveryInvalidWriteAndReadBoundary()
     CHECK(buffer.Read(0, 0, {}) == VRREC_STATUS_INVALID_ARGUMENT);
     CHECK(buffer.Read(0, 1, std::span<float> {}) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(buffer.Read(
+              0,
+              std::numeric_limits<std::size_t>::max(),
+              std::span<float> {}) == VRREC_STATUS_INVALID_ARGUMENT);
     std::vector<float> overflow_output(4);
     CHECK(buffer.Read(
               std::numeric_limits<std::uint64_t>::max(),
