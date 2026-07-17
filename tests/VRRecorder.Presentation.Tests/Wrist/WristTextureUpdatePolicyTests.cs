@@ -136,6 +136,61 @@ public sealed class WristTextureUpdatePolicyTests
         Assert.True(decision.ShouldRender);
     }
 
+    [Fact]
+    public void RejectsInvalidAndNonMonotonicUpdateCursors()
+    {
+        var ready = Snapshot(10, RecorderState.Ready);
+        var valid = new WristTextureUpdateCursor(
+            10,
+            2,
+            RecorderState.Ready,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                previous: null,
+                ready,
+                TimeSpan.FromTicks(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                valid with { State = (RecorderState)int.MaxValue },
+                ready with { PresentationRevision = 2 },
+                TimeSpan.FromSeconds(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                valid with { RenderedAt = TimeSpan.FromTicks(-1) },
+                ready with { PresentationRevision = 2 },
+                TimeSpan.FromSeconds(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                valid,
+                ready with { PresentationRevision = 2 },
+                TimeSpan.FromMilliseconds(999)));
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                valid,
+                ready with
+                {
+                    Revision = 9,
+                    PresentationRevision = 2,
+                },
+                TimeSpan.FromSeconds(1)));
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                valid,
+                ready with { PresentationRevision = 1 },
+                TimeSpan.FromSeconds(1)));
+        Assert.Throws<InvalidOperationException>(() =>
+            WristTextureUpdatePolicy.Evaluate(
+                valid,
+                ready with
+                {
+                    PresentationRevision = 2,
+                    State = RecorderState.NoSignal,
+                },
+                TimeSpan.FromSeconds(1)));
+    }
+
     private static WristUiSnapshot Snapshot(
         long revision,
         RecorderState state) =>
