@@ -113,6 +113,12 @@
       },
       "vrrecorder.domain": {
         "type": "Project"
+      },
+      "vrrecorder.releasetool": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Compliance": "[1.0.0, )"
+        }
       }
     }
   }

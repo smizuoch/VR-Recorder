@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/VRRecorder.Compliance/VRRecorder.Compliance.csproj" />
+    <ProjectReference Include="../../src/VRRecorder.ReleaseTool/VRRecorder.ReleaseTool.csproj" />
   </ItemGroup>
 
   <ItemGroup>
