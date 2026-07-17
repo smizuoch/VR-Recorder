@@ -302,6 +302,115 @@ public sealed class DesktopRecordingCommandHostTests
             runtime.ShutdownReasons);
     }
 
+    [Fact]
+    public async Task PublicCommandsValidateStateAndSupportCancelableWaits()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new DesktopRecordingCommandHost(null!));
+        var runtime = new ControllableDesktopRecordingRuntime();
+        var host = new DesktopRecordingCommandHost(
+            new StubDesktopRecordingRuntimeFactory(runtime));
+        Assert.Null(host.CurrentAudioControlState);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            host.ActivateAsync(
+                new RecorderStartupResult(RecorderState.Booting, []),
+                CancellationToken.None));
+        await Assert.ThrowsAsync<DesktopRecordingUnavailableException>(() =>
+            host.ExecuteAudioCommandAsync(
+                RecordingAudioCommand.ToggleMicrophone,
+                CancellationToken.None));
+
+        using var cancellation = new CancellationTokenSource();
+        var activation = await host.ActivateAsync(
+            ReadyStartup(),
+            cancellation.Token);
+        Assert.Equal(DesktopRecordingHostState.Ready, activation.State);
+        runtime.Publish(
+            RecorderState.Recording,
+            RecordingAudioControlState.FromRouting(AudioRouting.Mixed));
+        await host.ToggleAsync(cancellation.Token);
+        var audio = await host.ExecuteAudioCommandAsync(
+            RecordingAudioCommand.ToggleMicrophone,
+            cancellation.Token);
+        Assert.Equal(AudioRouting.DesktopOnly, audio.EffectiveRouting);
+
+        await host.DisposeAsync();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            host.ActivateAsync(ReadyStartup(), CancellationToken.None));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            host.ToggleAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            host.ExecuteAudioCommandAsync(
+                RecordingAudioCommand.ToggleMicrophone,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ComplianceActivationSupportsCancelableWaitAndIsIdempotent()
+    {
+        var host = new DesktopRecordingCommandHost(
+            new StubDesktopRecordingRuntimeFactory(
+                new ControllableDesktopRecordingRuntime()));
+        using var cancellation = new CancellationTokenSource();
+        var startup = new RecorderStartupResult(
+            RecorderState.ComplianceFault,
+            [new LegalBundleIssue("fault", "catalog")]);
+
+        var first = await host.ActivateAsync(startup, cancellation.Token);
+        await ((IComplianceFaultSink)host).EnterComplianceFaultAsync();
+        var second = await host.ActivateAsync(
+            ReadyStartup(),
+            cancellation.Token);
+
+        Assert.Equal(DesktopRecordingHostState.ComplianceFault, first.State);
+        Assert.Equal(DesktopRecordingHostState.ComplianceFault, second.State);
+        await host.DisposeAsync();
+        var disposed = await host.ActivateAsync(startup, cancellation.Token);
+        Assert.Equal(DesktopRecordingHostState.Disposed, disposed.State);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnexpectedOrNullRuntimeInitializationUsesGenericFailureCode(
+        bool returnsNull)
+    {
+        var factory = returnsNull
+            ? new StubDesktopRecordingRuntimeFactory(
+                (IDesktopRecordingRuntime)null!)
+            : new StubDesktopRecordingRuntimeFactory(
+                new InvalidOperationException("unexpected failure"));
+        await using var host = new DesktopRecordingCommandHost(factory);
+
+        var activation = await host.ActivateAsync(
+            ReadyStartup(),
+            CancellationToken.None);
+
+        Assert.Equal(
+            DesktopRecordingHostState.InitializationFailed,
+            activation.State);
+        Assert.Equal("RECORDING_INITIALIZATION_FAILED", activation.Failure?.Code);
+    }
+
+    [Fact]
+    public async Task DuplicateAndTerminalRuntimeStatusesCannotAdvanceRevision()
+    {
+        var runtime = new ControllableDesktopRecordingRuntime();
+        await using var host = new DesktopRecordingCommandHost(
+            new StubDesktopRecordingRuntimeFactory(runtime));
+        await host.ActivateAsync(ReadyStartup(), CancellationToken.None);
+        var readyRevision = host.Current.Revision;
+
+        runtime.Publish(RecorderState.Ready);
+        Assert.Equal(readyRevision, host.Current.Revision);
+        runtime.Publish(RecorderState.Faulted);
+        var terminalRevision = host.Current.Revision;
+        runtime.Publish(RecorderState.Recording);
+
+        Assert.Equal(RecorderState.Faulted, host.Current.State);
+        Assert.Equal(terminalRevision, host.Current.Revision);
+    }
+
     private static RecorderStartupResult ReadyStartup() =>
         new(RecorderState.Ready, []);
 
