@@ -131,11 +131,9 @@ CreateKeyedMutexVideoSurface(
         status = VRREC_STATUS_OK;
         return owned;
     } catch (const std::bad_alloc &) {
-        delete surface;
         status = VRREC_STATUS_OUT_OF_MEMORY;
         return {};
     } catch (...) {
-        delete surface;
         status = VRREC_STATUS_INTERNAL_ERROR;
         return {};
     }
