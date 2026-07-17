@@ -274,6 +274,129 @@ public sealed class NativeRecordingEngineTests
     }
 
     [Fact]
+    public async Task SealedHardwareFailureRollsToSoftwarePartWithStableHandle()
+    {
+        var firstPlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var secondPlan = firstPlan with
+        {
+            Output = new PendingRecording(
+                Path.Combine(Path.GetTempPath(), "take_part002.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "take_part002.mp4")),
+            Encoder = EncoderKind.MediaFoundationSoftware,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover(secondPlan);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.FromSeconds(4))),
+            runtimeFaults,
+            rollover);
+
+        var starting = engine.StartAsync(firstPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+        await engine.UpdateAudioRoutingAsync(
+            handle,
+            AudioRouting.MicOnly,
+            CancellationToken.None);
+
+        backend.SignalVideoEncoderFailed(
+            partIndex: 0,
+            new NativeRecordingFault(6, "NVENC device lost"));
+        await backend.WaitUntilOpenedAsync(2);
+
+        Assert.Equal(firstPlan, Assert.Single(rollover.Reservations).Plan);
+        Assert.Equal(2, Assert.Single(rollover.Reservations).SegmentNumber);
+        Assert.Equal(
+            AudioRouting.MicOnly,
+            Assert.Single(rollover.Reservations).AudioRouting);
+        Assert.Equal(secondPlan, backend.OpenedPlans[1]);
+        Assert.False(rollover.FinalizationCompleted.IsCompleted);
+
+        backend.SignalFirstVideoPacketMuxed(partIndex: 1);
+        await rollover.FinalizationCompleted;
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(secondPlan.Output, stopped.Recording);
+        Assert.Equal(1, backend.Sessions[0].StopCallCount);
+        Assert.Equal(1, backend.Sessions[1].StopCallCount);
+        Assert.Equal(
+            firstPlan.Output,
+            Assert.Single(rollover.FinalizedParts).Recording);
+        Assert.Empty(runtimeFaults.Reports);
+    }
+
+    [Fact]
+    public async Task FailedSoftwarePartStartLeavesSealedPartStoppable()
+    {
+        var firstPlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var secondPlan = firstPlan with
+        {
+            Output = new PendingRecording(
+                Path.Combine(Path.GetTempPath(), "take_part002.recording.mp4"),
+                Path.Combine(Path.GetTempPath(), "take_part002.mp4")),
+            Encoder = EncoderKind.MediaFoundationSoftware,
+        };
+        var backend = new MultiPartNativeRecordingBackend
+        {
+            OpenFailureAfterFirst = new IOException(
+                "software encoder could not start"),
+        };
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover(secondPlan);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            runtimeFaults,
+            rollover);
+        var starting = engine.StartAsync(firstPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+
+        backend.SignalVideoEncoderFailed(
+            partIndex: 0,
+            new NativeRecordingFault(6, "NVENC device lost"));
+        var report = await runtimeFaults.WaitForReportAsync();
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(firstPlan.Output, stopped.Recording);
+        Assert.Equal(1, backend.Sessions[0].StopCallCount);
+        Assert.Empty(rollover.FinalizedParts);
+        Assert.Equal(handle, report.Handle);
+        Assert.Contains("Software encoder rollover failed", report.Fault.Message);
+    }
+
+    [Fact]
+    public async Task SealedSoftwareEncoderFailureUsesTerminalFaultPath()
+    {
+        var backend = new ControllableNativeRecordingBackend();
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover(CreatePlan());
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            runtimeFaults,
+            rollover);
+        var starting = engine.StartAsync(CreatePlan(), CancellationToken.None);
+        await backend.WaitUntilOpenedAsync();
+        backend.SignalFirstVideoPacketMuxed();
+        var handle = await starting;
+        var fault = new NativeRecordingFault(6, "software encoder failed");
+
+        backend.SignalVideoEncoderFailed(fault);
+        var report = await runtimeFaults.WaitForReportAsync();
+
+        Assert.Equal((handle, fault), report);
+        Assert.Empty(rollover.Reservations);
+    }
+
+    [Fact]
     public async Task AudioObserversCannotInterruptAnActiveNativeSession()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -450,6 +573,11 @@ public sealed class NativeRecordingEngineTests
              throw new InvalidOperationException("The backend is not open."))
             .Faulted(fault);
 
+        public void SignalVideoEncoderFailed(NativeRecordingFault fault) =>
+            (_callbacks ??
+             throw new InvalidOperationException("The backend is not open."))
+            .VideoEncoderFailed!(fault);
+
         public void SignalAudioWarning(AudioSessionWarning warning) =>
             (_callbacks ??
              throw new InvalidOperationException("The backend is not open."))
@@ -487,6 +615,124 @@ public sealed class NativeRecordingEngineTests
 
         public void SignalFirstVideoPacketMuxed(int sessionIndex) =>
             _callbacks[sessionIndex].FirstVideoPacketMuxed();
+    }
+
+    private sealed class MultiPartNativeRecordingBackend
+        : INativeRecordingBackend
+    {
+        private readonly object _gate = new();
+        private readonly List<NativeRecordingCallbacks> _callbacks = [];
+
+        public List<RecordingPlan> OpenedPlans { get; } = [];
+
+        public List<PartNativeRecordingSession> Sessions { get; } = [];
+
+        public Exception? OpenFailureAfterFirst { get; init; }
+
+        public Task<INativeRecordingSession> OpenAsync(
+            RecordingPlan plan,
+            NativeRecordingCallbacks callbacks,
+            CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                if (Sessions.Count > 0 && OpenFailureAfterFirst is not null)
+                {
+                    return Task.FromException<INativeRecordingSession>(
+                        OpenFailureAfterFirst);
+                }
+
+                OpenedPlans.Add(plan);
+                _callbacks.Add(callbacks);
+                var session = new PartNativeRecordingSession(
+                    $"native-part-{Sessions.Count + 1:000}",
+                    plan.Output);
+                Sessions.Add(session);
+                Monitor.PulseAll(_gate);
+                return Task.FromResult<INativeRecordingSession>(session);
+            }
+        }
+
+        public async Task WaitUntilOpenedAsync(int count)
+        {
+            await Task.Run(() =>
+            {
+                lock (_gate)
+                {
+                    while (Sessions.Count < count)
+                    {
+                        Monitor.Wait(_gate);
+                    }
+                }
+            });
+        }
+
+        public void SignalFirstVideoPacketMuxed(int partIndex) =>
+            _callbacks[partIndex].FirstVideoPacketMuxed();
+
+        public void SignalVideoEncoderFailed(
+            int partIndex,
+            NativeRecordingFault fault) =>
+            _callbacks[partIndex].VideoEncoderFailed!(fault);
+    }
+
+    private sealed class PartNativeRecordingSession(
+        string id,
+        PendingRecording output) : INativeRecordingSession
+    {
+        public int StopCallCount { get; private set; }
+
+        public string Id { get; } = id;
+
+        public Task AbortAsync(CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task UpdateAudioRoutingAsync(
+            AudioRouting routing,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<RecordingStopResult> StopAsync(
+            CancellationToken cancellationToken)
+        {
+            StopCallCount++;
+            return Task.FromResult(new RecordingStopResult(
+                output,
+                VideoPacketCount: 45,
+                AudioPacketCount: 72));
+        }
+    }
+
+    private sealed class StubRecordingPartRollover(RecordingPlan nextPlan)
+        : IRecordingPartRollover
+    {
+        private readonly TaskCompletionSource _finalizationCompleted = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public List<(RecordingPlan Plan, int SegmentNumber, AudioRouting AudioRouting)>
+            Reservations { get; } = [];
+
+        public List<RecordingStopResult> FinalizedParts { get; } = [];
+
+        public Task FinalizationCompleted => _finalizationCompleted.Task;
+
+        public Task<RecordingPlan> ReserveNextSoftwarePartAsync(
+            RecordingPlan currentPlan,
+            int segmentNumber,
+            AudioRouting audioRouting,
+            CancellationToken cancellationToken)
+        {
+            Reservations.Add((currentPlan, segmentNumber, audioRouting));
+            return Task.FromResult(nextPlan);
+        }
+
+        public Task FinalizeIntermediatePartAsync(
+            RecordingStopResult stopped,
+            CancellationToken cancellationToken)
+        {
+            FinalizedParts.Add(stopped);
+            _finalizationCompleted.TrySetResult();
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubNativeRecordingSession : INativeRecordingSession
@@ -556,13 +802,25 @@ public sealed class NativeRecordingEngineTests
     private sealed class CapturingRuntimeFaultSink
         : INativeRecordingRuntimeFaultSink
     {
+        private readonly TaskCompletionSource<(
+            RecordingHandle Handle,
+            NativeRecordingFault Fault)> _reported = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
         public List<(RecordingHandle Handle, NativeRecordingFault Fault)>
             Reports
         { get; } = [];
 
         public void Report(
             RecordingHandle handle,
-            NativeRecordingFault fault) => Reports.Add((handle, fault));
+            NativeRecordingFault fault)
+        {
+            Reports.Add((handle, fault));
+            _reported.TrySetResult((handle, fault));
+        }
+
+        public Task<(RecordingHandle Handle, NativeRecordingFault Fault)>
+            WaitForReportAsync() => _reported.Task;
     }
 
     private sealed class ThrowingAudioSessionEventSink

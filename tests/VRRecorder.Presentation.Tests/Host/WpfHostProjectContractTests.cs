@@ -1318,7 +1318,10 @@ public sealed class WpfHostProjectContractTests
         Assert.Contains(
             "audioEvents,\n                events,\n" +
             "                SystemRecordingEnvironmentSource." +
-            "ForCurrentProcess());",
+            "ForCurrentProcess(),\n" +
+            "                new RecordingPartRollover(\n" +
+            "                    fileReservation,\n" +
+            "                    finalization));",
             factoryCode);
         var audioComposition = factoryCode.IndexOf(
             "new CompositeAudioSessionEventSink(",

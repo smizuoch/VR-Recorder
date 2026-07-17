@@ -129,13 +129,6 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
 
             var clock = new SystemMonotonicClock();
             var faultStops = new NativeRecordingFaultStopSink();
-            var recordingEngine = new NativeRecordingEngine(
-                nativeBackend,
-                clock,
-                faultStops,
-                audioEvents,
-                events,
-                SystemRecordingEnvironmentSource.ForCurrentProcess());
             var savedEvents = new CompositeSavedRecordingSink(
                 events,
                 _recordingNotifications);
@@ -149,6 +142,17 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 new FileSystemRecordingRecoveryStore(),
                 savedEvents,
                 events);
+            var fileReservation = new FileSystemRecordingFileReservation();
+            var recordingEngine = new NativeRecordingEngine(
+                nativeBackend,
+                clock,
+                faultStops,
+                audioEvents,
+                events,
+                SystemRecordingEnvironmentSource.ForCurrentProcess(),
+                new RecordingPartRollover(
+                    fileReservation,
+                    finalization));
             var sessions = new ActiveRecordingSessionCoordinator(
                 recordingEngine,
                 finalization);
@@ -164,7 +168,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
             var startRecording = new StartRecordingUseCase(
                 new SpoutVideoSignalGateway(spoutSource, senderSelection),
                 new MonotonicCountdownTimer(clock),
-                new FileSystemRecordingFileReservation(),
+                fileReservation,
                 wallClock,
                 storage,
                 new EncoderSelector(encoderProbe),

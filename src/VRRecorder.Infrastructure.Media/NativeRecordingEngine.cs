@@ -3,6 +3,7 @@ using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
 using VRRecorder.Domain.Audio;
+using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Timing;
 
 namespace VRRecorder.Infrastructure.Media;
@@ -16,6 +17,7 @@ public sealed class NativeRecordingEngine
     private readonly IRecordingMediaEventSink _mediaEvents;
     private readonly IRecordingEnvironmentSource? _environmentSource;
     private readonly INativeRecordingRuntimeFaultSink _runtimeFaults;
+    private readonly IRecordingPartRollover? _partRollover;
     private readonly ConcurrentDictionary<string, ActiveSession> _sessions =
         new(StringComparer.Ordinal);
 
@@ -29,6 +31,22 @@ public sealed class NativeRecordingEngine
             runtimeFaults,
             NullAudioSessionEventSink.Instance,
             NullRecordingMediaEventSink.Instance)
+    {
+    }
+
+    public NativeRecordingEngine(
+        INativeRecordingBackend backend,
+        IMonotonicClock clock,
+        INativeRecordingRuntimeFaultSink runtimeFaults,
+        IRecordingPartRollover partRollover)
+        : this(
+            backend,
+            clock,
+            runtimeFaults,
+            NullAudioSessionEventSink.Instance,
+            NullRecordingMediaEventSink.Instance,
+            environmentSource: null,
+            partRollover)
     {
     }
 
@@ -68,7 +86,8 @@ public sealed class NativeRecordingEngine
         INativeRecordingRuntimeFaultSink runtimeFaults,
         IAudioSessionEventSink audioEvents,
         IRecordingMediaEventSink mediaEvents,
-        IRecordingEnvironmentSource? environmentSource)
+        IRecordingEnvironmentSource? environmentSource,
+        IRecordingPartRollover? partRollover = null)
     {
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(clock);
@@ -78,6 +97,7 @@ public sealed class NativeRecordingEngine
         _backend = backend;
         _clock = clock;
         _runtimeFaults = runtimeFaults;
+        _partRollover = partRollover;
         _audioEvents = audioEvents;
         _mediaEvents = mediaEvents;
         _environmentSource = environmentSource;
@@ -91,22 +111,13 @@ public sealed class NativeRecordingEngine
         var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var runtimeFaultContext = new RuntimeFaultContext(_runtimeFaults);
-        var callbacks = new NativeRecordingCallbacks(
-            FirstVideoPacketMuxed: () =>
-                firstPacket.TrySetResult(_clock.Now),
-            Faulted: fault =>
-            {
-                if (!firstPacket.TrySetException(
-                        new NativeRecordingException(fault)))
-                {
-                    runtimeFaultContext.Report(fault);
-                }
-            },
-            AudioWarning: PublishAudioBestEffort,
-            AudioStatus: PublishAudioBestEffort,
-            AvDrift: PublishAvDriftBestEffort,
-            AudioBufferHealth: PublishAudioBufferHealthBestEffort,
-            VideoEncoderFailed: runtimeFaultContext.Report);
+        var rolloverContext = new RolloverRequestContext(
+            this,
+            runtimeFaultContext);
+        var callbacks = CreateCallbacks(
+            firstPacket,
+            runtimeFaultContext,
+            rolloverContext.Report);
         var session = await _backend
             .OpenAsync(
                 plan,
@@ -114,7 +125,10 @@ public sealed class NativeRecordingEngine
                 cancellationToken)
             .ConfigureAwait(false);
         ArgumentException.ThrowIfNullOrWhiteSpace(session.Id);
-        var activeSession = new ActiveSession(session);
+        var activeSession = new ActiveSession(
+            session,
+            plan,
+            runtimeFaultContext);
         if (!_sessions.TryAdd(session.Id, activeSession))
         {
             await session
@@ -131,6 +145,7 @@ public sealed class NativeRecordingEngine
                 .ConfigureAwait(false);
             var handle = new RecordingHandle(session.Id, committedAt);
             runtimeFaultContext.Activate(handle);
+            rolloverContext.Activate(handle, activeSession);
             PublishMediaBestEffort(plan);
             return handle;
         }
@@ -193,6 +208,12 @@ public sealed class NativeRecordingEngine
 
             try
             {
+                if (activeSession.TerminalStopResult is { } terminalResult)
+                {
+                    _sessions.TryRemove(handle.Id, out _);
+                    return terminalResult;
+                }
+
                 var result = await activeSession.Session
                     .StopAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -257,6 +278,7 @@ public sealed class NativeRecordingEngine
             await activeSession.Session
                 .UpdateAudioRoutingAsync(routing, cancellationToken)
                 .ConfigureAwait(false);
+            activeSession.AudioRouting = routing;
         }
         finally
         {
@@ -267,6 +289,140 @@ public sealed class NativeRecordingEngine
     private static InvalidOperationException InactiveSession(
         RecordingHandle handle) => new(
         $"Native recording session {handle.Id} is not active.");
+
+    private NativeRecordingCallbacks CreateCallbacks(
+        TaskCompletionSource<MonotonicTimestamp> firstPacket,
+        RuntimeFaultContext runtimeFaultContext,
+        Action<NativeRecordingFault> videoEncoderFailed) => new(
+        FirstVideoPacketMuxed: () =>
+            firstPacket.TrySetResult(_clock.Now),
+        Faulted: fault =>
+        {
+            if (!firstPacket.TrySetException(
+                    new NativeRecordingException(fault)))
+            {
+                runtimeFaultContext.Report(fault);
+            }
+        },
+        AudioWarning: PublishAudioBestEffort,
+        AudioStatus: PublishAudioBestEffort,
+        AvDrift: PublishAvDriftBestEffort,
+        AudioBufferHealth: PublishAudioBufferHealthBestEffort,
+        VideoEncoderFailed: videoEncoderFailed);
+
+    private void ScheduleRollover(
+        RecordingHandle handle,
+        ActiveSession activeSession,
+        NativeRecordingFault fault)
+    {
+        if (_partRollover is null ||
+            activeSession.Plan.Encoder ==
+                EncoderKind.MediaFoundationSoftware)
+        {
+            activeSession.RuntimeFaults.Report(fault);
+            return;
+        }
+
+        if (!activeSession.TryBeginRollover())
+        {
+            return;
+        }
+
+        _ = RolloverAsync(handle, activeSession, fault);
+    }
+
+    private async Task RolloverAsync(
+        RecordingHandle handle,
+        ActiveSession activeSession,
+        NativeRecordingFault sourceFault)
+    {
+        INativeRecordingSession? nextSession = null;
+        var nextSessionCommitted = false;
+        await activeSession.StopGate.WaitAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(handle.Id, out var currentSession) ||
+                !ReferenceEquals(activeSession, currentSession))
+            {
+                return;
+            }
+
+            var stopped = await activeSession.Session
+                .StopAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            activeSession.TerminalStopResult = stopped;
+            if (stopped.Statistics is { } statistics)
+            {
+                PublishMediaBestEffort(statistics);
+            }
+
+            var nextSegmentNumber = checked(activeSession.SegmentNumber + 1);
+            var nextPlan = await _partRollover!
+                .ReserveNextSoftwarePartAsync(
+                    activeSession.Plan,
+                    nextSegmentNumber,
+                    activeSession.AudioRouting,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            if (nextPlan.Encoder !=
+                EncoderKind.MediaFoundationSoftware)
+            {
+                throw new InvalidOperationException(
+                    "A recording rollover must use the software encoder.");
+            }
+
+            var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            var callbacks = CreateCallbacks(
+                firstPacket,
+                activeSession.RuntimeFaults,
+                activeSession.RuntimeFaults.Report);
+            nextSession = await _backend
+                .OpenAsync(nextPlan, callbacks, CancellationToken.None)
+                .ConfigureAwait(false);
+            ArgumentException.ThrowIfNullOrWhiteSpace(nextSession.Id);
+            _ = await firstPacket.Task
+                .WaitAsync(TimeSpan.FromSeconds(10))
+                .ConfigureAwait(false);
+
+            activeSession.Session = nextSession;
+            activeSession.Plan = nextPlan;
+            activeSession.SegmentNumber = nextSegmentNumber;
+            activeSession.TerminalStopResult = null;
+            nextSessionCommitted = true;
+            PublishMediaBestEffort(nextPlan);
+            await _partRollover
+                .FinalizeIntermediatePartAsync(
+                    stopped,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            if (nextSession is not null && !nextSessionCommitted)
+            {
+                try
+                {
+                    await nextSession
+                        .AbortAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Preserve the rollover failure that owns this transition.
+                }
+            }
+
+            activeSession.RuntimeFaults.Report(new NativeRecordingFault(
+                sourceFault.Status,
+                $"Software encoder rollover failed ({exception.GetType().Name})."));
+        }
+        finally
+        {
+            activeSession.StopGate.Release();
+        }
+    }
 
     private void PublishMediaBestEffort(RecordingPlan plan)
     {
@@ -338,14 +494,35 @@ public sealed class NativeRecordingEngine
 
     private sealed class ActiveSession
     {
-        public ActiveSession(INativeRecordingSession session)
+        private int _rolloverStarted;
+
+        public ActiveSession(
+            INativeRecordingSession session,
+            RecordingPlan plan,
+            RuntimeFaultContext runtimeFaults)
         {
             Session = session;
+            Plan = plan;
+            RuntimeFaults = runtimeFaults;
+            AudioRouting = plan.Media.AudioRouting;
         }
 
-        public INativeRecordingSession Session { get; }
+        public INativeRecordingSession Session { get; set; }
+
+        public RecordingPlan Plan { get; set; }
+
+        public RuntimeFaultContext RuntimeFaults { get; }
+
+        public AudioRouting AudioRouting { get; set; }
+
+        public int SegmentNumber { get; set; } = 1;
+
+        public RecordingStopResult? TerminalStopResult { get; set; }
 
         public SemaphoreSlim StopGate { get; } = new(1, 1);
+
+        public bool TryBeginRollover() =>
+            Interlocked.CompareExchange(ref _rolloverStarted, 1, 0) == 0;
     }
 
     private sealed class NullRecordingMediaEventSink
@@ -413,6 +590,60 @@ public sealed class NativeRecordingEngine
             {
                 // A callback observer must not escape through the native ABI
                 // or replace the encoder failure that owns this session.
+            }
+        }
+    }
+
+    private sealed class RolloverRequestContext(
+        NativeRecordingEngine owner,
+        RuntimeFaultContext runtimeFaults)
+    {
+        private readonly object _gate = new();
+        private RecordingHandle? _handle;
+        private ActiveSession? _activeSession;
+        private NativeRecordingFault? _pendingFault;
+
+        public void Activate(
+            RecordingHandle handle,
+            ActiveSession activeSession)
+        {
+            NativeRecordingFault? pending;
+            lock (_gate)
+            {
+                _handle = handle;
+                _activeSession = activeSession;
+                pending = _pendingFault;
+                _pendingFault = null;
+            }
+
+            if (pending is not null)
+            {
+                owner.ScheduleRollover(handle, activeSession, pending);
+            }
+        }
+
+        public void Report(NativeRecordingFault fault)
+        {
+            RecordingHandle? handle;
+            ActiveSession? activeSession;
+            lock (_gate)
+            {
+                handle = _handle;
+                activeSession = _activeSession;
+                if (handle is null || activeSession is null)
+                {
+                    _pendingFault ??= fault;
+                    return;
+                }
+            }
+
+            try
+            {
+                owner.ScheduleRollover(handle, activeSession, fault);
+            }
+            catch (Exception)
+            {
+                runtimeFaults.Report(fault);
             }
         }
     }

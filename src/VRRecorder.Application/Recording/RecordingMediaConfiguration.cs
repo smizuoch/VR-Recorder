@@ -102,6 +102,19 @@ public sealed record RecordingMediaConfiguration
             signal.GpuIdentity);
     }
 
+    public RecordingMediaConfiguration WithAudioRouting(
+        AudioRouting audioRouting) => new(
+        audioRouting,
+        DesktopEndpointId,
+        MicrophoneEndpointId,
+        DesktopGainDb,
+        MicrophoneGainDb,
+        QualityPreset,
+        SpoutSenderIdentity,
+        SpoutAdapterLuid,
+        EncoderAdapterLuid,
+        GpuIdentity);
+
     private static void EnsureDefined<TEnum>(TEnum value, string parameterName)
         where TEnum : struct, Enum
     {
