@@ -188,6 +188,7 @@ public sealed class StartRecordingUseCase
             encoder,
             videoLayout)
         {
+            EncoderPreference = command.EncoderPreference,
             Media = (command.Media ?? RecordingMediaConfiguration.CreateDefault())
                 .WithVideoSource(signal),
         };

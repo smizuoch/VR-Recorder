@@ -271,6 +271,37 @@ public sealed class NativeRecordingEngineTests
     }
 
     [Fact]
+    public async Task FixedHardwareFailureBeforeFirstPacketDoesNotRetrySoftware()
+    {
+        var fixedPlan = CreatePlan() with
+        {
+            Encoder = EncoderKind.Nvenc,
+            EncoderPreference = EncoderPreference.Nvenc,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var rollover = new StubRecordingPartRollover();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink(),
+            rollover);
+
+        var starting = engine.StartAsync(fixedPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFault(
+            partIndex: 0,
+            new NativeRecordingFault(6, "fixed NVENC produced no packet"));
+
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => starting);
+
+        Assert.Equal("fixed NVENC produced no packet", exception.Fault.Message);
+        Assert.Single(backend.OpenedPlans);
+        Assert.Empty(rollover.StartRetries);
+    }
+
+    [Fact]
     public async Task FaultAfterFirstPacketIsReportedToRuntimeFaultSink()
     {
         var backend = new ControllableNativeRecordingBackend();
@@ -368,6 +399,41 @@ public sealed class NativeRecordingEngineTests
             firstPlan.Output,
             Assert.Single(rollover.FinalizedParts).Recording);
         Assert.Empty(runtimeFaults.Reports);
+    }
+
+    [Fact]
+    public async Task FixedHardwareFailureAfterFirstPacketDoesNotRollToSoftware()
+    {
+        var fixedPlan = CreatePlan() with
+        {
+            Encoder = EncoderKind.Nvenc,
+            EncoderPreference = EncoderPreference.Nvenc,
+        };
+        var backend = new MultiPartNativeRecordingBackend();
+        var runtimeFaults = new CapturingRuntimeFaultSink();
+        var rollover = new StubRecordingPartRollover();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            runtimeFaults,
+            rollover);
+        var starting = engine.StartAsync(fixedPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+        var fault = new NativeRecordingFault(
+            6,
+            "fixed NVENC failed while recording");
+
+        backend.SignalVideoEncoderFailed(partIndex: 0, fault);
+
+        var report = Assert.Single(runtimeFaults.Reports);
+        Assert.Equal(handle, report.Handle);
+        Assert.Equal(fault, report.Fault);
+        Assert.Single(backend.OpenedPlans);
+        Assert.Empty(rollover.Reservations);
+        _ = await engine.StopAsync(handle, CancellationToken.None);
     }
 
     [Fact]
@@ -783,7 +849,7 @@ public sealed class NativeRecordingEngineTests
     }
 
     private static RecordingPlan CreatePlan() =>
-        new(
+        new RecordingPlan(
             new StableVideoSignal(320, 180),
             new PendingRecording(
                 Path.Combine(Path.GetTempPath(), "take.recording.mp4"),
@@ -796,7 +862,10 @@ public sealed class NativeRecordingEngineTests
                 34,
                 56,
                 TimeSpan.Zero)),
-            new FrameRate(30));
+            new FrameRate(30))
+        {
+            EncoderPreference = EncoderPreference.Auto,
+        };
 
     private static RecordingPlan ExactPlan(
         StableVideoSignal signal,

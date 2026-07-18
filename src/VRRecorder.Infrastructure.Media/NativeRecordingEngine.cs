@@ -112,8 +112,7 @@ public sealed class NativeRecordingEngine
         ArgumentNullException.ThrowIfNull(plan);
         return await StartCoreAsync(
                 plan,
-                allowSoftwareFallback:
-                    plan.Encoder != EncoderKind.MediaFoundationSoftware,
+                allowSoftwareFallback: AllowsSoftwareFallback(plan),
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -363,8 +362,7 @@ public sealed class NativeRecordingEngine
             return;
         }
         if (_partRollover is null ||
-            activeSession.Plan.Encoder ==
-                EncoderKind.MediaFoundationSoftware)
+            !AllowsSoftwareFallback(activeSession.Plan))
         {
             activeSession.RuntimeFaults.Report(fault);
             return;
@@ -482,6 +480,10 @@ public sealed class NativeRecordingEngine
             activeSession.StopGate.Release();
         }
     }
+
+    private static bool AllowsSoftwareFallback(RecordingPlan plan) =>
+        plan.EncoderPreference == EncoderPreference.Auto &&
+        plan.Encoder != EncoderKind.MediaFoundationSoftware;
 
     private void ScheduleVideoGeometryChange(
         RecordingHandle handle,

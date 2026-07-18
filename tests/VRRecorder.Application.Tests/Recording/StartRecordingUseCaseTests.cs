@@ -301,6 +301,48 @@ public sealed class StartRecordingUseCaseTests
     }
 
     [Fact]
+    public async Task FixedEncoderPreferenceIsPreservedInRecordingPlan()
+    {
+        var signal = new ControllableVideoSignalGateway();
+        var probe = new ScriptedEncoderProbe(
+            (EncoderKind.Nvenc, EncoderProbeResult.PacketProduced));
+        var engine = new FakeRecordingEngine();
+        var useCase = new StartRecordingUseCase(
+            signal,
+            new ControllableCountdownTimer(),
+            CompletedReservation(),
+            new FixedWallClock(TestLocalNow),
+            SufficientStorage(),
+            new EncoderSelector(probe),
+            engine,
+            new FakeRecordingSessionActivator(),
+            new FakeRecordingStorageMonitor(),
+            CreateAutoStopScheduler());
+        var execution = useCase.ExecuteAsync(
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                TestOutputPath,
+                TestFrameRate,
+                EncoderPreference.Nvenc,
+                GpuVendor.Nvidia),
+            CancellationToken.None);
+        await signal.WaitUntilRequestedAsync();
+
+        signal.CompleteWithStableSignal(new StableVideoSignal(1920, 1080));
+        await engine.WaitUntilStartRequestedAsync();
+
+        var plan = Assert.Single(engine.StartedPlans);
+        Assert.Equal(EncoderKind.Nvenc, plan.Encoder);
+        Assert.Equal(EncoderPreference.Nvenc, plan.EncoderPreference);
+
+        engine.CommitFirstPacket(new RecordingHandle(
+            "session-001",
+            MonotonicTimestamp.FromElapsed(TimeSpan.Zero)));
+        Assert.IsType<StartRecordingResult.Started>(await execution);
+    }
+
+    [Fact]
     public async Task AutoStopDeadlineStartsAtEngineFirstPacketCommit()
     {
         var initialNow = MonotonicTimestamp.FromElapsed(TimeSpan.Zero);

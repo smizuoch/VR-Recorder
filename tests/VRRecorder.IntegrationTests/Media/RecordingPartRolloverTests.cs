@@ -48,7 +48,10 @@ public sealed class RecordingPartRolloverTests
             first,
             startedAt,
             new FrameRate(60),
-            EncoderKind.Nvenc);
+            EncoderKind.Nvenc)
+        {
+            EncoderPreference = EncoderPreference.Auto,
+        };
 
         var next = await rollover.ReserveNextSoftwarePartAsync(
             plan,
@@ -186,7 +189,10 @@ public sealed class RecordingPartRolloverTests
                 pending,
                 new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
                 new FrameRate(30),
-                EncoderKind.Nvenc);
+                EncoderKind.Nvenc)
+            {
+                EncoderPreference = EncoderPreference.Auto,
+            };
             var rollover = new RecordingPartRollover(
                 new CapturingReservation(pending),
                 new RecordingFileFinalizationUseCase(
@@ -294,6 +300,51 @@ public sealed class RecordingPartRolloverTests
                 CancellationToken.None));
     }
 
+    [Fact]
+    public async Task SoftwareFallbackRejectsFixedPreferenceBeforeFileMutation()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"vrrecorder-fixed-rollover-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var pending = CreatePending(directory);
+        var reservation = new CapturingReservation(pending);
+        var rollover = new RecordingPartRollover(
+            reservation,
+            CreateFinalization());
+        var plan = CreatePlan(pending, EncoderKind.Nvenc) with
+        {
+            EncoderPreference = EncoderPreference.Nvenc,
+        };
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                pending.TemporaryPath,
+                "fixed encoder partial output");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                rollover.PrepareSoftwareStartRetryAsync(
+                    plan,
+                    CancellationToken.None));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                rollover.ReserveNextSoftwarePartAsync(
+                    plan,
+                    segmentNumber: 2,
+                    AudioRouting.Mixed,
+                    CancellationToken.None));
+
+            Assert.Equal(
+                "fixed encoder partial output",
+                await File.ReadAllTextAsync(pending.TemporaryPath));
+            Assert.Null(reservation.OutputPath);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static RecordingFileFinalizationUseCase CreateFinalization() =>
         new(
             new CapturingFinalizer(),
@@ -312,7 +363,10 @@ public sealed class RecordingPartRolloverTests
         pending,
         new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
         new FrameRate(30),
-        encoder);
+        encoder)
+    {
+        EncoderPreference = EncoderPreference.Auto,
+    };
 
     private sealed class CapturingReservation(PendingRecording result)
         : IRecordingFileReservation

@@ -24,6 +24,7 @@ public sealed class RecordingPartRollover(
     {
         ArgumentNullException.ThrowIfNull(failedPlan);
         cancellationToken.ThrowIfCancellationRequested();
+        EnsureAutomaticSoftwareFallback(failedPlan);
         if (failedPlan.Encoder == EncoderKind.MediaFoundationSoftware)
         {
             throw new InvalidOperationException(
@@ -74,6 +75,7 @@ public sealed class RecordingPartRollover(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(currentPlan);
+        EnsureAutomaticSoftwareFallback(currentPlan);
         if (segmentNumber < 2)
         {
             throw new ArgumentOutOfRangeException(
@@ -187,6 +189,15 @@ public sealed class RecordingPartRollover(
             throw new ArgumentException(
                 "An exact part must retain the active Spout source identity.",
                 nameof(next));
+        }
+    }
+
+    private static void EnsureAutomaticSoftwareFallback(RecordingPlan plan)
+    {
+        if (plan.EncoderPreference != EncoderPreference.Auto)
+        {
+            throw new InvalidOperationException(
+                "A fixed encoder preference cannot silently fall back.");
         }
     }
 }

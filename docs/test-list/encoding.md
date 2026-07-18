@@ -8,6 +8,8 @@
 - [x] AMD adapterではAMFを先にprobeする
 - [x] Intel adapterではQSVを先にprobeする
 - [x] 固定指定が失敗した場合は黙って別encoderを選ばず明示失敗する
+- [x] probe後も元のAuto／固定指定をrecording planへ保持し、選択済み実encoderだけからfallback可否を推測しない
+- [x] 開始前と録画中のsoftware fallback／part rolloverはAutoだけに許可し、固定指定では元のfailureを報告して予約fileを変更しない
 - [x] packetを生成しないprobeは失敗として扱う
 - [x] 全encoder probe requestを安定化したSpout senderと同じadapter LUIDへ固定する
 - [x] 出力寸法・fps・同一adapterをnative ABIへ渡し16合成frameを実encodeする
@@ -22,6 +24,8 @@ Following Basic Design v0.3 §§10.3, 11.2, 18.4, and 24, probe success requires
 - [x] Probe AMF first on an AMD adapter
 - [x] Probe QSV first on an Intel adapter
 - [x] Fail explicitly instead of silently choosing another encoder when a fixed preference fails
+- [x] Preserve the original Auto/fixed preference in the recording plan after probing instead of inferring fallback policy from only the selected encoder
+- [x] Permit pre-start software retry and in-recording software part rollover only for Auto, reporting the original failure and leaving reserved files unchanged for fixed preferences
 - [x] Treat a probe that produces no packet as failed
 - [x] Pin every encoder probe request to the same adapter LUID as the stabilized Spout sender
 - [x] Pass output geometry, frame rate, and the same adapter through the native ABI and encode 16 synthetic frames
