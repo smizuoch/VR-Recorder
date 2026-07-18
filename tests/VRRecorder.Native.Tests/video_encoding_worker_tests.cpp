@@ -405,6 +405,15 @@ public:
         video_encoder_failure_message = message_utf8;
     }
 
+    void VideoEncoderFaulted(
+        vrrec_status_t status,
+        const char *message_utf8) noexcept override
+    {
+        ++video_encoder_terminal_failure_calls;
+        video_encoder_terminal_failure_status = status;
+        video_encoder_terminal_failure_message = message_utf8;
+    }
+
     void AudioEndpointAvailabilityChanged(
         AudioEndpointRole,
         bool,
@@ -415,10 +424,14 @@ public:
     std::size_t first_packet_calls = 0;
     std::size_t fault_calls = 0;
     std::size_t video_encoder_failure_calls = 0;
+    std::size_t video_encoder_terminal_failure_calls = 0;
     vrrec_status_t fault_status = VRREC_STATUS_OK;
     vrrec_status_t video_encoder_failure_status = VRREC_STATUS_OK;
+    vrrec_status_t video_encoder_terminal_failure_status =
+        VRREC_STATUS_OK;
     const char *fault_message = nullptr;
     const char *video_encoder_failure_message = nullptr;
+    const char *video_encoder_terminal_failure_message = nullptr;
 };
 
 class ScriptedThreadFactory final : public NativeThreadFactoryPort {
@@ -552,9 +565,11 @@ void RuntimeEncoderFailureRaisesFaultAndDoesNotFlush()
     CHECK(worker.Join() == VideoEncodingWorkerResult::EncoderFailed);
     CHECK(worker.RequestStop() == VRREC_STATUS_INVALID_STATE);
     CHECK(events.first_packet_calls == 0);
-    CHECK(events.fault_calls == 1);
-    CHECK(events.fault_status == VRREC_STATUS_INTERNAL_ERROR);
-    CHECK(events.fault_message != nullptr);
+    CHECK(events.fault_calls == 0);
+    CHECK(events.video_encoder_terminal_failure_calls == 1);
+    CHECK(events.video_encoder_terminal_failure_status ==
+          VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(events.video_encoder_terminal_failure_message != nullptr);
     CHECK(sink.finish_calls == 0);
     CHECK(sink.abort_calls == 1);
     CHECK(clock.abort_calls == 1);
@@ -838,7 +853,9 @@ void FinishFailurePreservesWhetherTheCurrentPartWasSealed()
         CHECK(worker.Join() == expected);
         CHECK(sink.finish_calls == 1);
         CHECK(sink.abort_calls == (part_sealed ? 0U : 1U));
-        CHECK(events.fault_calls == (part_sealed ? 0U : 1U));
+        CHECK(events.fault_calls == 0);
+        CHECK(events.video_encoder_terminal_failure_calls ==
+              (part_sealed ? 0U : 1U));
         CHECK(events.video_encoder_failure_calls ==
               (part_sealed ? 1U : 0U));
         CHECK(clock.abort_calls == 1);

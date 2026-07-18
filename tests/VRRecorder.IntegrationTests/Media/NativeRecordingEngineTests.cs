@@ -254,7 +254,10 @@ public sealed class NativeRecordingEngineTests
         await backend.WaitUntilOpenedAsync(1);
         backend.SignalFault(
             partIndex: 0,
-            new NativeRecordingFault(6, "NVENC produced no packet"));
+            new NativeRecordingFault(
+                6,
+                "NVENC produced no packet",
+                NativeRecordingFaultSource.VideoEncoder));
         await backend.WaitUntilOpenedAsync(2);
 
         Assert.False(starting.IsCompleted);
@@ -268,6 +271,34 @@ public sealed class NativeRecordingEngineTests
 
         Assert.Equal("native-part-002", handle.Id);
         Assert.Empty(runtimeFaults.Reports);
+    }
+
+    [Fact]
+    public async Task AutoNonEncoderFailureBeforeFirstPacketDoesNotRetrySoftware()
+    {
+        var hardwarePlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
+        var backend = new MultiPartNativeRecordingBackend();
+        var rollover = new StubRecordingPartRollover();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink(),
+            rollover);
+        var fault = new NativeRecordingFault(
+            6,
+            "video packet muxing failed before first packet");
+
+        var starting = engine.StartAsync(hardwarePlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFault(partIndex: 0, fault);
+
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => starting);
+
+        Assert.Equal(fault, exception.Fault);
+        Assert.Single(backend.OpenedPlans);
+        Assert.Empty(rollover.StartRetries);
     }
 
     [Fact]
@@ -291,7 +322,10 @@ public sealed class NativeRecordingEngineTests
         await backend.WaitUntilOpenedAsync(1);
         backend.SignalFault(
             partIndex: 0,
-            new NativeRecordingFault(6, "fixed NVENC produced no packet"));
+            new NativeRecordingFault(
+                6,
+                "fixed NVENC produced no packet",
+                NativeRecordingFaultSource.VideoEncoder));
 
         var exception = await Assert.ThrowsAsync<NativeRecordingException>(
             () => starting);

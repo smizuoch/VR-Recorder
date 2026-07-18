@@ -360,7 +360,11 @@ void VideoEncodingWorker::Fail(
         clock_.Abort();
     }
     sink_.Abort();
-    events_.Faulted(status, message);
+    if (result == VideoEncodingWorkerResult::EncoderFailed) {
+        events_.VideoEncoderFaulted(status, message);
+    } else {
+        events_.Faulted(status, message);
+    }
 }
 
 void VideoEncodingWorker::ReportSealedEncoderFailure(

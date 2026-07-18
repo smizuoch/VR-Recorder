@@ -28,6 +28,7 @@ typedef struct vrrec_steamvr_overlay vrrec_steamvr_overlay_t;
 typedef struct vrrec_spout_source vrrec_spout_source_t;
 typedef int32_t vrrec_status_t;
 typedef uint32_t vrrec_event_kind_t;
+typedef uint32_t vrrec_fault_source_t;
 typedef uint32_t vrrec_encoder_kind_t;
 typedef uint32_t vrrec_canvas_background_t;
 typedef uint32_t vrrec_video_rotation_t;
@@ -80,6 +81,9 @@ typedef uint32_t vrrec_steamvr_tracking_origin_t;
 #define VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN UINT32_C(12)
 #define VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY UINT32_C(13)
 #define VRREC_EVENT_VIDEO_GEOMETRY_STABLE UINT32_C(14)
+
+#define VRREC_FAULT_SOURCE_UNKNOWN UINT32_C(0)
+#define VRREC_FAULT_SOURCE_VIDEO_ENCODER UINT32_C(1)
 
 #define VRREC_ENCODER_NVENC UINT32_C(1)
 #define VRREC_ENCODER_AMF UINT32_C(2)
@@ -210,6 +214,10 @@ typedef struct vrrec_session_statistics_v1 {
  * source pixel format in the upper 32 bits and source width in the lower
  * 32 bits. audio_packet_count carries source height. status is
  * VRREC_STATUS_OK and message_utf8 is null.
+ *
+ * For VRREC_EVENT_FAULTED, video_packet_count carries vrrec_fault_source_t
+ * and audio_packet_count is zero. Unknown and legacy producers use
+ * VRREC_FAULT_SOURCE_UNKNOWN.
  */
 typedef struct vrrec_event_v1 {
     uint32_t struct_size;

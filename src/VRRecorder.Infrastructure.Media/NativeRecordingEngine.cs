@@ -179,7 +179,9 @@ public sealed class NativeRecordingEngine
 
             if (allowSoftwareFallback &&
                 _partRollover is not null &&
-                exception is NativeRecordingException &&
+                exception is NativeRecordingException nativeException &&
+                nativeException.Fault.Source ==
+                    NativeRecordingFaultSource.VideoEncoder &&
                 !cancellationToken.IsCancellationRequested)
             {
                 var fallbackPlan = await _partRollover

@@ -70,13 +70,15 @@ internal sealed class NativeCallbackState
                     fault = new NativeRecordingFault(
                         (int)nativeEvent.Status,
                         Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
-                        "Native recording failed.");
+                        "Native recording failed.",
+                        DecodeFaultSource(nativeEvent.VideoPacketCount));
                     break;
                 case NativeEventKind.VideoEncoderFailedPartReady:
                     videoEncoderFailure = new NativeRecordingFault(
                         (int)nativeEvent.Status,
                         Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
-                        "Native video encoder failed after sealing the current part.");
+                        "Native video encoder failed after sealing the current part.",
+                        NativeRecordingFaultSource.VideoEncoder);
                     break;
                 case NativeEventKind.VideoGeometryStable:
                     stableVideoGeometry = CreateStableVideoGeometry(
@@ -180,6 +182,13 @@ internal sealed class NativeCallbackState
             _callbacks.VideoGeometryStable?.Invoke(stableVideoGeometry);
         }
     }
+
+    private static NativeRecordingFaultSource DecodeFaultSource(
+        ulong source) => source switch
+        {
+            1 => NativeRecordingFaultSource.VideoEncoder,
+            _ => NativeRecordingFaultSource.Unknown,
+        };
 
     private static VideoGeometry? CreateStableVideoGeometry(
         NativeEventV1 nativeEvent)

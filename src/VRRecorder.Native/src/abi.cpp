@@ -420,30 +420,20 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         vrrec_status_t status,
         const char *message_utf8) noexcept override
     {
-        const std::lock_guard callback_lock(callback_mutex_);
-        std::uint64_t sequence;
-        {
-            const std::lock_guard state_lock(state_mutex_);
-            if (state_ == SessionState::Terminal ||
-                state_ == SessionState::Aborted) {
-                return;
-            }
-
-            state_ = SessionState::Terminal;
-            terminal_status_ = status;
-            sequence = ++sequence_;
-        }
-
-        Emit(vrrec_event_v1 {
-            sizeof(vrrec_event_v1),
-            VRREC_ABI_V1,
-            VRREC_EVENT_FAULTED,
+        EmitTerminalFault(
             status,
-            sequence,
-            0,
-            0,
             message_utf8,
-        });
+            VRREC_FAULT_SOURCE_UNKNOWN);
+    }
+
+    void VideoEncoderFaulted(
+        vrrec_status_t status,
+        const char *message_utf8) noexcept override
+    {
+        EmitTerminalFault(
+            status,
+            message_utf8,
+            VRREC_FAULT_SOURCE_VIDEO_ENCODER);
     }
 
     void VideoEncoderFailed(
@@ -637,6 +627,37 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
     }
 
 private:
+    void EmitTerminalFault(
+        vrrec_status_t status,
+        const char *message_utf8,
+        vrrec_fault_source_t source) noexcept
+    {
+        const std::lock_guard callback_lock(callback_mutex_);
+        std::uint64_t sequence;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (state_ == SessionState::Terminal ||
+                state_ == SessionState::Aborted) {
+                return;
+            }
+
+            state_ = SessionState::Terminal;
+            terminal_status_ = status;
+            sequence = ++sequence_;
+        }
+
+        Emit(vrrec_event_v1 {
+            sizeof(vrrec_event_v1),
+            VRREC_ABI_V1,
+            VRREC_EVENT_FAULTED,
+            status,
+            sequence,
+            source,
+            0,
+            message_utf8,
+        });
+    }
+
 #if defined(VRRECORDER_NATIVE_ABI_CONTRACT_TEST_HOOKS)
     void WaitAtStartCommitHook() noexcept
     {

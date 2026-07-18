@@ -26,6 +26,12 @@ public:
     virtual void Faulted(
         vrrec_status_t status,
         const char *message_utf8) noexcept = 0;
+    virtual void VideoEncoderFaulted(
+        vrrec_status_t status,
+        const char *message_utf8) noexcept
+    {
+        Faulted(status, message_utf8);
+    }
     virtual void VideoEncoderFailed(
         vrrec_status_t status,
         const char *message_utf8) noexcept

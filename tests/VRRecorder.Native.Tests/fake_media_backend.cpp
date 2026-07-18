@@ -278,6 +278,13 @@ public:
         events_.Faulted(status, message.c_str());
     }
 
+    void EmitVideoEncoderFaulted(
+        vrrec_status_t status,
+        const std::string &message) noexcept
+    {
+        events_.VideoEncoderFaulted(status, message.c_str());
+    }
+
     void EmitVideoEncoderFailed(
         vrrec_status_t status,
         const std::string &message) noexcept
@@ -1201,6 +1208,15 @@ void CompleteTrailerFlushClose(
 void Fail(std::int32_t status, std::string_view message)
 {
     FakeMediaBackend::Active()->Fail(status, std::string(message));
+}
+
+void EmitVideoEncoderFaulted(
+    std::int32_t status,
+    std::string_view message)
+{
+    FakeMediaBackend::Active()->EmitVideoEncoderFaulted(
+        status,
+        std::string(message));
 }
 
 void EmitVideoEncoderFailed(

@@ -2376,6 +2376,32 @@ bool FaultIsTerminalAndAbortQuiescesCallbacks()
     return true;
 }
 
+bool TerminalVideoEncoderFaultCarriesTypedSource()
+{
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+
+    vrrecorder::native::testing::EmitVideoEncoderFaulted(
+        VRREC_STATUS_INTERNAL_ERROR,
+        "video encoder failed before first packet");
+
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_FAULTED);
+    CHECK(log.events[0].status == VRREC_STATUS_INTERNAL_ERROR);
+    CHECK(log.events[0].video_packet_count ==
+          VRREC_FAULT_SOURCE_VIDEO_ENCODER);
+    CHECK(log.events[0].audio_packet_count == 0);
+    CHECK(log.events[0].message ==
+          "video encoder failed before first packet");
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
 bool SealedVideoEncoderFailureIsNonterminalAndCanStop()
 {
     EventLog log;
@@ -4448,6 +4474,7 @@ int main(int argc, char **argv)
         !GatesEveryRemainingNonterminalMediaEvent() ||
         !EmitsStableVideoGeometryAsANonterminalEvent() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
+        !TerminalVideoEncoderFaultCarriesTypedSource() ||
         !SealedVideoEncoderFailureIsNonterminalAndCanStop() ||
         !RejectsInvalidSteamVrAbiInputs() ||
         !PollsSteamVrDigitalStateThroughVersionedAbi() ||

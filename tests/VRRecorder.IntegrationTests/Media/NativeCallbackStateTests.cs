@@ -123,10 +123,22 @@ public sealed class NativeCallbackStateTests
                 (item.Input, item.Kind)));
         Assert.Collection(
             encoderFailures,
-            failure => Assert.Equal("encoder failed", failure.Message),
-            failure => Assert.Contains(
-                "Native video encoder failed",
-                failure.Message));
+            failure =>
+            {
+                Assert.Equal("encoder failed", failure.Message);
+                Assert.Equal(
+                    NativeRecordingFaultSource.VideoEncoder,
+                    failure.Source);
+            },
+            failure =>
+            {
+                Assert.Contains(
+                    "Native video encoder failed",
+                    failure.Message);
+                Assert.Equal(
+                    NativeRecordingFaultSource.VideoEncoder,
+                    failure.Source);
+            });
     }
 
     [Fact]
@@ -168,7 +180,33 @@ public sealed class NativeCallbackStateTests
         var exception = await Assert.ThrowsAsync<NativeRecordingException>(() =>
             faultedState.Stopped.Task);
         Assert.Contains("Native recording failed", exception.Message);
-        Assert.Single(faults);
+        Assert.Equal(
+            NativeRecordingFaultSource.Unknown,
+            Assert.Single(faults).Source);
+    }
+
+    [Fact]
+    public async Task DecodesVideoEncoderSourceFromTerminalFaultPayload()
+    {
+        NativeRecordingFault? observed = null;
+        var state = new NativeCallbackState(
+            Plan(),
+            new NativeRecordingCallbacks(
+                () => { },
+                fault => observed = fault));
+
+        state.Process(Event(
+            NativeEventKind.Faulted,
+            sequence: 1,
+            status: NativeStatus.InternalError,
+            videoPacketCount: 1));
+
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(
+            () => state.Stopped.Task);
+        Assert.Equal(
+            NativeRecordingFaultSource.VideoEncoder,
+            exception.Fault.Source);
+        Assert.Equal(exception.Fault, observed);
     }
 
     [Fact]

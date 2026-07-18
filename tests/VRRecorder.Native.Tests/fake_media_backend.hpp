@@ -89,6 +89,9 @@ void CompleteTrailerFlushClose(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count);
 void Fail(std::int32_t status, std::string_view message);
+void EmitVideoEncoderFaulted(
+    std::int32_t status,
+    std::string_view message);
 void EmitVideoEncoderFailed(
     std::int32_t status,
     std::string_view message);
