@@ -140,6 +140,21 @@ public sealed record StableVideoSignal
 
     public bool HasDiscoveredSourceIdentity { get; }
 
+    public StableVideoSignal WithGeometry(VideoGeometry geometry)
+    {
+        ArgumentNullException.ThrowIfNull(geometry);
+        return new StableVideoSignal(
+            SenderId,
+            AdapterLuid,
+            GpuIdentity,
+            GpuVendor,
+            geometry.Width,
+            geometry.Height,
+            geometry.PixelFormat,
+            EstimatedSourceFramesPerSecond,
+            HasDiscoveredSourceIdentity);
+    }
+
     private static void EnsureIdentity(string value, string parameterName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);

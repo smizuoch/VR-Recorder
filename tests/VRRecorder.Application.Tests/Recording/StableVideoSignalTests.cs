@@ -53,6 +53,25 @@ public sealed class StableVideoSignalTests
         }
     }
 
+    [Fact]
+    public void ReplacesOnlyTheObservedVideoGeometry()
+    {
+        var signal = Create();
+
+        var changed = signal.WithGeometry(
+            new VideoGeometry(1_280, 720, VideoPixelFormat.Rgba8));
+
+        Assert.Equal("sender", changed.SenderId);
+        Assert.Equal(42UL, changed.AdapterLuid);
+        Assert.Equal("GPU_1234", changed.GpuIdentity);
+        Assert.Equal(GpuVendor.Nvidia, changed.GpuVendor);
+        Assert.Equal(1_280, changed.Width);
+        Assert.Equal(720, changed.Height);
+        Assert.Equal(VideoPixelFormat.Rgba8, changed.PixelFormat);
+        Assert.Equal(60, changed.EstimatedSourceFramesPerSecond);
+        Assert.True(changed.HasDiscoveredSourceIdentity);
+    }
+
     private static StableVideoSignal Create(
         string senderId = "sender",
         ulong adapterLuid = 42,

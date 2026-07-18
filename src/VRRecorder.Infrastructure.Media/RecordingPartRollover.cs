@@ -1,5 +1,6 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Settings;
 using VRRecorder.Application.Storage;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
@@ -104,6 +105,58 @@ public sealed class RecordingPartRollover(
         };
     }
 
+    public async Task<RecordingPlan> ReserveNextExactPartAsync(
+        RecordingPlan currentPlan,
+        StableVideoSignal nextSignal,
+        int segmentNumber,
+        AudioRouting audioRouting,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(currentPlan);
+        ArgumentNullException.ThrowIfNull(nextSignal);
+        if (currentPlan.VideoLayout.Policy !=
+            ResolutionChangePolicy.ExactFollowSegments)
+        {
+            throw new InvalidOperationException(
+                "Only an exact-follow recording can reserve an exact part.");
+        }
+        EnsureSameSourceIdentity(currentPlan.Signal, nextSignal);
+        if (segmentNumber < 2)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(segmentNumber),
+                segmentNumber,
+                "A rollover segment number must be at least two.");
+        }
+
+        var nextLayout = RecordingVideoLayoutSession.StartExactSegment(
+            nextSignal);
+        var outputCanvas = nextLayout.OutputCanvas;
+        var descriptor = new RecordingFileDescriptor(
+            currentPlan.StartedAt,
+            outputCanvas.Width,
+            outputCanvas.Height,
+            currentPlan.FrameRate,
+            segmentNumber);
+        var outputPath = new OutputPath(
+            Path.GetDirectoryName(currentPlan.Output.FinalPath) ??
+            throw new InvalidOperationException(
+                "The current recording has no output directory."));
+        var output = await _reservation
+            .ReserveAsync(outputPath, descriptor, cancellationToken)
+            .ConfigureAwait(false);
+
+        return currentPlan with
+        {
+            Signal = nextSignal,
+            Output = output,
+            VideoLayout = nextLayout,
+            Media = currentPlan.Media
+                .WithAudioRouting(audioRouting)
+                .WithVideoSource(nextSignal),
+        };
+    }
+
     public async Task FinalizeIntermediatePartAsync(
         RecordingStopResult stopped,
         CancellationToken cancellationToken)
@@ -112,5 +165,28 @@ public sealed class RecordingPartRollover(
         _ = await _finalization
             .ExecuteAsync(stopped, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private static void EnsureSameSourceIdentity(
+        StableVideoSignal current,
+        StableVideoSignal next)
+    {
+        if (current.AdapterLuid != next.AdapterLuid ||
+            current.GpuVendor != next.GpuVendor ||
+            current.HasDiscoveredSourceIdentity !=
+                next.HasDiscoveredSourceIdentity ||
+            !string.Equals(
+                current.SenderId,
+                next.SenderId,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                current.GpuIdentity,
+                next.GpuIdentity,
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "An exact part must retain the active Spout source identity.",
+                nameof(next));
+        }
     }
 }

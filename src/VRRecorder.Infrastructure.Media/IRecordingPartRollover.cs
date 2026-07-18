@@ -15,6 +15,13 @@ public interface IRecordingPartRollover
         AudioRouting audioRouting,
         CancellationToken cancellationToken);
 
+    Task<RecordingPlan> ReserveNextExactPartAsync(
+        RecordingPlan currentPlan,
+        StableVideoSignal nextSignal,
+        int segmentNumber,
+        AudioRouting audioRouting,
+        CancellationToken cancellationToken);
+
     Task FinalizeIntermediatePartAsync(
         RecordingStopResult stopped,
         CancellationToken cancellationToken);

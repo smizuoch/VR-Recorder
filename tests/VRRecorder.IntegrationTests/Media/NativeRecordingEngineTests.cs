@@ -915,6 +915,14 @@ public sealed class NativeRecordingEngineTests
             return Task.FromResult(nextPlan);
         }
 
+        public Task<RecordingPlan> ReserveNextExactPartAsync(
+            RecordingPlan currentPlan,
+            StableVideoSignal nextSignal,
+            int segmentNumber,
+            AudioRouting audioRouting,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(nextPlan);
+
         public Task FinalizeIntermediatePartAsync(
             RecordingStopResult stopped,
             CancellationToken cancellationToken)

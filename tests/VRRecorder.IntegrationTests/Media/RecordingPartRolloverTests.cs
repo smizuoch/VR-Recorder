@@ -1,5 +1,6 @@
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Settings;
 using VRRecorder.Application.Storage;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
@@ -85,6 +86,83 @@ public sealed class RecordingPartRolloverTests
         Assert.Equal(
             new FinalizedRecording(first.FinalPath),
             Assert.Single(saved.Recordings));
+    }
+
+    [Fact]
+    public async Task ReservesExactPartAtTheNewStableSourceGeometry()
+    {
+        var directory = Path.GetFullPath(Path.Combine(
+            Path.GetTempPath(),
+            "vrrecorder-exact-rollover"));
+        var first = new PendingRecording(
+            Path.Combine(directory, "take.recording.mp4"),
+            Path.Combine(directory, "take.mp4"));
+        var second = new PendingRecording(
+            Path.Combine(directory, "take_part002.recording.mp4"),
+            Path.Combine(directory, "take_part002.mp4"));
+        var reservation = new CapturingReservation(second);
+        var rollover = new RecordingPartRollover(
+            reservation,
+            CreateFinalization());
+        var initialSignal = new StableVideoSignal(
+            "vrchat",
+            42,
+            "GPU_1234",
+            GpuVendor.Nvidia,
+            1_920,
+            1_080,
+            VideoPixelFormat.Bgra8,
+            60);
+        var initialLayout = RecordingVideoLayoutSession.StartExactSegment(
+            initialSignal);
+        var plan = new RecordingPlan(
+            initialSignal,
+            first,
+            new RecordingSessionTimestamp(DateTimeOffset.UnixEpoch),
+            new FrameRate(60),
+            EncoderKind.Nvenc,
+            initialLayout)
+        {
+            Media = RecordingMediaConfiguration.CreateDefault()
+                .WithVideoSource(initialSignal),
+        };
+        var nextSignal = initialSignal.WithGeometry(
+            new VideoGeometry(1_280, 720, VideoPixelFormat.Rgba8));
+
+        var next = await rollover.ReserveNextExactPartAsync(
+            plan,
+            nextSignal,
+            segmentNumber: 2,
+            AudioRouting.MicOnly,
+            CancellationToken.None);
+
+        Assert.Equal(1_280, reservation.Descriptor!.Width);
+        Assert.Equal(720, reservation.Descriptor.Height);
+        Assert.Equal(2, reservation.Descriptor.SegmentNumber);
+        Assert.Equal(second, next.Output);
+        Assert.Equal(EncoderKind.Nvenc, next.Encoder);
+        Assert.Equal(nextSignal, next.Signal);
+        Assert.Equal(AudioRouting.MicOnly, next.Media.AudioRouting);
+        Assert.Equal("vrchat", next.Media.SpoutSenderIdentity);
+        Assert.Equal(42UL, next.Media.SpoutAdapterLuid);
+        Assert.Equal(ResolutionChangePolicy.ExactFollowSegments,
+            next.VideoLayout.Policy);
+        Assert.Equal(1_280, next.VideoLayout.CurrentLayout.Source.Width);
+        Assert.Equal(720, next.VideoLayout.CurrentLayout.Source.Height);
+        Assert.Equal(VideoPixelFormat.Rgba8,
+            next.VideoLayout.CurrentLayout.Source.PixelFormat);
+        Assert.Equal(1_280, next.VideoLayout.OutputCanvas.Width);
+        Assert.Equal(720, next.VideoLayout.OutputCanvas.Height);
+        Assert.Equal(VideoPixelFormat.Nv12,
+            next.VideoLayout.OutputCanvas.PixelFormat);
+        Assert.Equal(1_920, plan.VideoLayout.OutputCanvas.Width);
+        Assert.Equal(1_080, plan.VideoLayout.OutputCanvas.Height);
+        Assert.Throws<ArgumentException>(() =>
+            RecordingVideoLayoutSession.StartExactSegment(
+                nextSignal.WithGeometry(new VideoGeometry(
+                    1_279,
+                    720,
+                    VideoPixelFormat.Rgba8))));
     }
 
     [Fact]

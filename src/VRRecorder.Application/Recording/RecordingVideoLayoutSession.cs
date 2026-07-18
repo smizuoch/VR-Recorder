@@ -56,6 +56,30 @@ public sealed class RecordingVideoLayoutSession
             initialLayout);
     }
 
+    public static RecordingVideoLayoutSession StartExactSegment(
+        StableVideoSignal signal)
+    {
+        ArgumentNullException.ThrowIfNull(signal);
+        if ((signal.Width & 1) != 0 || (signal.Height & 1) != 0)
+        {
+            throw new ArgumentException(
+                "Exact-follow H.264 segments require even source dimensions.",
+                nameof(signal));
+        }
+
+        var source = SourceGeometry(signal);
+        var canvas = new VideoGeometry(
+            source.Width,
+            source.Height,
+            VideoPixelFormat.Nv12);
+        return new RecordingVideoLayoutSession(
+            ResolutionChangePolicy.ExactFollowSegments,
+            Layout(
+                source,
+                canvas,
+                new VideoPlacement(0, 0, source.Width, source.Height)));
+    }
+
     public RecordingVideoLayout ApplyStableSignal(StableVideoSignal signal)
     {
         ArgumentNullException.ThrowIfNull(signal);
