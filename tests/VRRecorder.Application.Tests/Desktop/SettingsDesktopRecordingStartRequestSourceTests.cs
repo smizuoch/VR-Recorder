@@ -1,3 +1,4 @@
+using System.Collections;
 using VRRecorder.Application.Desktop;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
@@ -10,6 +11,26 @@ namespace VRRecorder.Application.Tests.Desktop;
 
 public sealed class SettingsDesktopRecordingStartRequestSourceTests
 {
+    [Fact]
+    public void ConstructorRejectsNullDependencies()
+    {
+        var settings = new QueueSettingsStore(CreateSettings());
+        var defaults = new TrackingDefaultOutputPathProvider(
+            AbsolutePath("unused"));
+
+        var settingsException = Assert.Throws<ArgumentNullException>(() =>
+            new SettingsDesktopRecordingStartRequestSource(
+                null!,
+                defaults));
+        Assert.Equal("settings", settingsException.ParamName);
+
+        var defaultsException = Assert.Throws<ArgumentNullException>(() =>
+            new SettingsDesktopRecordingStartRequestSource(
+                settings,
+                null!));
+        Assert.Equal("defaultOutputPaths", defaultsException.ParamName);
+    }
+
     [Fact]
     public async Task MapsEveryRecordingSettingWithoutGuessingHardwareIdentity()
     {
@@ -205,6 +226,41 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
     }
 
     [Fact]
+    public async Task WhitespaceEndpointIsWrappedAsInvalidSettings()
+    {
+        var defaults = new TrackingDefaultOutputPathProvider(
+            AbsolutePath("unused"));
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(CreateSettings(desktopEndpointId: " ")),
+            defaults);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            source.GetAsync(CancellationToken.None));
+
+        Assert.IsType<ArgumentException>(exception.InnerException);
+        Assert.Equal(0, defaults.CallCount);
+    }
+
+    [Fact]
+    public async Task UnsupportedSchemaFailsBeforeDefaultResolution()
+    {
+        var defaults = new TrackingDefaultOutputPathProvider(
+            AbsolutePath("unused"));
+        var settings = CreateSettings() with
+        {
+            SchemaVersion = VRRecorderSettings.CurrentSchemaVersion + 1,
+        };
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(settings),
+            defaults);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            source.GetAsync(CancellationToken.None));
+
+        Assert.Equal(0, defaults.CallCount);
+    }
+
+    [Fact]
     public async Task CancellationIsPassedToStoreAndRecheckedBeforeMapping()
     {
         using var cancellation = new CancellationTokenSource();
@@ -225,6 +281,66 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
     }
 
     [Fact]
+    public async Task CancellationAfterNullLoadWinsOverMissingDocumentFailure()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var defaults = new TrackingDefaultOutputPathProvider(
+            AbsolutePath("unused"));
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new CancelingNullSettingsStore(cancellation),
+            defaults);
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => source.GetAsync(cancellation.Token));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.Equal(0, defaults.CallCount);
+    }
+
+    [Fact]
+    public async Task CancellationAfterValidationStopsBeforeDefaultResolution()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var defaults = new TrackingDefaultOutputPathProvider(
+            AbsolutePath("unused"));
+        var baseSettings = CreateSettings();
+        var settings = baseSettings with
+        {
+            Vr = baseSettings.Vr with
+            {
+                PlacementProfiles = new CancelOnCountProfileList(cancellation),
+            },
+        };
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(settings),
+            defaults);
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => source.GetAsync(cancellation.Token));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.Equal(0, defaults.CallCount);
+    }
+
+    [Fact]
+    public async Task CancellationDuringDefaultResolutionStopsBeforeReturn()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var defaults = new CancelingDefaultOutputPathProvider(
+            cancellation,
+            AbsolutePath("downloads"));
+        var source = new SettingsDesktopRecordingStartRequestSource(
+            new QueueSettingsStore(CreateSettings()),
+            defaults);
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => source.GetAsync(cancellation.Token));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.Equal(1, defaults.CallCount);
+    }
+
+    [Fact]
     public async Task NullSettingsResultFailsBeforeDefaultResolution()
     {
         var defaults = new TrackingDefaultOutputPathProvider(
@@ -233,9 +349,10 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
             new NullSettingsStore(),
             defaults);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
             source.GetAsync(CancellationToken.None));
 
+        Assert.Null(exception.InnerException);
         Assert.Equal(0, defaults.CallCount);
     }
 
@@ -341,6 +458,58 @@ public sealed class SettingsDesktopRecordingStartRequestSourceTests
             VRRecorderSettings settings,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class CancelingNullSettingsStore(
+        CancellationTokenSource cancellation) : ISettingsStore
+    {
+        public Task<VRRecorderSettings> LoadAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            return Task.FromResult<VRRecorderSettings>(null!);
+        }
+
+        public Task SaveAsync(
+            VRRecorderSettings settings,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class CancelOnCountProfileList(
+        CancellationTokenSource cancellation)
+        : IReadOnlyList<VrOverlayPlacementProfile>
+    {
+        public int Count
+        {
+            get
+            {
+                cancellation.Cancel();
+                return 0;
+            }
+        }
+
+        public VrOverlayPlacementProfile this[int index] =>
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        public IEnumerator<VrOverlayPlacementProfile> GetEnumerator() =>
+            Enumerable.Empty<VrOverlayPlacementProfile>().GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class CancelingDefaultOutputPathProvider(
+        CancellationTokenSource cancellation,
+        string path) : IDefaultOutputPathProvider
+    {
+        public int CallCount { get; private set; }
+
+        public OutputPath GetDefault()
+        {
+            CallCount++;
+            cancellation.Cancel();
+            return new OutputPath(path);
+        }
     }
 
     private sealed class NullDefaultOutputPathProvider

@@ -18,7 +18,6 @@ public sealed class SettingsDesktopRecordingStartRequestSource
         IDefaultOutputPathProvider defaultOutputPaths)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        ArgumentNullException.ThrowIfNull(defaultOutputPaths);
         _settings = settings;
         _outputPaths = new RecordingOutputPathResolver(defaultOutputPaths);
     }
