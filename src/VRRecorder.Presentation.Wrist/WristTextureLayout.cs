@@ -6,6 +6,7 @@ public enum WristElementKind
 {
     Background,
     StateCue,
+    TelemetryPanel,
     PrimaryAction,
     SecondaryAction,
 }

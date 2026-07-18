@@ -19,6 +19,16 @@ public static class WristTextureLayoutEngine
         136,
         512,
         224);
+    private static readonly WristPixelRect TelemetryPrimaryBounds = new(
+        SafeInset,
+        136,
+        192,
+        224);
+    private static readonly WristPixelRect TelemetryHealthBounds = new(
+        PixelWidth - SafeInset - 192,
+        136,
+        192,
+        224);
 
     public static WristTextureLayout Layout(
         WristUiSnapshot snapshot,
@@ -51,6 +61,31 @@ public static class WristTextureLayoutEngine
                 Command: null,
                 MinimumTargetDp: 0),
         ];
+        if (snapshot.Page == WristPage.Main && snapshot.Telemetry is not null)
+        {
+            elements.Add(new WristLayoutElement(
+                "telemetry:recording",
+                WristElementKind.TelemetryPanel,
+                MirrorIfRequired(
+                    TelemetryPrimaryBounds,
+                    options.FlowDirection),
+                ZIndex: 15,
+                IsEnabled: false,
+                SemanticId: null,
+                Command: null,
+                MinimumTargetDp: 0));
+            elements.Add(new WristLayoutElement(
+                "telemetry:health",
+                WristElementKind.TelemetryPanel,
+                MirrorIfRequired(
+                    TelemetryHealthBounds,
+                    options.FlowDirection),
+                ZIndex: 15,
+                IsEnabled: false,
+                SemanticId: null,
+                Command: null,
+                MinimumTargetDp: 0));
+        }
         List<WristHitTarget> hitTargets = [];
         if (actions.Length == 0)
         {

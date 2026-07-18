@@ -28,6 +28,9 @@
 - [x] install rootからはmanifest認証済みLegal fileだけをミラーし、同居するEXE／DLL等をコピーしない
 - [x] `CURRENT.txt`、`OPEN-NOTICES.html`、過去version、atomic置換、symlink拒否を保存先連携後も維持する
 - [x] settingsの保存先変更時にversion付きLegal Bundleを先にミラーし、失敗時は旧設定を維持する
+- [x] app-local MSVC CRTのMicrosoft署名済みinstaller identity、公式redistribution list／Runtime license全文、実4 DLLを改ざん検出可能なpending review candidateへ固定する
+- [ ] FFmpeg／JsonSchema.Net／Spout2／OpenVR／libvpl／app-local MSVC CRTの実artifactと配布条件を独立reviewし、実在するticket／requester／reviewer付きで承認する
+- [ ] 承認済みcanonical registryからHardware Validation Payload用の認証済みLegal Bundleを発行する
 
 ## English
 
@@ -57,3 +60,6 @@ Following Basic Design v0.3 §§17, 18.4, and 24, notices, license payloads, the
 - [x] Mirror only manifest-authenticated Legal files from the install root, never colocated EXE, DLL, or other application payloads
 - [x] Preserve `CURRENT.txt`, `OPEN-NOTICES.html`, prior versions, atomic replacement, and symlink rejection after output integration
 - [x] Mirror the versioned Legal Bundle before persisting a settings output change, preserving the prior setting on failure
+- [x] Pin the app-local MSVC CRT Microsoft-signed installer identity, official redistribution list/full Runtime license, and four actual DLLs as a tamper-evident pending-review candidate
+- [ ] Independently review the actual FFmpeg, JsonSchema.Net, Spout2, OpenVR, libvpl, and app-local MSVC CRT artifacts and distribution terms, with real ticket, requester, and reviewer metadata
+- [ ] Issue the authenticated Legal Bundle for the Hardware Validation Payload from the approved canonical registry

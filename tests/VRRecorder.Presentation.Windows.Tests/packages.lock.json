@@ -35,6 +35,25 @@
         "resolved": "3.1.4",
         "contentHash": "5mj99LvCqrq3CNi06xYdyIAXOEh+5b33F2nErCzI5zWiDdLHXiPXEWFSUAF8zlIv0ZWqjZNCwHTQeAPYbF3pCg=="
       },
+      "Humanizer.Core": {
+        "type": "Transitive",
+        "resolved": "3.0.1",
+        "contentHash": "scB3+KcxNmEjZK5V8rKCW2gIiL8m8KH91w14FuuExyhi9xTyAJ+jr+DDxGdy12mHmioe2uvjxTfMgM7WmSUFlw=="
+      },
+      "Json.More.Net": {
+        "type": "Transitive",
+        "resolved": "2.2.0",
+        "contentHash": "fiyEZJNgiCzDa7/N9bZ+CnM5qnawyJ54+CkHNZ2svwxWBWNNFzydJ7RlroqMdOjokGBiLcKIxdajNvOklzlYqQ=="
+      },
+      "JsonPointer.Net": {
+        "type": "Transitive",
+        "resolved": "6.0.1",
+        "contentHash": "EbSJkd/1y9r0WBIptjUctA6BzjgKh1aNU/g6QGgdMZVZ8wc0S/ysQhfiQerP9/VFTeENFHFdCQaoOk9fZqwnFQ==",
+        "dependencies": {
+          "Humanizer.Core": "3.0.1",
+          "Json.More.Net": "2.2.0"
+        }
+      },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
         "resolved": "17.14.1",
@@ -99,10 +118,29 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "vrrecorder.app": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )",
+          "VRRecorder.Compliance": "[1.0.0, )",
+          "VRRecorder.DesignSystem": "[1.0.0, )",
+          "VRRecorder.Infrastructure.Media": "[1.0.0, )",
+          "VRRecorder.Infrastructure.Osc": "[1.0.0, )",
+          "VRRecorder.Infrastructure.SteamVr": "[1.0.0, )",
+          "VRRecorder.Infrastructure.Storage": "[1.0.0, )",
+          "VRRecorder.Presentation.Wrist.Windows": "[1.0.0, )"
+        }
+      },
       "vrrecorder.application": {
         "type": "Project",
         "dependencies": {
           "VRRecorder.Domain": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.compliance": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
         }
       },
       "vrrecorder.designsystem": {
@@ -110,6 +148,33 @@
       },
       "vrrecorder.domain": {
         "type": "Project"
+      },
+      "vrrecorder.infrastructure.media": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.infrastructure.osc": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.infrastructure.steamvr": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )",
+          "VRRecorder.DesignSystem": "[1.0.0, )",
+          "VRRecorder.Presentation.Wrist": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.infrastructure.storage": {
+        "type": "Project",
+        "dependencies": {
+          "JsonSchema.Net": "[8.0.5, )",
+          "VRRecorder.Application": "[1.0.0, )"
+        }
       },
       "vrrecorder.presentation.wrist": {
         "type": "Project",
@@ -123,6 +188,15 @@
         "type": "Project",
         "dependencies": {
           "VRRecorder.Presentation.Wrist": "[1.0.0, )"
+        }
+      },
+      "JsonSchema.Net": {
+        "type": "CentralTransitive",
+        "requested": "[8.0.5, )",
+        "resolved": "8.0.5",
+        "contentHash": "QoEqdoAUgAkbzuFAiHySjGuh8lJs8L8DxkEDGJLEebtlZ6+EbEr0wmYlidErSS2ASNFOModueb83DLNIRLqshg==",
+        "dependencies": {
+          "JsonPointer.Net": "6.0.1"
         }
       }
     }

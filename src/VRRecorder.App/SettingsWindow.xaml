@@ -15,13 +15,13 @@
         WindowStartupLocation="CenterOwner">
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+        <StackPanel Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
             <TextBlock Text="{DynamicResource Settings_Intro}"
                        TextWrapping="Wrap" />
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Output_Heading}">
-                <Grid Margin="{StaticResource Spacing.LayoutGrid}">
+                <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -31,16 +31,16 @@
                                Text="{DynamicResource Settings_OutputFolder_Label}" />
                     <TextBox x:Name="OutputFolderTextBox"
                              Grid.Row="1"
-                             Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                             Margin="{StaticResource Spacing.LayoutGrid.Top}"
                              MinHeight="{StaticResource Interaction.MinimumTarget}"
                              IsReadOnly="True"
                              AutomationProperties.Name="{DynamicResource Settings_OutputFolder_Label}"
                              AutomationProperties.HelpText="{DynamicResource Settings_OutputFolder_Tooltip}"
                              ToolTip="{DynamicResource Settings_OutputFolder_Tooltip}" />
                     <WrapPanel Grid.Row="2"
-                               Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                               Margin="{StaticResource Spacing.LayoutGrid.Top}">
                         <Button x:Name="BrowseOutputFolderButton"
-                                Margin="0,0,{StaticResource Spacing.LayoutGrid},0"
+                                Margin="{StaticResource Spacing.LayoutGrid.Right}"
                                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                                 MinWidth="{StaticResource Interaction.MinimumTarget}"
                                 Content="{DynamicResource Settings_Output_Browse_Label}"
@@ -62,10 +62,10 @@
                 </Grid>
             </GroupBox>
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Language_Label}">
                 <ComboBox x:Name="UiLocaleComboBox"
-                          Margin="{StaticResource Spacing.LayoutGrid}"
+                          Margin="{StaticResource Spacing.LayoutGrid.Thickness}"
                           MinHeight="{StaticResource Interaction.MinimumTarget}"
                           DisplayMemberPath="Label"
                           SelectionChanged="OnSelectionChanged"
@@ -74,9 +74,9 @@
                           ToolTip="{DynamicResource Settings_Language_Tooltip}" />
             </GroupBox>
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Recording_Heading}">
-                <Grid Margin="{StaticResource Spacing.LayoutGrid}">
+                <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="{StaticResource Spacing.LayoutGrid}" />
@@ -112,7 +112,7 @@
                     <ComboBox x:Name="AutoStopComboBox"
                               Grid.Row="1"
                               Grid.Column="2"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -127,7 +127,7 @@
                     <ComboBox x:Name="FrameRateComboBox"
                               Grid.Row="2"
                               Grid.Column="2"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -142,7 +142,7 @@
                     <ComboBox x:Name="ResolutionPolicyComboBox"
                               Grid.Row="3"
                               Grid.Column="2"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -157,7 +157,7 @@
                     <ComboBox x:Name="EncoderComboBox"
                               Grid.Row="4"
                               Grid.Column="2"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -172,7 +172,7 @@
                     <ComboBox x:Name="QualityPresetComboBox"
                               Grid.Row="5"
                               Grid.Column="2"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -182,12 +182,12 @@
                 </Grid>
             </GroupBox>
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Audio_Heading}">
-                <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                <StackPanel Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
                     <TextBlock Text="{DynamicResource Settings_DesktopEndpoint_Label}" />
                     <ComboBox x:Name="DesktopEndpointComboBox"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               IsEditable="True"
                               DisplayMemberPath="DisplayName"
@@ -196,10 +196,10 @@
                               AutomationProperties.HelpText="{DynamicResource Settings_DesktopEndpoint_Tooltip}"
                               ToolTip="{DynamicResource Settings_DesktopEndpoint_Tooltip}" />
 
-                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    <TextBlock Margin="{StaticResource Spacing.LayoutGrid.Top}"
                                Text="{DynamicResource Settings_MicrophoneEndpoint_Label}" />
                     <ComboBox x:Name="MicrophoneEndpointComboBox"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               IsEditable="True"
                               DisplayMemberPath="DisplayName"
@@ -210,7 +210,7 @@
 
                     <TextBlock Text="{DynamicResource Settings_AudioRouting_Label}" />
                     <ComboBox x:Name="AudioRoutingComboBox"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -218,7 +218,7 @@
                               AutomationProperties.HelpText="{DynamicResource Settings_AudioRouting_Tooltip}"
                               ToolTip="{DynamicResource Settings_AudioRouting_Tooltip}" />
 
-                    <DockPanel Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                    <DockPanel Margin="{StaticResource Spacing.LayoutGrid.Top}">
                         <TextBlock DockPanel.Dock="Left"
                                    Text="{DynamicResource Settings_DesktopGain_Label}" />
                         <TextBlock x:Name="DesktopGainValueText"
@@ -236,7 +236,7 @@
                             AutomationProperties.HelpText="{DynamicResource Settings_DesktopGain_Tooltip}"
                             ToolTip="{DynamicResource Settings_DesktopGain_Tooltip}" />
 
-                    <DockPanel Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                    <DockPanel Margin="{StaticResource Spacing.LayoutGrid.Top}">
                         <TextBlock DockPanel.Dock="Left"
                                    Text="{DynamicResource Settings_MicrophoneGain_Label}" />
                         <TextBlock x:Name="MicrophoneGainValueText"
@@ -256,22 +256,22 @@
                 </StackPanel>
             </GroupBox>
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Vr_Heading}">
-                <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                <StackPanel Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
                     <TextBlock Text="{DynamicResource Settings_VrHand_Label}" />
                     <ComboBox x:Name="VrHandComboBox"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
                               AutomationProperties.Name="{DynamicResource Settings_VrHand_Label}"
                               AutomationProperties.HelpText="{DynamicResource Settings_VrHand_Tooltip}"
                               ToolTip="{DynamicResource Settings_VrHand_Tooltip}" />
-                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    <TextBlock Margin="{StaticResource Spacing.LayoutGrid.Top}"
                                Text="{DynamicResource Settings_OverlayPlacement_Label}" />
                     <ComboBox x:Name="OverlayPlacementComboBox"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
@@ -281,19 +281,19 @@
                 </StackPanel>
             </GroupBox>
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Osc_Heading}">
-                <StackPanel Margin="{StaticResource Spacing.LayoutGrid}">
+                <StackPanel Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
                     <TextBlock Text="{DynamicResource Settings_OscAutoDiscover_Label}" />
                     <ComboBox x:Name="OscAutoDiscoverComboBox"
-                              Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                              Margin="{StaticResource Spacing.LayoutGrid.Top}"
                               MinHeight="{StaticResource Interaction.MinimumTarget}"
                               DisplayMemberPath="Label"
                               SelectionChanged="OnSelectionChanged"
                               AutomationProperties.Name="{DynamicResource Settings_OscAutoDiscover_Label}"
                               AutomationProperties.HelpText="{DynamicResource Settings_OscAutoDiscover_Tooltip}"
                               ToolTip="{DynamicResource Settings_OscAutoDiscover_Tooltip}" />
-                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    <TextBlock Margin="{StaticResource Spacing.LayoutGrid.Top}"
                                Text="{DynamicResource Settings_OscFallbackHost_Label}" />
                     <TextBox x:Name="OscFallbackHostTextBox"
                              MinHeight="{StaticResource Interaction.MinimumTarget}"
@@ -301,14 +301,14 @@
                              AutomationProperties.Name="{DynamicResource Settings_OscFallbackHost_Label}"
                              AutomationProperties.HelpText="{DynamicResource Settings_OscFallbackHost_Tooltip}"
                              ToolTip="{DynamicResource Settings_OscFallbackHost_Tooltip}" />
-                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    <TextBlock Margin="{StaticResource Spacing.LayoutGrid.Top}"
                                Text="{DynamicResource Settings_OscFallbackSendPort_Label}" />
                     <TextBox x:Name="OscFallbackSendPortTextBox"
                              MinHeight="{StaticResource Interaction.MinimumTarget}"
                              TextChanged="OnSettingsTextChanged"
                              AutomationProperties.Name="{DynamicResource Settings_OscFallbackSendPort_Label}"
                              AutomationProperties.HelpText="{DynamicResource Settings_OscFallbackSendPort_Label}" />
-                    <TextBlock Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    <TextBlock Margin="{StaticResource Spacing.LayoutGrid.Top}"
                                Text="{DynamicResource Settings_OscFallbackReceivePort_Label}" />
                     <TextBox x:Name="OscFallbackReceivePortTextBox"
                              MinHeight="{StaticResource Interaction.MinimumTarget}"
@@ -318,20 +318,20 @@
                 </StackPanel>
             </GroupBox>
 
-            <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Settings_Rights_Heading}">
-                <TextBlock Margin="{StaticResource Spacing.LayoutGrid}"
+                <TextBlock Margin="{StaticResource Spacing.LayoutGrid.Thickness}"
                            Text="{DynamicResource Rights_Body}"
                            TextWrapping="Wrap"
                            AutomationProperties.Name="{DynamicResource Rights_Body}" />
             </GroupBox>
 
             <TextBlock x:Name="SettingsStatusText"
-                       Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                       Margin="{StaticResource Spacing.LayoutGrid.Top}"
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Assertive" />
 
-            <StackPanel Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+            <StackPanel Margin="{StaticResource Spacing.LayoutGrid.Top}"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
                 <Button Content="{DynamicResource Settings_Cancel_Label}"

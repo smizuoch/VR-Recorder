@@ -1,0 +1,7 @@
+#ifndef VRRECORDER_NATIVE_FFMPEG_H264_D3D11_HARDWARE_TESTS_HPP
+#define VRRECORDER_NATIVE_FFMPEG_H264_D3D11_HARDWARE_TESTS_HPP
+
+void RunFfmpegH264D3d11HardwareTest(bool required);
+void RunFfmpegH264HardwareProbeTest(bool required);
+
+#endif

@@ -65,6 +65,10 @@ public sealed class EnglishUiLocalizer : IUiLocalizer
             ["state.stopping.label"] = "Saving recording",
             ["state.no-signal.label"] = "No camera signal",
             ["state.faulted.label"] = "Recorder error",
+            ["telemetry.desktop-audio.unavailable"] =
+                "Desktop audio unavailable",
+            ["telemetry.microphone.unavailable"] =
+                "Microphone unavailable",
             ["legal.title"] = "About & Legal",
             ["legal.version.format"] = "Product version {0}",
             ["legal.bundle.format"] = "Legal Bundle identity {0}",

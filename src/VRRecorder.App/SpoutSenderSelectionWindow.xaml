@@ -12,7 +12,7 @@
         ShowInTaskbar="True"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="{StaticResource Spacing.LayoutGrid}"
+    <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}"
           MaxWidth="780">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -27,7 +27,7 @@
 
         <ListBox x:Name="SpoutSenderList"
                  Grid.Row="1"
-                 Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                 Margin="{StaticResource Spacing.LayoutGrid.Top}"
                  MinHeight="144"
                  MaxHeight="360"
                  DisplayMemberPath="Label"
@@ -47,7 +47,7 @@
         </ListBox>
 
         <StackPanel Grid.Row="2"
-                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    Margin="{StaticResource Spacing.LayoutGrid.Top}"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="{DynamicResource Spout_Selection_Cancel_Label}"

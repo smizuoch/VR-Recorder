@@ -25,6 +25,26 @@ vrrec_status_t ResolveProductionVideoEncoderRoute(
             requested_encoder_adapter_luid,
         };
         return VRREC_STATUS_OK;
+    case VRREC_ENCODER_AMF:
+        route = {
+            requested_kind,
+            "h264_amf",
+            true,
+            ProductionVideoEncoderInput::D3d11Nv12,
+            source_adapter_luid,
+            requested_encoder_adapter_luid,
+        };
+        return VRREC_STATUS_OK;
+    case VRREC_ENCODER_QSV:
+        route = {
+            requested_kind,
+            "h264_qsv",
+            true,
+            ProductionVideoEncoderInput::QsvDerivedD3d11Nv12,
+            source_adapter_luid,
+            requested_encoder_adapter_luid,
+        };
+        return VRREC_STATUS_OK;
     case VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE:
         route = {
             requested_kind,
@@ -35,9 +55,6 @@ vrrec_status_t ResolveProductionVideoEncoderRoute(
             0,
         };
         return VRREC_STATUS_OK;
-    case VRREC_ENCODER_AMF:
-    case VRREC_ENCODER_QSV:
-        return VRREC_STATUS_BACKEND_UNAVAILABLE;
     default:
         return VRREC_STATUS_INVALID_ARGUMENT;
     }

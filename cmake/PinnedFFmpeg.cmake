@@ -10,6 +10,12 @@ set(
     "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c")
 set(VRRECORDER_FFMPEG_MSVC_COMPILER_VERSION "19.44.35228")
 set(VRRECORDER_FFMPEG_WINDOWS_SDK_VERSION "10.0.26100.0")
+set(VRRECORDER_FFMPEG_NV_CODEC_HEADERS_VERSION "n13.0.19.0")
+set(VRRECORDER_FFMPEG_NV_CODEC_HEADERS_COMMIT "e844e5b26f46bb77479f063029595293aa8f812d")
+set(VRRECORDER_FFMPEG_AMF_VERSION "v1.5.2")
+set(VRRECORDER_FFMPEG_AMF_COMMIT "eadd00804d5f7e5cd8c85d540073198312870776")
+set(VRRECORDER_FFMPEG_LIBVPL_VERSION "v2.17.0")
+set(VRRECORDER_FFMPEG_LIBVPL_COMMIT "d77f9195cf495b937631607333288fd917ae8939")
 set(
     VRRECORDER_FFMPEG_SOURCE_ARCHIVE_RELATIVE_PATH
     "share/vrrecorder/sources/ffmpeg-8.1.2.tar.xz")
@@ -30,7 +36,7 @@ set(
     "share/vrrecorder/build-recipes/ffmpeg-windows-x64.md")
 set(
     VRRECORDER_FFMPEG_BUILD_RECIPE_SHA256
-    "3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01")
+    "80cbf4fefde70a4b9fb89bc2a692370f0814efb50329a9de11ccd9304b54534e")
 set(
     VRRECORDER_FFMPEG_WINDOWS_ORACLE_BUILD_RECIPE_RELATIVE_PATH
     "share/vrrecorder/build-recipes/ffmpeg-windows-oracle-x64.md")
@@ -46,6 +52,7 @@ set(
     "bin/avformat-62.dll"
     "bin/avutil-60.dll"
     "bin/swresample-6.dll"
+    "bin/libvpl.dll"
     "lib/avcodec.lib"
     "lib/avformat.lib"
     "lib/avutil.lib"
@@ -82,8 +89,15 @@ set(
     "--enable-swresample"
     "--enable-d3d11va"
     "--enable-mediafoundation"
+    "--enable-ffnvcodec"
+    "--enable-nvenc"
+    "--enable-amf"
+    "--enable-libvpl"
     "--enable-encoder=aac"
     "--enable-encoder=h264_mf"
+    "--enable-encoder=h264_nvenc"
+    "--enable-encoder=h264_amf"
+    "--enable-encoder=h264_qsv"
     "--enable-muxer=mp4"
     "--enable-protocol=file")
 
@@ -181,6 +195,48 @@ function(_vrrecorder_ffmpeg_require_exact_array json property)
             FATAL_ERROR
             "Pinned FFmpeg evidence array ${property} does not match the exact contract")
     endif()
+endfunction()
+
+function(_vrrecorder_ffmpeg_require_vendor_dependencies evidence)
+    set(expected_names nv-codec-headers AMF libvpl)
+    set(
+        expected_versions
+        "${VRRECORDER_FFMPEG_NV_CODEC_HEADERS_VERSION}"
+        "${VRRECORDER_FFMPEG_AMF_VERSION}"
+        "${VRRECORDER_FFMPEG_LIBVPL_VERSION}")
+    set(
+        expected_commits
+        "${VRRECORDER_FFMPEG_NV_CODEC_HEADERS_COMMIT}"
+        "${VRRECORDER_FFMPEG_AMF_COMMIT}"
+        "${VRRECORDER_FFMPEG_LIBVPL_COMMIT}")
+    string(
+        JSON dependency_count
+        ERROR_VARIABLE json_error
+        LENGTH "${evidence}" vendorDependencies)
+    if(NOT json_error STREQUAL "NOTFOUND" OR
+       NOT dependency_count EQUAL 3)
+        message(
+            FATAL_ERROR
+            "Pinned FFmpeg evidence must contain the exact vendor dependency set")
+    endif()
+    foreach(index RANGE 0 2)
+        list(GET expected_names ${index} expected_name)
+        list(GET expected_versions ${index} expected_version)
+        list(GET expected_commits ${index} expected_commit)
+        string(
+            JSON dependency
+            ERROR_VARIABLE json_error
+            GET "${evidence}" vendorDependencies ${index})
+        if(NOT json_error STREQUAL "NOTFOUND")
+            message(FATAL_ERROR "Pinned FFmpeg vendor dependency is invalid")
+        endif()
+        _vrrecorder_ffmpeg_require_json_value(
+            "${dependency}" name "${expected_name}")
+        _vrrecorder_ffmpeg_require_json_value(
+            "${dependency}" version "${expected_version}")
+        _vrrecorder_ffmpeg_require_json_value(
+            "${dependency}" commit "${expected_commit}")
+    endforeach()
 endfunction()
 
 function(
@@ -441,6 +497,7 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         "${evidence}" license "LGPL version 2.1 or later")
     _vrrecorder_ffmpeg_require_json_value("${evidence}" gpl "OFF")
     _vrrecorder_ffmpeg_require_json_value("${evidence}" nonfree "OFF")
+    _vrrecorder_ffmpeg_require_vendor_dependencies("${evidence}")
 
     _vrrecorder_ffmpeg_read_json_array(
         configure_arguments "${evidence}" configureArguments)
@@ -453,7 +510,9 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         else()
             list(APPEND normalized_arguments "${argument}")
         endif()
-        if(argument MATCHES "^--enable-(gpl|nonfree|version3|lib.+)$")
+        if(argument MATCHES "^--enable-(gpl|nonfree|version3)$" OR
+           (argument MATCHES "^--enable-lib.+$" AND
+            NOT argument STREQUAL "--enable-libvpl"))
             message(
                 FATAL_ERROR
                 "Pinned FFmpeg evidence enables a forbidden license/external feature: ${argument}")
@@ -472,7 +531,7 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         avcodec avformat avutil swresample)
     _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledEncoders
-        aac h264_mf)
+        aac h264_amf h264_mf h264_nvenc h264_qsv)
     _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledMuxers
         mov mp4)
@@ -487,10 +546,10 @@ function(vrrecorder_validate_pinned_ffmpeg_sdk root)
         file)
     _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledExternalLibraries
-        mediafoundation)
+        amf ffnvcodec libvpl mediafoundation)
     _vrrecorder_ffmpeg_require_exact_array(
         "${evidence}" enabledHardwareAccelerationLibraries
-        d3d11va)
+        amf d3d11va nvenc qsv)
     _vrrecorder_ffmpeg_require_file_identity(
         "${normalized_root}"
         "${evidence}"

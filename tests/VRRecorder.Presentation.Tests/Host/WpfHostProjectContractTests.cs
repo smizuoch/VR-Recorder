@@ -137,7 +137,7 @@ public sealed class WpfHostProjectContractTests
             "Polite",
             status.Attribute("AutomationProperties.LiveSetting")?.Value);
         Assert.Equal(
-            "{StaticResource Spacing.LayoutGrid}",
+            "{StaticResource Spacing.LayoutGrid.Thickness}",
             window.Descendants(Presentation + "Grid")
                 .First()
                 .Attribute("Margin")?.Value);
@@ -378,14 +378,14 @@ public sealed class WpfHostProjectContractTests
             "{DynamicResource Layout.FlowDirection}",
             window.Root?.Attribute("FlowDirection")?.Value);
         Assert.Equal(
-            "systemWindows:FlowDirection.LeftToRight",
-            ReadStaticResourceMember(
+            "LeftToRight",
+            ReadResourceValue(
                 appDirectory,
                 "Resources/Layout.ltr.xaml",
                 "Layout.FlowDirection"));
         Assert.Equal(
-            "systemWindows:FlowDirection.RightToLeft",
-            ReadStaticResourceMember(
+            "RightToLeft",
+            ReadResourceValue(
                 appDirectory,
                 "Resources/Layout.rtl.xaml",
                 "Layout.FlowDirection"));
@@ -894,6 +894,8 @@ public sealed class WpfHostProjectContractTests
             "NativeMediaLibraryPath",
             "FfprobeExecutablePath",
             "FfmpegRuntimeDirectory",
+            "OpenVrRuntimeLibraryPath",
+            "MsvcRuntimeDirectory",
         };
         foreach (var property in legacyProperties)
         {
@@ -1062,6 +1064,9 @@ public sealed class WpfHostProjectContractTests
             appCode);
         Assert.Contains("_wristOverlayPlacement.Value", appCode);
         Assert.Contains(".ApplySavedAsync(", appCode);
+        Assert.Contains("ProductionWristTelemetrySource", appCode);
+        Assert.Contains("_wristTelemetry", appCode);
+        Assert.Contains("appliedPlacement.PlacementMode", appCode);
 
         var readyCheck = appCode.IndexOf(
             "activation.State == DesktopRecordingHostState.Ready",
@@ -1351,7 +1356,7 @@ public sealed class WpfHostProjectContractTests
             "new NativeRecordingEngine(",
             factoryCode);
         Assert.Contains(
-            "audioEvents,\n                events,\n" +
+            "audioEvents,\n                mediaEvents,\n" +
             "                SystemRecordingEnvironmentSource." +
             "ForCurrentProcess(),\n" +
             "                new RecordingPartRollover(\n" +
@@ -2498,7 +2503,7 @@ public sealed class WpfHostProjectContractTests
         return resources;
     }
 
-    private static string ReadStaticResourceMember(
+    private static string ReadResourceValue(
         string appDirectory,
         string relativePath,
         string resourceKey)
@@ -2506,9 +2511,7 @@ public sealed class WpfHostProjectContractTests
         var document = LoadRequiredXaml(appDirectory, relativePath);
         var resource = Assert.Single(document.Root!.Elements(), element =>
             element.Attribute(Xaml + "Key")?.Value == resourceKey);
-        return resource.Attribute("Member")?.Value ??
-               throw new InvalidDataException(
-                   $"Resource {resourceKey} has no x:Static Member.");
+        return resource.Value;
     }
 
     private static string PseudoLocalize(string source)

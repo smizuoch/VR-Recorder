@@ -31,6 +31,7 @@ public partial class App
     private readonly DesktopRecordingNotificationHub _recordingNotifications =
         new DesktopRecordingNotificationHub();
     private readonly DesktopRecordingCommandHost _recordingHost;
+    private readonly ProductionWristTelemetrySource _wristTelemetry;
     private readonly IUiCommandDispatcher _uiCommands;
     private readonly RecordingInputDispatcher _recordingInputs;
     private readonly DesktopDiagnosticsController _diagnosticsController;
@@ -99,10 +100,13 @@ public partial class App
         _diagnosticsController = new DesktopDiagnosticsController(
             new PrivacySafeDiagnosticBundleExporter(
                 LogDirectory(settingsPath)));
+        _wristTelemetry = new ProductionWristTelemetrySource(
+            new SystemMonotonicClock());
         _recordingHost = new DesktopRecordingCommandHost(
             new ProductionDesktopRecordingRuntimeFactory(
                 settingsStore,
-                _recordingNotifications));
+                _recordingNotifications,
+                _wristTelemetry));
         _recordingRightsStore =
             new JsonFileRecordingRightsAcknowledgementStore(
                 RecordingRightsPath(settingsPath));
@@ -733,7 +737,7 @@ public partial class App
     {
         try
         {
-            await _wristOverlayPlacement.Value
+            var appliedPlacement = await _wristOverlayPlacement.Value
                 .ApplySavedAsync(_steamVrInputLifetime.Token)
                 .ConfigureAwait(false);
             var overlay = _steamVrWristOverlay.Value;
@@ -745,7 +749,9 @@ public partial class App
                 overlay,
                 _wristLocalizer,
                 _wristLayoutOptions,
-                new SystemMonotonicClock());
+                new SystemMonotonicClock(),
+                _wristTelemetry,
+                appliedPlacement.PlacementMode);
             await runtime
                 .RunAsync(_steamVrInputLifetime.Token)
                 .ConfigureAwait(false);

@@ -11,7 +11,7 @@
         ShowInTaskbar="False"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="{StaticResource Spacing.LayoutGrid}" MaxWidth="560">
+    <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}" MaxWidth="560">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -25,7 +25,7 @@
 
         <CheckBox x:Name="RightsAcknowledgementCheckBox"
                   Grid.Row="1"
-                  Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                  Margin="{StaticResource Spacing.LayoutGrid.Top}"
                   MinHeight="{StaticResource Interaction.MinimumTarget}"
                   Content="{DynamicResource Rights_Acknowledge_Label}"
                   AutomationProperties.Name="{DynamicResource Rights_Acknowledge_AccessibleName}"
@@ -33,7 +33,7 @@
                   Unchecked="OnAcknowledgementChanged" />
 
         <StackPanel Grid.Row="2"
-                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    Margin="{StaticResource Spacing.LayoutGrid.Top}"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="{DynamicResource Rights_Decline_Label}"

@@ -26,7 +26,9 @@ internal sealed record RegistryComponent(
     RegistryFfmpegLegalCandidate? FfmpegLegalCandidate = null,
     RegistrySpout2LegalCandidate? Spout2LegalCandidate = null,
     RegistryOpenVrLegalCandidate? OpenVrLegalCandidate = null,
-    RegistryNativeArtifact[]? NativeArtifacts = null);
+    RegistryCandidateArtifact[]? NativeArtifactCandidates = null,
+    RegistryNativeArtifact[]? NativeArtifacts = null,
+    RegistryMsvcRuntimeLegalCandidate? MsvcRuntimeLegalCandidate = null);
 
 internal sealed record RegistryRepository(string Url, string? Commit);
 
@@ -108,6 +110,20 @@ internal sealed record RegistryOpenVrLegalCandidate(
     string BuildRecipePath,
     long BuildRecipeLength,
     string BuildRecipeSha256,
+    string SourceOfferPath,
+    long SourceOfferLength,
+    string SourceOfferSha256,
+    RegistryCandidateArtifact[] Artifacts);
+
+internal sealed record RegistryMsvcRuntimeLegalCandidate(
+    int SchemaVersion,
+    string InstallerPackageFileName,
+    long InstallerPackageLength,
+    string InstallerPackageSha256,
+    string InstallerPackageDownloadUrl,
+    string InstallerPackageSignerSubject,
+    string RedistributionListUrl,
+    string LicenseSourceUrl,
     string SourceOfferPath,
     long SourceOfferLength,
     string SourceOfferSha256,

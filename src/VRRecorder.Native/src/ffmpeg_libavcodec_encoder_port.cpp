@@ -375,7 +375,9 @@ FfmpegCodecIoResult LibavcodecEncoderPort::ReceivePacket(
         auto &destination = impl_->side_data_views[index];
         destination.kind = source.type == AV_PKT_DATA_SKIP_SAMPLES
             ? FfmpegReceivedPacketSideDataKind::SkipSamples
-            : FfmpegReceivedPacketSideDataKind::Unsupported;
+            : source.type == AV_PKT_DATA_QUALITY_STATS
+                ? FfmpegReceivedPacketSideDataKind::QualityStats
+                : FfmpegReceivedPacketSideDataKind::Unsupported;
         destination.data = reinterpret_cast<const std::byte *>(source.data);
         destination.size = static_cast<int>(source.size);
     }

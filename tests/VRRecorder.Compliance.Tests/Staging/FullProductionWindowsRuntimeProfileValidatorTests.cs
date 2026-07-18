@@ -17,6 +17,11 @@ public sealed class FullProductionWindowsRuntimeProfileValidatorTests
     [InlineData("avformat-62.dll")]
     [InlineData("avutil-60.dll")]
     [InlineData("swresample-6.dll")]
+    [InlineData("libvpl.dll")]
+    [InlineData("msvcp140.dll")]
+    [InlineData("msvcp140_atomic_wait.dll")]
+    [InlineData("vcruntime140.dll")]
+    [InlineData("vcruntime140_1.dll")]
     [InlineData("ffprobe.exe")]
     [InlineData("openvr_api.dll")]
     [InlineData("OpenVr/steamvr.vrmanifest")]
@@ -119,6 +124,31 @@ public sealed class FullProductionWindowsRuntimeProfileValidatorTests
             "swresample-6.dll",
             WindowsRuntimeRole.FfmpegRuntime,
             "ffmpeg",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Entry(
+            "libvpl.dll",
+            WindowsRuntimeRole.EncoderRuntime,
+            "libvpl",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Entry(
+            "msvcp140.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Entry(
+            "msvcp140_atomic_wait.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Entry(
+            "vcruntime140.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Entry(
+            "vcruntime140_1.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
             WindowsRuntimeDeploymentKind.NativeLibrary),
         Entry(
             "ffprobe.exe",

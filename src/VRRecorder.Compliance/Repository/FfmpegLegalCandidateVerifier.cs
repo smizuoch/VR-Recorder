@@ -23,17 +23,17 @@ public static class FfmpegLegalCandidateVerifier
             StringComparer.Ordinal)
         {
             ["avcodec-62.dll"] = (
-                636928,
-                "e399de2feeb8ec0d92eecb3b124205ddc3b5e27c880537cf19a8d2c85d2c6ef2"),
+                805888,
+                "910631cc5372b7e6a04269bd2782d45d162c5435a9537d265911fef382a9ba9d"),
             ["avformat-62.dll"] = (
                 620544,
-                "73b2ae5addd81234f89e266f6dd827e9122862e6de3d4380cb57e948f3936efc"),
+                "b27c21bcb5a788a148688ddc67cecac594201c55470023b731edf54e142ef5bc"),
             ["avutil-60.dll"] = (
-                984576,
-                "c4d6e753ded06793ec484f54798608eb98f8aa4819bd029e68a328b41f25ede7"),
+                1024000,
+                "9581d9e3c1fe5434bc443cdadc848877c47daf181cd64c815f171101924dc508"),
             ["swresample-6.dll"] = (
-                201728,
-                "0e39d92a9aec1b1f07bac1bd0586c23c8b761777bf4676fff5795d22df5a6de3"),
+                202240,
+                "496fda4ed10310adc7e17b3831f80db04776d02ed2482b99480c90fcd8385a5d"),
         };
 
     public static IReadOnlyList<ComplianceIssue> Verify(string repositoryRoot)

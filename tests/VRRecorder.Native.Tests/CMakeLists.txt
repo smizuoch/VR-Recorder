@@ -992,7 +992,10 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
     add_executable(
         vrrecorder_native_ffmpeg_h264_packet_encoder
         ffmpeg_h264_packet_encoder_tests.cpp
+        ffmpeg_h264_d3d11_hardware_tests.cpp
         "${native_source_root}/src/ffmpeg_h264_packet_encoder.cpp"
+        "${native_source_root}/src/ffmpeg_h264_hardware_codec_session.cpp"
+        "${native_source_root}/src/ffmpeg_h264_d3d11_packet_encoder_adapter.cpp"
         "${native_source_root}/src/ffmpeg_h264_software_codec_session.cpp"
         "${native_source_root}/src/ffmpeg_h264_media_foundation_configuration.cpp"
         "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp"
@@ -1000,13 +1003,23 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
         "${native_source_root}/src/ffmpeg_encoder_state_machine.cpp"
         "${native_source_root}/src/h264_packet_normalizer.cpp"
         "${native_source_root}/src/h264_bitstream_converter.cpp"
+        "${native_source_root}/src/h264_avcc_to_annex_b.cpp"
         "${native_source_root}/src/h264_sps_parser.cpp"
-        "${native_source_root}/src/video_encoder_config.cpp")
+        "${native_source_root}/src/video_encoder_config.cpp"
+        "${native_source_root}/src/production_video_encoder_route.cpp"
+        "${native_source_root}/src/hardware_encoder_probe_session_factory.cpp"
+        "${native_source_root}/src/encoder_probe_evidence_builder.cpp"
+        "${native_source_root}/src/encoder_probe_pipeline.cpp"
+        "${native_source_root}/src/annex_b_encoder_probe_decoder.cpp"
+        "${native_source_root}/src/windows_software_encoder_probe_adapter_identity_lookup.cpp"
+        "${native_source_root}/src/windows_media_foundation_h264_decode_port.cpp")
     target_compile_features(
         vrrecorder_native_ffmpeg_h264_packet_encoder PRIVATE cxx_std_20)
     target_compile_definitions(
         vrrecorder_native_ffmpeg_h264_packet_encoder
-        PRIVATE VRRECORDER_NATIVE_TESTING=1)
+        PRIVATE
+            VRRECORDER_NATIVE_TESTING=1
+            NOMINMAX)
     target_include_directories(
         vrrecorder_native_ffmpeg_h264_packet_encoder
         PRIVATE
@@ -1015,7 +1028,15 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
             "${CMAKE_CURRENT_SOURCE_DIR}")
     target_link_libraries(
         vrrecorder_native_ffmpeg_h264_packet_encoder
-        PRIVATE ${ffmpeg_libavcodec_test_dependency} Threads::Threads)
+        PRIVATE
+            ${ffmpeg_libavcodec_test_dependency}
+            Threads::Threads
+            d3d11
+            dxgi
+            mfplat
+            mf
+            mfuuid
+            wmcodecdspuuid)
     set_target_properties(
         vrrecorder_native_ffmpeg_h264_packet_encoder
         PROPERTIES CXX_EXTENSIONS OFF)
@@ -1364,13 +1385,15 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
             vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
             PRIVATE
                 "${native_source_root}/src/ffmpeg_h264_packet_encoder.cpp"
+                "${native_source_root}/src/ffmpeg_h264_hardware_codec_session.cpp"
                 "${native_source_root}/src/ffmpeg_h264_software_codec_session.cpp"
                 "${native_source_root}/src/ffmpeg_h264_media_foundation_configuration.cpp"
                 "${native_source_root}/src/ffmpeg_h264_nv12_frame.cpp"
                 "${native_source_root}/src/h264_packet_normalizer.cpp"
                 "${native_source_root}/src/h264_bitstream_converter.cpp"
                 "${native_source_root}/src/h264_sps_parser.cpp"
-                "${native_source_root}/src/video_encoder_config.cpp")
+                "${native_source_root}/src/video_encoder_config.cpp"
+                "${native_source_root}/src/production_video_encoder_route.cpp")
     endif()
     target_compile_features(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
@@ -1396,7 +1419,9 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
             ${ffmpeg_libavcodec_test_dependency}
             ${ffmpeg_swresample_test_dependency}
             ${ffmpeg_libavformat_test_dependency}
-            Threads::Threads)
+            Threads::Threads
+            d3d11
+            dxgi)
     set_target_properties(
         vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration
         PROPERTIES CXX_EXTENSIONS OFF)

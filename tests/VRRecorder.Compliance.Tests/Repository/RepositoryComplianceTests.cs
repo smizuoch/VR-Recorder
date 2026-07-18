@@ -422,7 +422,7 @@ public sealed class RepositoryComplianceTests
             "0001-configure-redo-enabling-cbs-in-lavf.patch",
             builder);
         Assert.Contains(
-            "3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01",
+            "80cbf4fefde70a4b9fb89bc2a692370f0814efb50329a9de11ccd9304b54534e",
             builder);
         Assert.Contains("cbs_apv_lavf", patch);
         Assert.Contains("cbs_av1_lavf", patch);
@@ -443,6 +443,13 @@ public sealed class RepositoryComplianceTests
                      "--disable-everything",
                      "--enable-encoder=aac",
                      "--enable-encoder=h264_mf",
+                     "--enable-encoder=h264_nvenc",
+                     "--enable-encoder=h264_amf",
+                     "--enable-encoder=h264_qsv",
+                     "--enable-ffnvcodec",
+                     "--enable-nvenc",
+                     "--enable-amf",
+                     "--enable-libvpl",
                      "--enable-muxer=mp4",
                      "--enable-protocol=file"
                  })
@@ -452,7 +459,19 @@ public sealed class RepositoryComplianceTests
         Assert.DoesNotContain("--enable-gpl", combined);
         Assert.DoesNotContain("--enable-nonfree", combined);
         Assert.DoesNotContain("--enable-version3", combined);
-        Assert.DoesNotContain("--enable-lib", combined);
+        Assert.DoesNotContain("--enable-libx264", combined);
+        Assert.Contains("n13.0.19.0", combined);
+        Assert.Contains("v1.5.2", combined);
+        Assert.Contains("v2.17.0", combined);
+        Assert.Contains(
+            "e844e5b26f46bb77479f063029595293aa8f812d",
+            combined);
+        Assert.Contains(
+            "eadd00804d5f7e5cd8c85d540073198312870776",
+            combined);
+        Assert.Contains(
+            "d77f9195cf495b937631607333288fd917ae8939",
+            combined);
     }
 
     [Fact]

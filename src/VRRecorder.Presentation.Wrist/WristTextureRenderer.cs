@@ -51,6 +51,16 @@ public sealed class WristTextureRenderer
                         theme,
                         options);
                     break;
+                case WristElementKind.TelemetryPanel:
+                    DrawTelemetryPanel(
+                        surface,
+                        snapshot.Telemetry ??
+                            throw new InvalidOperationException(
+                                "A telemetry panel requires telemetry."),
+                        element,
+                        theme,
+                        options);
+                    break;
                 case WristElementKind.PrimaryAction:
                 case WristElementKind.SecondaryAction:
                     DrawAction(
@@ -68,6 +78,106 @@ public sealed class WristTextureRenderer
 
         return new WristTextureFrame(snapshot.Revision, layout, pixels);
     }
+
+    private void DrawTelemetryPanel(
+        BgraSurface surface,
+        WristTelemetrySnapshot telemetry,
+        WristLayoutElement element,
+        WristTextureTheme theme,
+        WristLayoutOptions options)
+    {
+        surface.FillRoundedRectangle(
+            element.Bounds,
+            theme.Metrics.StateCornerRadiusPixels,
+            theme.Palette.SurfaceContainer);
+        var lines = element.ElementId switch
+        {
+            "telemetry:recording" => new (string AssetId, string Text)[]
+            {
+                ("telemetry.elapsed", telemetry.ElapsedText),
+                ("telemetry.resolution", telemetry.ResolutionText),
+                ("telemetry.fps", telemetry.FramesPerSecondText),
+                ("telemetry.encoder", telemetry.EncoderDisplayName),
+            },
+            "telemetry:health" => CreateTelemetryHealthLines(telemetry),
+            _ => throw new InvalidOperationException(
+                "The telemetry panel identity is invalid."),
+        };
+        DrawTelemetryLines(
+            surface,
+            element.Bounds,
+            lines,
+            theme.Palette.OnSurface,
+            options);
+    }
+
+    private static (string AssetId, string Text)[]
+        CreateTelemetryHealthLines(WristTelemetrySnapshot telemetry)
+    {
+        var lines = new List<(string AssetId, string Text)>
+        {
+            ("telemetry.spout", $"Spout: {HealthText(telemetry.SpoutSignal)}"),
+            ("telemetry.desktop-audio",
+                $"Desktop: {HealthText(telemetry.DesktopAudioSignal)}"),
+            ("telemetry.microphone",
+                $"Microphone: {HealthText(telemetry.MicrophoneSignal)}"),
+            ("telemetry.placement", $"Placement: {telemetry.PlacementMode}"),
+        };
+        var alert = telemetry.Alerts
+            .OrderByDescending(value => value.Severity)
+            .FirstOrDefault();
+        if (alert is not null)
+        {
+            lines.Add((alert.Message.ResourceKey, alert.Message.Value));
+        }
+        return [.. lines];
+    }
+
+    private void DrawTelemetryLines(
+        BgraSurface surface,
+        WristPixelRect bounds,
+        IReadOnlyList<(string AssetId, string Text)> lines,
+        WristBgra32 foreground,
+        WristLayoutOptions options)
+    {
+        const int padding = 8;
+        const int gap = 2;
+        var maximumWidth = checked(bounds.Width - padding * 2);
+        var masks = lines
+            .Select(line => ResolveText(new WristTextRasterRequest(
+                line.AssetId,
+                line.Text,
+                WristTextRole.SecondaryAction,
+                options.TextScale,
+                maximumWidth,
+                options.FlowDirection)))
+            .ToArray();
+        var contentHeight = checked(
+            masks.Sum(mask => mask.Height) + gap * (masks.Length - 1));
+        if (contentHeight > bounds.Height - padding * 2)
+        {
+            throw new InvalidOperationException(
+                "The wrist telemetry does not fit its layout bounds.");
+        }
+        var top = bounds.Top + (bounds.Height - contentHeight) / 2;
+        for (var index = 0; index < masks.Length; index++)
+        {
+            var left = options.FlowDirection == WristFlowDirection.RightToLeft
+                ? bounds.Right - padding - masks[index].Width
+                : bounds.Left + padding;
+            surface.BlendMask(left, top, masks[index], foreground);
+            top = checked(top + masks[index].Height + gap);
+        }
+    }
+
+    private static string HealthText(WristSignalHealth health) => health switch
+    {
+        WristSignalHealth.NotApplicable => "N/A",
+        WristSignalHealth.Available => "Available",
+        WristSignalHealth.Degraded => "Degraded",
+        WristSignalHealth.Unavailable => "Unavailable",
+        _ => throw new ArgumentOutOfRangeException(nameof(health)),
+    };
 
     private void DrawStateCue(
         BgraSurface surface,

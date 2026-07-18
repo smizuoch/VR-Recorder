@@ -9,11 +9,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <utility>
+#include <vector>
 
 #include "windows_d3d11_multithread_protection.hpp"
 
@@ -131,6 +133,8 @@ private:
 class WindowsD3d11VideoProcessorPort final
     : public D3d11VideoProcessorPort {
 public:
+    static constexpr std::size_t OutputTexturePoolCapacity = 16;
+
     WindowsD3d11VideoProcessorPort(
         ID3D11Device *device,
         std::uint64_t adapter_luid) noexcept
@@ -296,13 +300,30 @@ public:
         output_descriptor.SampleDesc.Count = 1;
         output_descriptor.Usage = D3D11_USAGE_DEFAULT;
         output_descriptor.BindFlags = D3D11_BIND_RENDER_TARGET;
-        ComOwner<ID3D11Texture2D> output_texture;
-        result = device_.Get()->CreateTexture2D(
-            &output_descriptor,
-            nullptr,
-            output_texture.Put());
-        if (FAILED(result)) {
-            return Classify(result);
+        ID3D11Texture2D *output_texture = nullptr;
+        if (output_pool_width_ != plan.output_width ||
+            output_pool_height_ != plan.output_height) {
+            output_texture_pool_.clear();
+            output_pool_index_ = 0;
+            output_pool_width_ = plan.output_width;
+            output_pool_height_ = plan.output_height;
+        }
+        if (output_texture_pool_.size() < OutputTexturePoolCapacity) {
+            ComOwner<ID3D11Texture2D> created_texture;
+            result = device_.Get()->CreateTexture2D(
+                &output_descriptor,
+                nullptr,
+                created_texture.Put());
+            if (FAILED(result)) {
+                return Classify(result);
+            }
+            output_texture_pool_.push_back(std::move(created_texture));
+            output_texture = output_texture_pool_.back().Get();
+        } else {
+            output_texture =
+                output_texture_pool_[output_pool_index_].Get();
+            output_pool_index_ =
+                (output_pool_index_ + 1U) % OutputTexturePoolCapacity;
         }
 
         D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC input_view_descriptor {};
@@ -327,7 +348,7 @@ public:
         output_view_descriptor.Texture2D.MipSlice = 0;
         ComOwner<ID3D11VideoProcessorOutputView> output_view;
         result = video_device_.Get()->CreateVideoProcessorOutputView(
-            output_texture.Get(),
+            output_texture,
             enumerator.Get(),
             &output_view_descriptor,
             output_view.Put());
@@ -388,7 +409,7 @@ public:
 
         try {
             output = std::make_shared<OwnedD3d11VideoSurface>(
-                output_texture.Get(),
+                output_texture,
                 VideoSurfaceDescriptor {
                     adapter_luid_,
                     plan.output_width,
@@ -546,6 +567,10 @@ private:
     ComOwner<ID3D11DeviceContext> context_;
     ComOwner<ID3D11VideoDevice> video_device_;
     ComOwner<ID3D11VideoContext> video_context_;
+    std::vector<ComOwner<ID3D11Texture2D>> output_texture_pool_;
+    std::size_t output_pool_index_ = 0;
+    std::uint32_t output_pool_width_ = 0;
+    std::uint32_t output_pool_height_ = 0;
     std::uint64_t adapter_luid_;
     std::atomic_bool aborted_ = false;
 };

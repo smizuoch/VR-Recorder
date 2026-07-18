@@ -78,7 +78,8 @@ foreach(runtime IN ITEMS
         "avcodec-62.dll"
         "avformat-62.dll"
         "avutil-60.dll"
-        "swresample-6.dll")
+        "swresample-6.dll"
+        "libvpl.dll")
     file(WRITE "${sdk_root}/bin/${runtime}" "fake runtime DLL\n")
 endforeach()
 
@@ -149,6 +150,7 @@ set(artifact_paths
     "bin/avformat-62.dll"
     "bin/avutil-60.dll"
     "bin/swresample-6.dll"
+    "bin/libvpl.dll"
     "lib/avcodec.lib"
     "lib/avformat.lib"
     "lib/avutil.lib"
@@ -188,6 +190,11 @@ file(
     "  \"license\": \"LGPL version 2.1 or later\",\n"
     "  \"gpl\": false,\n"
     "  \"nonfree\": false,\n"
+    "  \"vendorDependencies\": [\n"
+    "    {\"name\": \"nv-codec-headers\", \"version\": \"n13.0.19.0\", \"commit\": \"e844e5b26f46bb77479f063029595293aa8f812d\"},\n"
+    "    {\"name\": \"AMF\", \"version\": \"v1.5.2\", \"commit\": \"eadd00804d5f7e5cd8c85d540073198312870776\"},\n"
+    "    {\"name\": \"libvpl\", \"version\": \"v2.17.0\", \"commit\": \"d77f9195cf495b937631607333288fd917ae8939\"}\n"
+    "  ],\n"
     "  \"configureArguments\": [\n"
     "    \"--prefix=${sdk_root}\",\n"
     "    \"--toolchain=msvc\",\n"
@@ -218,19 +225,26 @@ file(
     "    \"--enable-swresample\",\n"
     "    \"--enable-d3d11va\",\n"
     "    \"--enable-mediafoundation\",\n"
+    "    \"--enable-ffnvcodec\",\n"
+    "    \"--enable-nvenc\",\n"
+    "    \"--enable-amf\",\n"
+    "    \"--enable-libvpl\",\n"
     "    \"--enable-encoder=aac\",\n"
     "    \"--enable-encoder=h264_mf\",\n"
+    "    \"--enable-encoder=h264_nvenc\",\n"
+    "    \"--enable-encoder=h264_amf\",\n"
+    "    \"--enable-encoder=h264_qsv\",\n"
     "    \"--enable-muxer=mp4\",\n"
     "    \"--enable-protocol=file\"\n"
     "  ],\n"
     "  \"enabledLibraries\": [\"avcodec\", \"avformat\", \"avutil\", \"swresample\"],\n"
-    "  \"enabledEncoders\": [\"aac\", \"h264_mf\"],\n"
+    "  \"enabledEncoders\": [\"aac\", \"h264_amf\", \"h264_mf\", \"h264_nvenc\", \"h264_qsv\"],\n"
     "  \"enabledMuxers\": [\"mov\", \"mp4\"],\n"
     "  \"enabledParsers\": [\"ac3\"],\n"
     "  \"enabledBitstreamFilters\": [\"aac_adtstoasc\", \"vp9_superframe\"],\n"
     "  \"enabledProtocols\": [\"file\"],\n"
-    "  \"enabledExternalLibraries\": [\"mediafoundation\"],\n"
-    "  \"enabledHardwareAccelerationLibraries\": [\"d3d11va\"],\n"
+    "  \"enabledExternalLibraries\": [\"amf\", \"ffnvcodec\", \"libvpl\", \"mediafoundation\"],\n"
+    "  \"enabledHardwareAccelerationLibraries\": [\"amf\", \"d3d11va\", \"nvenc\", \"qsv\"],\n"
     "  \"buildRecipePath\": \"${build_recipe_relative_path}\",\n"
     "  \"buildRecipeLength\": ${build_recipe_length},\n"
     "  \"buildRecipeSha256\": \"${build_recipe_sha256}\",\n"
@@ -247,7 +261,7 @@ file(
     "if(NOT VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256 STREQUAL \"464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c\")\n"
     "  message(FATAL_ERROR \"Pinned source archive SHA-256 drifted\")\n"
     "endif()\n"
-    "if(NOT VRRECORDER_FFMPEG_BUILD_RECIPE_SHA256 STREQUAL \"3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01\")\n"
+    "if(NOT VRRECORDER_FFMPEG_BUILD_RECIPE_SHA256 STREQUAL \"80cbf4fefde70a4b9fb89bc2a692370f0814efb50329a9de11ccd9304b54534e\")\n"
     "  message(FATAL_ERROR \"Pinned build recipe SHA-256 drifted\")\n"
     "endif()\n"
     "set(VRRECORDER_FFMPEG_SOURCE_ARCHIVE_SHA256 \"${source_archive_sha256}\")\n"
@@ -370,11 +384,20 @@ file(WRITE "${evidence_path}" "${valid_evidence}")
 
 string(
     REPLACE
-        "[\"mediafoundation\"]"
-        "[\"libx264\", \"mediafoundation\"]"
+        "[\"amf\", \"ffnvcodec\", \"libvpl\", \"mediafoundation\"]"
+        "[\"amf\", \"ffnvcodec\", \"libvpl\", \"libx264\", \"mediafoundation\"]"
     external_library_evidence "${valid_evidence}")
 file(WRITE "${evidence_path}" "${external_library_evidence}")
 run_validation(FALSE "unknown external library")
+file(WRITE "${evidence_path}" "${valid_evidence}")
+
+string(
+    REPLACE
+        "e844e5b26f46bb77479f063029595293aa8f812d"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    wrong_vendor_commit_evidence "${valid_evidence}")
+file(WRITE "${evidence_path}" "${wrong_vendor_commit_evidence}")
+run_validation(FALSE "wrong vendor source commit")
 file(WRITE "${evidence_path}" "${valid_evidence}")
 
 string(

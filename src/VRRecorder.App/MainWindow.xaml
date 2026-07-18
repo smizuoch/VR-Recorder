@@ -11,7 +11,7 @@
         PreviewKeyDown="OnPreviewKeyDown"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterScreen">
-    <Grid Margin="{StaticResource Spacing.LayoutGrid}">
+    <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -32,20 +32,20 @@
 
         <TextBlock x:Name="RecordingSavedText"
                    Grid.Row="1"
-                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   Margin="{StaticResource Spacing.LayoutGrid.Top}"
                    TextWrapping="Wrap"
                    Visibility="Collapsed"
                    AutomationProperties.LiveSetting="Polite" />
 
         <TextBlock x:Name="CameraRestoreWarningText"
                    Grid.Row="2"
-                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   Margin="{StaticResource Spacing.LayoutGrid.Top}"
                    TextWrapping="Wrap"
                    Visibility="Collapsed"
                    AutomationProperties.LiveSetting="Assertive" />
 
         <Grid Grid.Row="3"
-              Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+              Margin="{StaticResource Spacing.LayoutGrid.Top}">
             <TextBlock x:Name="AudioDeviceStatusText"
                        TextWrapping="Wrap"
                        Visibility="Collapsed" />
@@ -63,7 +63,7 @@
 
         <Button x:Name="RecordingToggleButton"
                 Grid.Row="4"
-                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                Margin="{StaticResource Spacing.LayoutGrid.Top}"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
                 Content="{DynamicResource Recording_Start_Short}"
@@ -75,7 +75,7 @@
 
         <StackPanel x:Name="AudioControlsPanel"
                     Grid.Row="5"
-                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    Margin="{StaticResource Spacing.LayoutGrid.Top}"
                     Orientation="Horizontal"
                     Visibility="Collapsed">
             <ToggleButton x:Name="MicrophoneToggleButton"
@@ -105,7 +105,7 @@
 
         <Button x:Name="SettingsButton"
                 Grid.Row="6"
-                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                Margin="{StaticResource Spacing.LayoutGrid.Top}"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
                 Content="{DynamicResource Settings_Open_Label}"
@@ -116,7 +116,7 @@
 
         <Button x:Name="DiagnosticsButton"
                 Grid.Row="7"
-                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                Margin="{StaticResource Spacing.LayoutGrid.Top}"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
                 Content="{DynamicResource Diagnostics_Open_Label}"
@@ -127,7 +127,7 @@
 
         <Button x:Name="AboutLegalButton"
                 Grid.Row="8"
-                Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                Margin="{StaticResource Spacing.LayoutGrid.Top}"
                 MinHeight="{StaticResource Interaction.MinimumTarget}"
                 MinWidth="{StaticResource Interaction.MinimumTarget}"
                 Content="{DynamicResource Legal_Open_Label}"

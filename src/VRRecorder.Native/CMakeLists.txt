@@ -122,6 +122,7 @@ if(VRRECORDER_ENCODER_PROBE_FACTORY_VARIANT STREQUAL "PRODUCTION")
         vrrecorder_production_encoder_probe_sources
         ${vrrecorder_production_encoder_h264_sources}
         src/ffmpeg_h264_software_codec_session.cpp
+        src/hardware_encoder_probe_session_factory.cpp
         src/ffmpeg_system_memory_encoder_probe_session.cpp
         src/software_encoder_probe_session_factory.cpp)
     list(REMOVE_DUPLICATES vrrecorder_production_encoder_probe_sources)

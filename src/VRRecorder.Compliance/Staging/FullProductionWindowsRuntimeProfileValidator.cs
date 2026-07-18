@@ -30,6 +30,31 @@ internal static class FullProductionWindowsRuntimeProfileValidator
             "ffmpeg",
             WindowsRuntimeDeploymentKind.NativeLibrary),
         Required(
+            "libvpl.dll",
+            WindowsRuntimeRole.EncoderRuntime,
+            "libvpl",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Required(
+            "msvcp140.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Required(
+            "msvcp140_atomic_wait.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Required(
+            "vcruntime140.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Required(
+            "vcruntime140_1.dll",
+            WindowsRuntimeRole.ToolchainRuntime,
+            "msvc-runtime",
+            WindowsRuntimeDeploymentKind.NativeLibrary),
+        Required(
             "ffprobe.exe",
             WindowsRuntimeRole.DiagnosticTool,
             "ffmpeg",

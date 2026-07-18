@@ -10,6 +10,39 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 public sealed class WristUiSessionTests
 {
     [Fact]
+    public async Task ProjectsProductionTelemetryWithCommittedPlacement()
+    {
+        var telemetry = new CapturingTelemetrySource();
+        var session = new WristUiSession(
+            EnglishUiLocalizer.Instance,
+            new CapturingCommands(),
+            new CapturingPlacementCommands(),
+            telemetry,
+            OverlayPlacementMode.WristDock);
+        var status = RecorderStatusSnapshot.Create(
+            1,
+            RecorderState.Recording);
+
+        var docked = session.Project(status);
+        await session.DispatchAsync(
+            UiCommandId.PinOverlayInWorld,
+            UiActivationKind.WristRay,
+            CancellationToken.None);
+        var pinned = session.Project(status);
+
+        Assert.NotNull(docked.Telemetry);
+        Assert.Equal(
+            OverlayPlacementMode.WristDock,
+            docked.Telemetry.PlacementMode);
+        Assert.Equal(
+            OverlayPlacementMode.WorldPin,
+            pinned.Telemetry!.PlacementMode);
+        Assert.Equal(
+            [OverlayPlacementMode.WristDock, OverlayPlacementMode.WorldPin],
+            telemetry.Placements);
+    }
+
+    [Fact]
     public async Task NavigatesAndRoutesSmallNudgesWithoutChangingRecorderRevision()
     {
         var application = new CapturingCommands();
@@ -116,6 +149,31 @@ public sealed class WristUiSessionTests
             cancellationToken.ThrowIfCancellationRequested();
             Commands.Add((command, activationKind));
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingTelemetrySource : IWristTelemetrySource
+    {
+        public List<OverlayPlacementMode> Placements { get; } = [];
+
+        public WristTelemetrySnapshot? Capture(
+            RecorderStatusSnapshot status,
+            OverlayPlacementMode placementMode,
+            IUiLocalizer localizer)
+        {
+            Placements.Add(placementMode);
+            return new WristTelemetrySnapshot(
+                TimeSpan.Zero,
+                1_280,
+                720,
+                60,
+                59.94,
+                WristSignalHealth.Available,
+                WristSignalHealth.Available,
+                WristSignalHealth.Available,
+                "NVENC",
+                placementMode,
+                []);
         }
     }
 

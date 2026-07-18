@@ -14,7 +14,8 @@ public:
         PreHeaderCoordinator &coordinator,
         std::int64_t capture_epoch,
         const void *video_encoder_identity,
-        FragmentedMp4StreamConfiguration configuration);
+        FragmentedMp4StreamConfiguration configuration,
+        bool publish_initial_video_descriptor = true);
 
     vrrec_status_t Start(
         const FragmentedMp4StreamConfiguration &configuration)
@@ -28,6 +29,7 @@ private:
     std::int64_t capture_epoch_;
     const void *video_encoder_identity_;
     FragmentedMp4StreamConfiguration configuration_;
+    bool publish_initial_video_descriptor_;
     std::atomic_bool start_attempted_ = false;
 };
 

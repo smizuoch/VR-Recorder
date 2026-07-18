@@ -132,7 +132,33 @@ vrrec_status_t ConvertH264AvccDescriptorToAnnexB(
             }
         }
         if (offset != descriptor.size()) {
-            return VRREC_STATUS_INVALID_ARGUMENT;
+            if (descriptor[1] != std::byte {100} ||
+                descriptor.size() - offset < 4U ||
+                (std::to_integer<unsigned int>(descriptor[offset]) &
+                    0xfcU) != 0xfcU ||
+                (std::to_integer<unsigned int>(descriptor[offset + 1U]) &
+                    0xf8U) != 0xf8U ||
+                (std::to_integer<unsigned int>(descriptor[offset + 2U]) &
+                    0xf8U) != 0xf8U) {
+                return VRREC_STATUS_INVALID_ARGUMENT;
+            }
+            const auto sequence_parameter_set_extension_count =
+                std::to_integer<unsigned int>(descriptor[offset + 3U]);
+            offset += 4U;
+            for (unsigned int index = 0;
+                 index < sequence_parameter_set_extension_count;
+                 ++index) {
+                if (!ReadDescriptorNal(
+                        descriptor,
+                        offset,
+                        13U,
+                        converted)) {
+                    return VRREC_STATUS_INVALID_ARGUMENT;
+                }
+            }
+            if (offset != descriptor.size()) {
+                return VRREC_STATUS_INVALID_ARGUMENT;
+            }
         }
         annex_b.swap(converted);
         return VRREC_STATUS_OK;

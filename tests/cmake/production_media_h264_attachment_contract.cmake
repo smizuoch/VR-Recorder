@@ -17,6 +17,8 @@ file(MAKE_DIRECTORY "${source_root}/src" "${project_root}")
 
 set(source_names
     ffmpeg_h264_packet_encoder.cpp
+    ffmpeg_h264_hardware_codec_session.cpp
+    ffmpeg_h264_d3d11_packet_encoder_adapter.cpp
     ffmpeg_h264_media_foundation_configuration.cpp
     ffmpeg_h264_nv12_frame.cpp
     ffmpeg_libavcodec_encoder_port.cpp)
@@ -58,6 +60,8 @@ vrrecorder_resolve_production_media_h264_attachment(
 if(EXPECT_ATTACHED)
     set(expected_sources
         "${NATIVE_SOURCE_ROOT}/src/ffmpeg_h264_packet_encoder.cpp"
+        "${NATIVE_SOURCE_ROOT}/src/ffmpeg_h264_hardware_codec_session.cpp"
+        "${NATIVE_SOURCE_ROOT}/src/ffmpeg_h264_d3d11_packet_encoder_adapter.cpp"
         "${NATIVE_SOURCE_ROOT}/src/ffmpeg_h264_media_foundation_configuration.cpp"
         "${NATIVE_SOURCE_ROOT}/src/ffmpeg_h264_nv12_frame.cpp"
         "${NATIVE_SOURCE_ROOT}/src/ffmpeg_libavcodec_encoder_port.cpp")

@@ -11,6 +11,7 @@ enum class ProductionVideoEncoderInput {
     None,
     SystemMemoryNv12,
     D3d11Nv12,
+    QsvDerivedD3d11Nv12,
 };
 
 struct ProductionVideoEncoderRoute final {

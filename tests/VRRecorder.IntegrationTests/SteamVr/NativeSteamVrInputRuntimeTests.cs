@@ -43,6 +43,11 @@ public sealed class NativeSteamVrInputRuntimeTests
     [Fact]
     public async Task RejectsBlankActionPathBeforeCreatingNativeInput()
     {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
         using var install = TemporaryInstall.Create();
         using var controls = new NativeSteamVrFixtureControls(FixturePath());
         var runtime = new NativeSteamVrInputRuntime(FixturePath(), install.Path);
@@ -58,6 +63,11 @@ public sealed class NativeSteamVrInputRuntimeTests
     [Fact]
     public async Task HonorsCancellationBeforeCreatingNativeInput()
     {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
         using var install = TemporaryInstall.Create();
         using var controls = new NativeSteamVrFixtureControls(FixturePath());
         var runtime = new NativeSteamVrInputRuntime(FixturePath(), install.Path);

@@ -12,6 +12,15 @@ param(
     [Parameter()]
     [string] $Msys2Root = 'C:\msys64',
 
+    [Parameter(Mandatory)]
+    [string] $NvCodecHeadersRoot,
+
+    [Parameter(Mandatory)]
+    [string] $AmfRoot,
+
+    [Parameter(Mandatory)]
+    [string] $LibvplRoot,
+
     [Parameter()]
     [ValidateRange(1, 128)]
     [int] $BuildJobs = [Math]::Max(1, [Environment]::ProcessorCount)
@@ -31,6 +40,12 @@ $sourcePatchUpstreamUrl = 'https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/23039'
 $sourcePatchSha256 = 'c8aca5fee1f02dbd1a1623de0333013e0c41fb691adf0ede3d4479ee32ac41c0'
 $requiredMsvcVersion = '19.44.35228'
 $requiredWindowsSdkVersion = '10.0.26100.0'
+$nvCodecHeadersVersion = 'n13.0.19.0'
+$nvCodecHeadersCommit = 'e844e5b26f46bb77479f063029595293aa8f812d'
+$amfVersion = 'v1.5.2'
+$amfCommit = 'eadd00804d5f7e5cd8c85d540073198312870776'
+$libvplVersion = 'v2.17.0'
+$libvplCommit = 'd77f9195cf495b937631607333288fd917ae8939'
 $ownershipToken = 'vr-recorder FFmpeg Windows production SDK workspace v1'
 $ownerRelativePath = 'share\vrrecorder\windows-production-sdk-owned.txt'
 $evidenceRelativePath = 'share\vrrecorder\ffmpeg-build-evidence.json'
@@ -44,12 +59,13 @@ $sourcePatchSourcePath = Join-Path $PSScriptRoot `
     'patches\ffmpeg-8.1.2\0001-configure-redo-enabling-cbs-in-lavf.patch'
 $recipeSourcePath = Join-Path $PSScriptRoot `
     'ffmpeg-windows-production-build-recipe.md'
-$recipeSha256 = '3579cddeb30c04a3a17bf3956ebbbfe87dccdd12081c0432fb4626e049beff01'
+$recipeSha256 = '80cbf4fefde70a4b9fb89bc2a692370f0814efb50329a9de11ccd9304b54534e'
 $artifactPaths = @(
     'bin/avcodec-62.dll',
     'bin/avformat-62.dll',
     'bin/avutil-60.dll',
     'bin/swresample-6.dll',
+    'bin/libvpl.dll',
     'lib/avcodec.lib',
     'lib/avformat.lib',
     'lib/avutil.lib',
@@ -84,8 +100,15 @@ $configureArgumentSuffix = @(
     '--enable-swresample',
     '--enable-d3d11va',
     '--enable-mediafoundation',
+    '--enable-ffnvcodec',
+    '--enable-nvenc',
+    '--enable-amf',
+    '--enable-libvpl',
     '--enable-encoder=aac',
     '--enable-encoder=h264_mf',
+    '--enable-encoder=h264_nvenc',
+    '--enable-encoder=h264_amf',
+    '--enable-encoder=h264_qsv',
     '--enable-muxer=mp4',
     '--enable-protocol=file'
 )
@@ -116,6 +139,24 @@ function Get-Sha256 {
     param([Parameter(Mandatory)] [string] $Path)
 
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-ExactGitCommit {
+    param([Parameter(Mandatory)] [string] $RepositoryRoot)
+
+    if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot '.git'))) {
+        throw "Vendor source is not a Git checkout: $RepositoryRoot"
+    }
+    $gitPath = (Get-Command git.exe -CommandType Application).Source
+    $commit = (& $gitPath -C $RepositoryRoot rev-parse HEAD | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') {
+        throw "Could not read vendor source commit: $RepositoryRoot"
+    }
+    $dirty = (& $gitPath -C $RepositoryRoot status --porcelain | Out-String)
+    if ($LASTEXITCODE -ne 0 -or -not [string]::IsNullOrWhiteSpace($dirty)) {
+        throw "Vendor source checkout must be clean: $RepositoryRoot"
+    }
+    return $commit
 }
 
 function Assert-OwnedDirectory {
@@ -273,6 +314,19 @@ function Test-ExistingSdk {
             $evidence.windowsSdkVersion -ne $requiredWindowsSdkVersion) {
             return $false
         }
+        $vendorDependencies = @($evidence.vendorDependencies)
+        if ($vendorDependencies.Count -ne 3 -or
+            $vendorDependencies[0].name -ne 'nv-codec-headers' -or
+            $vendorDependencies[0].version -ne $nvCodecHeadersVersion -or
+            $vendorDependencies[0].commit -ne $nvCodecHeadersCommit -or
+            $vendorDependencies[1].name -ne 'AMF' -or
+            $vendorDependencies[1].version -ne $amfVersion -or
+            $vendorDependencies[1].commit -ne $amfCommit -or
+            $vendorDependencies[2].name -ne 'libvpl' -or
+            $vendorDependencies[2].version -ne $libvplVersion -or
+            $vendorDependencies[2].commit -ne $libvplCommit) {
+            return $false
+        }
         $sourcePath = Join-Path $Root $sourceArchiveRelativePath
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf) -or
             (Get-Sha256 $sourcePath) -ne $sourceSha256 -or
@@ -319,10 +373,40 @@ function Test-ExistingSdk {
 $SdkRoot = Get-NormalizedAbsolutePath $SdkRoot
 $VisualStudioRoot = Get-NormalizedAbsolutePath $VisualStudioRoot
 $Msys2Root = Get-NormalizedAbsolutePath $Msys2Root
+$NvCodecHeadersRoot = Get-NormalizedAbsolutePath $NvCodecHeadersRoot
+$AmfRoot = Get-NormalizedAbsolutePath $AmfRoot
+$LibvplRoot = Get-NormalizedAbsolutePath $LibvplRoot
 $driveRoot = [IO.Path]::GetPathRoot($SdkRoot)
 if ($SdkRoot -eq [IO.Path]::TrimEndingDirectorySeparator($driveRoot) -or
     $SdkRoot -eq (Get-NormalizedAbsolutePath $HOME)) {
     throw "Refusing unsafe SDK root: $SdkRoot"
+}
+
+$vendorSourceRequirements = @(
+    @{
+        Root = $NvCodecHeadersRoot
+        RelativePath = 'include\ffnvcodec\nvEncodeAPI.h'
+        Commit = $nvCodecHeadersCommit
+    },
+    @{
+        Root = $AmfRoot
+        RelativePath = 'amf\public\include\core\Version.h'
+        Commit = $amfCommit
+    },
+    @{
+        Root = $LibvplRoot
+        RelativePath = 'CMakeLists.txt'
+        Commit = $libvplCommit
+    }
+)
+foreach ($requirement in $vendorSourceRequirements) {
+    $requiredSource = Join-Path $requirement.Root $requirement.RelativePath
+    if (-not (Test-Path -LiteralPath $requiredSource -PathType Leaf)) {
+        throw "Vendor source input is missing: $requiredSource"
+    }
+    if ((Get-ExactGitCommit $requirement.Root) -ne $requirement.Commit) {
+        throw "Vendor source commit does not match: $($requirement.Root)"
+    }
 }
 
 $workRoot = Get-NormalizedAbsolutePath "$SdkRoot.work"
@@ -333,6 +417,8 @@ $sourceRoot = Join-Path $workRoot 'source'
 $buildLogPath = Join-Path $workRoot 'build.log'
 $vcEnvironmentScriptPath = Join-Path $workRoot 'vcvars-env.cmd'
 $msysBuildScriptPath = Join-Path $workRoot 'build-ffmpeg.sh'
+$vendorPrefix = Join-Path $workRoot 'vendor-prefix'
+$libvplBuildRoot = Join-Path $workRoot 'libvpl-build'
 
 if (-not (Test-Path -LiteralPath $recipeSourcePath -PathType Leaf)) {
     throw "Canonical build recipe is missing: $recipeSourcePath"
@@ -364,6 +450,60 @@ if (Test-Path -LiteralPath $workRoot) {
         "$ownershipToken`n",
         [Text.UTF8Encoding]::new($false))
 }
+
+Remove-WorkChild $vendorPrefix $workRoot $workMarkerPath
+Remove-WorkChild $libvplBuildRoot $workRoot $workMarkerPath
+New-Item -ItemType Directory -Path $vendorPrefix | Out-Null
+$cmakePath = (Get-Command cmake.exe -CommandType Application).Source
+& $cmakePath `
+    -S $LibvplRoot `
+    -B $libvplBuildRoot `
+    -G 'Visual Studio 17 2022' `
+    -A x64 `
+    "-DCMAKE_INSTALL_PREFIX=$vendorPrefix" `
+    -DBUILD_SHARED_LIBS=ON `
+    -DBUILD_TESTS=OFF `
+    -DBUILD_EXAMPLES=OFF `
+    -DINSTALL_EXAMPLES=OFF `
+    -DBUILD_EXPERIMENTAL=OFF
+if ($LASTEXITCODE -ne 0) {
+    throw "Intel VPL configure failed with exit code $LASTEXITCODE"
+}
+& $cmakePath --build $libvplBuildRoot --config Release --target install `
+    --parallel $BuildJobs
+if ($LASTEXITCODE -ne 0) {
+    throw "Intel VPL build failed with exit code $LASTEXITCODE"
+}
+
+$vendorIncludeRoot = Join-Path $vendorPrefix 'include'
+$ffnvcodecDestination = Join-Path $vendorIncludeRoot 'ffnvcodec'
+$amfDestination = Join-Path $vendorIncludeRoot 'AMF'
+New-Item -ItemType Directory -Path $vendorIncludeRoot -Force | Out-Null
+Copy-Item `
+    -LiteralPath (Join-Path $NvCodecHeadersRoot 'include\ffnvcodec') `
+    -Destination $ffnvcodecDestination `
+    -Recurse
+New-Item -ItemType Directory -Path $amfDestination -Force | Out-Null
+Copy-Item `
+    -Path (Join-Path $AmfRoot 'amf\public\include\*') `
+    -Destination $amfDestination `
+    -Recurse
+$pkgConfigRoot = Join-Path $vendorPrefix 'lib\pkgconfig'
+New-Item -ItemType Directory -Path $pkgConfigRoot -Force | Out-Null
+$ffnvcodecPkgConfig = @(
+    "prefix=$($vendorPrefix.Replace('\', '/'))",
+    'includedir=${prefix}/include',
+    '',
+    'Name: ffnvcodec',
+    'Description: FFmpeg version of Nvidia Codec SDK headers',
+    'Version: 13.0.19.0',
+    'Cflags: -I${includedir}',
+    ''
+) -join "`n"
+[IO.File]::WriteAllText(
+    (Join-Path $pkgConfigRoot 'ffnvcodec.pc'),
+    $ffnvcodecPkgConfig,
+    [Text.UTF8Encoding]::new($false))
 
 if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
     $temporaryArchive = "$archivePath.download"
@@ -405,6 +545,9 @@ if (-not (Test-Path -LiteralPath $vcVarsPath -PathType Leaf)) {
     throw "vcvars64.bat is missing: $vcVarsPath"
 }
 Import-VcVarsEnvironment $vcVarsPath $vcEnvironmentScriptPath
+$env:INCLUDE = "$vendorIncludeRoot;$env:INCLUDE"
+$env:LIB = "$(Join-Path $vendorPrefix 'lib');$env:LIB"
+$env:PKG_CONFIG_PATH = $pkgConfigRoot
 
 $clPath = (Get-Command cl.exe -CommandType Application).Source
 $linkPath = (Get-Command link.exe -CommandType Application).Source
@@ -444,12 +587,14 @@ $sdkMsys = Convert-ToMsysPath $SdkRoot $cygpathPath
 $buildScriptMsys = Convert-ToMsysPath $msysBuildScriptPath $cygpathPath
 $msvcBinMsys = Convert-ToMsysPath (Split-Path -Parent $clPath) $cygpathPath
 $windowsSdkBinMsys = Convert-ToMsysPath (Split-Path -Parent $rcPath) $cygpathPath
+$vendorBinMsys = Convert-ToMsysPath (Join-Path $vendorPrefix 'bin') $cygpathPath
 $configureArguments = @("--prefix=$sdkMsys") + $configureArgumentSuffix
 $bashArguments = $configureArguments |
     ForEach-Object { Convert-ToBashLiteral $_ }
 $buildScript = @(
     'set -euo pipefail',
-    "export PATH=$(Convert-ToBashLiteral "$msvcBinMsys`:$windowsSdkBinMsys`:/usr/bin")",
+    "export PATH=$(Convert-ToBashLiteral "$msvcBinMsys`:$windowsSdkBinMsys`:$vendorBinMsys`:/usr/bin")",
+    "export PKG_CONFIG_PATH=$(Convert-ToBashLiteral (Convert-ToMsysPath $pkgConfigRoot $cygpathPath))",
     "cd $(Convert-ToBashLiteral $sourceMsys)",
     "./configure $($bashArguments -join ' ')",
     "make -j$BuildJobs",
@@ -478,6 +623,12 @@ foreach ($component in @('avcodec', 'avformat', 'avutil', 'swresample')) {
     Move-Item -LiteralPath $installedImportLibrary `
         -Destination $contractImportLibrary
 }
+$libvplRuntime = Join-Path $vendorPrefix 'bin\libvpl.dll'
+if (-not (Test-Path -LiteralPath $libvplRuntime -PathType Leaf)) {
+    throw "Intel VPL runtime is missing: $libvplRuntime"
+}
+Copy-Item -LiteralPath $libvplRuntime `
+    -Destination (Join-Path $SdkRoot 'bin\libvpl.dll')
 
 $componentsPath = Join-Path $sourceRoot 'config_components.h'
 if (-not (Test-Path -LiteralPath $componentsPath -PathType Leaf)) {
@@ -490,7 +641,10 @@ $enabledDemuxers = Get-EnabledComponents $componentsPath 'DEMUXER'
 $enabledParsers = Get-EnabledComponents $componentsPath 'PARSER'
 $enabledBitstreamFilters = Get-EnabledComponents $componentsPath 'BSF'
 $enabledProtocols = Get-EnabledComponents $componentsPath 'PROTOCOL'
-Assert-ExactSet 'encoders' $enabledEncoders @('aac', 'h264_mf')
+Assert-ExactSet `
+    'encoders' `
+    $enabledEncoders `
+    @('aac', 'h264_amf', 'h264_mf', 'h264_nvenc', 'h264_qsv')
 Assert-ExactSet 'decoders' $enabledDecoders @()
 Assert-ExactSet 'muxers' $enabledMuxers @('mov', 'mp4')
 Assert-ExactSet 'demuxers' $enabledDemuxers @()
@@ -555,15 +709,45 @@ $evidence = [ordered]@{
     license = 'LGPL version 2.1 or later'
     gpl = $false
     nonfree = $false
+    vendorDependencies = @(
+        [ordered]@{
+            name = 'nv-codec-headers'
+            version = $nvCodecHeadersVersion
+            commit = $nvCodecHeadersCommit
+        },
+        [ordered]@{
+            name = 'AMF'
+            version = $amfVersion
+            commit = $amfCommit
+        },
+        [ordered]@{
+            name = 'libvpl'
+            version = $libvplVersion
+            commit = $libvplCommit
+        }
+    )
     configureArguments = $configureArguments
     enabledLibraries = @('avcodec', 'avformat', 'avutil', 'swresample')
-    enabledEncoders = @('aac', 'h264_mf')
+    enabledEncoders = @(
+        'aac',
+        'h264_amf',
+        'h264_mf',
+        'h264_nvenc',
+        'h264_qsv')
     enabledMuxers = @('mov', 'mp4')
     enabledParsers = @('ac3')
     enabledBitstreamFilters = @('aac_adtstoasc', 'vp9_superframe')
     enabledProtocols = @('file')
-    enabledExternalLibraries = @('mediafoundation')
-    enabledHardwareAccelerationLibraries = @('d3d11va')
+    enabledExternalLibraries = @(
+        'amf',
+        'ffnvcodec',
+        'libvpl',
+        'mediafoundation')
+    enabledHardwareAccelerationLibraries = @(
+        'amf',
+        'd3d11va',
+        'nvenc',
+        'qsv')
     buildRecipePath = $recipeRelativePath.Replace('\', '/')
     buildRecipeLength = (Get-Item -LiteralPath $recipeDestination).Length
     buildRecipeSha256 = Get-Sha256 $recipeDestination

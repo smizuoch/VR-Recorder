@@ -58,6 +58,29 @@ void ConvertsAllParameterSetsInOrder()
     CHECK(output == expected);
 }
 
+void ConvertsHighProfileDescriptorExtension()
+{
+    auto descriptor = AvccDescriptor();
+    descriptor.insert(
+        descriptor.end(),
+        {
+            std::byte {0xfd},
+            std::byte {0xf8},
+            std::byte {0xf8},
+            std::byte {0},
+        });
+    std::vector<std::byte> output;
+    CHECK(ConvertH264AvccDescriptorToAnnexB(descriptor, output) ==
+          VRREC_STATUS_OK);
+    const std::vector<std::byte> expected {
+        std::byte {0}, std::byte {0}, std::byte {0}, std::byte {1},
+        std::byte {0x67}, std::byte {0x64}, std::byte {0}, std::byte {0x28},
+        std::byte {0}, std::byte {0}, std::byte {0}, std::byte {1},
+        std::byte {0x68}, std::byte {0xee}, std::byte {0x3c},
+    };
+    CHECK(output == expected);
+}
+
 void ConvertsEveryLengthPrefixedNalInAnAccessUnit()
 {
     const std::vector<std::byte> packet {
@@ -167,6 +190,7 @@ void ReportsAllocationFailureWithoutChangingOutput()
 int main()
 {
     ConvertsAllParameterSetsInOrder();
+    ConvertsHighProfileDescriptorExtension();
     ConvertsEveryLengthPrefixedNalInAnAccessUnit();
     RejectsMalformedDescriptorWithoutChangingOutput();
     RejectsMalformedAccessUnitWithoutChangingOutput();

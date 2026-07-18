@@ -239,6 +239,23 @@ vrrec_status_t FfmpegEncoderStateMachine::AppendPacket(
         bool has_skip_samples = false;
         for (std::size_t index = 0; index < packet.side_data_count; ++index) {
             const auto &side_data = packet.side_data[index];
+            if (side_data.kind ==
+                    FfmpegReceivedPacketSideDataKind::QualityStats) {
+                constexpr int quality_stats_header_size = 8;
+                if (stream_ != MediaStreamKind::Video ||
+                    side_data.data == nullptr ||
+                    side_data.size < quality_stats_header_size) {
+                    return VRREC_STATUS_INTERNAL_ERROR;
+                }
+                const auto error_count = std::to_integer<unsigned int>(
+                    side_data.data[5]);
+                const auto expected_size = quality_stats_header_size +
+                    static_cast<int>(error_count * 8U);
+                if (side_data.size != expected_size) {
+                    return VRREC_STATUS_INTERNAL_ERROR;
+                }
+                continue;
+            }
             if (side_data.kind !=
                     FfmpegReceivedPacketSideDataKind::SkipSamples ||
                 stream_ != MediaStreamKind::Audio ||

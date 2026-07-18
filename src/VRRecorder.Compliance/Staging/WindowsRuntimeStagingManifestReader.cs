@@ -264,6 +264,7 @@ internal static class WindowsRuntimeStagingManifestReader
         "openvr-binding" => WindowsRuntimeRole.OpenVrBinding,
         "spout-runtime" => WindowsRuntimeRole.SpoutRuntime,
         "encoder-runtime" => WindowsRuntimeRole.EncoderRuntime,
+        "toolchain-runtime" => WindowsRuntimeRole.ToolchainRuntime,
         "factory-selection-evidence" =>
             WindowsRuntimeRole.FactorySelectionEvidence,
         "application-asset" => WindowsRuntimeRole.ApplicationAsset,
@@ -287,7 +288,8 @@ internal static class WindowsRuntimeStagingManifestReader
                 WindowsRuntimeRole.FfmpegRuntime or
                 WindowsRuntimeRole.OpenVrRuntime or
                 WindowsRuntimeRole.SpoutRuntime or
-                WindowsRuntimeRole.EncoderRuntime =>
+                WindowsRuntimeRole.EncoderRuntime or
+                WindowsRuntimeRole.ToolchainRuntime =>
                 WindowsRuntimeDeploymentKind.NativeLibrary,
             WindowsRuntimeRole.DiagnosticTool =>
                 WindowsRuntimeDeploymentKind.Executable,

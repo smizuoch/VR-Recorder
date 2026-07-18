@@ -42,7 +42,19 @@ internal sealed record FullProductionStagingTestData(
         var nativeBinary = WindowsPeImageTestData.Create(
             isDll: true,
             subsystem: 2,
-            imports: ["KERNEL32.dll"],
+            imports:
+            [
+                "avformat-62.dll",
+                "swresample-6.dll",
+                "avcodec-62.dll",
+                "avutil-60.dll",
+                "openvr_api.dll",
+                "msvcp140.dll",
+                "msvcp140_atomic_wait.dll",
+                "vcruntime140.dll",
+                "vcruntime140_1.dll",
+                "KERNEL32.dll",
+            ],
             payload: Encoding.ASCII.GetBytes(
                 "prefix-VRRECORDER_FACTORY_SELECTION_V1:" +
                 factoryIntentSha +
@@ -64,6 +76,16 @@ internal sealed record FullProductionStagingTestData(
                 "ffmpeg-runtime", "ffmpeg", "native-library"),
             Entry("runtime/swresample-6.dll", "swresample-6.dll",
                 "ffmpeg-runtime", "ffmpeg", "native-library"),
+            Entry("runtime/libvpl.dll", "libvpl.dll",
+                "encoder-runtime", "libvpl", "native-library"),
+            Entry("runtime/msvcp140.dll", "msvcp140.dll",
+                "toolchain-runtime", "msvc-runtime", "native-library"),
+            Entry("runtime/msvcp140_atomic_wait.dll", "msvcp140_atomic_wait.dll",
+                "toolchain-runtime", "msvc-runtime", "native-library"),
+            Entry("runtime/vcruntime140.dll", "vcruntime140.dll",
+                "toolchain-runtime", "msvc-runtime", "native-library"),
+            Entry("runtime/vcruntime140_1.dll", "vcruntime140_1.dll",
+                "toolchain-runtime", "msvc-runtime", "native-library"),
             Entry("tools/ffprobe.exe", "ffprobe.exe",
                 "diagnostic-tool", "ffmpeg", "executable"),
             Entry("runtime/openvr_api.dll", "openvr_api.dll",
@@ -96,7 +118,9 @@ internal sealed record FullProductionStagingTestData(
                     subsystem: entry.DeploymentKind == "executable"
                         ? (ushort)3
                         : (ushort)2,
-                    imports: ["KERNEL32.dll"]));
+                    imports: entry.Target == "avcodec-62.dll"
+                        ? ["libvpl.dll", "KERNEL32.dll"]
+                        : ["KERNEL32.dll"]));
         }
 
         foreach (var entry in entries.Where(entry =>
@@ -111,7 +135,8 @@ internal sealed record FullProductionStagingTestData(
             native,
             evidence,
             nativeBinary,
-            [Component("ffmpeg"), Component("openvr")]);
+            [Component("ffmpeg"), Component("libvpl"),
+                Component("msvc-runtime"), Component("openvr")]);
     }
 
     public static string ManifestJson(
@@ -143,7 +168,8 @@ internal sealed record FullProductionStagingTestData(
         File.WriteAllText(recipe, "approved recipe");
         var archiveSha = Sha256(File.ReadAllBytes(archive));
         var artifacts = entries
-            .Where(entry => entry.ComponentId is "ffmpeg" or "openvr" &&
+            .Where(entry => entry.ComponentId is "ffmpeg" or "libvpl" or
+                                "msvc-runtime" or "openvr" &&
                             entry.DeploymentKind is
                                 "native-library" or "executable")
             .GroupBy(entry => entry.ComponentId, StringComparer.Ordinal)
@@ -154,7 +180,7 @@ internal sealed record FullProductionStagingTestData(
                     """)),
                 StringComparer.Ordinal);
         var registry = $$"""
-            {"schemaVersion":1,"registryVersion":1,"components":[{{ComponentJson("ffmpeg", artifacts["ffmpeg"])}},{{ComponentJson("openvr", artifacts["openvr"])}}]}
+            {"schemaVersion":1,"registryVersion":1,"components":[{{ComponentJson("ffmpeg", artifacts["ffmpeg"])}},{{ComponentJson("libvpl", artifacts["libvpl"])}},{{ComponentJson("msvc-runtime", artifacts["msvc-runtime"])}},{{ComponentJson("openvr", artifacts["openvr"])}}]}
             """;
         var registryDirectory = Path.Combine(repositoryRoot, "third-party");
         Directory.CreateDirectory(registryDirectory);

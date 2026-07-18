@@ -1,6 +1,7 @@
 #include "ffmpeg_h264_packet_encoder.hpp"
 #include "ffmpeg_h264_software_codec_session.hpp"
 #include "ffmpeg_h264_system_memory_packet_encoder_adapter.hpp"
+#include "ffmpeg_h264_d3d11_hardware_tests.hpp"
 #include "h264_test_vectors.hpp"
 #include "muxing_video_encoder_sink.hpp"
 
@@ -439,7 +440,7 @@ void SoftwareCodecSessionFactoryRejectsInvalidConfigurationAndFailsClosed()
 
 }
 
-int main()
+int main(int argc, char **argv)
 {
     UsesOpenTimeExtradataAndEncodesOwnedNv12();
     DerivesLateExtradataFromTheFirstRealPacket();
@@ -449,5 +450,11 @@ int main()
     FailureAbortsTheSessionAndMakesTheEncoderTerminal();
     ProductionFactoryFailsClosedWhenH264MfIsUnavailable();
     SoftwareCodecSessionFactoryRejectsInvalidConfigurationAndFailsClosed();
+#if defined(_WIN32)
+    RunFfmpegH264D3d11HardwareTest(
+        argc == 2 && std::strcmp(argv[1], "--require-nvenc") == 0);
+    RunFfmpegH264HardwareProbeTest(
+        argc == 2 && std::strcmp(argv[1], "--require-nvenc") == 0);
+#endif
     return 0;
 }

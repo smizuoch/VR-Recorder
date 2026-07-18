@@ -10,7 +10,7 @@
         MaxWidth="720"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="{StaticResource Spacing.LayoutGrid}"
+    <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}"
           MaxWidth="640">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -24,20 +24,20 @@
                    TextWrapping="Wrap" />
 
         <TextBlock Grid.Row="1"
-                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   Margin="{StaticResource Spacing.LayoutGrid.Top}"
                    Text="{DynamicResource Diagnostics_Privacy}"
                    TextWrapping="Wrap"
                    AutomationProperties.Name="{DynamicResource Diagnostics_Privacy}" />
 
         <TextBlock x:Name="DiagnosticsStatusText"
                    Grid.Row="2"
-                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   Margin="{StaticResource Spacing.LayoutGrid.Top}"
                    TextWrapping="Wrap"
                    Visibility="Collapsed"
                    AutomationProperties.LiveSetting="Polite" />
 
         <StackPanel Grid.Row="3"
-                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                    Margin="{StaticResource Spacing.LayoutGrid.Top}"
                     HorizontalAlignment="Right"
                     Orientation="Horizontal">
             <Button Content="{DynamicResource Diagnostics_Close_Label}"

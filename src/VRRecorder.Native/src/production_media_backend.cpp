@@ -22,6 +22,7 @@
 #include "ffmpeg_aac_packet_encoder.hpp"
 #include "ffmpeg_fragmented_mp4_muxer.hpp"
 #include "ffmpeg_h264_packet_encoder.hpp"
+#include "ffmpeg_h264_d3d11_packet_encoder_adapter.hpp"
 #include "ffmpeg_h264_system_memory_packet_encoder_adapter.hpp"
 #include "ffmpeg_libavformat_fragmented_mp4_muxer_port.hpp"
 #include "media_mux_pipeline.hpp"
@@ -155,6 +156,11 @@ public:
     std::unique_ptr<FfmpegH264PacketEncoder> h264_encoder_;
     std::unique_ptr<FfmpegH264SystemMemoryPacketEncoderAdapter>
         h264_adapter_;
+    std::unique_ptr<FfmpegH264D3d11PacketEncoderAdapter>
+        hardware_h264_adapter_;
+    PacketVideoEncoder *packet_h264_encoder_ = nullptr;
+    const void *video_encoder_identity_ = nullptr;
+    bool publish_initial_video_descriptor_ = true;
     std::unique_ptr<MediaAudioCaptureAvailabilitySink>
         audio_availability_;
     std::unique_ptr<PlatformAudioCaptureSourceProvider>
@@ -194,7 +200,7 @@ vrrec_status_t CreateH264Encoder(
     std::unique_ptr<FfmpegH264PacketEncoder> &encoder) noexcept
 {
     encoder.reset();
-    if (route.requested_kind == VRREC_ENCODER_NVENC) {
+    if (route.hardware_accelerated) {
         return VRREC_STATUS_BACKEND_UNAVAILABLE;
     }
     if (route.requested_kind !=
@@ -298,46 +304,84 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
         graph->frame_processor_ =
             std::make_unique<D3d11VideoFrameProcessor>(
                 *graph->d3d11_processor_port_);
-        graph->readback_port_ = CreateWindowsD3d11Nv12ReadbackPort(
-            production_config.encoder_route.source_adapter_luid,
-            status);
-        if (status != VRREC_STATUS_OK || graph->readback_port_ == nullptr) {
-            status = status == VRREC_STATUS_OK
-                ? VRREC_STATUS_INTERNAL_ERROR
-                : status;
-            return {};
+        H264StreamDescriptor video_descriptor {};
+        if (production_config.encoder_route.hardware_accelerated) {
+            H264VideoEncoderConfig encoder_config {};
+            status = CreateH264VideoEncoderConfig(
+                config.width,
+                config.height,
+                production_config.frames_per_second,
+                true,
+                encoder_config);
+            if (status != VRREC_STATUS_OK) {
+                return {};
+            }
+            graph->hardware_h264_adapter_ = std::make_unique<
+                FfmpegH264D3d11PacketEncoderAdapter>(
+                    production_config.encoder_route,
+                    encoder_config);
+            graph->packet_h264_encoder_ =
+                graph->hardware_h264_adapter_.get();
+            graph->video_encoder_identity_ =
+                graph->hardware_h264_adapter_.get();
+            graph->publish_initial_video_descriptor_ = false;
+            video_descriptor = {
+                MicrosecondPacketTimeBase,
+                encoder_config.width,
+                encoder_config.height,
+                encoder_config.profile,
+                H264PacketFormat::AvccLengthPrefixed,
+                {},
+            };
+        } else {
+            graph->readback_port_ = CreateWindowsD3d11Nv12ReadbackPort(
+                production_config.encoder_route.source_adapter_luid,
+                status);
+            if (status != VRREC_STATUS_OK ||
+                graph->readback_port_ == nullptr) {
+                status = status == VRREC_STATUS_OK
+                    ? VRREC_STATUS_INTERNAL_ERROR
+                    : status;
+                return {};
+            }
+            graph->frame_mapper_ =
+                std::make_unique<D3d11SystemMemoryNv12FrameMapper>(
+                    *graph->readback_port_);
+            status = CreateH264Encoder(
+                production_config.encoder_route,
+                config.width,
+                config.height,
+                production_config.frames_per_second,
+                graph->h264_encoder_);
+            if (status != VRREC_STATUS_OK) {
+                events.VideoEncoderFaulted(
+                    status,
+                    "H.264 encoder creation failed.");
+                return {};
+            }
+            const auto *video_descriptor_pointer =
+                graph->h264_encoder_->Descriptor();
+            if (video_descriptor_pointer == nullptr) {
+                status = VRREC_STATUS_INTERNAL_ERROR;
+                events.VideoEncoderFaulted(
+                    status,
+                    "H.264 encoder descriptor is unavailable.");
+                return {};
+            }
+            video_descriptor = *video_descriptor_pointer;
+            graph->h264_adapter_ = std::make_unique<
+                FfmpegH264SystemMemoryPacketEncoderAdapter>(
+                    *graph->h264_encoder_,
+                    *graph->frame_mapper_,
+                    production_config.frames_per_second);
+            graph->packet_h264_encoder_ = graph->h264_adapter_.get();
+            graph->video_encoder_identity_ = graph->h264_encoder_.get();
         }
-        graph->frame_mapper_ =
-            std::make_unique<D3d11SystemMemoryNv12FrameMapper>(
-                *graph->readback_port_);
-
-        status = CreateH264Encoder(
-            production_config.encoder_route,
-            config.width,
-            config.height,
-            production_config.frames_per_second,
-            graph->h264_encoder_);
-        if (status != VRREC_STATUS_OK) {
-            events.VideoEncoderFaulted(
-                status,
-                "H.264 encoder creation failed.");
-            return {};
-        }
-        const auto *video_descriptor_pointer =
-            graph->h264_encoder_->Descriptor();
-        if (video_descriptor_pointer == nullptr) {
+        if (graph->packet_h264_encoder_ == nullptr ||
+            graph->video_encoder_identity_ == nullptr) {
             status = VRREC_STATUS_INTERNAL_ERROR;
-            events.VideoEncoderFaulted(
-                status,
-                "H.264 encoder descriptor is unavailable.");
             return {};
         }
-        const auto video_descriptor = *video_descriptor_pointer;
-        graph->h264_adapter_ = std::make_unique<
-            FfmpegH264SystemMemoryPacketEncoderAdapter>(
-                *graph->h264_encoder_,
-                *graph->frame_mapper_,
-                production_config.frames_per_second);
 
         AacAudioEncoderConfig aac_config {};
         status = CreateAacAudioEncoderConfig(aac_config);
@@ -404,10 +448,10 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
                 *graph->mux_pipeline_,
                 audio_descriptor,
                 DefaultFragmentedMp4FragmentPolicy,
-                graph->h264_encoder_.get());
+                graph->video_encoder_identity_);
         graph->muxing_video_sink_ =
             std::make_unique<MuxingVideoEncoderSink>(
-                *graph->h264_adapter_,
+                *graph->packet_h264_encoder_,
                 *graph->pre_header_coordinator_,
                 *graph->pre_header_coordinator_);
         graph->processing_video_sink_ =
@@ -454,8 +498,9 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
             std::make_unique<PreHeaderMediaMuxSession>(
                 *graph->pre_header_coordinator_,
                 0,
-                graph->h264_encoder_.get(),
-                mux_configuration);
+                graph->video_encoder_identity_,
+                mux_configuration,
+                graph->publish_initial_video_descriptor_);
         const StereoAudioCaptureSessionConfig audio_capture_config {
             config.desktop_endpoint_id_utf8,
             config.microphone_endpoint_id_utf8,

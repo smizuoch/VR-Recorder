@@ -2,6 +2,12 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=System.Runtime">
     <system:Double x:Key="Spacing.LayoutGrid">8</system:Double>
+    <Thickness x:Key="Spacing.LayoutGrid.Thickness">8</Thickness>
+    <Thickness x:Key="Spacing.LayoutGrid.Top">0,8,0,0</Thickness>
+    <Thickness x:Key="Spacing.LayoutGrid.Right">0,0,8,0</Thickness>
+    <Thickness x:Key="Spacing.LayoutGrid.Bottom">0,0,0,8</Thickness>
+    <Thickness x:Key="Spacing.LayoutGrid.RightBottom">0,0,8,8</Thickness>
+    <Thickness x:Key="Spacing.ContentGap.Top">0,4,0,0</Thickness>
     <system:Double x:Key="Interaction.MinimumTarget">48</system:Double>
     <system:Double x:Key="Typography.HeadlineMedium.FontSize">22</system:Double>
 </ResourceDictionary>

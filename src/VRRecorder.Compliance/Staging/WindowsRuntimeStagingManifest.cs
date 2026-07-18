@@ -32,6 +32,7 @@ public enum WindowsRuntimeRole
     OpenVrBinding,
     SpoutRuntime,
     EncoderRuntime,
+    ToolchainRuntime,
     FactorySelectionEvidence,
     ApplicationAsset,
 }

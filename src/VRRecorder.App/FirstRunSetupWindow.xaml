@@ -12,7 +12,7 @@
         ShowInTaskbar="False"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="{StaticResource Spacing.LayoutGrid}" MaxWidth="640">
+    <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}" MaxWidth="640">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -28,7 +28,7 @@
 
         <ProgressBar x:Name="SetupProgressBar"
                      Grid.Row="1"
-                     Margin="0,{StaticResource Spacing.ContentGap},0,0"
+                     Margin="{StaticResource Spacing.ContentGap.Top}"
                      Height="8"
                      Minimum="0"
                      Maximum="100"
@@ -37,27 +37,27 @@
 
         <TextBlock x:Name="SetupTitleText"
                    Grid.Row="2"
-                   Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                   Margin="{StaticResource Spacing.LayoutGrid.Top}"
                    FontWeight="SemiBold"
                    TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" />
 
         <TextBlock x:Name="SetupBodyText"
                    Grid.Row="3"
-                   Margin="0,{StaticResource Spacing.ContentGap},0,0"
+                   Margin="{StaticResource Spacing.ContentGap.Top}"
                    TextWrapping="Wrap" />
 
         <StackPanel Grid.Row="4"
-                    Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                    Margin="{StaticResource Spacing.LayoutGrid.Top}">
             <TextBlock Text="{DynamicResource Setup_VerificationPending}"
                        TextWrapping="Wrap"
                        AutomationProperties.Name="{DynamicResource Setup_VerificationPending}" />
             <TextBlock x:Name="SetupVerificationStatusText"
-                       Margin="0,{StaticResource Spacing.ContentGap},0,0"
+                       Margin="{StaticResource Spacing.ContentGap.Top}"
                        TextWrapping="Wrap"
                        Visibility="Collapsed"
                        AutomationProperties.LiveSetting="Assertive" />
-            <StackPanel Margin="0,{StaticResource Spacing.ContentGap},0,0"
+            <StackPanel Margin="{StaticResource Spacing.ContentGap.Top}"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal">
                 <Button MinHeight="{StaticResource Interaction.MinimumTarget}"

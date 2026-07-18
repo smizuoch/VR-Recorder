@@ -10,6 +10,7 @@
 #include "annex_b_encoder_probe_decoder.hpp"
 #include "encoder_probe_pipeline.hpp"
 #include "ffmpeg_h264_software_codec_session.hpp"
+#include "hardware_encoder_probe_session_factory.hpp"
 #include "software_encoder_probe_platform_identity.hpp"
 #include "software_encoder_probe_session_factory.hpp"
 #include "windows_media_foundation_h264_decode_port.hpp"
@@ -30,7 +31,9 @@ public:
         : platform_identity_(adapter_identity_lookup_),
           session_factory_(platform_identity_, codec_factory_),
           decoder_(media_foundation_decoder_),
-          verified_(session_factory_, decoder_)
+          verified_(session_factory_, decoder_),
+          hardware_session_factory_(adapter_identity_lookup_),
+          hardware_verified_(hardware_session_factory_, decoder_)
     {
     }
 
@@ -40,7 +43,7 @@ public:
     {
         packet_produced = false;
         if (IsKnownHardwareEncoder(config.encoder_kind)) {
-            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+            return hardware_verified_.Probe(config, packet_produced);
         }
         return verified_.Probe(config, packet_produced);
     }
@@ -50,7 +53,7 @@ public:
         EncoderProbeEvidence &evidence) override
     {
         if (IsKnownHardwareEncoder(config.encoder_kind)) {
-            return VRREC_STATUS_BACKEND_UNAVAILABLE;
+            return hardware_verified_.ProbeV2(config, evidence);
         }
         return verified_.ProbeV2(config, evidence);
     }
@@ -64,6 +67,8 @@ private:
     WindowsMediaFoundationH264DecodePort media_foundation_decoder_;
     AnnexBEncoderProbeDecoder decoder_;
     VerifiedEncoderProbeBackend verified_;
+    HardwareEncoderProbeSessionFactory hardware_session_factory_;
+    VerifiedEncoderProbeBackend hardware_verified_;
 };
 
 }

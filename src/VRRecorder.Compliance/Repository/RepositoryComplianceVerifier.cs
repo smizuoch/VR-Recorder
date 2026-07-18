@@ -63,6 +63,9 @@ public static class RepositoryComplianceVerifier
         issues.AddRange(OpenVrLegalCandidateVerifier.Verify(
             root,
             registry.Components));
+        issues.AddRange(MsvcRuntimeLegalCandidateVerifier.Verify(
+            root,
+            registry.Components));
         issues.AddRange(RepositoryNativeRuntimeLoadVerifier.Verify(root));
         issues.AddRange(RepositoryNativeLinkVerifier.Verify(root));
 

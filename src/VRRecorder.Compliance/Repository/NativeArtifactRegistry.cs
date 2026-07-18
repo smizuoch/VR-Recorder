@@ -108,6 +108,16 @@ internal static class NativeArtifactRegistryReader
                 componentId,
                 "openVrLegalCandidate",
                 candidateArtifacts);
+            ReadDirectCandidateArtifacts(
+                component,
+                componentId,
+                "nativeArtifactCandidates",
+                candidateArtifacts);
+            ReadCandidateArtifacts(
+                component,
+                componentId,
+                "msvcRuntimeLegalCandidate",
+                candidateArtifacts);
 
             if (!component.TryGetProperty("nativeArtifacts", out var nativeArtifacts))
             {
@@ -281,6 +291,29 @@ internal static class NativeArtifactRegistryReader
         }
 
         foreach (var artifact in candidate.GetProperty("artifacts").EnumerateArray())
+        {
+            artifacts.Add(new RegisteredNativeCandidateArtifact(
+                componentId,
+                RequiredString(artifact, "fileName"),
+                RequiredString(artifact, "sha256")));
+        }
+    }
+
+    private static void ReadDirectCandidateArtifacts(
+        JsonElement component,
+        string componentId,
+        string candidatePropertyName,
+        List<RegisteredNativeCandidateArtifact> artifacts)
+    {
+        if (!component.TryGetProperty(
+                candidatePropertyName,
+                out var candidates) ||
+            candidates.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var artifact in candidates.EnumerateArray())
         {
             artifacts.Add(new RegisteredNativeCandidateArtifact(
                 componentId,

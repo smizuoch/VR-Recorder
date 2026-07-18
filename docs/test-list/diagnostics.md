@@ -18,7 +18,7 @@
 - [x] app version、OS build、canonical PCI GPU model、driverをfirst packet確定後の構造化eventへ記録する
 - [x] 再arm可能なA/V閾値超過とaudio underrun／overrunをinput／正確なframe付きで記録する
 - [x] OSC capability／確認済み書込みの成功・失敗とfinalization失敗／隔離を固定語だけでprivacy-safeに記録する
-- [ ] Windows UI Automationでdiagnostics windowとSave dialogのkeyboard／screen-reader操作を検証する
+- [x] Windows UI Automationでdiagnostics windowとSave dialogのkeyboard／screen-reader操作を検証する
 
 ## English
 
@@ -38,4 +38,4 @@
 - [x] Record app version, OS build, canonical PCI GPU model, and driver as a structured event after the first packet is committed
 - [x] Record rearmable A/V threshold violations and audio underruns/overruns with the input and exact frame
 - [x] Record OSC capability/confirmed-write outcomes and finalization failure/quarantine using privacy-safe fixed terms only
-- [ ] Validate keyboard and screen-reader operation of the diagnostics window and Save dialog with Windows UI Automation
+- [x] Validate keyboard and screen-reader operation of the diagnostics window and Save dialog with Windows UI Automation

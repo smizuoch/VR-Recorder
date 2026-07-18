@@ -25,6 +25,7 @@ struct FfmpegCodecIoResult final {
 
 enum class FfmpegReceivedPacketSideDataKind {
     SkipSamples,
+    QualityStats,
     Unsupported,
 };
 

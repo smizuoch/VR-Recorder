@@ -15,11 +15,19 @@ struct AVFrame;
 namespace vrrecorder::native {
 
 struct PacketVideoEncoderWrite;
+struct ProductionVideoEncoderRoute;
+class VideoSurface;
 
 class FfmpegH264CodecSession {
 public:
     virtual ~FfmpegH264CodecSession() = default;
     virtual vrrec_status_t PrepareFrame(const AVFrame &frame) noexcept = 0;
+    virtual vrrec_status_t PrepareD3d11Frame(
+        const std::shared_ptr<VideoSurface> &,
+        std::int64_t) noexcept
+    {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
     virtual FfmpegEncodeBatch EncodePreparedFrame() noexcept = 0;
     virtual FfmpegEncodeBatch Finish() noexcept = 0;
     virtual vrrec_status_t CopyCodecExtradata(
@@ -45,6 +53,10 @@ public:
 
     static FfmpegH264PacketEncoderCreateResult Create(
         const H264VideoEncoderConfig &config) noexcept;
+    static FfmpegH264PacketEncoderCreateResult CreateHardware(
+        const H264VideoEncoderConfig &config,
+        const ProductionVideoEncoderRoute &route,
+        void *d3d11_device) noexcept;
 #if defined(VRRECORDER_NATIVE_TESTING)
     static FfmpegH264PacketEncoderCreateResult CreateForTesting(
         const H264VideoEncoderConfig &config,
@@ -54,6 +66,9 @@ public:
 
     FfmpegH264PacketEncoderWrite EncodeNv12(
         const SystemMemoryNv12FrameView &frame) noexcept;
+    FfmpegH264PacketEncoderWrite EncodeD3d11Nv12(
+        const std::shared_ptr<VideoSurface> &surface,
+        std::int64_t pts) noexcept;
     FfmpegH264PacketEncoderWrite Finish() noexcept;
     void Abort() noexcept;
     const H264StreamDescriptor *Descriptor() const noexcept;
@@ -77,7 +92,8 @@ struct FfmpegH264PacketEncoderCreateResult final {
 PacketVideoEncoderWrite MakeMuxingVideoEncoderWrite(
     const FfmpegH264PacketEncoder &encoder,
     FfmpegH264PacketEncoderWrite write,
-    std::uint64_t encode_latency_microseconds) noexcept;
+    std::uint64_t encode_latency_microseconds,
+    const void *encoder_identity = nullptr) noexcept;
 
 }
 

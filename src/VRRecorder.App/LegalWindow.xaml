@@ -15,7 +15,7 @@
     <ScrollViewer x:Name="LegalContentScrollViewer"
                   VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Auto">
-        <Grid Margin="{StaticResource Spacing.LayoutGrid}"
+        <Grid Margin="{StaticResource Spacing.LayoutGrid.Thickness}"
               MinWidth="480">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -33,7 +33,7 @@
                        TextWrapping="Wrap" />
 
             <StackPanel Grid.Row="1"
-                        Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                        Margin="{StaticResource Spacing.LayoutGrid.Top}">
                 <TextBlock x:Name="ProductVersionText"
                            Text="{DynamicResource Legal_ProductVersion_Label}"
                            TextWrapping="Wrap" />
@@ -44,20 +44,20 @@
                            Text="{DynamicResource Legal_ManifestSha256_Label}"
                            TextWrapping="Wrap" />
                 <TextBlock Text="{DynamicResource Legal_NoAffiliation}"
-                           Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                           Margin="{StaticResource Spacing.LayoutGrid.Top}"
                            TextWrapping="Wrap" />
             </StackPanel>
 
             <TextBlock x:Name="LegalUnavailableText"
                        Grid.Row="2"
-                       Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                       Margin="{StaticResource Spacing.LayoutGrid.Top}"
                        Text="{DynamicResource Legal_State_Loading}"
                        TextWrapping="Wrap"
                        AutomationProperties.Name="{DynamicResource Legal_State_Loading}"
                        AutomationProperties.LiveSetting="Assertive" />
 
             <GroupBox Grid.Row="3"
-                      Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                      Margin="{StaticResource Spacing.LayoutGrid.Top}"
                       Header="{DynamicResource Legal_ThirdPartyComponents}">
                 <ListBox x:Name="LegalComponentList"
                          MinHeight="144"
@@ -69,10 +69,10 @@
             </GroupBox>
 
             <StackPanel Grid.Row="4"
-                        Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                        Margin="{StaticResource Spacing.LayoutGrid.Top}">
                 <TextBlock x:Name="ComponentDetailText"
                            TextWrapping="Wrap" />
-                <GroupBox Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                <GroupBox Margin="{StaticResource Spacing.LayoutGrid.Top}"
                           Header="{DynamicResource Legal_Documents_Header}">
                     <ListBox x:Name="LegalDocumentList"
                              MinHeight="120"
@@ -84,12 +84,12 @@
                              IsEnabled="False" />
                 </GroupBox>
                 <TextBlock x:Name="LegalDocumentHeadingText"
-                           Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                           Margin="{StaticResource Spacing.LayoutGrid.Top}"
                            FontWeight="SemiBold"
                            Text="{DynamicResource Legal_DocumentText_Heading}"
                            TextWrapping="Wrap" />
                 <TextBox x:Name="FullDocumentText"
-                         Margin="0,{StaticResource Spacing.LayoutGrid},0,0"
+                         Margin="{StaticResource Spacing.LayoutGrid.Top}"
                          MinHeight="192"
                          IsReadOnly="True"
                          AcceptsReturn="True"
@@ -102,9 +102,9 @@
             </StackPanel>
 
             <WrapPanel Grid.Row="5"
-                       Margin="0,{StaticResource Spacing.LayoutGrid},0,0">
+                       Margin="{StaticResource Spacing.LayoutGrid.Top}">
                 <Button x:Name="OpenLicenseFolderButton"
-                        Margin="0,0,{StaticResource Spacing.LayoutGrid},{StaticResource Spacing.LayoutGrid}"
+                        Margin="{StaticResource Spacing.LayoutGrid.RightBottom}"
                         MinHeight="{StaticResource Interaction.MinimumTarget}"
                         MinWidth="{StaticResource Interaction.MinimumTarget}"
                         Content="{DynamicResource Legal_OpenFolder_Label}"
@@ -114,7 +114,7 @@
                         IsEnabled="False"
                         Click="OnOpenLicenseFolderClick" />
                 <Button x:Name="RefreshLegalButton"
-                        Margin="0,0,{StaticResource Spacing.LayoutGrid},{StaticResource Spacing.LayoutGrid}"
+                        Margin="{StaticResource Spacing.LayoutGrid.RightBottom}"
                         MinHeight="{StaticResource Interaction.MinimumTarget}"
                         MinWidth="{StaticResource Interaction.MinimumTarget}"
                         Content="{DynamicResource Legal_Refresh_Label}"
@@ -123,7 +123,7 @@
                         ToolTip="{DynamicResource Legal_Refresh_Tooltip}"
                         Click="OnRefreshLegalClick" />
                 <Button x:Name="CloseLegalButton"
-                        Margin="0,0,0,{StaticResource Spacing.LayoutGrid}"
+                        Margin="{StaticResource Spacing.LayoutGrid.Bottom}"
                         MinHeight="{StaticResource Interaction.MinimumTarget}"
                         MinWidth="{StaticResource Interaction.MinimumTarget}"
                         Content="{DynamicResource Legal_Close_Label}"

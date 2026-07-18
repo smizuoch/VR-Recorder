@@ -17,6 +17,8 @@ function(vrrecorder_resolve_production_media_h264_sources output source_root)
 
     set(sources
         "${source_root}/src/ffmpeg_h264_packet_encoder.cpp"
+        "${source_root}/src/ffmpeg_h264_hardware_codec_session.cpp"
+        "${source_root}/src/ffmpeg_h264_d3d11_packet_encoder_adapter.cpp"
         "${source_root}/src/ffmpeg_h264_media_foundation_configuration.cpp"
         "${source_root}/src/ffmpeg_h264_nv12_frame.cpp"
         "${source_root}/src/ffmpeg_libavcodec_encoder_port.cpp")

@@ -15,6 +15,11 @@ remain separate gates.
 - Compiler: MSVC `19.44.35228`, x64 host and target
 - Windows SDK: `10.0.26100.0`
 - POSIX build environment: MSYS2 with GNU Make
+- nv-codec-headers tag/commit: `n13.0.19.0` / `e844e5b26f46bb77479f063029595293aa8f812d`
+- AMD AMF tag/commit: `v1.5.2` / `eadd00804d5f7e5cd8c85d540073198312870776`
+- Intel VPL tag/commit: `v2.17.0` / `d77f9195cf495b937631607333288fd917ae8939`
+- Intel VPL is built as a shared MSVC x64 dispatcher. Its `libvpl.dll` is
+  copied into the FFmpeg SDK and is an explicit runtime dependency.
 
 ## Configure contract
 
@@ -48,8 +53,15 @@ remain separate gates.
 --enable-swresample
 --enable-d3d11va
 --enable-mediafoundation
+--enable-ffnvcodec
+--enable-nvenc
+--enable-amf
+--enable-libvpl
 --enable-encoder=aac
 --enable-encoder=h264_mf
+--enable-encoder=h264_nvenc
+--enable-encoder=h264_amf
+--enable-encoder=h264_qsv
 --enable-muxer=mp4
 --enable-protocol=file
 ```
@@ -58,11 +70,15 @@ Run from PowerShell 7:
 
 ```powershell
 pwsh -File eng/build-ffmpeg-windows-production-sdk.ps1 `
-  -SdkRoot C:\absolute\private\ffmpeg-8.1.2-windows-msvc-x64
+  -SdkRoot C:\absolute\private\ffmpeg-8.1.2-windows-msvc-x64-hardware `
+  -NvCodecHeadersRoot C:\absolute\sources\nv-codec-headers-n13.0.19.0 `
+  -AmfRoot C:\absolute\sources\AMF-v1.5.2 `
+  -LibvplRoot C:\absolute\sources\libvpl-v2.17.0
 ```
 
 The builder verifies the selected component macros, absence of programs and
-decoders, source and backport-patch bytes, compiler/SDK versions, output
-filenames, and every artifact length/SHA-256 before returning the SDK root. The
+decoders, the three vendor source commits, source and backport-patch bytes,
+compiler/SDK versions, output filenames, and every artifact length/SHA-256
+before returning the SDK root. The
 patch is the upstream fix for an empty `cbs_type_table` in minimal mov/mp4
 builds, which can trigger an MSVC internal compiler error.

@@ -4,7 +4,18 @@
 #include "ffmpeg_h264_packet_encoder.hpp"
 #include "ffmpeg_libavformat_fragmented_mp4_muxer_port.hpp"
 #include "media_mux_pipeline.hpp"
+#include "production_video_encoder_route.hpp"
 #include "video_encoder_config.hpp"
+#include "video_surface.hpp"
+
+#if defined(_WIN32)
+#if !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <d3d11.h>
+#include <dxgi.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -14,12 +25,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <cstdio>
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string>
@@ -45,6 +58,102 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+
+#if defined(_WIN32)
+std::uint64_t PackLuid(const LUID &luid) noexcept
+{
+    return static_cast<std::uint64_t>(luid.LowPart) |
+        (static_cast<std::uint64_t>(
+             static_cast<std::uint32_t>(luid.HighPart)) << 32U);
+}
+
+class NvencTextureSurface final : public VideoSurface {
+public:
+    NvencTextureSurface(
+        ID3D11Texture2D *texture,
+        VideoSurfaceDescriptor descriptor) noexcept
+        : texture_(texture), descriptor_(descriptor)
+    {
+        texture_->AddRef();
+    }
+
+    ~NvencTextureSurface() override
+    {
+        texture_->Release();
+    }
+
+    VideoSurfaceDescriptor Descriptor() const noexcept override
+    {
+        return descriptor_;
+    }
+
+    void *NativeHandle() const noexcept override
+    {
+        return texture_;
+    }
+
+    VideoSurfaceAcquireResult AcquireForRead(
+        std::chrono::milliseconds) noexcept override
+    {
+        return VideoSurfaceAcquireResult::Acquired;
+    }
+
+    vrrec_status_t ReleaseFromRead() noexcept override
+    {
+        return VRREC_STATUS_OK;
+    }
+
+private:
+    ID3D11Texture2D *texture_;
+    VideoSurfaceDescriptor descriptor_;
+};
+
+bool CreateNvidiaDevice(
+    ID3D11Device **device,
+    std::uint64_t &adapter_luid) noexcept
+{
+    *device = nullptr;
+    adapter_luid = 0;
+    IDXGIFactory1 *factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(
+            __uuidof(IDXGIFactory1),
+            reinterpret_cast<void **>(&factory)))) {
+        return false;
+    }
+    IDXGIAdapter1 *adapter = nullptr;
+    for (UINT index = 0;
+         factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND;
+         ++index) {
+        DXGI_ADAPTER_DESC1 descriptor {};
+        const auto described = SUCCEEDED(adapter->GetDesc1(&descriptor));
+        if (described && descriptor.VendorId == 0x10DE &&
+            (descriptor.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) {
+            D3D_FEATURE_LEVEL opened_level {};
+            const auto opened = D3D11CreateDevice(
+                adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
+                nullptr,
+                D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+                nullptr,
+                0,
+                D3D11_SDK_VERSION,
+                device,
+                &opened_level,
+                nullptr);
+            if (SUCCEEDED(opened) && *device != nullptr) {
+                adapter_luid = PackLuid(descriptor.AdapterLuid);
+                adapter->Release();
+                factory->Release();
+                return true;
+            }
+        }
+        adapter->Release();
+        adapter = nullptr;
+    }
+    factory->Release();
+    return false;
+}
+#endif
 
 class ScratchOutput final {
 public:
@@ -785,6 +894,142 @@ void WritesThreeSecondsOfRealH264MfAndAacPackets()
     CHECK(oracle.video_packet_count == video_packets.size());
     CHECK(oracle.video_decoded_frame_count == VideoFrameCount);
 }
+
+void WritesRealD3d11NvencAndAacPacketsToMp4(bool required)
+{
+    constexpr std::uint32_t Width = 1'280;
+    constexpr std::uint32_t Height = 720;
+    constexpr std::uint32_t FramesPerSecond = 30;
+    constexpr std::uint64_t VideoFrameCount = FramesPerSecond;
+    constexpr std::uint64_t AudioFrameCount = 48'000;
+    constexpr std::size_t AudioWindowFrameCount = 1'024;
+
+    ID3D11Device *device = nullptr;
+    std::uint64_t adapter_luid = 0;
+    if (!CreateNvidiaDevice(&device, adapter_luid)) {
+        CHECK(!required);
+        std::cout << "SKIP: NVIDIA D3D11 device unavailable\n";
+        return;
+    }
+
+    D3D11_TEXTURE2D_DESC texture_descriptor {};
+    texture_descriptor.Width = Width;
+    texture_descriptor.Height = Height;
+    texture_descriptor.MipLevels = 1;
+    texture_descriptor.ArraySize = 1;
+    texture_descriptor.Format = DXGI_FORMAT_NV12;
+    texture_descriptor.SampleDesc.Count = 1;
+    texture_descriptor.Usage = D3D11_USAGE_DEFAULT;
+    texture_descriptor.BindFlags = D3D11_BIND_RENDER_TARGET;
+    ID3D11Texture2D *texture = nullptr;
+    CHECK(SUCCEEDED(device->CreateTexture2D(
+        &texture_descriptor,
+        nullptr,
+        &texture)));
+    CHECK(texture != nullptr);
+    auto surface = std::make_shared<NvencTextureSurface>(
+        texture,
+        VideoSurfaceDescriptor {
+            adapter_luid,
+            Width,
+            Height,
+            VRREC_SOURCE_PIXEL_FORMAT_NV12,
+            1,
+        });
+    texture->Release();
+
+    ProductionVideoEncoderRoute route {};
+    CHECK(ResolveProductionVideoEncoderRoute(
+              VRREC_ENCODER_NVENC,
+              adapter_luid,
+              adapter_luid,
+              route) == VRREC_STATUS_OK);
+    H264VideoEncoderConfig video_config {};
+    CHECK(CreateH264VideoEncoderConfig(
+              Width,
+              Height,
+              FramesPerSecond,
+              true,
+              video_config) == VRREC_STATUS_OK);
+    auto video_result = FfmpegH264PacketEncoder::CreateHardware(
+        video_config,
+        route,
+        device);
+    device->Release();
+    CHECK(video_result.status == VRREC_STATUS_OK);
+    CHECK(video_result.encoder != nullptr);
+
+    std::vector<EncodedMediaPacket> video_packets;
+    const auto append_video = [&](FfmpegH264PacketEncoderWrite write) {
+        CHECK(write.status == VRREC_STATUS_OK);
+        video_packets.insert(
+            video_packets.end(),
+            std::make_move_iterator(write.packets.begin()),
+            std::make_move_iterator(write.packets.end()));
+    };
+    for (std::uint64_t frame = 0; frame < VideoFrameCount; ++frame) {
+        append_video(video_result.encoder->EncodeD3d11Nv12(
+            surface,
+            static_cast<std::int64_t>(frame)));
+    }
+    append_video(video_result.encoder->Finish());
+    CHECK(video_packets.size() == VideoFrameCount);
+    const auto *video_descriptor = video_result.encoder->Descriptor();
+    CHECK(video_descriptor != nullptr);
+
+    AacAudioEncoderConfig audio_config {};
+    CHECK(CreateAacAudioEncoderConfig(audio_config) == VRREC_STATUS_OK);
+    auto audio_result = FfmpegAacPacketEncoder::Create(audio_config);
+    CHECK(audio_result.status == VRREC_STATUS_OK);
+    CHECK(audio_result.encoder != nullptr);
+    CHECK(audio_result.descriptor.has_value());
+
+    ScratchOutput output;
+    const auto path = output.Path().string();
+    auto mux_result = LibavformatFragmentedMp4MuxerPort::Create(path.c_str());
+    CHECK(mux_result.status == VRREC_STATUS_OK);
+    CHECK(mux_result.port != nullptr);
+    FfmpegFragmentedMp4Muxer mux(*mux_result.port);
+    const FragmentedMp4StreamConfiguration streams {
+        *video_descriptor,
+        std::move(*audio_result.descriptor),
+        DefaultFragmentedMp4FragmentPolicy,
+    };
+    audio_result.descriptor.reset();
+    CHECK(mux.WriteHeader(streams) == VRREC_STATUS_OK);
+    for (const auto &packet : video_packets) {
+        CHECK(mux.WritePacket(packet) == VRREC_STATUS_OK);
+    }
+
+    std::uint64_t audio_frame = 0;
+    while (audio_frame < AudioFrameCount) {
+        const auto frame_count = static_cast<std::size_t>(std::min(
+            static_cast<std::uint64_t>(AudioWindowFrameCount),
+            AudioFrameCount - audio_frame));
+        auto samples = StereoFrames(audio_frame, frame_count);
+        const auto encoded =
+            audio_result.encoder->EncodePcm48k(audio_frame, samples);
+        CHECK(encoded.status == VRREC_STATUS_OK);
+        for (const auto &packet : encoded.packets) {
+            CHECK(mux.WritePacket(packet) == VRREC_STATUS_OK);
+        }
+        audio_frame += frame_count;
+    }
+    const auto audio_finished = audio_result.encoder->Finish();
+    CHECK(audio_finished.status == VRREC_STATUS_OK);
+    for (const auto &packet : audio_finished.packets) {
+        CHECK(mux.WritePacket(packet) == VRREC_STATUS_OK);
+    }
+    CHECK(mux.WriteTrailer() == VRREC_STATUS_OK);
+    CHECK(mux.FlushFile() == VRREC_STATUS_OK);
+
+    const auto oracle = RunAacDecodeOracle(output.Path());
+    CHECK(oracle.presented_decoded_frame_count == AudioFrameCount);
+    CHECK(oracle.video_width == Width);
+    CHECK(oracle.video_height == Height);
+    CHECK(oracle.video_packet_count == VideoFrameCount);
+    CHECK(oracle.video_decoded_frame_count == VideoFrameCount);
+}
 #endif
 
 void CarriesTheOpenedAacBitrateIntoTheRealFragmentedMp4Header()
@@ -1001,13 +1246,15 @@ void FlushesTheOwnedAacPipelineThroughTheRealMuxGraph()
 
 }
 
-int main()
+int main(int argc, char **argv)
 {
     CarriesTheOpenedAacBitrateIntoTheRealFragmentedMp4Header();
     WritesThreeSecondsOfRealAacPacketsIntoFragmentedMp4();
     RequiresThreeDecodedH264FramesAlongsideThreeSecondsOfRealAac();
 #if defined(_WIN32)
     WritesThreeSecondsOfRealH264MfAndAacPackets();
+    WritesRealD3d11NvencAndAacPacketsToMp4(
+        argc == 2 && std::strcmp(argv[1], "--require-nvenc") == 0);
 #endif
     FlushesTheOwnedAacPipelineThroughTheRealMuxGraph();
     return 0;

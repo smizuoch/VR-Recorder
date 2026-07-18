@@ -99,8 +99,10 @@ void AcceptsKnownEncodersAndRejectsUnknownOrNonIntegralFps()
 {
     ProductionMediaConfiguration output {};
     for (const auto encoder_kind :
-         std::array<vrrec_encoder_kind_t, 2> {
+         std::array<vrrec_encoder_kind_t, 4> {
              VRREC_ENCODER_NVENC,
+             VRREC_ENCODER_AMF,
+             VRREC_ENCODER_QSV,
              VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE,
          }) {
         auto input = ValidConfiguration();
@@ -113,16 +115,6 @@ void AcceptsKnownEncodersAndRejectsUnknownOrNonIntegralFps()
     }
 
     auto input = ValidConfiguration();
-    input.encoder_kind = VRREC_ENCODER_AMF;
-    CHECK(ValidateProductionMediaConfiguration(input, output) ==
-          VRREC_STATUS_BACKEND_UNAVAILABLE);
-
-    input = ValidConfiguration();
-    input.encoder_kind = VRREC_ENCODER_QSV;
-    CHECK(ValidateProductionMediaConfiguration(input, output) ==
-          VRREC_STATUS_BACKEND_UNAVAILABLE);
-
-    input = ValidConfiguration();
     input.encoder_kind = UINT32_MAX;
     CHECK(ValidateProductionMediaConfiguration(input, output) ==
           VRREC_STATUS_INVALID_ARGUMENT);
@@ -172,14 +164,26 @@ void ResolvesExactNvencAndSoftwareRoutesWithoutVendorFallback()
               VRREC_ENCODER_AMF,
               adapter_luid,
               adapter_luid,
-              route) == VRREC_STATUS_BACKEND_UNAVAILABLE);
-    CHECK(route.requested_kind == 0);
+              route) == VRREC_STATUS_OK);
+    CHECK(route.requested_kind == VRREC_ENCODER_AMF);
+    CHECK(std::string_view(route.codec_name) == "h264_amf");
+    CHECK(route.hardware_accelerated);
+    CHECK(route.input == ProductionVideoEncoderInput::D3d11Nv12);
+    CHECK(route.source_adapter_luid == adapter_luid);
+    CHECK(route.encoder_adapter_luid == adapter_luid);
+
     CHECK(ResolveProductionVideoEncoderRoute(
               VRREC_ENCODER_QSV,
               adapter_luid,
               adapter_luid,
-              route) == VRREC_STATUS_BACKEND_UNAVAILABLE);
-    CHECK(route.requested_kind == 0);
+              route) == VRREC_STATUS_OK);
+    CHECK(route.requested_kind == VRREC_ENCODER_QSV);
+    CHECK(std::string_view(route.codec_name) == "h264_qsv");
+    CHECK(route.hardware_accelerated);
+    CHECK(route.input ==
+          ProductionVideoEncoderInput::QsvDerivedD3d11Nv12);
+    CHECK(route.source_adapter_luid == adapter_luid);
+    CHECK(route.encoder_adapter_luid == adapter_luid);
 }
 
 void RejectsUnknownOrMismatchedAdapters()

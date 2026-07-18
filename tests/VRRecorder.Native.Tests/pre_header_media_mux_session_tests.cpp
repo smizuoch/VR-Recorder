@@ -219,6 +219,39 @@ void StartsCoordinatorWithTheExactCodecDescriptors()
     CHECK(downstream.StartCalls() == 1);
 }
 
+void DefersTheVideoDescriptorUntilTheHardwareEncoderProducesAPacket()
+{
+    RecordingDownstream downstream;
+    const auto descriptor = Configuration().video;
+    auto priming_configuration = Configuration();
+    priming_configuration.video.codec_extradata.clear();
+    const int encoder_identity = 8;
+    PreHeaderCoordinator coordinator(
+        downstream,
+        downstream,
+        priming_configuration.audio,
+        priming_configuration.fragment_policy,
+        &encoder_identity);
+    PreHeaderMediaMuxSession session(
+        coordinator,
+        104,
+        &encoder_identity,
+        priming_configuration,
+        false);
+
+    CHECK(session.Start(priming_configuration) == VRREC_STATUS_OK);
+    CHECK(coordinator.State() == PreHeaderState::Priming);
+    CHECK(downstream.StartCalls() == 0);
+    CHECK(coordinator.PublishVideoDescriptor(
+              &encoder_identity,
+              descriptor) == VRREC_STATUS_OK);
+    CHECK(coordinator.State() == PreHeaderState::Running);
+    CHECK(downstream.StartCalls() == 1);
+    auto expected = priming_configuration;
+    expected.video = descriptor;
+    CheckSameConfiguration(downstream.LastConfiguration(), expected);
+}
+
 void RejectsAConfigurationThatDiffersFromTheWiredGraph()
 {
     RecordingDownstream downstream;
@@ -353,6 +386,7 @@ void RequestAbortInterruptsAConcurrentHeaderStart()
 int main()
 {
     StartsCoordinatorWithTheExactCodecDescriptors();
+    DefersTheVideoDescriptorUntilTheHardwareEncoderProducesAPacket();
     RejectsAConfigurationThatDiffersFromTheWiredGraph();
     RejectsInvalidPrimingEpochAndEncoderIdentity();
     PropagatesHeaderFailureAndAbortsExactlyOnce();

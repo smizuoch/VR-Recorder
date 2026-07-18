@@ -12,6 +12,7 @@ using VRRecorder.Compliance.Runtime;
 using VRRecorder.Infrastructure.Media;
 using VRRecorder.Infrastructure.Osc;
 using VRRecorder.Infrastructure.Storage;
+using VRRecorder.Presentation.Wrist;
 
 namespace VRRecorder.App;
 
@@ -29,23 +30,28 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
         TimeSpan.FromSeconds(2);
     private readonly DesktopRecordingNotificationHub _recordingNotifications;
     private readonly ISettingsStore _settings;
+    private readonly ProductionWristTelemetrySource _wristTelemetry;
 
     public ProductionDesktopRecordingRuntimeFactory()
         : this(new JsonFileSettingsStore(
             SettingsPath(),
             SystemWallClock.Instance),
-            new DesktopRecordingNotificationHub())
+            new DesktopRecordingNotificationHub(),
+            new ProductionWristTelemetrySource(new SystemMonotonicClock()))
     {
     }
 
     internal ProductionDesktopRecordingRuntimeFactory(
         ISettingsStore settings,
-        DesktopRecordingNotificationHub recordingNotifications)
+        DesktopRecordingNotificationHub recordingNotifications,
+        ProductionWristTelemetrySource wristTelemetry)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(recordingNotifications);
+        ArgumentNullException.ThrowIfNull(wristTelemetry);
         _settings = settings;
         _recordingNotifications = recordingNotifications;
+        _wristTelemetry = wristTelemetry;
     }
 
     public async Task<IDesktopRecordingRuntime> InitializeAsync(
@@ -107,12 +113,17 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 diagnosticLog,
                 wallClock);
             resources.Add(events);
+            var mediaEvents = new CompositeRecordingMediaEventSink(
+                _wristTelemetry,
+                events);
             var presentationAudioEvents = new QueuedAudioSessionEventSink(
                 _recordingNotifications);
             resources.Add(presentationAudioEvents);
             var audioEvents = new CompositeAudioSessionEventSink(
-                events,
-                presentationAudioEvents);
+                _wristTelemetry,
+                new CompositeAudioSessionEventSink(
+                    events,
+                    presentationAudioEvents));
             var http = CreateLoopbackHttpInvoker();
             resources.Add(http);
             var cameraLeases = new FileSystemCameraLeaseStore(cameraLeasePath);
@@ -148,7 +159,7 @@ internal sealed class ProductionDesktopRecordingRuntimeFactory
                 clock,
                 faultStops,
                 audioEvents,
-                events,
+                mediaEvents,
                 SystemRecordingEnvironmentSource.ForCurrentProcess(),
                 new RecordingPartRollover(
                     fileReservation,

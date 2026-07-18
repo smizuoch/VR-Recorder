@@ -1,0 +1,36 @@
+Microsoft Visual C++ Runtime 2015-2022 candidate evidence
+
+Status: pending independent legal review
+Component ID: msvc-runtime
+Version: 14.44.35211.0
+Architecture: windows-x64
+Deployment: unmodified app-local runtime DLLs
+
+Microsoft-signed Visual Studio installer package:
+Microsoft.VC.14.44.17.14.CRT.Redist.X64.base.vsix
+Length: 3236248
+SHA-256: 4aaf54db0bfc9435f7c3660e1a00237a4b556042bfeea64bde44c2e0194e6ee5
+Download: https://download.visualstudio.microsoft.com/download/pr/45d3b8dd-bced-4b37-9974-142f748d710c/4aaf54db0bfc9435f7c3660e1a00237a4b556042bfeea64bde44c2e0194e6ee5/Microsoft.VC.14.44.17.14.CRT.Redist.X64.base.vsix
+Signer subject recorded by Visual Studio Installer: CN=Microsoft Corporation, OU=OPC, O=Microsoft Corporation, L=Redmond, S=Washington, C=US
+
+Official redistribution list:
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+
+Official runtime license source:
+https://visualstudio.microsoft.com/wp-content/uploads/2021/09/Visual-C-Runtime-2015-2022-License-1.docx
+
+Repository license transcription:
+third-party/licenses/msvc-runtime/LICENSE.txt
+Length: 6614
+SHA-256: bc4249b090d1653b5467ac87ddecba0d8e101a5d125bfa0c7e1014dd98452bdd
+
+Pinned unmodified x64 artifacts from VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT:
+msvcp140.dll | 557728 | 0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9
+msvcp140_atomic_wait.dll | 50304 | 640b2aefced484d0368eea5bdd06addd0658a3a70a49256e560d6923b404a479
+vcruntime140.dll | 124544 | d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066
+vcruntime140_1.dll | 49792 | 1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f
+
+These bytes are candidate inputs only. This file does not grant approval,
+does not replace the Microsoft license terms, and must not be converted to
+nativeArtifacts until a real requester, ticket, and independent reviewer have
+approved the component and its distribution conditions.

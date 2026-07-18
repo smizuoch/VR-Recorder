@@ -13,10 +13,13 @@
 - [x] factory-selection evidenceのproduction 4 family、binary filename／length／SHA-256、intent marker、evidence SHA-256をactual staged input bytesと照合する
 - [x] sibling temporary directoryへCreateNew copy・再hash・length／kind／exact inventory検証し、mid-copy／tamper／extra／commit／cancellation失敗時に既存immutable payloadを維持する
 - [x] stagerが決定的`ApprovedWindowsRuntime.props`を生成し、Release Appは明示されたpropsだけをimportしてsource／target一覧を配置する
-- [x] Releaseで`NativeMediaLibraryPath`／`FfprobeExecutablePath`／`FfmpegRuntimeDirectory`の直接指定を拒否する
-- [x] manifest v2のfull-production profile／RID／declared length／Legal anchorでfirst-party native、FFmpeg 4 DLL、ffprobe、OpenVR runtime／application manifest／action manifest／bindings、Spout／encoder runtimeのrequired closureとruntime majorを固定する
+- [x] Releaseで`NativeMediaLibraryPath`／`FfprobeExecutablePath`／`FfmpegRuntimeDirectory`／`OpenVrRuntimeLibraryPath`／`MsvcRuntimeDirectory`の直接指定を拒否する
+- [x] manifest v2のfull-production profile／RID／declared length／Legal anchorでfirst-party native、FFmpeg 4 DLL、`libvpl.dll`、ffprobe、OpenVR runtime／application manifest／action manifest／bindings、app-local MSVC CRT 4 DLL、Spout／encoder runtimeのrequired closureとruntime majorを固定する
 - [x] canonical repository evidenceからApprovedGraphを発行するbuilder、external staging CLI、two-invocation publish scriptを実装し、手書きprops／別digest directory差替えを拒否する
 - [x] DLL／EXEを実PE bytesとしてparseし、PE32+／AMD64 machine／subsystem／entrypoint／import closureを検証して拡張子だけのkind判定をrelease gateにしない
+- [x] app-local MSVC CRTをMicrosoft署名済みVC143 x64 package、公式redistribution list／Runtime license、実4 DLLのlength／SHA-256へ結合したpending candidateとして固定し、developmentだけ許可してRelease admissionを閉じる
+- [ ] FFmpeg／JsonSchema.Net／Spout2／OpenVR／libvpl／app-local MSVC CRTを独立reviewし、実在するticket／requester／reviewer付きでcanonical registryをApprovedGraphへadmitする
+- [ ] ApprovedGraphから認証済みLegal Bundle／`LEGAL-MANIFEST.sha256`を生成し、clean canonical application source revisionを確定する
 - [ ] authenticated Legal Bundle admission、ambient PATH排除、手動copy回避、publish後の全managed／native／self-contained .NET／asset／Legal inventory sealerを通す
 - [ ] Windows上でalternate data stream／reparse HILを実行し、portable injection testだけで合格にしない
 - [x] Legal Bundle ID／manifest hashをpost-publish payload identityへ取り込み、認証失敗／identity差替え時はidentityを発行しない

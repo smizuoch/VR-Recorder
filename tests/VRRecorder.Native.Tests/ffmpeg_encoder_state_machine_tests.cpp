@@ -308,6 +308,31 @@ void CopiesSupportedSkipSamplesSideDataAndOwnsItsPayload()
         std::byte {0x04});
 }
 
+void DropsValidatedVideoQualityStatsSideData()
+{
+    ScriptedEncoderPort port;
+    port.send_frame_results = {Ok()};
+    auto packet = Packet(std::byte {0x11}, 0);
+    packet.has_side_data = true;
+    packet.side_data_kind =
+        FfmpegReceivedPacketSideDataKind::QualityStats;
+    packet.side_data_payload =
+        std::vector<std::byte>(8, std::byte {0});
+    port.receive_steps = {
+        packet,
+        ReceiveResult(Again()),
+    };
+    FfmpegEncoderStateMachine encoder(port, MediaStreamKind::Video);
+
+    const auto result = encoder.EncodePreparedFrame();
+
+    CHECK(result.status == VRREC_STATUS_OK);
+    CHECK(result.packets.size() == 1);
+    CHECK(result.packets[0].side_data.empty());
+    CHECK(port.unref_calls == 1);
+    CHECK(port.abort_calls == 0);
+}
+
 void PreservesNegativeAudioPrimingTimestampsForTheMp4EditList()
 {
     ScriptedEncoderPort port;
@@ -963,6 +988,7 @@ int main()
     AcceptsAFrameThatProducesNoPacketYet();
     CopiesEveryPacketInOrderAndUnrefsEachSuccessfulReceive();
     CopiesSupportedSkipSamplesSideDataAndOwnsItsPayload();
+    DropsValidatedVideoQualityStatsSideData();
     PreservesNegativeAudioPrimingTimestampsForTheMp4EditList();
     DrainsPendingOutputAndRetriesTheSamePreparedFrameAfterSendAgain();
     RejectsSimultaneousSendAndReceiveAgainWithoutBusyLooping();

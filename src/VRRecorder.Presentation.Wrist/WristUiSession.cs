@@ -14,9 +14,12 @@ public sealed class WristUiSession
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _commandGate = new(1, 1);
     private readonly WristUiProjector _projector;
+    private readonly IUiLocalizer _localizer;
     private readonly IUiCommandDispatcher _application;
     private readonly IWristOverlayAdjustmentCommands _placement;
+    private readonly IWristTelemetrySource _telemetry;
     private WristPage _page = WristPage.Main;
+    private OverlayPlacementMode _placementMode;
     private long _presentationRevision;
     private bool _disposed;
 
@@ -24,13 +27,37 @@ public sealed class WristUiSession
         IUiLocalizer localizer,
         IUiCommandDispatcher application,
         IWristOverlayAdjustmentCommands placement)
+        : this(
+            localizer,
+            application,
+            placement,
+            NullWristTelemetrySource.Instance,
+            OverlayPlacementMode.WristDock)
+    {
+    }
+
+    public WristUiSession(
+        IUiLocalizer localizer,
+        IUiCommandDispatcher application,
+        IWristOverlayAdjustmentCommands placement,
+        IWristTelemetrySource telemetry,
+        OverlayPlacementMode initialPlacementMode)
     {
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(application);
         ArgumentNullException.ThrowIfNull(placement);
+        ArgumentNullException.ThrowIfNull(telemetry);
+        if (!Enum.IsDefined(initialPlacementMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(initialPlacementMode));
+        }
+        _localizer = localizer;
         _projector = new WristUiProjector(localizer);
         _application = application;
         _placement = placement;
+        _telemetry = telemetry;
+        _placementMode = initialPlacementMode;
     }
 
     public WristUiSnapshot Project(RecorderStatusSnapshot status)
@@ -38,12 +65,18 @@ public sealed class WristUiSession
         ObjectDisposedException.ThrowIf(_disposed, this);
         WristPage page;
         long presentationRevision;
+        OverlayPlacementMode placementMode;
         lock (_stateGate)
         {
             page = _page;
             presentationRevision = _presentationRevision;
+            placementMode = _placementMode;
         }
-        return _projector.Project(status, page) with
+        var telemetry = _telemetry.Capture(
+            status,
+            placementMode,
+            _localizer);
+        return _projector.Project(status, page, telemetry) with
         {
             PresentationRevision = presentationRevision,
         };
@@ -106,10 +139,9 @@ public sealed class WristUiSession
                         .ConfigureAwait(false);
                     break;
                 case UiCommandId.RecenterOverlay:
-                    await _placement
+                    CommitPlacement(await _placement
                         .RecenterAsync(cancellationToken)
-                        .ConfigureAwait(false);
-                    IncrementPresentationRevision();
+                        .ConfigureAwait(false));
                     break;
                 default:
                     await _application
@@ -138,10 +170,9 @@ public sealed class WristUiSession
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            await _placement
+            CommitPlacement(await _placement
                 .DragReleaseAsync(delta, cancellationToken)
-                .ConfigureAwait(false);
-            IncrementPresentationRevision();
+                .ConfigureAwait(false));
         }
         finally
         {
@@ -163,23 +194,21 @@ public sealed class WristUiSession
         WristOverlayNudgeDirection direction,
         CancellationToken cancellationToken)
     {
-        await _placement
+        CommitPlacement(await _placement
             .NudgeAsync(
                 direction,
                 WristOverlayNudgeSize.Small,
                 cancellationToken)
-            .ConfigureAwait(false);
-        IncrementPresentationRevision();
+            .ConfigureAwait(false));
     }
 
     private async Task SetPlacementModeAsync(
         OverlayPlacementMode placementMode,
         CancellationToken cancellationToken)
     {
-        await _placement
+        CommitPlacement(await _placement
             .SetPlacementModeAsync(placementMode, cancellationToken)
-            .ConfigureAwait(false);
-        IncrementPresentationRevision();
+            .ConfigureAwait(false));
     }
 
     private void SetPage(WristPage page)
@@ -195,10 +224,17 @@ public sealed class WristUiSession
         }
     }
 
-    private void IncrementPresentationRevision()
+    private void CommitPlacement(VrOverlayPlacement placement)
     {
+        ArgumentNullException.ThrowIfNull(placement);
+        if (!Enum.IsDefined(placement.PlacementMode))
+        {
+            throw new InvalidDataException(
+                "The applied wrist placement mode is invalid.");
+        }
         lock (_stateGate)
         {
+            _placementMode = placement.PlacementMode;
             _presentationRevision++;
         }
     }

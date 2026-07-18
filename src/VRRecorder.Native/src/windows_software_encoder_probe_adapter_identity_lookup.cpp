@@ -124,7 +124,7 @@ bool TryFormatDriverIdentity(
 {
     LARGE_INTEGER version {};
     if (FAILED(adapter.CheckInterfaceSupport(
-            __uuidof(ID3D11Device),
+            __uuidof(IDXGIDevice),
             &version))) {
         return false;
     }

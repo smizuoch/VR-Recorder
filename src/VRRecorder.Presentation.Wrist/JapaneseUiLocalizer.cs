@@ -66,6 +66,10 @@ public sealed class JapaneseUiLocalizer : IUiLocalizer
             ["state.stopping.label"] = "録画保存中",
             ["state.no-signal.label"] = "カメラ信号なし",
             ["state.faulted.label"] = "レコーダーエラー",
+            ["telemetry.desktop-audio.unavailable"] =
+                "デスクトップ音声を利用できません",
+            ["telemetry.microphone.unavailable"] =
+                "マイクを利用できません",
             ["legal.title"] = "情報とライセンス",
             ["legal.version.format"] = "製品バージョン {0}",
             ["legal.bundle.format"] = "Legal Bundle 識別子 {0}",

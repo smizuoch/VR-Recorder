@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ffmpeg_h264_software_codec_session.hpp"
+#include "ffmpeg_h264_hardware_codec_session.hpp"
 #include "ffmpeg_h264_system_memory_packet_encoder_adapter.hpp"
 #include "muxing_video_encoder_sink.hpp"
 
@@ -39,8 +40,11 @@ public:
     {
         std::vector<std::byte> extradata;
         const auto status = session->CopyCodecExtradata(extradata);
-        if (status != VRREC_STATUS_OK || extradata.empty()) {
+        if (status != VRREC_STATUS_OK) {
             return status;
+        }
+        if (extradata.empty()) {
+            return VRREC_STATUS_OK;
         }
         return normalizer.InitializeFromAnnexBExtradata(extradata);
     }
@@ -120,6 +124,27 @@ FfmpegH264PacketEncoderCreateResult FfmpegH264PacketEncoder::Create(
         opened.owned_frame);
 }
 
+FfmpegH264PacketEncoderCreateResult
+FfmpegH264PacketEncoder::CreateHardware(
+    const H264VideoEncoderConfig &config,
+    const ProductionVideoEncoderRoute &route,
+    void *d3d11_device) noexcept
+{
+    auto opened = CreateFfmpegH264HardwareCodecSession(
+        config,
+        route,
+        d3d11_device);
+    if (opened.status != VRREC_STATUS_OK || opened.session == nullptr ||
+        opened.owned_frame == nullptr) {
+        av_frame_free(&opened.owned_frame);
+        return {opened.status, nullptr};
+    }
+    return CreateWithSession(
+        config,
+        std::move(opened.session),
+        opened.owned_frame);
+}
+
 #if defined(VRRECORDER_NATIVE_TESTING)
 FfmpegH264PacketEncoderCreateResult
 FfmpegH264PacketEncoder::CreateForTesting(
@@ -188,6 +213,25 @@ FfmpegH264PacketEncoderWrite FfmpegH264PacketEncoder::EncodeNv12(
     return impl_->Normalize(impl_->session->EncodePreparedFrame());
 }
 
+FfmpegH264PacketEncoderWrite
+FfmpegH264PacketEncoder::EncodeD3d11Nv12(
+    const std::shared_ptr<VideoSurface> &surface,
+    std::int64_t pts) noexcept
+{
+    if (impl_ == nullptr) {
+        return {VRREC_STATUS_INVALID_STATE, false, {}};
+    }
+    const std::lock_guard lock(impl_->mutex);
+    if (impl_->state != Impl::State::Active) {
+        return {VRREC_STATUS_INVALID_STATE, false, {}};
+    }
+    const auto status = impl_->session->PrepareD3d11Frame(surface, pts);
+    if (status != VRREC_STATUS_OK) {
+        return impl_->Fail(status);
+    }
+    return impl_->Normalize(impl_->session->EncodePreparedFrame());
+}
+
 FfmpegH264PacketEncoderWrite FfmpegH264PacketEncoder::Finish() noexcept
 {
     if (impl_ == nullptr) {
@@ -235,7 +279,8 @@ const H264StreamDescriptor *FfmpegH264PacketEncoder::Descriptor() const noexcept
 PacketVideoEncoderWrite MakeMuxingVideoEncoderWrite(
     const FfmpegH264PacketEncoder &encoder,
     FfmpegH264PacketEncoderWrite write,
-    std::uint64_t encode_latency_microseconds) noexcept
+    std::uint64_t encode_latency_microseconds,
+    const void *encoder_identity) noexcept
 {
     const auto *descriptor = write.descriptor_became_ready
         ? encoder.Descriptor()
@@ -251,7 +296,9 @@ PacketVideoEncoderWrite MakeMuxingVideoEncoderWrite(
         encode_latency_microseconds,
         std::move(write.packets),
         publish_descriptor,
-        publish_descriptor ? &encoder : nullptr,
+        publish_descriptor
+            ? (encoder_identity != nullptr ? encoder_identity : &encoder)
+            : nullptr,
         publish_descriptor ? descriptor : nullptr,
     };
 }

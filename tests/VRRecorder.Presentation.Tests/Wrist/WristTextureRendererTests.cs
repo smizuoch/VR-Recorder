@@ -8,6 +8,58 @@ namespace VRRecorder.Presentation.Tests.Wrist;
 public sealed class WristTextureRendererTests
 {
     [Fact]
+    public void RendersEveryProductionTelemetryField()
+    {
+        var assets = new SyntheticRasterAssets();
+        var renderer = new WristTextureRenderer(
+            assets,
+            new WristTextureThemeSet(CreateTheme(10), CreateTheme(80)));
+        var telemetry = new WristTelemetrySnapshot(
+            TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(2),
+            1_280,
+            720,
+            60,
+            59.94,
+            WristSignalHealth.Available,
+            WristSignalHealth.Degraded,
+            WristSignalHealth.Unavailable,
+            "NVENC",
+            VRRecorder.Application.Settings.OverlayPlacementMode.WorldPin,
+            [
+                new WristAlertSnapshot(
+                    "signal.microphone.unavailable",
+                    WristAlertSeverity.Warning,
+                    new LocalizedText(
+                        "telemetry.microphone.unavailable",
+                        "Microphone unavailable")),
+            ]);
+        var snapshot = new WristUiProjector(EnglishUiLocalizer.Instance)
+            .Project(
+                RecorderStatusSnapshot.Create(7, RecorderState.Recording),
+                WristPage.Main,
+                telemetry);
+
+        _ = renderer.Render(snapshot, WristLayoutOptions.Default);
+
+        foreach (var expected in new[]
+                 {
+                     "01:02",
+                     "1280×720",
+                     "60 / 59.94 FPS",
+                     "NVENC",
+                     "Spout: Available",
+                     "Desktop: Degraded",
+                     "Microphone: Unavailable",
+                     "Placement: WorldPin",
+                     "Microphone unavailable",
+                 })
+        {
+            Assert.Contains(assets.TextRequests, request =>
+                request.Text == expected);
+        }
+    }
+
+    [Fact]
     public void RendersDeterministicOpaqueBgraFromResolvedAssets()
     {
         var assets = new SyntheticRasterAssets();
