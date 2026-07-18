@@ -1,4 +1,5 @@
 using VRRecorder.Application.Ports;
+using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
 using VRRecorder.Application.Tests.TestDoubles;
 
@@ -6,6 +7,67 @@ namespace VRRecorder.Application.Tests.Storage;
 
 public sealed class RecordingFileFinalizationUseCaseTests
 {
+    [Fact]
+    public void ConstructorRejectsNullRequiredDependencies()
+    {
+        var finalizer = new UnexpectedRecordingFileFinalizer();
+        var validator = new StubRecordingFileValidator(
+            RecordingFileValidation.Valid);
+        var recovery = new FakeRecordingRecoveryStore();
+        var savedRecordings = new FakeSavedRecordingSink();
+
+        var finalizerException = Assert.Throws<ArgumentNullException>(() =>
+            new RecordingFileFinalizationUseCase(
+                null!,
+                validator,
+                recovery,
+                savedRecordings));
+        Assert.Equal("finalizer", finalizerException.ParamName);
+
+        var validatorException = Assert.Throws<ArgumentNullException>(() =>
+            new RecordingFileFinalizationUseCase(
+                finalizer,
+                null!,
+                recovery,
+                savedRecordings));
+        Assert.Equal("validator", validatorException.ParamName);
+
+        var recoveryException = Assert.Throws<ArgumentNullException>(() =>
+            new RecordingFileFinalizationUseCase(
+                finalizer,
+                validator,
+                null!,
+                savedRecordings));
+        Assert.Equal("recovery", recoveryException.ParamName);
+
+        var savedException = Assert.Throws<ArgumentNullException>(() =>
+            new RecordingFileFinalizationUseCase(
+                finalizer,
+                validator,
+                recovery,
+                null!));
+        Assert.Equal("savedRecordings", savedException.ParamName);
+    }
+
+    [Fact]
+    public async Task ExecuteRejectsNullPendingAndStopResults()
+    {
+        var useCase = new RecordingFileFinalizationUseCase(
+            new UnexpectedRecordingFileFinalizer(),
+            new StubRecordingFileValidator(RecordingFileValidation.Valid),
+            new FakeRecordingRecoveryStore(),
+            new FakeSavedRecordingSink());
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            useCase.ExecuteAsync(
+                (PendingRecording)null!,
+                CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            useCase.ExecuteAsync(
+                (RecordingStopResult)null!,
+                CancellationToken.None));
+    }
+
     [Fact]
     public async Task PendingIsValidatedBeforeFinalNameIsPublished()
     {
@@ -104,11 +166,13 @@ public sealed class RecordingFileFinalizationUseCaseTests
             RecordingFileValidation.Invalid);
         var recovery = new FakeRecordingRecoveryStore();
         var savedRecordings = new FakeSavedRecordingSink();
+        var diagnostics = new CapturingRecordingFinalizationEventSink();
         var useCase = new RecordingFileFinalizationUseCase(
             new UnexpectedRecordingFileFinalizer(),
             validator,
             recovery,
-            savedRecordings);
+            savedRecordings,
+            diagnostics);
         var pending = new PendingRecording(
             Path.Combine(Path.GetTempPath(), "recording.recording.mp4"),
             Path.Combine(Path.GetTempPath(), "recording.mp4"));
@@ -129,6 +193,9 @@ public sealed class RecordingFileFinalizationUseCaseTests
             new RecoverableRecording(pending.TemporaryPath),
             Assert.Single(recovery.Recordings));
         Assert.Empty(savedRecordings.Recordings);
+        Assert.Equal(
+            [RecordingRecoveryReason.ValidationFailed],
+            diagnostics.Reasons);
     }
 
     [Fact]
@@ -227,5 +294,14 @@ public sealed class RecordingFileFinalizationUseCaseTests
             Reasons.Add(reason);
             throw new IOException("diagnostic storage unavailable");
         }
+    }
+
+    private sealed class CapturingRecordingFinalizationEventSink
+        : IRecordingFinalizationEventSink
+    {
+        public List<RecordingRecoveryReason> Reasons { get; } = [];
+
+        public void Publish(RecordingRecoveryReason reason) =>
+            Reasons.Add(reason);
     }
 }
