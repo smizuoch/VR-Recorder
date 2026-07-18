@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <!--
-    The release coverage gate executes this project alone. Reuse the focused
+    The coverage metrics workflow executes this project alone. Reuse the focused
     behavior scenarios in the same test assembly while retaining their small
     source projects for the fast Red/Green developer loop.
   -->

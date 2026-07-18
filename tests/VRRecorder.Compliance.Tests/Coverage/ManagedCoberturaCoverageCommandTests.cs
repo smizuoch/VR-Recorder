@@ -17,7 +17,7 @@ public sealed class ManagedCoberturaCoverageCommandTests
     ];
 
     [Fact]
-    public void AcceptsEveryRequiredAssemblyAtExactlyEightyPercent()
+    public void ReportsEveryRequiredAssemblyAtExactlyEightyPercent()
     {
         using var report = TemporaryReport.Create(Document());
         using var output = new StringWriter();
@@ -38,7 +38,7 @@ public sealed class ManagedCoberturaCoverageCommandTests
     [Theory]
     [InlineData("0.799", "0.81", "line")]
     [InlineData("0.81", "0.799", "branch")]
-    public void RejectsAnyAssemblyBelowEitherThreshold(
+    public void ReportsAnyCoverageLevelWithoutUsingItAsAGate(
         string lineRate,
         string branchRate,
         string metric)
@@ -55,11 +55,12 @@ public sealed class ManagedCoberturaCoverageCommandTests
             output,
             error);
 
-        Assert.Equal(1, exitCode);
-        Assert.Equal(string.Empty, output.ToString());
+        Assert.Equal(0, exitCode);
         Assert.Contains(
-            $"VRRecorder.Compliance {metric} coverage 79.90% is below 80.00%",
-            error.ToString());
+            $"VRRecorder.Compliance: line={(metric == "line" ? "79.90" : "81.00")}%, " +
+            $"branch={(metric == "branch" ? "79.90" : "81.00")}%",
+            output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     [Fact]

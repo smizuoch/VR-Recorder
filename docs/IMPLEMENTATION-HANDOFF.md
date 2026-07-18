@@ -2,13 +2,13 @@
 
 - 更新日: 2026-07-18
 - 対象branch: `main`
-- 実装基準commit: `22884b0`（managed coverage最終再採取前のPE admission境界強化）
-- 現在の判定: release-payload identity／Hardware Validation evidence contract／settings schema validation／native・managed coverage gateは自動化完了。mutation／UI Automationを実装中で、配布製品でもrelease候補でもない
+- 実装基準commit: `6c8ab77`（coverage／mutation方針変更直前のnotification境界強化）
+- 現在の判定: release-payload identity／Hardware Validation evidence contract／settings schema validationとnative・managed coverage metrics収集は自動化済み。coverage／mutationの数値閾値はrelease条件から撤廃した。UI Automationとproduction機能残を実装中で、配布製品でもrelease候補でもない
 - 配布方針: unpackaged self-contained `win-x64` payloadで実機検証し、同一payloadの合格後だけMicrosoft Store MSIX候補へ進める
 
 ## 1. 最初に読む結論
 
-desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect captureとMicOnly production mux／oracleは完了した。release payload identity、versioned Hardware Validation report／required matrix validator、settings schema、native・managed line／branch coverage gateの自動化も完了した。実機検証は最終Hardware Validationへまとめる。残るmutation／UI Automationを閉じてpayloadをfreezeしてから、Windows／GPU／VRChat／SteamVR／HMDを同一identityで一括検証する。独立Legal承認は外部gateとしてfail-closedのまま維持し、自動化可能な実装と直列化しない。
+desktop production録画、production OpenVR overlay、first-run setup 7／8のproduction route、PICO microphoneのdirect captureとMicOnly production mux／oracleは完了した。release payload identity、versioned Hardware Validation report／required matrix validator、settings schema、native・managed line／branch metrics収集も自動化した。coverage／mutationは参考指標であり、最低率を満たすためだけの作業は行わない。実機検証は最終Hardware Validationへまとめる。UI Automationとproduction機能残を閉じ、payloadをfreezeしてからWindows／GPU／VRChat／SteamVR／HMDを同一identityで一括検証する。独立Legal承認は外部gateとしてfail-closedのまま維持し、自動化可能な実装と直列化しない。
 
 2026-07-16 checkpointでは、公式Spout demo senderの640×360 BGRA8 frameとdefault render endpointのWASAPI loopbackを、production `vrrecorder_native.dll`のSpout2→D3D11 NV12→software `h264_mf`およびAAC→fragmented MP4経路へ通した。共有D3D11 immediate contextには`ID3D11Multithread`保護を有効化し、CFR frame PTSはcodec tickのままlibavcodecへ渡す。実録画はvideo 117 packet／3.900秒／30 fps、audio 193 packet／4.117秒／48 kHz stereo、container 4.133秒となり、別rootのpinned `ffprobe`でpending fileを検証してからだけfinal `.mp4`へrenameされた。PICO `default-capture`のdirect production WASAPI HILでは、session前packetとshort discontinuity後のdevice-position gapを修正し、3秒／48 kHz captureを500 ms間隔で10回連続成功させた。さらに同じPICO endpointをMicOnlyでfull production sessionへ接続し、Spout映像110 H.264 packetとmicrophone音声179 AAC packetをmuxした。pinned oracleはvideo 110 frame、audio 178 decoded frame／182,272 sample、audio presentation 0.000～3.797秒を確認し、検証後だけfinal `.mp4`へ公開した。独立Legal review／canonical registry admission、VRChat sender、device change／privacy、controller HIL、fallback／part rollover、最終payload／MSIXは未完了であり、Release admissionは引き続きfail-closedである。古いcheckpointの「production media未接続」「実Spout／WASAPI未完了」という記述より本段落と2.7節を優先する。
 
@@ -16,7 +16,7 @@ desktop production録画、production OpenVR overlay、first-run setup 7／8のp
 
 1. manifest v2、PE admission、repository-derived graph、staging CLI、two-phase publish、post-publish sealの自動gateを完成させる。
 2. source revision／product versionを含むapplication payload identityと、versioned Hardware Validation report schema／required matrix validatorをRed→Greenで閉じる。
-3. native・managed coverageは完了済み。mutation／UI Automationの実機を要しない範囲を閉じ、全機能を含むunpackaged directoryをfreezeする。
+3. coverage／mutationの数値追求は行わない。UI Automationと実機を要しないproduction機能残を閉じ、全機能を含むunpackaged directoryをfreezeする。
 4. freeze済みの同一identityに対してWindows／GPU／VRChat／audio／SteamVR／HMDの最終実機検証を一括実行する。
 5. 実在するticket／requester／independent reviewerからLegal approvalを取得し、合格payloadだけを別projectでMSIXへ包む。
 
@@ -227,17 +227,17 @@ coverage／mutationは今回再採取していない。前回値は[`VALIDATION-
 
 次の開始点はOpenVR production compositionである。既存のruntime owner、lifecycle、D3D11 texture presenter、event、pose、recenter、hapticを作り直さず、production Appから実SteamVRへ接続して最初の未接続点だけをTDDで直す。
 
-### 2.6 2026-07-17 native coverage checkpoint
+### 2.6 2026-07-17 native coverage metrics checkpoint
 
-この節は2.5節より新しい。canonical `build/native-linux-coverage`でnative CTest 75/75を実行後、first-party sourceを`/src/VRRecorder.Native/src/`へ限定して271個のgcov JSON artifactを再収集した。結果はline 94.78%（8860/9348）、branch 90.02%（6025/6693）で、line／branch各80%以上のnative release thresholdを通過した。到達不能counter overflowや汎用`catch (...)`を除外追加で隠さず、ABI UTF-8、H.264 parser、pre-header race、OpenVR lifecycle／pose／texture、Windows path、mux result、AV sync、audio timing／routing、thread factory、Spout abort、CFR timestamp／clock overflow等の公開境界テストで到達した。
+この節は2.5節より新しい。canonical `build/native-linux-coverage`でnative CTest 75/75を実行後、first-party sourceを`/src/VRRecorder.Native/src/`へ限定して271個のgcov JSON artifactを再収集した。結果はline 94.78%（8860/9348）、branch 90.02%（6025/6693）だった。これは旧80% release threshold運用時のcheckpointであり、現在は品質傾向を読む参考値としてだけ保持する。ABI UTF-8、H.264 parser、pre-header race、OpenVR lifecycle／pose／texture、Windows path、mux result、AV sync、audio timing／routing、thread factory、Spout abort、CFR timestamp／clock overflow等の公開境界テストを実行した事実は引き続き有効である。
 
-この時点では、次の作業をIntegrationTests単独で主要managed assemblyごとのline／branch各80%以上へ進めた。結果は次の2.7節を正とする。
+この時点では、IntegrationTests単独で主要managed assemblyごとのline／branchを採取した。結果は次の2.7節を正とする。
 
-### 2.7 2026-07-18 managed coverage checkpoint
+### 2.7 2026-07-18 managed coverage metrics checkpoint
 
-Release構成の`VRRecorder.IntegrationTests`単独で2,043/2,043 testを実行し、Coberturaを第一者production codeだけに限定して再採取した。結果はApplication 94.82%／90.61%、Compliance 89.29%／80.78%、Domain 96.89%／95.16%、Media 91.57%／88.94%、Osc 92.40%／90.70%、SteamVr 94.43%／90.07%、Storage 95.71%／91.81%、Wrist 95.70%／90.94%で、主要8 assemblyすべてがline／branch各80%以上を通過した。
+Release構成の`VRRecorder.IntegrationTests`単独で2,043/2,043 testを実行し、Coberturaを第一者production codeだけに限定して再採取した。結果はApplication 94.82%／90.61%、Compliance 89.29%／80.78%、Domain 96.89%／95.16%、Media 91.57%／88.94%、Osc 92.40%／90.70%、SteamVr 94.43%／90.07%、Storage 95.71%／91.81%、Wrist 95.70%／90.94%だった。数値は2026-07-18時点の参考値であり、現在のmerge／release合否には使わない。
 
-`ManagedCoberturaCoverageCommand`はこの8 packageの欠落、各line-rate／branch-rateの80%未満、不正または重複したCobertura入力をfail-closedで拒否する。`.github/workflows/managed-coverage.yml`はlocked restore後に同じIntegrationTestsをRelease構成で一度だけ実行し、収集reportをこのgateへ渡す。managed coverage gateは完了とし、次はmutation 75%以上とWindows UI Automationを閉じる。実機Hardware Validationはfreeze済み同一payloadへ最後に一括実施する。
+`ManagedCoberturaCoverageCommand`はこの8 packageのline／branch値を表示する。package欠落、不正または重複したCobertura入力は測定系の異常として拒否するが、値が低いことでは失敗しない。`.github/workflows/managed-coverage.yml`はlocked restore後に同じIntegrationTestsをRelease構成で一度だけ実行し、収集reportをmetrics reporterへ渡す。mutationも必要時の参考測定に限定し、数値閾値を閉じる作業は終了する。次はWindows UI Automationとproduction機能残へ進み、実機Hardware Validationはfreeze済み同一payloadへ最後に一括実施する。
 
 ## 3. 現在の実装とplaceholderの境界
 
@@ -351,7 +351,7 @@ pure renderer、D3D11/OpenVR texture ownership、managed lifecycle、interaction
 | P1 | Windows hardware E2E | 未実施 | MSIX候補への昇格 |
 | P1 | OpenVR input／overlay一式 | runtime owner、native lifecycle／texture／event／pose／haptic、production glyph、App表示接続、Dock／Pin／nudge／recenter、drag release、World Pinでの実HMD表示はGreen。実controllerでのWrist Dock／drag／左右入力、再接続HILが未完了 | Wrist操作・表示 |
 | P1 | first-run setup 7／8 | setup 7はproduction overlayのShow＋mode／hand／origin／pose readback、setup 8はproduction 3秒録画＋ffprobe済みSaved＋既定player起動までGreen。実VRChat／controllerを含む全行程HILは未完了 | setup完走 |
-| P1 | coverage／mutation／UI Automation | native line 94.78%／branch 90.02%、managed主要8 assemblyのline／branch各80%以上と自動gateはGreen。mutation、UI Automationは未完了 | release quality gate |
+| P1 | test実行／quality metrics／UI Automation | native line 94.78%／branch 90.02%、managed主要8 assemblyのline／branchを参考値として採取済み。coverage／mutationの最低率はrelease条件ではない。UI Automationは未完了 | required test GreenとWindows UI smoke |
 | P1 | final Legal Bundle／承認 | candidate台帳、承認済みnative 0 | 配布・署名 |
 | P2 | MSIX／Store submission | policyのみ、packaging projectなし | Store提出 |
 
@@ -781,16 +781,16 @@ Microsoft公式資料の表現には差がある。Visual Studio packaging手順
 
 ## 9. 横断release gate
 
-### 9.1 Coverage／test quality
+### 9.1 Test execution／quality metrics
 
-- 基本設計はintegration-test単独で主要managed assemblyおよびnative first-party sourceごとのline／branch各80%以上を要求する。
-- 2026-07-18のmanaged再採取はRelease構成のIntegrationTests 2,043/2,043 Green。Application 94.82%／90.61%、Compliance 89.29%／80.78%、Domain 96.89%／95.16%、Media 91.57%／88.94%、Osc 92.40%／90.70%、SteamVr 94.43%／90.07%、Storage 95.71%／91.81%、Wrist 95.70%／90.94%で、主要8 assemblyすべてが達成した。
-- managed Cobertura gateとLinux CIは、主要8 assemblyの欠落またはline／branchいずれか80%未満を自動で拒否する。
-- nativeは2026-07-17のcanonical再採取でline 94.78%（8860/9348）、branch 90.02%（6025/6693）、CTest 75/75となりthreshold達成。
-- mutation score 75%は未測定。
+- 必須unit／contract／integration testとpublic native ABI scenarioの失敗は引き続き拒否する。coverage／mutationの数値は参考指標であり、最低率をrelease条件にしない。
+- 2026-07-18のmanaged再採取はRelease構成のIntegrationTests 2,043/2,043 Green。Application 94.82%／90.61%、Compliance 89.29%／80.78%、Domain 96.89%／95.16%、Media 91.57%／88.94%、Osc 92.40%／90.70%、SteamVr 94.43%／90.07%、Storage 95.71%／91.81%、Wrist 95.70%／90.94%だった。
+- managed Cobertura metrics workflowは主要8 assemblyのline／branch値を表示する。低い値では失敗せず、report欠落／破損だけを測定系異常として扱う。
+- nativeは2026-07-17のcanonical再採取でline 94.78%（8860/9348）、branch 90.02%（6025/6693）、CTest 75/75だった。Make targetは`coverage-report`とし、最低率を判定しない。
+- mutationは必要な調査時に差分または対象subsystemだけを採取する。scoreはmerge／release条件にしない。
 - Windows UI Automation、HIL、WPF実行は未完了。
 
-coverageを上げるためだけの無意味なassertを追加しない。production adapterのRedで未通過branchを先に埋め、各work package完了時に再採取する。
+coverage／mutationを上げるためだけのassertやテストは追加しない。要求、回帰、外部境界に対応するRedだけを追加し、metricsは節目で傾向確認に使う。
 
 ### 9.2 Legal／dependency
 

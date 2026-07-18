@@ -7,7 +7,7 @@ namespace VRRecorder.Compliance.Tests.Coverage;
 public sealed class NativeCoverageCommandTests
 {
     [Fact]
-    public void ReadsGzipArtifactsAndReturnsSuccessAtTheReleaseThreshold()
+    public void ReadsGzipArtifactsAndReportsCoverage()
     {
         using var directory = TemporaryDirectory.Create();
         var artifact = WriteArtifact(directory.Path, coveredCount: 8);
@@ -26,7 +26,7 @@ public sealed class NativeCoverageCommandTests
     }
 
     [Fact]
-    public void ReturnsFailureWithoutHidingAThresholdViolation()
+    public void ReportsLowCoverageWithoutUsingItAsAGate()
     {
         using var directory = TemporaryDirectory.Create();
         var artifact = WriteArtifact(directory.Path, coveredCount: 7);
@@ -38,9 +38,10 @@ public sealed class NativeCoverageCommandTests
             output,
             error);
 
-        Assert.Equal(1, exitCode);
-        Assert.Equal(string.Empty, output.ToString());
-        Assert.Contains("line coverage 70.00%", error.ToString());
+        Assert.Equal(0, exitCode);
+        Assert.Contains("line=70.00%", output.ToString());
+        Assert.Contains("branch=70.00%", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     private static string WriteArtifact(string directory, int coveredCount)

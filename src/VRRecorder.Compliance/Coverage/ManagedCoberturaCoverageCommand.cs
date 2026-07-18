@@ -6,7 +6,6 @@ namespace VRRecorder.Compliance.Coverage;
 
 public static class ManagedCoberturaCoverageCommand
 {
-    public const double ReleaseThresholdPercentage = 80;
     private const long MaximumReportBytes = 64 * 1024 * 1024;
     private static readonly string[] RequiredAssemblies =
     [
@@ -44,22 +43,6 @@ public static class ManagedCoberturaCoverageCommand
                 {
                     error.WriteLine(
                         $"required managed coverage package is missing: {assembly}.");
-                    return 1;
-                }
-
-                if (rate.LinePercentage < ReleaseThresholdPercentage)
-                {
-                    error.WriteLine(string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{assembly} line coverage {rate.LinePercentage:0.00}% is below {ReleaseThresholdPercentage:0.00}%."));
-                    return 1;
-                }
-
-                if (rate.BranchPercentage < ReleaseThresholdPercentage)
-                {
-                    error.WriteLine(string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{assembly} branch coverage {rate.BranchPercentage:0.00}% is below {ReleaseThresholdPercentage:0.00}%."));
                     return 1;
                 }
             }

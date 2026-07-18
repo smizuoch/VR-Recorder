@@ -38,7 +38,7 @@ public sealed class RepositoryComplianceTests
     }
 
     [Fact]
-    public void ManagedCoverageWorkflowRunsTheLockedReleaseGate()
+    public void ManagedCoverageWorkflowCollectsLockedReleaseMetrics()
     {
         var repositoryRoot = FindRepositoryRoot();
         var workflow = File.ReadAllText(Path.Combine(
@@ -64,6 +64,8 @@ public sealed class RepositoryComplianceTests
             "VRRecorder.ManagedCoverage.csproj",
             workflow);
         Assert.Contains("coverage.cobertura.xml", workflow);
+        Assert.Contains("Report managed coverage metrics", workflow);
+        Assert.DoesNotContain("Enforce 80 percent", workflow);
     }
 
     [Fact]

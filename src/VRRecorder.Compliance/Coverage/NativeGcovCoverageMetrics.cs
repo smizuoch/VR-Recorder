@@ -1,12 +1,9 @@
-using System.Globalization;
 using System.Text.Json;
 
 namespace VRRecorder.Compliance.Coverage;
 
-public static class NativeGcovCoverageGate
+public static class NativeGcovCoverageMetrics
 {
-    public const double ReleaseThresholdPercentage = 80;
-
     public static NativeCoverageSummary Evaluate(
         IEnumerable<string> jsonDocuments,
         string firstPartySourcePathFragment)
@@ -89,29 +86,6 @@ public static class NativeGcovCoverageGate
             Percentage(
                 branches.Count(pair => pair.Value),
                 branches.Count));
-    }
-
-    public static NativeCoverageSummary EnsureReleaseThreshold(
-        IEnumerable<string> jsonDocuments,
-        string firstPartySourcePathFragment)
-    {
-        var summary = Evaluate(jsonDocuments, firstPartySourcePathFragment);
-        if (summary.LinePercentage < ReleaseThresholdPercentage)
-        {
-            throw new InvalidDataException(string.Create(
-                CultureInfo.InvariantCulture,
-                $"Native line coverage {summary.LinePercentage:0.00}% is below {ReleaseThresholdPercentage:0.00}%."));
-        }
-
-        if (summary.TotalBranches == 0 ||
-            summary.BranchPercentage < ReleaseThresholdPercentage)
-        {
-            throw new InvalidDataException(string.Create(
-                CultureInfo.InvariantCulture,
-                $"Native branch coverage {summary.BranchPercentage:0.00}% is below {ReleaseThresholdPercentage:0.00}%."));
-        }
-
-        return summary;
     }
 
     private static double Percentage(int covered, int total) =>

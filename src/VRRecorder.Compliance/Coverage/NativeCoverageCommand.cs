@@ -35,31 +35,12 @@ public static class NativeCoverageCommand
                 .Skip(2)
                 .Select(ReadArtifact)
                 .ToArray();
-            var summary = NativeGcovCoverageGate.Evaluate(
+            var summary = NativeGcovCoverageMetrics.Evaluate(
                 documents,
                 arguments[1]);
             var report = string.Create(
                 CultureInfo.InvariantCulture,
                 $"native coverage: line={summary.LinePercentage:0.00}% ({summary.CoveredLines}/{summary.TotalLines}), branch={summary.BranchPercentage:0.00}% ({summary.CoveredBranches}/{summary.TotalBranches})");
-            if (summary.LinePercentage <
-                NativeGcovCoverageGate.ReleaseThresholdPercentage)
-            {
-                error.WriteLine(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{report}; line coverage {summary.LinePercentage:0.00}% is below {NativeGcovCoverageGate.ReleaseThresholdPercentage:0.00}%."));
-                return 1;
-            }
-
-            if (summary.TotalBranches == 0 ||
-                summary.BranchPercentage <
-                NativeGcovCoverageGate.ReleaseThresholdPercentage)
-            {
-                error.WriteLine(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{report}; branch coverage {summary.BranchPercentage:0.00}% is below {NativeGcovCoverageGate.ReleaseThresholdPercentage:0.00}%."));
-                return 1;
-            }
-
             output.WriteLine(report);
             return 0;
         }

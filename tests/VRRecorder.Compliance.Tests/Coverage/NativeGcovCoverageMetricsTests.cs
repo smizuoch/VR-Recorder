@@ -2,7 +2,7 @@ using VRRecorder.Compliance.Coverage;
 
 namespace VRRecorder.Compliance.Tests.Coverage;
 
-public sealed class NativeGcovCoverageGateTests
+public sealed class NativeGcovCoverageMetricsTests
 {
     [Fact]
     public void MergesFirstPartyLineAndBranchCoverageAcrossTestExecutables()
@@ -24,7 +24,7 @@ public sealed class NativeGcovCoverageGateTests
             {"line_number":99,"count":0,"branches":[{"count":0}]}
             """);
 
-        var summary = NativeGcovCoverageGate.Evaluate(
+        var summary = NativeGcovCoverageMetrics.Evaluate(
             [first, second, system],
             "/src/VRRecorder.Native/src/");
 
@@ -37,31 +37,22 @@ public sealed class NativeGcovCoverageGateTests
     }
 
     [Fact]
-    public void EnforcesEightyPercentForBothLinesAndBranches()
+    public void ReportsCoverageBelowEightyPercentWithoutAReleaseThreshold()
     {
-        var eightyPercent = Enumerable.Range(1, 10)
+        var lines = Enumerable.Range(1, 10)
             .Select(index => $$"""
-                {"line_number":{{index}},"count":{{(index <= 8 ? 1 : 0)}},"branches":[{"count":{{(index <= 8 ? 1 : 0)}}}]}
+                {"line_number":{{index}},"count":{{(index <= 7 ? 1 : 0)}},"branches":[{"count":{{(index <= 7 ? 1 : 0)}}}]}
                 """);
-        var passing = Document(
-            "/repo/src/VRRecorder.Native/src/pass.cpp",
-            string.Join(',', eightyPercent));
+        var report = Document(
+            "/repo/src/VRRecorder.Native/src/report.cpp",
+            string.Join(',', lines));
 
-        var summary = NativeGcovCoverageGate.EnsureReleaseThreshold(
-            [passing],
+        var summary = NativeGcovCoverageMetrics.Evaluate(
+            [report],
             "/src/VRRecorder.Native/src/");
-        Assert.Equal(80, summary.LinePercentage);
-        Assert.Equal(80, summary.BranchPercentage);
 
-        var failing = passing.Replace(
-            "{\"line_number\":8,\"count\":1",
-            "{\"line_number\":8,\"count\":0",
-            StringComparison.Ordinal);
-        var exception = Assert.Throws<InvalidDataException>(() =>
-            NativeGcovCoverageGate.EnsureReleaseThreshold(
-                [failing],
-                "/src/VRRecorder.Native/src/"));
-        Assert.Contains("line coverage", exception.Message);
+        Assert.Equal(70, summary.LinePercentage);
+        Assert.Equal(70, summary.BranchPercentage);
     }
 
     [Fact]
@@ -76,7 +67,7 @@ public sealed class NativeGcovCoverageGateTests
             ]}
             """);
 
-        var summary = NativeGcovCoverageGate.Evaluate(
+        var summary = NativeGcovCoverageMetrics.Evaluate(
             [document],
             "/src/VRRecorder.Native/src/");
 

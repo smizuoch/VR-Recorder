@@ -1,4 +1,4 @@
-name: Managed Coverage
+name: Managed Coverage Metrics
 
 on:
   pull_request:
@@ -51,7 +51,7 @@ jobs:
       - name: Restore locked integration graph
         run: dotnet restore tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj --locked-mode
 
-      - name: Restore locked coverage gate
+      - name: Restore locked coverage reporter
         run: dotnet restore src/VRRecorder.ManagedCoverage/VRRecorder.ManagedCoverage.csproj --locked-mode
 
       - name: Collect managed integration coverage
@@ -64,7 +64,7 @@ jobs:
           --results-directory artifacts/managed-coverage
           --logger "console;verbosity=minimal"
 
-      - name: Enforce 80 percent per managed assembly
+      - name: Report managed coverage metrics
         shell: bash
         run: |
           report="$(find artifacts/managed-coverage -type f -name coverage.cobertura.xml -print -quit)"

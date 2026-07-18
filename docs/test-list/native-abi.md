@@ -42,7 +42,7 @@
 - [x] session Start確定まではruntime操作と非terminal eventを拒否してFIRSTだけを保留し、Abort／Fault／backend戻り値を仲裁する。Start中Stopを拒否し、同時Stopの失敗／Fault／Abort結果を全callerへ共有・cacheして失敗後もgateを閉じる
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
-- [x] native branch／line coverage各80%のrelease thresholdを適用し、canonical Linux gcovでline 94.78%（8860/9348）、branch 90.02%（6025/6693）、native CTest 75/75を達成する
+- [x] canonical Linux gcovでnative line 94.78%（8860/9348）、branch 90.02%（6025/6693）を参考metricsとして採取し、native CTest 75/75を成功させる。coverage値自体はrelease thresholdにしない
 
 ## English
 
@@ -86,4 +86,4 @@
 - [x] Keep runtime operations and nonterminal events gated until session Start commits while deferring only FIRST; arbitrate Abort/Fault/backend results; reject Stop during Start; and share/cache concurrent Stop failure, Fault, or Abort results while keeping the gate closed after failure
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends
-- [x] Enforce the 80% native branch and line coverage release thresholds, reaching 94.78% line coverage (8860/9348), 90.02% branch coverage (6025/6693), and 75/75 native CTest passes in the canonical Linux gcov run
+- [x] Record native line coverage of 94.78% (8860/9348) and branch coverage of 90.02% (6025/6693) as reference metrics in the canonical Linux gcov run, with 75/75 native CTest passes; coverage values are not release thresholds
