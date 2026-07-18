@@ -7,6 +7,48 @@ namespace VRRecorder.Application.Tests.Desktop;
 public sealed class DesktopDiagnosticsControllerTests
 {
     [Fact]
+    public void NullExporterIsRejected()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new DesktopDiagnosticsController(null!));
+    }
+
+    [Fact]
+    public async Task RelativeDestinationIsRejectedBeforeExport()
+    {
+        var exporter = new ControllableDiagnosticBundleExporter();
+        var controller = new DesktopDiagnosticsController(exporter);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            controller.ExportAsync(
+                "diagnostics.zip",
+                CancellationToken.None));
+
+        Assert.Equal(0, exporter.CallCount);
+        Assert.Equal(0, controller.State.Revision);
+        Assert.Equal(DesktopDiagnosticsStatus.Idle, controller.State.Status);
+    }
+
+    [Fact]
+    public async Task PreCanceledRequestDoesNotStartOrChangeState()
+    {
+        var exporter = new ControllableDiagnosticBundleExporter();
+        var controller = new DesktopDiagnosticsController(exporter);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            controller.ExportAsync(
+                AbsolutePath("canceled-before-start.zip"),
+                cancellation.Token));
+
+        Assert.Equal(0, exporter.CallCount);
+        Assert.Equal(0, controller.State.Revision);
+        Assert.Equal(DesktopDiagnosticsStatus.Idle, controller.State.Status);
+        Assert.Null(controller.State.LastExport);
+    }
+
+    [Fact]
     public async Task ExportsOnlyAfterExplicitRequestAndPublishesSuccess()
     {
         var exporter = new ControllableDiagnosticBundleExporter();
@@ -53,6 +95,53 @@ public sealed class DesktopDiagnosticsControllerTests
     }
 
     [Fact]
+    public async Task ConcurrentExportIsRejectedWithoutReplacingActiveState()
+    {
+        var exporter = new ControllableDiagnosticBundleExporter
+        {
+            FailSecondCall = true,
+        };
+        var controller = new DesktopDiagnosticsController(exporter);
+        var firstDestination = AbsolutePath("first.zip");
+        var firstExport = controller.ExportAsync(
+            firstDestination,
+            CancellationToken.None);
+        await exporter.WaitUntilCalledAsync();
+
+        var failure = await Record.ExceptionAsync(() =>
+            controller.ExportAsync(
+                AbsolutePath("second.zip"),
+                CancellationToken.None));
+
+        Assert.IsType<InvalidOperationException>(failure);
+        Assert.Equal(1, exporter.CallCount);
+        Assert.Equal(1, controller.State.Revision);
+        Assert.Equal(DesktopDiagnosticsStatus.Exporting, controller.State.Status);
+        Assert.Null(controller.State.LastExport);
+
+        exporter.Complete(new DiagnosticBundleExport(firstDestination, 1));
+        await firstExport;
+    }
+
+    [Fact]
+    public async Task NullExporterResultFailsAndClearsActiveOperation()
+    {
+        var exporter = new ControllableDiagnosticBundleExporter();
+        var controller = new DesktopDiagnosticsController(exporter);
+        var export = controller.ExportAsync(
+            AbsolutePath("null-result.zip"),
+            CancellationToken.None);
+        await exporter.WaitUntilCalledAsync();
+        exporter.Complete(null!);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => export);
+
+        Assert.Equal(DesktopDiagnosticsStatus.Failed, controller.State.Status);
+        Assert.Equal(2, controller.State.Revision);
+        Assert.Null(controller.State.LastExport);
+    }
+
+    [Fact]
     public async Task FailureIsRetryableAndNeverReusesEarlierSuccess()
     {
         var exporter = new ControllableDiagnosticBundleExporter();
@@ -89,6 +178,8 @@ public sealed class DesktopDiagnosticsControllerTests
 
         public int CallCount { get; private set; }
 
+        public bool FailSecondCall { get; init; }
+
         public List<string> Destinations { get; } = [];
 
         public Task<DiagnosticBundleExport> ExportAsync(
@@ -98,6 +189,12 @@ public sealed class DesktopDiagnosticsControllerTests
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
             Destinations.Add(destinationPath);
+            if (FailSecondCall && CallCount > 1)
+            {
+                return Task.FromException<DiagnosticBundleExport>(
+                    new IOException("Unexpected concurrent export."));
+            }
+
             _called.TrySetResult();
             return _completion.Task;
         }
