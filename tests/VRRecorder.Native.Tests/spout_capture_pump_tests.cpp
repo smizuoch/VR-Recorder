@@ -185,6 +185,26 @@ public:
     bool release_poll = false;
 };
 
+class RecordingGeometryEvents final : public SpoutCaptureEventSink {
+public:
+    void StableVideoGeometryChanged(
+        std::uint32_t width,
+        std::uint32_t height,
+        vrrec_source_pixel_format_t pixel_format) noexcept override
+    {
+        ++calls;
+        last_width = width;
+        last_height = height;
+        last_pixel_format = pixel_format;
+    }
+
+    std::size_t calls = 0;
+    std::uint32_t last_width = 0;
+    std::uint32_t last_height = 0;
+    vrrec_source_pixel_format_t last_pixel_format =
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8;
+};
+
 SpoutFrame Frame(
     const char *sender,
     std::uint64_t sequence,
@@ -210,6 +230,34 @@ SpoutFrame Frame(
             1'920,
             1'080,
             VRREC_SOURCE_PIXEL_FORMAT_BGRA8,
+            generation,
+        });
+    return frame;
+}
+
+SpoutFrame FrameWithGeometry(
+    std::uint64_t sequence,
+    std::int64_t timestamp,
+    std::uint64_t generation,
+    std::uint32_t width,
+    std::uint32_t height,
+    vrrec_source_pixel_format_t pixel_format =
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8)
+{
+    auto frame = Frame(
+        "selected",
+        sequence,
+        timestamp,
+        generation);
+    frame.width = width;
+    frame.height = height;
+    frame.pixel_format = pixel_format;
+    frame.surface = std::make_shared<FakeVideoSurface>(
+        VideoSurfaceDescriptor {
+            frame.adapter_luid,
+            width,
+            height,
+            pixel_format,
             generation,
         });
     return frame;
@@ -623,6 +671,109 @@ void RejectsResourceMutationWithoutAGenerationAdvance()
     CHECK(scheduler.Statistics().source_frame_count == 1);
 }
 
+void QuarantinesChangedGeometryUntilStableForFiveHundredMilliseconds()
+{
+    ScriptedSpoutBackend backend;
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 80, 8'000'000, 1),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(81, 8'100'000, 2, 1'280, 720),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(82, 8'599'999, 2, 1'280, 720),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(
+            83,
+            8'600'000,
+            3,
+            1'280,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_RGBA8),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(
+            84,
+            9'100'000,
+            3,
+            1'280,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_RGBA8),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(
+            85,
+            9'200'000,
+            3,
+            1'280,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_RGBA8),
+    });
+    RecordingGeometryEvents events;
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected", events);
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
+    CHECK(events.calls == 0);
+
+    // Pixel format is part of the source signature, so this restarts the
+    // stability window instead of completing the BGRA candidate.
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
+    CHECK(events.calls == 0);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
+    CHECK(events.calls == 1);
+    CHECK(events.last_width == 1'280);
+    CHECK(events.last_height == 720);
+    CHECK(events.last_pixel_format == VRREC_SOURCE_PIXEL_FORMAT_RGBA8);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
+    CHECK(events.calls == 1);
+    CHECK(scheduler.Statistics().source_frame_count == 1);
+}
+
+void CancelsAnUnstableGeometryChangeWhenTheOriginalGeometryReturns()
+{
+    ScriptedSpoutBackend backend;
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 90, 9'000'000, 1),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(91, 9'100'000, 2, 1'280, 720),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 92, 9'200'000, 3),
+    });
+    RecordingGeometryEvents events;
+    VideoCfrScheduler scheduler;
+    SpoutCapturePump pump(backend, scheduler, "selected", events);
+
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(events.calls == 0);
+    CHECK(scheduler.Statistics().source_frame_count == 2);
+}
+
 }
 
 int main()
@@ -642,5 +793,7 @@ int main()
     ReplacesTheSurfaceOnlyWithANewerGeneration();
     DistinguishesAnAdapterChangeWithoutPushingItsSurface();
     RejectsResourceMutationWithoutAGenerationAdvance();
+    QuarantinesChangedGeometryUntilStableForFiveHundredMilliseconds();
+    CancelsAnUnstableGeometryChangeWhenTheOriginalGeometryReturns();
     return 0;
 }

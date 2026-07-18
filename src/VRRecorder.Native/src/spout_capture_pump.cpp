@@ -4,6 +4,11 @@
 #include <utility>
 
 namespace vrrecorder::native {
+namespace {
+
+constexpr auto GeometryStabilityDurationMicroseconds = 500'000;
+
+}
 
 SpoutCapturePump::SpoutCapturePump(
     SpoutSourceBackend &backend,
@@ -12,6 +17,18 @@ SpoutCapturePump::SpoutCapturePump(
     : backend_(backend),
       scheduler_(scheduler),
       selected_sender_id_(std::move(selected_sender_id))
+{
+}
+
+SpoutCapturePump::SpoutCapturePump(
+    SpoutSourceBackend &backend,
+    VideoCfrScheduler &scheduler,
+    std::string selected_sender_id,
+    SpoutCaptureEventSink &events)
+    : backend_(backend),
+      scheduler_(scheduler),
+      selected_sender_id_(std::move(selected_sender_id)),
+      events_(&events)
 {
 }
 
@@ -58,7 +75,10 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
         return SpoutCaptureResult::InvalidFrame;
     }
 
-    vrrec_status_t push_status;
+    vrrec_status_t push_status = VRREC_STATUS_INTERNAL_ERROR;
+    auto result = SpoutCaptureResult::InvalidFrame;
+    auto notify_geometry_change = false;
+    VideoSurfaceDescriptor stable_descriptor {};
     {
         const std::lock_guard lock(lifecycle_mutex_);
         if (aborted_.load()) {
@@ -79,19 +99,72 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
              descriptor.pixel_format != latest_descriptor_.pixel_format)) {
             return SpoutCaptureResult::InvalidFrame;
         }
-        push_status = scheduler_.Push({
-            frame.frame_sequence,
-            frame.monotonic_timestamp_microseconds,
-            frame.surface,
-        });
-        if (push_status == VRREC_STATUS_OK) {
-            latest_descriptor_ = descriptor;
-            has_descriptor_ = true;
+
+        if (has_descriptor_ &&
+            !HasSameGeometry(descriptor, latest_descriptor_)) {
+            if (geometry_change_notified_) {
+                return SpoutCaptureResult::GeometryChangePending;
+            }
+            if (has_geometry_candidate_ &&
+                descriptor.generation_id <
+                    candidate_descriptor_.generation_id) {
+                return SpoutCaptureResult::StaleFrame;
+            }
+            if (has_geometry_candidate_ &&
+                descriptor.generation_id ==
+                    candidate_descriptor_.generation_id &&
+                !HasSameGeometry(descriptor, candidate_descriptor_)) {
+                return SpoutCaptureResult::InvalidFrame;
+            }
+            if (!has_geometry_candidate_ ||
+                !HasSameCandidateSignature(
+                    descriptor,
+                    candidate_descriptor_)) {
+                BeginGeometryCandidate(frame, descriptor);
+                return SpoutCaptureResult::GeometryChangePending;
+            }
+            if (frame.frame_sequence <= candidate_last_sequence_ ||
+                frame.monotonic_timestamp_microseconds <
+                    candidate_last_timestamp_microseconds_) {
+                return SpoutCaptureResult::StaleFrame;
+            }
+
+            candidate_last_sequence_ = frame.frame_sequence;
+            candidate_last_timestamp_microseconds_ =
+                frame.monotonic_timestamp_microseconds;
+            if (candidate_last_timestamp_microseconds_ -
+                    candidate_first_timestamp_microseconds_ >=
+                GeometryStabilityDurationMicroseconds) {
+                geometry_change_notified_ = true;
+                stable_descriptor = candidate_descriptor_;
+                notify_geometry_change = events_ != nullptr;
+            }
+            result = SpoutCaptureResult::GeometryChangePending;
+        } else {
+            ResetGeometryCandidate();
+            geometry_change_notified_ = false;
+            push_status = scheduler_.Push({
+                frame.frame_sequence,
+                frame.monotonic_timestamp_microseconds,
+                frame.surface,
+            });
+            if (push_status == VRREC_STATUS_OK) {
+                latest_descriptor_ = descriptor;
+                has_descriptor_ = true;
+            }
+            result = push_status == VRREC_STATUS_OK
+                ? SpoutCaptureResult::FrameAccepted
+                : SpoutCaptureResult::InvalidFrame;
         }
     }
-    return push_status == VRREC_STATUS_OK
-        ? SpoutCaptureResult::FrameAccepted
-        : SpoutCaptureResult::InvalidFrame;
+
+    if (notify_geometry_change && !aborted_.load()) {
+        events_->StableVideoGeometryChanged(
+            stable_descriptor.width,
+            stable_descriptor.height,
+            stable_descriptor.pixel_format);
+    }
+    return result;
 }
 
 void SpoutCapturePump::Abort() noexcept
@@ -136,6 +209,44 @@ bool SpoutCapturePump::IsFrameValid(
            frame.estimated_source_fps > 0.0 &&
            frame.frame_sequence != 0 &&
            frame.monotonic_timestamp_microseconds >= 0;
+}
+
+bool SpoutCapturePump::HasSameGeometry(
+    const VideoSurfaceDescriptor &left,
+    const VideoSurfaceDescriptor &right) noexcept
+{
+    return left.width == right.width && left.height == right.height &&
+           left.pixel_format == right.pixel_format;
+}
+
+bool SpoutCapturePump::HasSameCandidateSignature(
+    const VideoSurfaceDescriptor &left,
+    const VideoSurfaceDescriptor &right) noexcept
+{
+    return left.generation_id == right.generation_id &&
+           HasSameGeometry(left, right);
+}
+
+void SpoutCapturePump::BeginGeometryCandidate(
+    const SpoutFrame &frame,
+    const VideoSurfaceDescriptor &descriptor) noexcept
+{
+    candidate_descriptor_ = descriptor;
+    candidate_last_sequence_ = frame.frame_sequence;
+    candidate_first_timestamp_microseconds_ =
+        frame.monotonic_timestamp_microseconds;
+    candidate_last_timestamp_microseconds_ =
+        frame.monotonic_timestamp_microseconds;
+    has_geometry_candidate_ = true;
+}
+
+void SpoutCapturePump::ResetGeometryCandidate() noexcept
+{
+    candidate_descriptor_ = {};
+    candidate_last_sequence_ = 0;
+    candidate_first_timestamp_microseconds_ = 0;
+    candidate_last_timestamp_microseconds_ = 0;
+    has_geometry_candidate_ = false;
 }
 
 }

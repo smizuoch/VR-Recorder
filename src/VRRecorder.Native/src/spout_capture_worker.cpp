@@ -102,6 +102,7 @@ void SpoutCaptureWorker::Run() noexcept
             return;
         }
         if (result == SpoutCaptureResult::FrameAccepted ||
+            result == SpoutCaptureResult::GeometryChangePending ||
             result == SpoutCaptureResult::Timeout ||
             result == SpoutCaptureResult::StaleFrame) {
             continue;

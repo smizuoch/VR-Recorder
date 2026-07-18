@@ -184,11 +184,12 @@ void ContinuesAcrossTimeoutsUntilAborted()
     BlockingCaptureSource source;
     source.results.push_back(SpoutCaptureResult::Timeout);
     source.results.push_back(SpoutCaptureResult::StaleFrame);
+    source.results.push_back(SpoutCaptureResult::GeometryChangePending);
     source.results.push_back(SpoutCaptureResult::FrameAccepted);
     SpoutCaptureWorker worker(source);
 
     CHECK(worker.Start(std::chrono::milliseconds(100)) == VRREC_STATUS_OK);
-    source.WaitForPolls(4);
+    source.WaitForPolls(5);
     worker.Abort();
     worker.Abort();
     CHECK(worker.Join() == SpoutCaptureWorkerResult::Aborted);
