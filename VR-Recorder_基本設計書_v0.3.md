@@ -2027,7 +2027,7 @@ Nightly / lab:
 - ADR-007: SteamVR Input Actionを使用し物理ボタンを固定しない
 - ADR-008: H.264/AAC MP4、LGPL FFmpeg、MF software fallback
 - ADR-009: QPC共通時計とCFR映像スケジューラー
-- ADR-010: 結合テスト単独で主要assembly／native第一者コードの行・分岐各80%をゲート
+- ADR-010: 必須テストと公開契約を合否条件とし、主要assembly／native第一者コードのline／branch coverageは数値閾値なしの参考指標として記録
 - ADR-011: Windows 10 22H2は互換サポート、Windows 11を正式推奨
 - ADR-012: fMP4一時ファイル＋atomic rename
 - ADR-013: Third-party registryを単一情報源とし、notices／license catalog／SBOMを生成する
