@@ -904,6 +904,41 @@ public sealed class PInvokeNativeRecordingBackendTests
     }
 
     [Fact]
+    public async Task CreateFailurePreservesSynchronousVideoEncoderFault()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var backend = new PInvokeNativeRecordingBackend(FixturePath());
+        using var controls = new NativeFixtureControls(FixturePath());
+        controls.FailNextMediaCreateAsVideoEncoder(
+            status: 6,
+            message: "NVENC factory could not create an encoder");
+        var callbackFault = new TaskCompletionSource<NativeRecordingFault>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var exception = await Assert.ThrowsAsync<NativeRecordingException>(() =>
+            backend.OpenAsync(
+                CreatePlan() with { Encoder = EncoderKind.Nvenc },
+                new NativeRecordingCallbacks(
+                    FirstVideoPacketMuxed: () => { },
+                    Faulted: fault => callbackFault.TrySetResult(fault)),
+                CancellationToken.None));
+
+        Assert.Equal(6, exception.Fault.Status);
+        Assert.Equal(
+            "NVENC factory could not create an encoder",
+            exception.Fault.Message);
+        Assert.Equal(
+            NativeRecordingFaultSource.VideoEncoder,
+            exception.Fault.Source);
+        Assert.Equal(exception.Fault, await callbackFault.Task);
+        Assert.Null(Record.Exception(backend.Dispose));
+    }
+
+    [Fact]
     public void AbiMappingsCoverSupportedValuesAndRejectUnknownValues()
     {
         Assert.Equal(
@@ -1186,6 +1221,7 @@ public sealed class PInvokeNativeRecordingBackendTests
     private sealed class NativeFixtureControls : IDisposable
     {
         private readonly nint _library;
+        private readonly FailDelegate _failNextMediaCreateAsVideoEncoder;
         private readonly CommitDelegate _commit;
         private readonly CompleteDelegate _complete;
         private readonly AudioEndpointAvailabilityDelegate
@@ -1210,6 +1246,11 @@ public sealed class PInvokeNativeRecordingBackendTests
         public NativeFixtureControls(string path)
         {
             _library = NativeLibrary.Load(path);
+            _failNextMediaCreateAsVideoEncoder =
+                Marshal.GetDelegateForFunctionPointer<FailDelegate>(
+                    NativeLibrary.GetExport(
+                        _library,
+                        "vrrec_test_fail_next_media_create_as_video_encoder"));
             _commit = Marshal.GetDelegateForFunctionPointer<CommitDelegate>(
                 NativeLibrary.GetExport(
                     _library,
@@ -1297,6 +1338,11 @@ public sealed class PInvokeNativeRecordingBackendTests
         }
 
         public void CommitMuxedVideoPacket() => _commit();
+
+        public void FailNextMediaCreateAsVideoEncoder(
+            int status,
+            string message) =>
+            _failNextMediaCreateAsVideoEncoder(status, message);
 
         public void CompleteTrailerFlushClose(
             ulong videoPacketCount,

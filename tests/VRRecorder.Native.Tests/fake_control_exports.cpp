@@ -62,6 +62,16 @@ extern "C" VRREC_TEST_API void vrrec_test_commit_muxed_video_packet(void)
     vrrecorder::native::testing::CommitMuxedVideoPacket();
 }
 
+extern "C" VRREC_TEST_API void
+vrrec_test_fail_next_media_create_as_video_encoder(
+    std::int32_t status,
+    const char *message_utf8)
+{
+    vrrecorder::native::testing::FailNextMediaCreateAsVideoEncoder(
+        status,
+        message_utf8 == nullptr ? "" : message_utf8);
+}
+
 extern "C" VRREC_TEST_API void vrrec_test_complete_trailer_flush_close(
     std::uint64_t video_packet_count,
     std::uint64_t audio_packet_count)

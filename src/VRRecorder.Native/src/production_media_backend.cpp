@@ -305,12 +305,18 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
             production_config.frames_per_second,
             graph->h264_encoder_);
         if (status != VRREC_STATUS_OK) {
+            events.VideoEncoderFaulted(
+                status,
+                "H.264 encoder creation failed.");
             return {};
         }
         const auto *video_descriptor_pointer =
             graph->h264_encoder_->Descriptor();
         if (video_descriptor_pointer == nullptr) {
             status = VRREC_STATUS_INTERNAL_ERROR;
+            events.VideoEncoderFaulted(
+                status,
+                "H.264 encoder descriptor is unavailable.");
             return {};
         }
         const auto video_descriptor = *video_descriptor_pointer;

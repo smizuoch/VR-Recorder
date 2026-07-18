@@ -66,6 +66,9 @@ struct TestEncoderProbeEvidence {
 };
 
 void CommitMuxedVideoPacket();
+void FailNextMediaCreateAsVideoEncoder(
+    std::int32_t status,
+    std::string_view message);
 void BlockNextMediaStart(std::int32_t status);
 bool WaitUntilMediaStartEntered(std::chrono::milliseconds timeout);
 void ReleaseMediaStart();

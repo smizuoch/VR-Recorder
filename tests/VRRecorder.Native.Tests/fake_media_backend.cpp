@@ -17,6 +17,14 @@
 namespace vrrecorder::native {
 namespace {
 
+struct FakeMediaFactoryState {
+    std::mutex mutex;
+    vrrec_status_t next_create_status = VRREC_STATUS_OK;
+    std::string next_create_message;
+};
+
+FakeMediaFactoryState fake_media_factory;
+
 class FakeMediaBackend final : public MediaBackend {
 public:
     FakeMediaBackend(
@@ -1085,7 +1093,19 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
     MediaEventSink &events,
     vrrec_status_t &status)
 {
-    status = VRREC_STATUS_OK;
+    std::string failure_message;
+    {
+        const std::lock_guard lock(fake_media_factory.mutex);
+        status = fake_media_factory.next_create_status;
+        failure_message = std::move(fake_media_factory.next_create_message);
+        fake_media_factory.next_create_status = VRREC_STATUS_OK;
+        fake_media_factory.next_create_message.clear();
+    }
+    if (status != VRREC_STATUS_OK) {
+        events.VideoEncoderFaulted(status, failure_message.c_str());
+        return nullptr;
+    }
+
     return std::make_unique<FakeMediaBackend>(config, events);
 }
 
@@ -1150,6 +1170,15 @@ std::unique_ptr<EncoderProbeBackend> CreateEncoderProbeBackend(
 }
 
 namespace testing {
+
+void FailNextMediaCreateAsVideoEncoder(
+    std::int32_t status,
+    std::string_view message)
+{
+    const std::lock_guard lock(fake_media_factory.mutex);
+    fake_media_factory.next_create_status = status;
+    fake_media_factory.next_create_message = message;
+}
 
 void CommitMuxedVideoPacket()
 {

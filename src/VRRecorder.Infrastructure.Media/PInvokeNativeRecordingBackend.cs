@@ -144,7 +144,10 @@ public sealed class PInvokeNativeRecordingBackend
                 out var nativeSession);
             if (createStatus != NativeStatus.Ok)
             {
-                throw StatusException(createStatus, "create");
+                throw StatusException(
+                    createStatus,
+                    "create",
+                    callbackState.TerminalFault);
             }
 
             var safeSession = new NativeSessionSafeHandle(
@@ -155,7 +158,10 @@ public sealed class PInvokeNativeRecordingBackend
                 var startStatus = _library.StartSession(nativeSession);
                 if (startStatus != NativeStatus.Ok)
                 {
-                    throw StatusException(startStatus, "start");
+                    throw StatusException(
+                        startStatus,
+                        "start",
+                        callbackState.TerminalFault);
                 }
 
                 return Task.FromResult<INativeRecordingSession>(
@@ -237,10 +243,13 @@ public sealed class PInvokeNativeRecordingBackend
 
     private static NativeRecordingException StatusException(
         NativeStatus status,
-        string operation) =>
-        new(new NativeRecordingFault(
-            (int)status,
-            $"Native recording {operation} failed with status {(int)status}."));
+        string operation,
+        NativeRecordingFault? terminalFault) =>
+        terminalFault is not null
+            ? new NativeRecordingException(terminalFault)
+            : new NativeRecordingException(new NativeRecordingFault(
+                (int)status,
+                $"Native recording {operation} failed with status {(int)status}."));
 
     internal static NativeEncoderKind ToNativeEncoder(
         Domain.Encoding.EncoderKind encoder) => encoder switch

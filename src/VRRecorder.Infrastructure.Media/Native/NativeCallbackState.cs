@@ -13,6 +13,7 @@ internal sealed class NativeCallbackState
     private readonly NativeRecordingCallbacks _callbacks;
     private readonly RecordingPlan _plan;
     private ulong _lastSequence;
+    private NativeRecordingFault? _terminalFault;
     private bool _terminal;
 
     public NativeCallbackState(
@@ -27,6 +28,17 @@ internal sealed class NativeCallbackState
 
     public TaskCompletionSource<RecordingStopResult> Stopped { get; } = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public NativeRecordingFault? TerminalFault
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _terminalFault;
+            }
+        }
+    }
 
     public void Process(NativeEventV1 nativeEvent)
     {
@@ -72,6 +84,7 @@ internal sealed class NativeCallbackState
                         Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
                         "Native recording failed.",
                         DecodeFaultSource(nativeEvent.VideoPacketCount));
+                    _terminalFault = fault;
                     break;
                 case NativeEventKind.VideoEncoderFailedPartReady:
                     videoEncoderFailure = new NativeRecordingFault(
