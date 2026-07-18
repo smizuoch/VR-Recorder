@@ -2,9 +2,11 @@ using System.Collections.Concurrent;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
+using VRRecorder.Application.Settings;
 using VRRecorder.Domain.Audio;
 using VRRecorder.Domain.Encoding;
 using VRRecorder.Domain.Timing;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Infrastructure.Media;
 
@@ -127,10 +129,14 @@ public sealed class NativeRecordingEngine
         var rolloverContext = new RolloverRequestContext(
             this,
             runtimeFaultContext);
+        var geometryContext = new VideoGeometryRequestContext(
+            this,
+            runtimeFaultContext);
         var callbacks = CreateCallbacks(
             firstPacket,
             runtimeFaultContext,
-            rolloverContext.Report);
+            rolloverContext.Report,
+            geometryContext.Report);
         INativeRecordingSession? session = null;
         ActiveSession? activeSession = null;
         try
@@ -157,7 +163,8 @@ public sealed class NativeRecordingEngine
                 .ConfigureAwait(false);
             var handle = new RecordingHandle(session.Id, committedAt);
             runtimeFaultContext.Activate(handle);
-            rolloverContext.Activate(handle, activeSession);
+            rolloverContext.Activate(handle, activeSession, session);
+            geometryContext.Activate(handle, activeSession, session);
             PublishMediaBestEffort(plan);
             return handle;
         }
@@ -326,7 +333,8 @@ public sealed class NativeRecordingEngine
     private NativeRecordingCallbacks CreateCallbacks(
         TaskCompletionSource<MonotonicTimestamp> firstPacket,
         RuntimeFaultContext runtimeFaultContext,
-        Action<NativeRecordingFault> videoEncoderFailed) => new(
+        Action<NativeRecordingFault> videoEncoderFailed,
+        Action<VideoGeometry> videoGeometryStable) => new(
         FirstVideoPacketMuxed: () =>
             firstPacket.TrySetResult(_clock.Now),
         Faulted: fault =>
@@ -341,13 +349,19 @@ public sealed class NativeRecordingEngine
         AudioStatus: PublishAudioBestEffort,
         AvDrift: PublishAvDriftBestEffort,
         AudioBufferHealth: PublishAudioBufferHealthBestEffort,
-        VideoEncoderFailed: videoEncoderFailed);
+        VideoEncoderFailed: videoEncoderFailed,
+        VideoGeometryStable: videoGeometryStable);
 
     private void ScheduleRollover(
         RecordingHandle handle,
         ActiveSession activeSession,
+        INativeRecordingSession sourceSession,
         NativeRecordingFault fault)
     {
+        if (!ReferenceEquals(activeSession.Session, sourceSession))
+        {
+            return;
+        }
         if (_partRollover is null ||
             activeSession.Plan.Encoder ==
                 EncoderKind.MediaFoundationSoftware)
@@ -361,12 +375,13 @@ public sealed class NativeRecordingEngine
             return;
         }
 
-        _ = RolloverAsync(handle, activeSession, fault);
+        _ = RolloverAsync(handle, activeSession, sourceSession, fault);
     }
 
     private async Task RolloverAsync(
         RecordingHandle handle,
         ActiveSession activeSession,
+        INativeRecordingSession sourceSession,
         NativeRecordingFault sourceFault)
     {
         INativeRecordingSession? nextSession = null;
@@ -376,7 +391,8 @@ public sealed class NativeRecordingEngine
         try
         {
             if (!_sessions.TryGetValue(handle.Id, out var currentSession) ||
-                !ReferenceEquals(activeSession, currentSession))
+                !ReferenceEquals(activeSession, currentSession) ||
+                !ReferenceEquals(activeSession.Session, sourceSession))
             {
                 return;
             }
@@ -407,10 +423,17 @@ public sealed class NativeRecordingEngine
 
             var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
+            var rolloverContext = new RolloverRequestContext(
+                this,
+                activeSession.RuntimeFaults);
+            var geometryContext = new VideoGeometryRequestContext(
+                this,
+                activeSession.RuntimeFaults);
             var callbacks = CreateCallbacks(
                 firstPacket,
                 activeSession.RuntimeFaults,
-                activeSession.RuntimeFaults.Report);
+                rolloverContext.Report,
+                geometryContext.Report);
             nextSession = await _backend
                 .OpenAsync(nextPlan, callbacks, CancellationToken.None)
                 .ConfigureAwait(false);
@@ -424,6 +447,8 @@ public sealed class NativeRecordingEngine
             activeSession.SegmentNumber = nextSegmentNumber;
             activeSession.TerminalStopResult = null;
             nextSessionCommitted = true;
+            rolloverContext.Activate(handle, activeSession, nextSession);
+            geometryContext.Activate(handle, activeSession, nextSession);
             PublishMediaBestEffort(nextPlan);
             await _partRollover
                 .FinalizeIntermediatePartAsync(
@@ -453,7 +478,204 @@ public sealed class NativeRecordingEngine
         }
         finally
         {
+            activeSession.EndRollover();
             activeSession.StopGate.Release();
+        }
+    }
+
+    private void ScheduleVideoGeometryChange(
+        RecordingHandle handle,
+        ActiveSession activeSession,
+        INativeRecordingSession sourceSession,
+        VideoGeometry geometry)
+    {
+        if (!ReferenceEquals(activeSession.Session, sourceSession) ||
+            !activeSession.TryBeginGeometryChange())
+        {
+            return;
+        }
+
+        _ = ApplyVideoGeometryChangeAsync(
+            handle,
+            activeSession,
+            sourceSession,
+            geometry);
+    }
+
+    private async Task ApplyVideoGeometryChangeAsync(
+        RecordingHandle handle,
+        ActiveSession activeSession,
+        INativeRecordingSession sourceSession,
+        VideoGeometry geometry)
+    {
+        await activeSession.StopGate.WaitAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        try
+        {
+            if (!_sessions.TryGetValue(handle.Id, out var currentSession) ||
+                !ReferenceEquals(activeSession, currentSession) ||
+                !ReferenceEquals(activeSession.Session, sourceSession))
+            {
+                return;
+            }
+
+            var nextSignal = activeSession.Plan.Signal.WithGeometry(geometry);
+            switch (activeSession.Plan.VideoLayout.Policy)
+            {
+                case ResolutionChangePolicy.SingleFileFit:
+                    await UpdateSingleFileGeometryAsync(
+                            activeSession,
+                            sourceSession,
+                            nextSignal)
+                        .ConfigureAwait(false);
+                    break;
+                case ResolutionChangePolicy.ExactFollowSegments:
+                    await RolloverExactGeometryAsync(
+                            handle,
+                            activeSession,
+                            sourceSession,
+                            nextSignal)
+                        .ConfigureAwait(false);
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        "The active resolution change policy is undefined.");
+            }
+        }
+        catch (Exception exception)
+        {
+            activeSession.RuntimeFaults.Report(new NativeRecordingFault(
+                (int)Native.NativeStatus.InternalError,
+                $"Video geometry transition failed ({exception.GetType().Name})."));
+        }
+        finally
+        {
+            activeSession.EndGeometryChange();
+            activeSession.StopGate.Release();
+        }
+    }
+
+    private void PublishUpdatedPlan(ActiveSession activeSession)
+    {
+        PublishMediaBestEffort(activeSession.Plan);
+    }
+
+    private async Task UpdateSingleFileGeometryAsync(
+        ActiveSession activeSession,
+        INativeRecordingSession sourceSession,
+        StableVideoSignal nextSignal)
+    {
+        var layout = activeSession.Plan.VideoLayout.ApplyStableSignal(
+            nextSignal);
+        await sourceSession.UpdateVideoLayoutAsync(
+                layout,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        activeSession.Plan = activeSession.Plan with
+        {
+            Signal = nextSignal,
+            Media = activeSession.Plan.Media.WithVideoSource(nextSignal),
+        };
+        PublishUpdatedPlan(activeSession);
+    }
+
+    private async Task RolloverExactGeometryAsync(
+        RecordingHandle handle,
+        ActiveSession activeSession,
+        INativeRecordingSession sourceSession,
+        StableVideoSignal nextSignal)
+    {
+        if (_partRollover is null)
+        {
+            throw new InvalidOperationException(
+                "Exact-follow recording requires a part rollover service.");
+        }
+
+        _ = RecordingVideoLayoutSession.StartExactSegment(nextSignal);
+        INativeRecordingSession? nextSession = null;
+        var nextSessionCommitted = false;
+        try
+        {
+            var currentPlan = activeSession.Plan;
+            var stopped = await sourceSession
+                .StopAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            activeSession.TerminalStopResult = stopped;
+            if (stopped.Statistics is { } statistics)
+            {
+                PublishMediaBestEffort(statistics);
+            }
+
+            var nextSegmentNumber = checked(activeSession.SegmentNumber + 1);
+            var nextPlan = await _partRollover
+                .ReserveNextExactPartAsync(
+                    currentPlan,
+                    nextSignal,
+                    nextSegmentNumber,
+                    activeSession.AudioRouting,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            if (nextPlan.VideoLayout.Policy !=
+                    ResolutionChangePolicy.ExactFollowSegments ||
+                nextPlan.Signal != nextSignal ||
+                nextPlan.Encoder != currentPlan.Encoder)
+            {
+                throw new InvalidOperationException(
+                    "An exact-follow rollover returned a mismatched plan.");
+            }
+
+            var firstPacket = new TaskCompletionSource<MonotonicTimestamp>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            var rolloverContext = new RolloverRequestContext(
+                this,
+                activeSession.RuntimeFaults);
+            var geometryContext = new VideoGeometryRequestContext(
+                this,
+                activeSession.RuntimeFaults);
+            var callbacks = CreateCallbacks(
+                firstPacket,
+                activeSession.RuntimeFaults,
+                rolloverContext.Report,
+                geometryContext.Report);
+            nextSession = await _backend
+                .OpenAsync(nextPlan, callbacks, CancellationToken.None)
+                .ConfigureAwait(false);
+            ArgumentException.ThrowIfNullOrWhiteSpace(nextSession.Id);
+            _ = await firstPacket.Task
+                .WaitAsync(TimeSpan.FromSeconds(10))
+                .ConfigureAwait(false);
+
+            activeSession.Session = nextSession;
+            activeSession.Plan = nextPlan;
+            activeSession.SegmentNumber = nextSegmentNumber;
+            activeSession.TerminalStopResult = null;
+            nextSessionCommitted = true;
+            rolloverContext.Activate(handle, activeSession, nextSession);
+            geometryContext.Activate(handle, activeSession, nextSession);
+            PublishUpdatedPlan(activeSession);
+            await _partRollover
+                .FinalizeIntermediatePartAsync(
+                    stopped,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            if (nextSession is not null && !nextSessionCommitted)
+            {
+                try
+                {
+                    await nextSession
+                        .AbortAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Preserve the exact-follow transition failure.
+                }
+            }
+
+            throw;
         }
     }
 
@@ -528,6 +750,7 @@ public sealed class NativeRecordingEngine
     private sealed class ActiveSession
     {
         private int _rolloverStarted;
+        private int _geometryChangeStarted;
 
         public ActiveSession(
             INativeRecordingSession session,
@@ -556,6 +779,18 @@ public sealed class NativeRecordingEngine
 
         public bool TryBeginRollover() =>
             Interlocked.CompareExchange(ref _rolloverStarted, 1, 0) == 0;
+
+        public void EndRollover() =>
+            Interlocked.Exchange(ref _rolloverStarted, 0);
+
+        public bool TryBeginGeometryChange() =>
+            Interlocked.CompareExchange(
+                ref _geometryChangeStarted,
+                1,
+                0) == 0;
+
+        public void EndGeometryChange() =>
+            Interlocked.Exchange(ref _geometryChangeStarted, 0);
     }
 
     private sealed class NullRecordingMediaEventSink
@@ -634,24 +869,31 @@ public sealed class NativeRecordingEngine
         private readonly object _gate = new();
         private RecordingHandle? _handle;
         private ActiveSession? _activeSession;
+        private INativeRecordingSession? _sourceSession;
         private NativeRecordingFault? _pendingFault;
 
         public void Activate(
             RecordingHandle handle,
-            ActiveSession activeSession)
+            ActiveSession activeSession,
+            INativeRecordingSession sourceSession)
         {
             NativeRecordingFault? pending;
             lock (_gate)
             {
                 _handle = handle;
                 _activeSession = activeSession;
+                _sourceSession = sourceSession;
                 pending = _pendingFault;
                 _pendingFault = null;
             }
 
             if (pending is not null)
             {
-                owner.ScheduleRollover(handle, activeSession, pending);
+                owner.ScheduleRollover(
+                    handle,
+                    activeSession,
+                    sourceSession,
+                    pending);
             }
         }
 
@@ -659,11 +901,14 @@ public sealed class NativeRecordingEngine
         {
             RecordingHandle? handle;
             ActiveSession? activeSession;
+            INativeRecordingSession? sourceSession;
             lock (_gate)
             {
                 handle = _handle;
                 activeSession = _activeSession;
-                if (handle is null || activeSession is null)
+                sourceSession = _sourceSession;
+                if (handle is null || activeSession is null ||
+                    sourceSession is null)
                 {
                     _pendingFault ??= fault;
                     return;
@@ -672,11 +917,85 @@ public sealed class NativeRecordingEngine
 
             try
             {
-                owner.ScheduleRollover(handle, activeSession, fault);
+                owner.ScheduleRollover(
+                    handle,
+                    activeSession,
+                    sourceSession,
+                    fault);
             }
             catch (Exception)
             {
                 runtimeFaults.Report(fault);
+            }
+        }
+    }
+
+    private sealed class VideoGeometryRequestContext(
+        NativeRecordingEngine owner,
+        RuntimeFaultContext runtimeFaults)
+    {
+        private readonly object _gate = new();
+        private RecordingHandle? _handle;
+        private ActiveSession? _activeSession;
+        private INativeRecordingSession? _sourceSession;
+        private VideoGeometry? _pendingGeometry;
+
+        public void Activate(
+            RecordingHandle handle,
+            ActiveSession activeSession,
+            INativeRecordingSession sourceSession)
+        {
+            VideoGeometry? pending;
+            lock (_gate)
+            {
+                _handle = handle;
+                _activeSession = activeSession;
+                _sourceSession = sourceSession;
+                pending = _pendingGeometry;
+                _pendingGeometry = null;
+            }
+
+            if (pending is not null)
+            {
+                owner.ScheduleVideoGeometryChange(
+                    handle,
+                    activeSession,
+                    sourceSession,
+                    pending);
+            }
+        }
+
+        public void Report(VideoGeometry geometry)
+        {
+            RecordingHandle? handle;
+            ActiveSession? activeSession;
+            INativeRecordingSession? sourceSession;
+            lock (_gate)
+            {
+                handle = _handle;
+                activeSession = _activeSession;
+                sourceSession = _sourceSession;
+                if (handle is null || activeSession is null ||
+                    sourceSession is null)
+                {
+                    _pendingGeometry ??= geometry;
+                    return;
+                }
+            }
+
+            try
+            {
+                owner.ScheduleVideoGeometryChange(
+                    handle,
+                    activeSession,
+                    sourceSession,
+                    geometry);
+            }
+            catch (Exception exception)
+            {
+                runtimeFaults.Report(new NativeRecordingFault(
+                    (int)Native.NativeStatus.InternalError,
+                    $"Video geometry callback failed ({exception.GetType().Name})."));
             }
         }
     }

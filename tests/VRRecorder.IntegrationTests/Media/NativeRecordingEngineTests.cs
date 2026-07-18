@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Ports;
 using VRRecorder.Application.Recording;
@@ -370,6 +371,89 @@ public sealed class NativeRecordingEngineTests
     }
 
     [Fact]
+    public async Task StableGeometryUpdatesTheSingleFileLayoutInPlace()
+    {
+        var plan = CreatePlan();
+        var backend = new MultiPartNativeRecordingBackend();
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink());
+        var starting = engine.StartAsync(plan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+
+        backend.SignalVideoGeometryStable(
+            partIndex: 0,
+            new VideoGeometry(180, 320, VideoPixelFormat.Rgba8));
+        await backend.Sessions[0]
+            .WaitUntilVideoLayoutUpdatedAsync()
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        var layout = Assert.Single(backend.Sessions[0].VideoLayoutUpdates);
+        Assert.Equal(180, layout.Source.Width);
+        Assert.Equal(320, layout.Source.Height);
+        Assert.Equal(VideoPixelFormat.Rgba8, layout.Source.PixelFormat);
+        Assert.Equal(plan.VideoLayout.OutputCanvas, layout.OutputCanvas);
+        Assert.Single(backend.Sessions);
+        _ = await engine.StopAsync(handle, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StableGeometryCanRollExactPartTwoAndPartThree()
+    {
+        var firstSignal = new StableVideoSignal(320, 180);
+        var secondSignal = firstSignal.WithGeometry(
+            new VideoGeometry(640, 360, VideoPixelFormat.Rgba8));
+        var thirdSignal = secondSignal.WithGeometry(
+            new VideoGeometry(1_280, 720, VideoPixelFormat.Bgra8));
+        var firstPlan = ExactPlan(firstSignal, "exact");
+        var secondPlan = ExactPlan(secondSignal, "exact_part002");
+        var thirdPlan = ExactPlan(thirdSignal, "exact_part003");
+        var backend = new MultiPartNativeRecordingBackend();
+        var rollover = new StubRecordingPartRollover(secondPlan, thirdPlan);
+        var engine = new NativeRecordingEngine(
+            backend,
+            new ControllableClock(
+                MonotonicTimestamp.FromElapsed(TimeSpan.Zero)),
+            new CapturingRuntimeFaultSink(),
+            rollover);
+        var starting = engine.StartAsync(firstPlan, CancellationToken.None);
+        await backend.WaitUntilOpenedAsync(1);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 0);
+        var handle = await starting;
+
+        backend.SignalVideoGeometryStable(
+            partIndex: 0,
+            new VideoGeometry(640, 360, VideoPixelFormat.Rgba8));
+        await backend.WaitUntilOpenedAsync(2);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 1);
+        await rollover.WaitForFinalizedPartAsync()
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        backend.SignalVideoGeometryStable(
+            partIndex: 1,
+            new VideoGeometry(1_280, 720, VideoPixelFormat.Bgra8));
+        await backend.WaitUntilOpenedAsync(3);
+        backend.SignalFirstVideoPacketMuxed(partIndex: 2);
+        await rollover.WaitForFinalizedPartAsync()
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        var stopped = await engine.StopAsync(handle, CancellationToken.None);
+
+        Assert.Equal(thirdPlan.Output, stopped.Recording);
+        Assert.Equal([2, 3], rollover.ExactReservations
+            .Select(item => item.SegmentNumber));
+        Assert.Equal([secondSignal, thirdSignal], rollover.ExactReservations
+            .Select(item => item.Signal));
+        Assert.Equal(1, backend.Sessions[0].StopCallCount);
+        Assert.Equal(1, backend.Sessions[1].StopCallCount);
+        Assert.Equal(1, backend.Sessions[2].StopCallCount);
+        Assert.Equal(2, rollover.FinalizedParts.Count);
+    }
+
+    [Fact]
     public async Task FailedSoftwarePartStartLeavesSealedPartStoppable()
     {
         var firstPlan = CreatePlan() with { Encoder = EncoderKind.Nvenc };
@@ -714,6 +798,25 @@ public sealed class NativeRecordingEngineTests
                 TimeSpan.Zero)),
             new FrameRate(30));
 
+    private static RecordingPlan ExactPlan(
+        StableVideoSignal signal,
+        string fileStem) => new(
+        signal,
+        new PendingRecording(
+            Path.Combine(Path.GetTempPath(), $"{fileStem}.recording.mp4"),
+            Path.Combine(Path.GetTempPath(), $"{fileStem}.mp4")),
+        new RecordingSessionTimestamp(new DateTimeOffset(
+            2026,
+            7,
+            10,
+            12,
+            34,
+            56,
+            TimeSpan.Zero)),
+        new FrameRate(30),
+        EncoderKind.MediaFoundationSoftware,
+        RecordingVideoLayoutSession.StartExactSegment(signal));
+
     private sealed class ControllableNativeRecordingBackend
         : INativeRecordingBackend
     {
@@ -849,6 +952,11 @@ public sealed class NativeRecordingEngineTests
             NativeRecordingFault fault) =>
             _callbacks[partIndex].VideoEncoderFailed!(fault);
 
+        public void SignalVideoGeometryStable(
+            int partIndex,
+            VideoGeometry geometry) =>
+            _callbacks[partIndex].VideoGeometryStable!(geometry);
+
         public void SignalFault(
             int partIndex,
             NativeRecordingFault fault) =>
@@ -862,6 +970,11 @@ public sealed class NativeRecordingEngineTests
         public int AbortCallCount { get; private set; }
 
         public int StopCallCount { get; private set; }
+
+        public List<RecordingVideoLayout> VideoLayoutUpdates { get; } = [];
+
+        private readonly TaskCompletionSource _videoLayoutUpdated = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Exception? AbortFailure { get; set; }
 
@@ -879,6 +992,15 @@ public sealed class NativeRecordingEngineTests
             AudioRouting routing,
             CancellationToken cancellationToken) => Task.CompletedTask;
 
+        public Task UpdateVideoLayoutAsync(
+            RecordingVideoLayout layout,
+            CancellationToken cancellationToken)
+        {
+            VideoLayoutUpdates.Add(layout);
+            _videoLayoutUpdated.TrySetResult();
+            return Task.CompletedTask;
+        }
+
         public Task<RecordingStopResult> StopAsync(
             CancellationToken cancellationToken)
         {
@@ -888,13 +1010,24 @@ public sealed class NativeRecordingEngineTests
                 VideoPacketCount: 45,
                 AudioPacketCount: 72));
         }
+
+        public Task WaitUntilVideoLayoutUpdatedAsync() =>
+            _videoLayoutUpdated.Task;
     }
 
-    private sealed class StubRecordingPartRollover(RecordingPlan nextPlan)
+    private sealed class StubRecordingPartRollover
         : IRecordingPartRollover
     {
+        private readonly Queue<RecordingPlan> _nextPlans;
         private readonly TaskCompletionSource _finalizationCompleted = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Channel<bool> _finalizedParts =
+            Channel.CreateUnbounded<bool>();
+
+        public StubRecordingPartRollover(params RecordingPlan[] nextPlans)
+        {
+            _nextPlans = new Queue<RecordingPlan>(nextPlans);
+        }
 
         public List<(RecordingPlan Plan, int SegmentNumber, AudioRouting AudioRouting)>
             Reservations { get; } = [];
@@ -902,6 +1035,12 @@ public sealed class NativeRecordingEngineTests
         public List<RecordingStopResult> FinalizedParts { get; } = [];
 
         public List<RecordingPlan> StartRetries { get; } = [];
+
+        public List<(
+            RecordingPlan Plan,
+            StableVideoSignal Signal,
+            int SegmentNumber,
+            AudioRouting AudioRouting)> ExactReservations { get; } = [];
 
         public Task FinalizationCompleted => _finalizationCompleted.Task;
 
@@ -912,7 +1051,7 @@ public sealed class NativeRecordingEngineTests
             CancellationToken cancellationToken)
         {
             Reservations.Add((currentPlan, segmentNumber, audioRouting));
-            return Task.FromResult(nextPlan);
+            return Task.FromResult(_nextPlans.Dequeue());
         }
 
         public Task<RecordingPlan> ReserveNextExactPartAsync(
@@ -920,8 +1059,15 @@ public sealed class NativeRecordingEngineTests
             StableVideoSignal nextSignal,
             int segmentNumber,
             AudioRouting audioRouting,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(nextPlan);
+            CancellationToken cancellationToken)
+        {
+            ExactReservations.Add((
+                currentPlan,
+                nextSignal,
+                segmentNumber,
+                audioRouting));
+            return Task.FromResult(_nextPlans.Dequeue());
+        }
 
         public Task FinalizeIntermediatePartAsync(
             RecordingStopResult stopped,
@@ -929,15 +1075,19 @@ public sealed class NativeRecordingEngineTests
         {
             FinalizedParts.Add(stopped);
             _finalizationCompleted.TrySetResult();
+            _finalizedParts.Writer.TryWrite(true);
             return Task.CompletedTask;
         }
+
+        public Task<bool> WaitForFinalizedPartAsync() =>
+            _finalizedParts.Reader.ReadAsync().AsTask();
 
         public Task<RecordingPlan> PrepareSoftwareStartRetryAsync(
             RecordingPlan failedPlan,
             CancellationToken cancellationToken)
         {
             StartRetries.Add(failedPlan);
-            return Task.FromResult(nextPlan);
+            return Task.FromResult(_nextPlans.Dequeue());
         }
     }
 
