@@ -9,6 +9,28 @@ namespace VRRecorder.Application.Tests.Desktop;
 public sealed class RecordingNotificationFanOutTests
 {
     [Fact]
+    public void CompositeSinksRejectEachNullDependency()
+    {
+        List<string> calls = [];
+        var saved = new SavedSink("saved", calls);
+        var warning = new WarningSink("warning", calls);
+        var audio = new AudioSink("audio", calls);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new CompositeSavedRecordingSink(null!, saved));
+        Assert.Throws<ArgumentNullException>(() =>
+            new CompositeSavedRecordingSink(saved, null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            new CompositeCameraRestoreWarningSink(null!, warning));
+        Assert.Throws<ArgumentNullException>(() =>
+            new CompositeCameraRestoreWarningSink(warning, null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            new CompositeAudioSessionEventSink(null!, audio));
+        Assert.Throws<ArgumentNullException>(() =>
+            new CompositeAudioSessionEventSink(audio, null!));
+    }
+
+    [Fact]
     public async Task SavedRecordingIsPublishedToBothSinksInOrder()
     {
         List<string> calls = [];
@@ -40,6 +62,37 @@ public sealed class RecordingNotificationFanOutTests
         Assert.Equal(["diagnostics", "presentation"], calls);
         Assert.Same(warning, first.Warning);
         Assert.Same(warning, second.Warning);
+    }
+
+    [Fact]
+    public async Task AsyncFanOutRejectsNullAndPreCanceledInputBeforeChildren()
+    {
+        List<string> calls = [];
+        var saved = new CompositeSavedRecordingSink(
+            new SavedSink("first-saved", calls),
+            new SavedSink("second-saved", calls));
+        var warnings = new CompositeCameraRestoreWarningSink(
+            new WarningSink("first-warning", calls),
+            new WarningSink("second-warning", calls));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            saved.PublishAsync(null!, CancellationToken.None));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            saved.PublishAsync(
+                new FinalizedRecording(AbsolutePath("canceled.mp4")),
+                cancellation.Token));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            warnings.PublishAsync(null!, CancellationToken.None));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            warnings.PublishAsync(
+                new CameraRestoreWarning(
+                    CameraRestoreWarningReason.RecordingCompleted,
+                    new IOException("camera restore failed")),
+                cancellation.Token));
+
+        Assert.Empty(calls);
     }
 
     [Fact]
@@ -75,6 +128,22 @@ public sealed class RecordingNotificationFanOutTests
         Assert.Same(status, second.Status);
     }
 
+    [Fact]
+    public void AudioFanOutRejectsNullInputBeforeChildren()
+    {
+        List<string> calls = [];
+        var sink = new CompositeAudioSessionEventSink(
+            new AudioSink("first", calls),
+            new AudioSink("second", calls));
+
+        Assert.Throws<ArgumentNullException>(() => sink.Publish(
+            (AudioSessionWarning)null!));
+        Assert.Throws<ArgumentNullException>(() => sink.Publish(
+            (AudioSessionStatus)null!));
+
+        Assert.Empty(calls);
+    }
+
     private static string AbsolutePath(string name) => Path.Combine(
         Path.GetTempPath(),
         "vr-recorder-notification-fan-out-tests",
@@ -90,7 +159,6 @@ public sealed class RecordingNotificationFanOutTests
             FinalizedRecording recording,
             CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             Recording = recording;
             calls.Add(name);
             return Task.CompletedTask;
@@ -107,7 +175,6 @@ public sealed class RecordingNotificationFanOutTests
             CameraRestoreWarning warning,
             CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             Warning = warning;
             calls.Add(name);
             return Task.CompletedTask;
