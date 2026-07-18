@@ -117,8 +117,8 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
     }
 
     [Fact]
-    [Trait("Scenario", "IT-009-Deferred")]
-    public async Task ExactFollowSegmentsIsRejectedBeforeOutputOrMediaStart()
+    [Trait("Scenario", "IT-009")]
+    public async Task ExactFollowSegmentsStartsPartOneAtTheInputDimensions()
     {
         var reservation = new CapturingRecordingFileReservation();
         var engine = new CapturingRecordingEngine();
@@ -136,25 +136,32 @@ public sealed class SingleFileFitVideoLayoutIntegrationTests
                 new UnexpectedDelayClock(),
                 new UnexpectedStopRequestSink()));
 
-        var exception = await Assert.ThrowsAsync<
-            UnsupportedResolutionChangePolicyException>(() =>
-            useCase.ExecuteAsync(
-                new StartRecordingCommand(
-                    SelfTimer.FromSeconds(0),
-                    RecordingDuration.Infinite,
-                    new OutputPath(Path.GetTempPath()),
-                    new FrameRate(30),
-                    ResolutionChangePolicy:
-                        ResolutionChangePolicy.ExactFollowSegments),
-                CancellationToken.None));
+        var result = await useCase.ExecuteAsync(
+            new StartRecordingCommand(
+                SelfTimer.FromSeconds(0),
+                RecordingDuration.Infinite,
+                new OutputPath(Path.GetTempPath()),
+                new FrameRate(30),
+                ResolutionChangePolicy:
+                    ResolutionChangePolicy.ExactFollowSegments),
+            CancellationToken.None);
 
+        Assert.IsType<StartRecordingResult.Started>(result);
+        var plan = Assert.IsType<RecordingPlan>(engine.Plan);
         Assert.Equal(
             ResolutionChangePolicy.ExactFollowSegments,
-            exception.Policy);
-        Assert.Equal(0, reservation.CallCount);
-        Assert.Empty(reservation.Descriptors);
-        Assert.Equal(0, engine.StartCallCount);
-        Assert.Null(engine.Plan);
+            plan.VideoLayout.Policy);
+        Assert.Equal(1_920, plan.VideoLayout.CurrentLayout.Source.Width);
+        Assert.Equal(1_080, plan.VideoLayout.CurrentLayout.Source.Height);
+        Assert.Equal(1_920, plan.VideoLayout.OutputCanvas.Width);
+        Assert.Equal(1_080, plan.VideoLayout.OutputCanvas.Height);
+        Assert.Equal(VideoPixelFormat.Nv12,
+            plan.VideoLayout.OutputCanvas.PixelFormat);
+        var descriptor = Assert.Single(reservation.Descriptors);
+        Assert.Equal(1_920, descriptor.Width);
+        Assert.Equal(1_080, descriptor.Height);
+        Assert.Equal(1, descriptor.SegmentNumber);
+        Assert.Equal(1, engine.StartCallCount);
     }
 
     private sealed class StableSignalGateway(StableVideoSignal signal)

@@ -36,6 +36,10 @@ public sealed class RecordingVideoLayoutSession
         ResolutionChangePolicy policy)
     {
         ArgumentNullException.ThrowIfNull(initialSignal);
+        if (policy == ResolutionChangePolicy.ExactFollowSegments)
+        {
+            return StartExactSegment(initialSignal);
+        }
         if (policy != ResolutionChangePolicy.SingleFileFit)
         {
             throw new UnsupportedResolutionChangePolicyException(policy);
