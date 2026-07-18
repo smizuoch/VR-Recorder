@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using VRRecorder.Application.Audio;
 using VRRecorder.Application.Recording;
 using VRRecorder.Application.Storage;
+using VRRecorder.Domain.Video;
 
 namespace VRRecorder.Infrastructure.Media.Native;
 
@@ -36,6 +37,7 @@ internal sealed class NativeCallbackState
         RecordingAudioBufferHealthEvent? audioBufferHealth = null;
         NativeRecordingFault? fault = null;
         NativeRecordingFault? videoEncoderFailure = null;
+        VideoGeometry? stableVideoGeometry = null;
         RecordingStopResult? stopped = null;
         lock (_gate)
         {
@@ -75,6 +77,10 @@ internal sealed class NativeCallbackState
                         (int)nativeEvent.Status,
                         Marshal.PtrToStringUTF8(nativeEvent.MessageUtf8) ??
                         "Native video encoder failed after sealing the current part.");
+                    break;
+                case NativeEventKind.VideoGeometryStable:
+                    stableVideoGeometry = CreateStableVideoGeometry(
+                        nativeEvent);
                     break;
                 case NativeEventKind.DesktopAudioDeviceLost:
                     audioWarning = CreateAudioWarning(
@@ -168,6 +174,43 @@ internal sealed class NativeCallbackState
         {
             _callbacks.VideoEncoderFailed?.Invoke(videoEncoderFailure);
         }
+
+        if (stableVideoGeometry is not null)
+        {
+            _callbacks.VideoGeometryStable?.Invoke(stableVideoGeometry);
+        }
+    }
+
+    private static VideoGeometry? CreateStableVideoGeometry(
+        NativeEventV1 nativeEvent)
+    {
+        if (nativeEvent.Status != NativeStatus.Ok ||
+            nativeEvent.MessageUtf8 != 0 ||
+            nativeEvent.AudioPacketCount is 0 or > int.MaxValue)
+        {
+            return null;
+        }
+
+        var width = nativeEvent.VideoPacketCount & uint.MaxValue;
+        var pixelFormat = nativeEvent.VideoPacketCount >> 32;
+        if (width is 0 or > int.MaxValue)
+        {
+            return null;
+        }
+
+        var managedPixelFormat = pixelFormat switch
+        {
+            (ulong)NativeSourcePixelFormat.Bgra8 => VideoPixelFormat.Bgra8,
+            (ulong)NativeSourcePixelFormat.Rgba8 => VideoPixelFormat.Rgba8,
+            (ulong)NativeSourcePixelFormat.Nv12 => VideoPixelFormat.Nv12,
+            _ => (VideoPixelFormat?)null,
+        };
+        return managedPixelFormat is { } defined
+            ? new VideoGeometry(
+                checked((int)width),
+                checked((int)nativeEvent.AudioPacketCount),
+                defined)
+            : null;
     }
 
     private static AudioSessionWarning? CreateAudioWarning(

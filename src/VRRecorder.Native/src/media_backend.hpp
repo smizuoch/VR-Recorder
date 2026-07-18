@@ -6,6 +6,7 @@
 
 #include "vrrecorder_native.h"
 #include "audio_capture_pump.hpp"
+#include "spout_capture_pump.hpp"
 
 namespace vrrecorder::native {
 
@@ -14,7 +15,7 @@ enum class AudioEndpointRole {
     Microphone,
 };
 
-class MediaEventSink {
+class MediaEventSink : public SpoutCaptureEventSink {
 public:
     virtual ~MediaEventSink() = default;
 
@@ -30,6 +31,12 @@ public:
         const char *message_utf8) noexcept
     {
         Faulted(status, message_utf8);
+    }
+    void StableVideoGeometryChanged(
+        std::uint32_t,
+        std::uint32_t,
+        vrrec_source_pixel_format_t) noexcept override
+    {
     }
     virtual void AudioEndpointAvailabilityChanged(
         AudioEndpointRole role,

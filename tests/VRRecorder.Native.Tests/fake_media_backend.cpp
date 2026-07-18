@@ -285,6 +285,14 @@ public:
         events_.VideoEncoderFailed(status, message.c_str());
     }
 
+    void EmitStableVideoGeometry(
+        std::uint32_t width,
+        std::uint32_t height,
+        vrrec_source_pixel_format_t pixel_format) noexcept
+    {
+        events_.StableVideoGeometryChanged(width, height, pixel_format);
+    }
+
     void SetAudioEndpointAvailable(
         AudioEndpointRole role,
         bool available,
@@ -1202,6 +1210,17 @@ void EmitVideoEncoderFailed(
     FakeMediaBackend::Active()->EmitVideoEncoderFailed(
         status,
         std::string(message));
+}
+
+void EmitStableVideoGeometry(
+    std::uint32_t width,
+    std::uint32_t height,
+    std::uint32_t pixel_format)
+{
+    FakeMediaBackend::Active()->EmitStableVideoGeometry(
+        width,
+        height,
+        pixel_format);
 }
 
 void EmitAvDrift(

@@ -474,6 +474,44 @@ struct vrrec_session final : vrrecorder::native::MediaEventSink {
         });
     }
 
+    void StableVideoGeometryChanged(
+        std::uint32_t width,
+        std::uint32_t height,
+        vrrec_source_pixel_format_t pixel_format) noexcept override
+    {
+        if (width == 0 || height == 0 ||
+            (pixel_format != VRREC_SOURCE_PIXEL_FORMAT_BGRA8 &&
+             pixel_format != VRREC_SOURCE_PIXEL_FORMAT_RGBA8 &&
+             pixel_format != VRREC_SOURCE_PIXEL_FORMAT_NV12)) {
+            return;
+        }
+
+        const std::lock_guard callback_lock(callback_mutex_);
+        std::uint64_t sequence;
+        {
+            const std::lock_guard state_lock(state_mutex_);
+            if (state_ != SessionState::Started || start_in_progress_ ||
+                stop_requested_) {
+                return;
+            }
+            sequence = ++sequence_;
+        }
+
+        const auto packed_format_and_width =
+            (static_cast<std::uint64_t>(pixel_format) << 32U) |
+            static_cast<std::uint64_t>(width);
+        Emit(vrrec_event_v1 {
+            sizeof(vrrec_event_v1),
+            VRREC_ABI_V1,
+            VRREC_EVENT_VIDEO_GEOMETRY_STABLE,
+            VRREC_STATUS_OK,
+            sequence,
+            packed_format_and_width,
+            height,
+            nullptr,
+        });
+    }
+
     void AudioEndpointAvailabilityChanged(
         vrrecorder::native::AudioEndpointRole role,
         bool available,

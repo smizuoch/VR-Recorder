@@ -259,7 +259,8 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
         graph->spout_pump_ = std::make_unique<SpoutCapturePump>(
             *graph->spout_backend_,
             *graph->scheduler_,
-            config.spout_sender_identity_utf8);
+            config.spout_sender_identity_utf8,
+            events);
         graph->spout_worker_ = std::make_unique<SpoutCaptureWorker>(
             *graph->spout_pump_);
         graph->video_clock_ = std::make_unique<SteadyVideoCfrClock>(

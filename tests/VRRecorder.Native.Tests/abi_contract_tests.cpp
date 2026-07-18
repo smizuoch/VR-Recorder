@@ -29,6 +29,7 @@ static_assert(VRREC_EVENT_DESKTOP_AUDIO_BUFFER_OVERRUN == 10);
 static_assert(VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_UNDERRUN == 11);
 static_assert(VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN == 12);
 static_assert(VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY == 13);
+static_assert(VRREC_EVENT_VIDEO_GEOMETRY_STABLE == 14);
 static_assert(sizeof(vrrec_session_config_v1) == 176);
 static_assert(offsetof(vrrec_session_config_v1, source_pixel_format) == 160);
 static_assert(offsetof(vrrec_session_config_v1, reserved_v2) == 164);
@@ -1894,6 +1895,43 @@ bool GatesEveryRemainingNonterminalMediaEvent()
     CHECK(log.events.size() == 4);
     CHECK(log.events[3].kind == VRREC_EVENT_STOPPED);
     CHECK(log.events[3].sequence == 4);
+    vrrec_session_destroy_v1(session);
+    return true;
+}
+
+bool EmitsStableVideoGeometryAsANonterminalEvent()
+{
+    using vrrecorder::native::testing::EmitStableVideoGeometry;
+
+    EventLog log;
+    const auto config = ValidConfig();
+    auto callbacks = ValidCallbacks(log);
+    vrrec_session_t *session = nullptr;
+    CHECK(vrrec_session_create_v1(&config, &callbacks, &session) ==
+          VRREC_STATUS_OK);
+    CHECK(vrrec_session_start_v1(session) == VRREC_STATUS_OK);
+
+    EmitStableVideoGeometry(
+        1'280,
+        720,
+        VRREC_SOURCE_PIXEL_FORMAT_RGBA8);
+    CHECK(log.events.size() == 1);
+    CHECK(log.events[0].kind == VRREC_EVENT_VIDEO_GEOMETRY_STABLE);
+    CHECK(log.events[0].status == VRREC_STATUS_OK);
+    CHECK(log.events[0].sequence == 1);
+    CHECK(log.events[0].video_packet_count ==
+          (std::uint64_t {VRREC_SOURCE_PIXEL_FORMAT_RGBA8} << 32U |
+           std::uint64_t {1'280}));
+    CHECK(log.events[0].audio_packet_count == 720);
+    CHECK(log.events[0].message.empty());
+
+    CHECK(vrrec_session_request_stop_v1(session) == VRREC_STATUS_OK);
+    EmitStableVideoGeometry(
+        720,
+        1'280,
+        VRREC_SOURCE_PIXEL_FORMAT_BGRA8);
+    CHECK(log.events.size() == 1);
+    vrrecorder::native::testing::CompleteTrailerFlushClose(45, 72);
     vrrec_session_destroy_v1(session);
     return true;
 }
@@ -4408,6 +4446,7 @@ int main(int argc, char **argv)
         !EmitsPrivacySafeNonterminalAudioDeviceEvents() ||
         !EmitsPrivacySafeNonterminalAudioBufferHealthEvents() ||
         !GatesEveryRemainingNonterminalMediaEvent() ||
+        !EmitsStableVideoGeometryAsANonterminalEvent() ||
         !FaultIsTerminalAndAbortQuiescesCallbacks() ||
         !SealedVideoEncoderFailureIsNonterminalAndCanStop() ||
         !RejectsInvalidSteamVrAbiInputs() ||

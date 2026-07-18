@@ -92,6 +92,10 @@ void Fail(std::int32_t status, std::string_view message);
 void EmitVideoEncoderFailed(
     std::int32_t status,
     std::string_view message);
+void EmitStableVideoGeometry(
+    std::uint32_t width,
+    std::uint32_t height,
+    std::uint32_t pixel_format);
 void EmitAvDrift(
     std::uint64_t video_pts_microseconds,
     std::uint64_t audio_pts_microseconds);

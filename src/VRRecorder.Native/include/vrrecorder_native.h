@@ -79,6 +79,7 @@ typedef uint32_t vrrec_steamvr_tracking_origin_t;
 #define VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_UNDERRUN UINT32_C(11)
 #define VRREC_EVENT_MICROPHONE_AUDIO_BUFFER_OVERRUN UINT32_C(12)
 #define VRREC_EVENT_VIDEO_ENCODER_FAILED_PART_READY UINT32_C(13)
+#define VRREC_EVENT_VIDEO_GEOMETRY_STABLE UINT32_C(14)
 
 #define VRREC_ENCODER_NVENC UINT32_C(1)
 #define VRREC_ENCODER_AMF UINT32_C(2)
@@ -204,6 +205,11 @@ typedef struct vrrec_session_statistics_v1 {
  * audio_packet_count carries the scheduled 48 kHz audio-frame position.
  * video_packet_count is zero, status is VRREC_STATUS_OK, and message_utf8 is
  * null.
+ *
+ * For VRREC_EVENT_VIDEO_GEOMETRY_STABLE, video_packet_count packs the
+ * source pixel format in the upper 32 bits and source width in the lower
+ * 32 bits. audio_packet_count carries source height. status is
+ * VRREC_STATUS_OK and message_utf8 is null.
  */
 typedef struct vrrec_event_v1 {
     uint32_t struct_size;

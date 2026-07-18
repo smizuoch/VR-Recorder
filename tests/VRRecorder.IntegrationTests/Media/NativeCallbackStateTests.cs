@@ -198,6 +198,31 @@ public sealed class NativeCallbackStateTests
     }
 
     [Fact]
+    public void DeliversStableVideoGeometryFromThePackedAbiPayload()
+    {
+        var geometries = new List<VideoGeometry>();
+        var state = new NativeCallbackState(
+            Plan(),
+            new NativeRecordingCallbacks(
+                () => { },
+                _ => { },
+                VideoGeometryStable: geometries.Add));
+        var packedFormatAndWidth =
+            (ulong)NativeSourcePixelFormat.Rgba8 << 32 | 1_280UL;
+
+        state.Process(Event(
+            NativeEventKind.VideoGeometryStable,
+            sequence: 1,
+            videoPacketCount: packedFormatAndWidth,
+            audioPacketCount: 720));
+
+        var geometry = Assert.Single(geometries);
+        Assert.Equal(1_280, geometry.Width);
+        Assert.Equal(720, geometry.Height);
+        Assert.Equal(VideoPixelFormat.Rgba8, geometry.PixelFormat);
+    }
+
+    [Fact]
     public void RejectsInvalidHeaderSequenceAndUnknownKind()
     {
         var delivered = 0;
