@@ -39,6 +39,7 @@
 - [x] factory-selection intentは改行を正規化せずexact file bytesをSHA-256化し、CRLF fixtureと実MSVC Release DLLの埋込みmarker／evidenceを同じdigestへ結合する
 - [ ] 4つのactual production factory sourceを実装し、production C ABI／composition smokeがplaceholder sourceへ委譲しないことを検証する
 - [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
+- [x] 48-byte event ABIを拡張せずnonterminal kind 14の安定映像geometry eventを追加し、`video_packet_count`の上位32 bitへpixel format、下位32 bitへwidth、`audio_packet_count`へheightをpackしてmanagedで復元し、Stopping以降は抑止する
 - [x] session Start確定まではruntime操作と非terminal eventを拒否してFIRSTだけを保留し、Abort／Fault／backend戻り値を仲裁する。Start中Stopを拒否し、同時Stopの失敗／Fault／Abort結果を全callerへ共有・cacheして失敗後もgateを閉じる
 - [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
@@ -83,6 +84,7 @@
 - [x] Hash factory-selection intents from exact file bytes without newline normalization, binding the CRLF fixture and the embedded marker/evidence in an actual MSVC Release DLL to the same digest
 - [ ] Implement all four actual production factory sources and verify with production C-ABI/composition smoke tests that none delegates to an unavailable source
 - [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI
+- [x] Add nonterminal stable-video-geometry event kind 14 without growing the 48-byte event ABI, pack pixel format into the upper 32 bits and width into the lower 32 bits of `video_packet_count`, carry height in `audio_packet_count`, decode it into a typed managed value, and suppress it once stopping begins
 - [x] Keep runtime operations and nonterminal events gated until session Start commits while deferring only FIRST; arbitrate Abort/Fault/backend results; reject Stop during Start; and share/cache concurrent Stop failure, Fault, or Abort results while keeping the gate closed after failure
 - [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends
