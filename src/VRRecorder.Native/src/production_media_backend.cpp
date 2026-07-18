@@ -107,7 +107,13 @@ public:
     vrrec_status_t UpdateVideoLayout(
         const vrrec_video_layout_v1 &layout) noexcept override
     {
-        return backend_->UpdateVideoLayout(layout);
+        const auto status = backend_->UpdateVideoLayout(layout);
+        if (status != VRREC_STATUS_OK) {
+            return status;
+        }
+        return spout_pump_->AcknowledgeStableVideoGeometry(
+            layout.source_width,
+            layout.source_height);
     }
 
     vrrec_status_t UpdateAudioRouting(

@@ -100,11 +100,12 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
             return SpoutCaptureResult::InvalidFrame;
         }
 
+        if (geometry_change_notified_) {
+            return SpoutCaptureResult::GeometryChangePending;
+        }
+
         if (has_descriptor_ &&
             !HasSameGeometry(descriptor, latest_descriptor_)) {
-            if (geometry_change_notified_) {
-                return SpoutCaptureResult::GeometryChangePending;
-            }
             if (has_geometry_candidate_ &&
                 descriptor.generation_id <
                     candidate_descriptor_.generation_id) {
@@ -165,6 +166,31 @@ SpoutCaptureResult SpoutCapturePump::PollOne(
             stable_descriptor.pixel_format);
     }
     return result;
+}
+
+vrrec_status_t SpoutCapturePump::AcknowledgeStableVideoGeometry(
+    std::uint32_t width,
+    std::uint32_t height) noexcept
+{
+    if (width == 0 || height == 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    const std::lock_guard lock(lifecycle_mutex_);
+    if (aborted_.load() || !geometry_change_notified_ ||
+        !has_geometry_candidate_) {
+        return VRREC_STATUS_INVALID_STATE;
+    }
+    if (candidate_descriptor_.width != width ||
+        candidate_descriptor_.height != height) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
+
+    latest_descriptor_ = candidate_descriptor_;
+    has_descriptor_ = true;
+    ResetGeometryCandidate();
+    geometry_change_notified_ = false;
+    return VRREC_STATUS_OK;
 }
 
 void SpoutCapturePump::Abort() noexcept

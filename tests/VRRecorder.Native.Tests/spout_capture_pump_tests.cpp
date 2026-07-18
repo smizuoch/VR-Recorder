@@ -716,6 +716,20 @@ void QuarantinesChangedGeometryUntilStableForFiveHundredMilliseconds()
             720,
             VRREC_SOURCE_PIXEL_FORMAT_RGBA8),
     });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        Frame("selected", 86, 9'300'000, 4),
+    });
+    backend.polls.push_back({
+        VRREC_STATUS_OK,
+        FrameWithGeometry(
+            87,
+            9'400'000,
+            5,
+            1'280,
+            720,
+            VRREC_SOURCE_PIXEL_FORMAT_RGBA8),
+    });
     RecordingGeometryEvents events;
     VideoCfrScheduler scheduler;
     SpoutCapturePump pump(backend, scheduler, "selected", events);
@@ -742,7 +756,16 @@ void QuarantinesChangedGeometryUntilStableForFiveHundredMilliseconds()
     CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
           SpoutCaptureResult::GeometryChangePending);
     CHECK(events.calls == 1);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::GeometryChangePending);
     CHECK(scheduler.Statistics().source_frame_count == 1);
+    CHECK(pump.AcknowledgeStableVideoGeometry(720, 1'280) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
+    CHECK(pump.AcknowledgeStableVideoGeometry(1'280, 720) ==
+          VRREC_STATUS_OK);
+    CHECK(pump.PollOne(std::chrono::milliseconds(100)) ==
+          SpoutCaptureResult::FrameAccepted);
+    CHECK(scheduler.Statistics().source_frame_count == 2);
 }
 
 void CancelsAnUnstableGeometryChangeWhenTheOriginalGeometryReturns()

@@ -57,6 +57,9 @@ public:
 
     SpoutCaptureResult PollOne(
         std::chrono::milliseconds timeout) noexcept override;
+    vrrec_status_t AcknowledgeStableVideoGeometry(
+        std::uint32_t width,
+        std::uint32_t height) noexcept;
     void Abort() noexcept override;
 
 private:
