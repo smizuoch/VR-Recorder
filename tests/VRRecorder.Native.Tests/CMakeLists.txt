@@ -216,7 +216,8 @@ vrrecorder_enable_strict_warnings(
 add_executable(
     vrrecorder_native_production_media_configuration
     production_media_configuration_tests.cpp
-    "${native_source_root}/src/production_media_configuration.cpp")
+    "${native_source_root}/src/production_media_configuration.cpp"
+    "${native_source_root}/src/production_video_encoder_route.cpp")
 target_compile_features(
     vrrecorder_native_production_media_configuration PRIVATE cxx_std_20)
 target_include_directories(

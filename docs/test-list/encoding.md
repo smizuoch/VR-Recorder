@@ -12,6 +12,7 @@
 - [x] 開始前と録画中のsoftware fallback／part rolloverはAutoだけに許可し、固定指定では元のfailureを報告して予約fileを変更しない
 - [x] Autoの開始前software retryはtyped VideoEncoder faultだけに許可し、同じstatus／messageを持つSpout／audio／mux／unknown failureを文字列判定でfallbackしない
 - [x] production H.264 factoryがCreate中に失敗した場合はtyped VideoEncoder faultを同期通知し、managed側は後続のgeneric create statusよりそのstatus／message／sourceを優先する
+- [x] production routeはNvencを`h264_nvenc`＋D3D11 NV12＋同一adapter LUID、MF softwareを`h264_mf`＋system-memory NV12＋encoder LUID 0へexact mappingし、vendor codec未搭載時にsoftwareへ偽装fallbackしない。AMF／QSV routeは各actual実装までUnavailableを維持する
 - [x] packetを生成しないprobeは失敗として扱う
 - [x] 全encoder probe requestを安定化したSpout senderと同じadapter LUIDへ固定する
 - [x] 出力寸法・fps・同一adapterをnative ABIへ渡し16合成frameを実encodeする
@@ -30,6 +31,7 @@ Following Basic Design v0.3 §§10.3, 11.2, 18.4, and 24, probe success requires
 - [x] Permit pre-start software retry and in-recording software part rollover only for Auto, reporting the original failure and leaving reserved files unchanged for fixed preferences
 - [x] Permit Auto's pre-start software retry only for a typed VideoEncoder fault, never using status/message matching to fall back on Spout, audio, mux, or unknown failures
 - [x] When the production H.264 factory fails during Create, synchronously publish a typed VideoEncoder fault and preserve its status, message, and source in managed code instead of replacing it with the subsequent generic create status
+- [x] Map the production Nvenc route exactly to `h264_nvenc`, D3D11 NV12, and the same adapter LUID, and map MF software to `h264_mf`, system-memory NV12, and encoder LUID zero; never masquerade a missing vendor codec as software, while AMF/QSV routes remain unavailable until their actual implementations land
 - [x] Treat a probe that produces no packet as failed
 - [x] Pin every encoder probe request to the same adapter LUID as the stabilized Spout sender
 - [x] Pass output geometry, frame rate, and the same adapter through the native ABI and encode 16 synthetic frames

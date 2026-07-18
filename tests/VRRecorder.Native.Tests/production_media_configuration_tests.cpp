@@ -1,8 +1,11 @@
 #include "production_media_configuration.hpp"
+#include "production_video_encoder_route.hpp"
 
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string_view>
 
 namespace {
 
@@ -63,6 +66,9 @@ void ProducesTheExactInitialLayoutAndFrameRate()
     CHECK(ValidateProductionMediaConfiguration(input, output) ==
           VRREC_STATUS_OK);
     CHECK(output.frames_per_second == 60);
+    CHECK(output.encoder_route.requested_kind == input.encoder_kind);
+    CHECK(output.encoder_route.source_adapter_luid ==
+          input.spout_adapter_luid);
     CHECK(output.layout.struct_size == sizeof(vrrec_video_layout_v1));
     CHECK(output.layout.abi_version == VRREC_ABI_V1);
     CHECK(output.layout.source_width == input.source_width);
@@ -89,13 +95,37 @@ void RejectsUnsupportedAbiWithoutChangingOutput()
     CHECK(output.layout.struct_size == 0);
 }
 
-void RejectsNonSoftwareEncodersAndNonIntegralFps()
+void AcceptsKnownEncodersAndRejectsUnknownOrNonIntegralFps()
 {
-    auto input = ValidConfiguration();
     ProductionMediaConfiguration output {};
-    input.encoder_kind = VRREC_ENCODER_NVENC;
+    for (const auto encoder_kind :
+         std::array<vrrec_encoder_kind_t, 2> {
+             VRREC_ENCODER_NVENC,
+             VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE,
+         }) {
+        auto input = ValidConfiguration();
+        input.encoder_kind = encoder_kind;
+        CHECK(ValidateProductionMediaConfiguration(input, output) ==
+              VRREC_STATUS_OK);
+        CHECK(output.encoder_route.requested_kind == encoder_kind);
+        CHECK(output.encoder_route.source_adapter_luid ==
+              input.spout_adapter_luid);
+    }
+
+    auto input = ValidConfiguration();
+    input.encoder_kind = VRREC_ENCODER_AMF;
     CHECK(ValidateProductionMediaConfiguration(input, output) ==
           VRREC_STATUS_BACKEND_UNAVAILABLE);
+
+    input = ValidConfiguration();
+    input.encoder_kind = VRREC_ENCODER_QSV;
+    CHECK(ValidateProductionMediaConfiguration(input, output) ==
+          VRREC_STATUS_BACKEND_UNAVAILABLE);
+
+    input = ValidConfiguration();
+    input.encoder_kind = UINT32_MAX;
+    CHECK(ValidateProductionMediaConfiguration(input, output) ==
+          VRREC_STATUS_INVALID_ARGUMENT);
 
     input = ValidConfiguration();
     input.fps_denominator = 2;
@@ -106,6 +136,50 @@ void RejectsNonSoftwareEncodersAndNonIntegralFps()
     input.fps_numerator = 121;
     CHECK(ValidateProductionMediaConfiguration(input, output) ==
           VRREC_STATUS_INVALID_ARGUMENT);
+}
+
+void ResolvesExactNvencAndSoftwareRoutesWithoutVendorFallback()
+{
+    constexpr auto adapter_luid = UINT64_C(0x00000001ABCDEF01);
+    ProductionVideoEncoderRoute route {};
+
+    CHECK(ResolveProductionVideoEncoderRoute(
+              VRREC_ENCODER_NVENC,
+              adapter_luid,
+              adapter_luid,
+              route) == VRREC_STATUS_OK);
+    CHECK(route.requested_kind == VRREC_ENCODER_NVENC);
+    CHECK(std::string_view(route.codec_name) == "h264_nvenc");
+    CHECK(route.hardware_accelerated);
+    CHECK(route.input == ProductionVideoEncoderInput::D3d11Nv12);
+    CHECK(route.source_adapter_luid == adapter_luid);
+    CHECK(route.encoder_adapter_luid == adapter_luid);
+
+    CHECK(ResolveProductionVideoEncoderRoute(
+              VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE,
+              adapter_luid,
+              adapter_luid,
+              route) == VRREC_STATUS_OK);
+    CHECK(route.requested_kind ==
+          VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE);
+    CHECK(std::string_view(route.codec_name) == "h264_mf");
+    CHECK(!route.hardware_accelerated);
+    CHECK(route.input == ProductionVideoEncoderInput::SystemMemoryNv12);
+    CHECK(route.source_adapter_luid == adapter_luid);
+    CHECK(route.encoder_adapter_luid == 0);
+
+    CHECK(ResolveProductionVideoEncoderRoute(
+              VRREC_ENCODER_AMF,
+              adapter_luid,
+              adapter_luid,
+              route) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(route.requested_kind == 0);
+    CHECK(ResolveProductionVideoEncoderRoute(
+              VRREC_ENCODER_QSV,
+              adapter_luid,
+              adapter_luid,
+              route) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    CHECK(route.requested_kind == 0);
 }
 
 void RejectsUnknownOrMismatchedAdapters()
@@ -285,7 +359,8 @@ int main()
 {
     ProducesTheExactInitialLayoutAndFrameRate();
     RejectsUnsupportedAbiWithoutChangingOutput();
-    RejectsNonSoftwareEncodersAndNonIntegralFps();
+    AcceptsKnownEncodersAndRejectsUnknownOrNonIntegralFps();
+    ResolvesExactNvencAndSoftwareRoutesWithoutVendorFallback();
     RejectsUnknownOrMismatchedAdapters();
     RejectsInvalidGeometryAndEndpointInputs();
     RejectsEveryInvalidProductionBoundary();

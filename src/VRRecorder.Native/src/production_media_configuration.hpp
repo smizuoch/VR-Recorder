@@ -3,12 +3,14 @@
 
 #include <cstdint>
 
+#include "production_video_encoder_route.hpp"
 #include "vrrecorder_native.h"
 
 namespace vrrecorder::native {
 
 struct ProductionMediaConfiguration final {
     std::uint32_t frames_per_second = 0;
+    ProductionVideoEncoderRoute encoder_route;
     vrrec_video_layout_v1 layout {};
 };
 

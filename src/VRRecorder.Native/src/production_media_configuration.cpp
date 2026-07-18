@@ -97,9 +97,14 @@ vrrec_status_t ValidateProductionMediaConfiguration(
     if (input.abi_version != VRREC_ABI_V1) {
         return VRREC_STATUS_UNSUPPORTED_ABI;
     }
-    if (input.encoder_kind !=
-        VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE) {
-        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    ProductionVideoEncoderRoute encoder_route {};
+    const auto encoder_status = ResolveProductionVideoEncoderRoute(
+        input.encoder_kind,
+        input.spout_adapter_luid,
+        input.encoder_adapter_luid,
+        encoder_route);
+    if (encoder_status != VRREC_STATUS_OK) {
+        return encoder_status;
     }
     if (input.fps_denominator != 1 ||
         input.fps_numerator < MinimumFramesPerSecond ||
@@ -120,8 +125,6 @@ vrrec_status_t ValidateProductionMediaConfiguration(
         !HasText(input.microphone_endpoint_id_utf8) ||
         !HasText(input.spout_sender_identity_utf8) ||
         !HasText(input.gpu_identity_utf8) ||
-        input.spout_adapter_luid == 0 ||
-        input.encoder_adapter_luid != input.spout_adapter_luid ||
         input.reserved != 0 || input.reserved_v1 != 0 ||
         input.reserved_v2 != 0) {
         return VRREC_STATUS_INVALID_ARGUMENT;
@@ -129,6 +132,7 @@ vrrec_status_t ValidateProductionMediaConfiguration(
 
     output = {
         input.fps_numerator,
+        encoder_route,
         {
             sizeof(vrrec_video_layout_v1),
             VRREC_ABI_V1,

@@ -187,12 +187,24 @@ public:
 };
 
 vrrec_status_t CreateH264Encoder(
+    const ProductionVideoEncoderRoute &route,
     std::uint32_t width,
     std::uint32_t height,
     std::uint32_t frames_per_second,
     std::unique_ptr<FfmpegH264PacketEncoder> &encoder) noexcept
 {
     encoder.reset();
+    if (route.requested_kind == VRREC_ENCODER_NVENC) {
+        return VRREC_STATUS_BACKEND_UNAVAILABLE;
+    }
+    if (route.requested_kind !=
+            VRREC_ENCODER_MEDIA_FOUNDATION_SOFTWARE ||
+        route.hardware_accelerated ||
+        route.input != ProductionVideoEncoderInput::SystemMemoryNv12 ||
+        route.source_adapter_luid == 0 ||
+        route.encoder_adapter_luid != 0) {
+        return VRREC_STATUS_INVALID_ARGUMENT;
+    }
     H264VideoEncoderConfig config {};
     auto status = CreateH264VideoEncoderConfig(
         width,
@@ -274,7 +286,7 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
 
         graph->d3d11_processor_port_ =
             CreateWindowsAdaptiveD3d11VideoProcessorPort(
-                config.spout_adapter_luid,
+                production_config.encoder_route.source_adapter_luid,
                 status);
         if (status != VRREC_STATUS_OK ||
             graph->d3d11_processor_port_ == nullptr) {
@@ -287,7 +299,7 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
             std::make_unique<D3d11VideoFrameProcessor>(
                 *graph->d3d11_processor_port_);
         graph->readback_port_ = CreateWindowsD3d11Nv12ReadbackPort(
-            config.spout_adapter_luid,
+            production_config.encoder_route.source_adapter_luid,
             status);
         if (status != VRREC_STATUS_OK || graph->readback_port_ == nullptr) {
             status = status == VRREC_STATUS_OK
@@ -300,6 +312,7 @@ std::unique_ptr<MediaBackend> CreateMediaBackend(
                 *graph->readback_port_);
 
         status = CreateH264Encoder(
+            production_config.encoder_route,
             config.width,
             config.height,
             production_config.frames_per_second,
