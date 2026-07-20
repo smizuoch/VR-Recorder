@@ -40,8 +40,10 @@ public sealed class PInvokeEncoderProbe
             {
                 try
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     ThrowIfDisposing();
-                    var result = ProbeCore(request);
+                    var result = ProbeCore(request, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
                     ThrowIfDisposing();
                     return result;
                 }
@@ -93,7 +95,9 @@ public sealed class PInvokeEncoderProbe
         _library.Dispose();
     }
 
-    private EncoderProbeResult ProbeCore(EncoderProbeRequest request)
+    private EncoderProbeResult ProbeCore(
+        EncoderProbeRequest request,
+        CancellationToken cancellationToken)
     {
         var gpuIdentity = Marshal.StringToCoTaskMemUTF8(request.GpuIdentity);
         try
@@ -113,12 +117,14 @@ public sealed class PInvokeEncoderProbe
                 GpuIdentityUtf8 = gpuIdentity,
             };
             var nativeResult = EmptyNativeResult();
+            cancellationToken.ThrowIfCancellationRequested();
             var status = _library.ProbeV2(
                 ref config,
                 ref nativeResult,
                 utf8Buffer: 0,
                 utf8Capacity: 0,
                 out var requiredUtf8Size);
+            cancellationToken.ThrowIfCancellationRequested();
             if (IsFallbackStatus(status))
             {
                 return EncoderProbeResult.Failed;
@@ -129,18 +135,21 @@ public sealed class PInvokeEncoderProbe
                 throw Failure(status, "native probe-v2 size query");
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposing();
             var utf8Buffer = Marshal.AllocCoTaskMem(
                 checked((int)requiredUtf8Size));
             try
             {
                 nativeResult = EmptyNativeResult();
+                cancellationToken.ThrowIfCancellationRequested();
                 status = _library.ProbeV2(
                     ref config,
                     ref nativeResult,
                     utf8Buffer,
                     requiredUtf8Size,
                     out var secondRequiredUtf8Size);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (IsFallbackStatus(status))
                 {
                     return EncoderProbeResult.Failed;
