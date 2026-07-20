@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -29,6 +31,8 @@ namespace {
     } while (false)
 
 using namespace vrrecorder::native;
+
+constexpr int kHardwareUnavailableSkipCode = 77;
 
 template <typename T>
 class ComOwner final {
@@ -103,7 +107,7 @@ struct HardwareDevice final {
     std::uint64_t adapter_luid = 0;
 };
 
-HardwareDevice CreateHardwareVideoDevice()
+std::optional<HardwareDevice> TryCreateHardwareVideoDevice()
 {
     ComOwner<IDXGIFactory1> factory;
     CHECK(SUCCEEDED(CreateDXGIFactory1(
@@ -157,11 +161,17 @@ HardwareDevice CreateHardwareVideoDevice()
 
         result.adapter_luid = PackLuid(adapter_descriptor.AdapterLuid);
         CHECK(result.adapter_luid != 0);
-        return result;
+        return std::make_optional<HardwareDevice>(std::move(result));
     }
 
-    std::cerr << "no hardware D3D11 video processor adapter is available\n";
-    std::abort();
+    return std::nullopt;
+}
+
+HardwareDevice CreateHardwareVideoDevice()
+{
+    auto result = TryCreateHardwareVideoDevice();
+    CHECK(result.has_value());
+    return std::move(*result);
 }
 
 void EnablesProtectionBeforeSharingAnImmediateContextAcrossThreads()
@@ -702,6 +712,12 @@ void RejectsNonKeyedAndMismatchedTextures()
 
 int main()
 {
+    if (!TryCreateHardwareVideoDevice().has_value()) {
+        std::cerr
+            << "no hardware D3D11 video processor adapter is available\n";
+        return kHardwareUnavailableSkipCode;
+    }
+
     EnablesProtectionBeforeSharingAnImmediateContextAcrossThreads();
     ConvertsOddBgraToOwnedNv12AndPadsBeforeFit();
     PreservesLogicalRedAcrossBgraAndRgbaChannelOrder();

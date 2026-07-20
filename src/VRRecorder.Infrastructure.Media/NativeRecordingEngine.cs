@@ -494,7 +494,7 @@ public sealed class NativeRecordingEngine
         VideoGeometry geometry)
     {
         if (!ReferenceEquals(activeSession.Session, sourceSession) ||
-            !activeSession.TryBeginGeometryChange())
+            !activeSession.TryBeginGeometryChange(sourceSession, geometry))
         {
             return;
         }
@@ -554,8 +554,16 @@ public sealed class NativeRecordingEngine
         }
         finally
         {
-            activeSession.EndGeometryChange();
+            var pending = activeSession.CompleteGeometryChange();
             activeSession.StopGate.Release();
+            if (pending is { } next)
+            {
+                _ = ApplyVideoGeometryChangeAsync(
+                    handle,
+                    activeSession,
+                    next.SourceSession,
+                    next.Geometry);
+            }
         }
     }
 
@@ -754,7 +762,11 @@ public sealed class NativeRecordingEngine
     private sealed class ActiveSession
     {
         private int _rolloverStarted;
-        private int _geometryChangeStarted;
+        private readonly object _geometryGate = new();
+        private bool _geometryChangeStarted;
+        private (
+            INativeRecordingSession SourceSession,
+            VideoGeometry Geometry)? _pendingGeometryChange;
 
         public ActiveSession(
             INativeRecordingSession session,
@@ -787,14 +799,35 @@ public sealed class NativeRecordingEngine
         public void EndRollover() =>
             Interlocked.Exchange(ref _rolloverStarted, 0);
 
-        public bool TryBeginGeometryChange() =>
-            Interlocked.CompareExchange(
-                ref _geometryChangeStarted,
-                1,
-                0) == 0;
+        public bool TryBeginGeometryChange(
+            INativeRecordingSession sourceSession,
+            VideoGeometry geometry)
+        {
+            lock (_geometryGate)
+            {
+                if (!_geometryChangeStarted)
+                {
+                    _geometryChangeStarted = true;
+                    return true;
+                }
 
-        public void EndGeometryChange() =>
-            Interlocked.Exchange(ref _geometryChangeStarted, 0);
+                _pendingGeometryChange = (sourceSession, geometry);
+                return false;
+            }
+        }
+
+        public (
+            INativeRecordingSession SourceSession,
+            VideoGeometry Geometry)? CompleteGeometryChange()
+        {
+            lock (_geometryGate)
+            {
+                var pending = _pendingGeometryChange;
+                _pendingGeometryChange = null;
+                _geometryChangeStarted = pending is not null;
+                return pending;
+            }
+        }
     }
 
     private sealed class NullRecordingMediaEventSink

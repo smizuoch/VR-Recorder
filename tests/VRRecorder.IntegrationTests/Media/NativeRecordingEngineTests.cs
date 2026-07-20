@@ -514,6 +514,18 @@ public sealed class NativeRecordingEngineTests
         var thirdPlan = ExactPlan(thirdSignal, "exact_part003");
         var backend = new MultiPartNativeRecordingBackend();
         var rollover = new StubRecordingPartRollover(secondPlan, thirdPlan);
+        rollover.IntermediatePartFinalizing = finalizedPartCount =>
+        {
+            if (finalizedPartCount == 1)
+            {
+                backend.SignalVideoGeometryStable(
+                    partIndex: 1,
+                    new VideoGeometry(
+                        1_280,
+                        720,
+                        VideoPixelFormat.Bgra8));
+            }
+        };
         var engine = new NativeRecordingEngine(
             backend,
             new ControllableClock(
@@ -533,9 +545,6 @@ public sealed class NativeRecordingEngineTests
         await rollover.WaitForFinalizedPartAsync()
             .WaitAsync(TimeSpan.FromSeconds(2));
 
-        backend.SignalVideoGeometryStable(
-            partIndex: 1,
-            new VideoGeometry(1_280, 720, VideoPixelFormat.Bgra8));
         await backend.WaitUntilOpenedAsync(3);
         backend.SignalFirstVideoPacketMuxed(partIndex: 2);
         await rollover.WaitForFinalizedPartAsync()
@@ -998,6 +1007,8 @@ public sealed class NativeRecordingEngineTests
     {
         private readonly object _gate = new();
         private readonly List<NativeRecordingCallbacks> _callbacks = [];
+        private readonly List<(int Count, TaskCompletionSource Completion)>
+            _openWaiters = [];
 
         public List<RecordingPlan> OpenedPlans { get; } = [];
 
@@ -1024,27 +1035,37 @@ public sealed class NativeRecordingEngineTests
                     $"native-part-{Sessions.Count + 1:000}",
                     plan.Output);
                 Sessions.Add(session);
-                Monitor.PulseAll(_gate);
+                for (var index = _openWaiters.Count - 1; index >= 0; --index)
+                {
+                    var waiter = _openWaiters[index];
+                    if (Sessions.Count >= waiter.Count)
+                    {
+                        waiter.Completion.TrySetResult();
+                        _openWaiters.RemoveAt(index);
+                    }
+                }
+
                 return Task.FromResult<INativeRecordingSession>(session);
             }
         }
 
         public async Task WaitUntilOpenedAsync(int count)
         {
-            await Task.Run(() =>
+            Task opened;
+            lock (_gate)
             {
-                lock (_gate)
+                if (Sessions.Count >= count)
                 {
-                    while (Sessions.Count < count)
-                    {
-                        if (!Monitor.Wait(_gate, TimeSpan.FromSeconds(2)))
-                        {
-                            throw new TimeoutException(
-                                $"Only {Sessions.Count} native parts opened.");
-                        }
-                    }
+                    return;
                 }
-            });
+
+                var completion = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                _openWaiters.Add((count, completion));
+                opened = completion.Task;
+            }
+
+            await opened.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
         public void SignalFirstVideoPacketMuxed(int partIndex) =>
@@ -1139,6 +1160,8 @@ public sealed class NativeRecordingEngineTests
 
         public List<RecordingPlan> StartRetries { get; } = [];
 
+        public Action<int>? IntermediatePartFinalizing { get; set; }
+
         public List<(
             RecordingPlan Plan,
             StableVideoSignal Signal,
@@ -1177,6 +1200,7 @@ public sealed class NativeRecordingEngineTests
             CancellationToken cancellationToken)
         {
             FinalizedParts.Add(stopped);
+            IntermediatePartFinalizing?.Invoke(FinalizedParts.Count);
             _finalizationCompleted.TrySetResult();
             _finalizedParts.Writer.TryWrite(true);
             return Task.CompletedTask;

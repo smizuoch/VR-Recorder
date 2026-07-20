@@ -2044,6 +2044,9 @@ if(TARGET vrrecorder_native_windows_d3d11_video_processor_integration)
     add_test(
         NAME vrrecorder_native_windows_d3d11_video_processor_integration
         COMMAND vrrecorder_native_windows_d3d11_video_processor_integration)
+    set_tests_properties(
+        vrrecorder_native_windows_d3d11_video_processor_integration
+        PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 add_test(NAME vrrecorder_native_video_encoding_pump
     COMMAND vrrecorder_native_video_encoding_pump)

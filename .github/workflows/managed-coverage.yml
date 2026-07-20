@@ -48,6 +48,18 @@ jobs:
           git -c protocol.version=2 fetch --no-tags --prune --depth=1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
+      - name: Install host FFmpeg tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg_path="$(command -v ffmpeg)"
+          ffprobe_path="$(command -v ffprobe)"
+          test -x "${ffmpeg_path}"
+          test -x "${ffprobe_path}"
+          printf 'VRRECORDER_TEST_FFMPEG=%s\n' "${ffmpeg_path}" >> "${GITHUB_ENV}"
+          printf 'VRRECORDER_TEST_FFPROBE=%s\n' "${ffprobe_path}" >> "${GITHUB_ENV}"
+
       - name: Restore locked integration graph
         run: dotnet restore tests/VRRecorder.IntegrationTests/VRRecorder.IntegrationTests.csproj --locked-mode
 

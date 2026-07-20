@@ -65,7 +65,30 @@ public sealed class RepositoryComplianceTests
             workflow);
         Assert.Contains("coverage.cobertura.xml", workflow);
         Assert.Contains("Report managed coverage metrics", workflow);
+        Assert.Contains("Install host FFmpeg tools", workflow);
+        Assert.Contains("sudo apt-get install", workflow);
+        Assert.Contains("VRRECORDER_TEST_FFMPEG", workflow);
+        Assert.Contains("VRRECORDER_TEST_FFPROBE", workflow);
         Assert.DoesNotContain("Enforce 80 percent", workflow);
+    }
+
+    [Fact]
+    public void NativeWindowsWorkflowSkipsGpuIntegrationWithoutHardware()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var nativeTests = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "VRRecorder.Native.Tests",
+            "windows_d3d11_video_processor_integration_tests.cpp"));
+        var nativeCmake = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "tests",
+            "VRRecorder.Native.Tests",
+            "CMakeLists.txt"));
+
+        Assert.Contains("return kHardwareUnavailableSkipCode;", nativeTests);
+        Assert.Contains("SKIP_RETURN_CODE 77", nativeCmake);
     }
 
     [Fact]
@@ -352,7 +375,7 @@ public sealed class RepositoryComplianceTests
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- third-party/**"));
         Assert.Equal(2, workflowLines.Count(line =>
-            line == "- '**/packages.lock.json'"));
+            line == "- '**/packages*.lock.json'"));
         Assert.Equal(2, workflowLines.Count(line =>
             line == "- CMakeLists.txt"));
         Assert.Equal(2, workflowLines.Count(line =>
