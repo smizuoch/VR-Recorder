@@ -1,0 +1,143 @@
+name: Build Microsoft Store MSIX Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: MSIX version matching the payload in A.B.C.0 format
+        required: true
+        default: 0.1.0.0
+        type: string
+      validated_run_id:
+        description: Run ID that uploaded the frozen validated payload
+        required: true
+        type: string
+      validated_artifact_id:
+        description: Immutable artifact ID for the validated payload and evidence
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: store-msix-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  STORE_PACKAGE_IDENTITY_NAME: ${{ vars.STORE_PACKAGE_IDENTITY_NAME }}
+  STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+  STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+  MSIX_VERSION: ${{ inputs.version }}
+
+jobs:
+  build-store-msix:
+    name: Build Store MSIX candidate
+    runs-on: windows-2025
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out packaging revision
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Validate Store identity variables
+        shell: pwsh
+        run: |
+          $required = [ordered]@{
+            STORE_PACKAGE_IDENTITY_NAME = $env:STORE_PACKAGE_IDENTITY_NAME
+            STORE_PUBLISHER = $env:STORE_PUBLISHER
+            STORE_PUBLISHER_DISPLAY_NAME = $env:STORE_PUBLISHER_DISPLAY_NAME
+          }
+
+          foreach ($entry in $required.GetEnumerator()) {
+            if ([string]::IsNullOrWhiteSpace($entry.Value)) {
+              throw "Missing GitHub repository variable: $($entry.Key)"
+            }
+          }
+
+      - name: Create temporary Store identity file
+        shell: pwsh
+        run: |
+          $identity = [ordered]@{
+            PackageIdentityName = $env:STORE_PACKAGE_IDENTITY_NAME
+            Publisher = $env:STORE_PUBLISHER
+            PublisherDisplayName = $env:STORE_PUBLISHER_DISPLAY_NAME
+          }
+          $identityFile = Join-Path $env:RUNNER_TEMP "store-identity.json"
+          $identity |
+            ConvertTo-Json |
+            Set-Content -LiteralPath $identityFile -Encoding utf8
+          "STORE_IDENTITY_FILE=$identityFile" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Download exact validated payload artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.validated_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.validated_run_id }}
+          path: ${{ runner.temp }}/validated-input
+
+      - name: Restore locked packaging validation graph
+        shell: pwsh
+        run: >-
+          dotnet restore
+          tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj
+          --runtime win-x64
+          --locked-mode
+
+      - name: Test Store packaging contracts
+        shell: pwsh
+        run: >-
+          dotnet test
+          tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj
+          --configuration Release
+          --runtime win-x64
+          --no-restore
+          --filter
+          "FullyQualifiedName~VRRecorder.Compliance.Tests.Distribution|FullyQualifiedName~ReleaseToolApplicationTests"
+
+      - name: Build and verify unsigned Store MSIX candidate
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:GITHUB_WORKSPACE "artifacts/store"
+          Remove-Item -LiteralPath $output -Recurse -Force -ErrorAction SilentlyContinue
+
+          .\eng\build-store-msix.ps1 `
+            -IdentityFile $env:STORE_IDENTITY_FILE `
+            -Version $env:MSIX_VERSION `
+            -ValidatedInputRoot (Join-Path $env:RUNNER_TEMP "validated-input") `
+            -ValidatedRunId '${{ inputs.validated_run_id }}' `
+            -ValidatedArtifactId '${{ inputs.validated_artifact_id }}' `
+            -OutputDirectory $output `
+            -PackagingRevision $env:GITHUB_SHA
+
+      - name: Record candidate status
+        shell: pwsh
+        run: |
+          @"
+          ## Microsoft Store packaging candidate
+
+          The uploaded MSIX is unsigned and `publishEligible` remains `false`.
+          It is ready for packaged-app regression, WACK, Partner Center flight,
+          and final Legal approval; it is not a public release artifact.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload Store packaging candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRRecorder-Store-Candidate-${{ inputs.version }}
+          path: |
+            artifacts/store/*.msix
+            artifacts/store/*.store-packaging-identity.v1.json
+            artifacts/store/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

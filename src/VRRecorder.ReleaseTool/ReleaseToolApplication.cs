@@ -36,6 +36,88 @@ internal interface IWindowsPayloadSealingRunner
         CancellationToken cancellationToken);
 }
 
+internal sealed record WindowsStorePackagingValidationArguments(
+    string PayloadRoot,
+    string PayloadIdentityPath,
+    string HardwareValidationReportPath,
+    string HardwareValidationArtifactRoot,
+    string CandidateOutputPath,
+    string StoreName,
+    string StorePublisher,
+    string StorePublisherDisplayName);
+
+internal sealed record WindowsStorePackagingValidationCommandResult(
+    string? PayloadIdentityPath,
+    IReadOnlyList<ComplianceIssue> Issues)
+{
+    public bool IsValidated =>
+        PayloadIdentityPath is not null && Issues.Count == 0;
+}
+
+internal interface IWindowsStorePackagingValidationRunner
+{
+    Task<WindowsStorePackagingValidationCommandResult> ExecuteAsync(
+        WindowsStorePackagingValidationArguments arguments,
+        CancellationToken cancellationToken);
+}
+
+internal sealed class WindowsStorePackagingValidationRunner
+    : IWindowsStorePackagingValidationRunner
+{
+    public async Task<WindowsStorePackagingValidationCommandResult>
+        ExecuteAsync(
+            WindowsStorePackagingValidationArguments arguments,
+            CancellationToken cancellationToken)
+    {
+        byte[] identityContent;
+        byte[] reportContent;
+        try
+        {
+            identityContent = await File.ReadAllBytesAsync(
+                    arguments.PayloadIdentityPath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            reportContent = await File.ReadAllBytesAsync(
+                    arguments.HardwareValidationReportPath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is
+            IOException or UnauthorizedAccessException or
+            ArgumentException or NotSupportedException)
+        {
+            return new WindowsStorePackagingValidationCommandResult(
+                null,
+                [
+                    new ComplianceIssue(
+                        "store-packaging-input-read-failed",
+                        exception is IOException
+                            ? exception.Message
+                            : "input-path"),
+                ]);
+        }
+
+        var validation = await WindowsStorePackagingInputValidator
+            .ValidateAsync(
+                arguments.PayloadRoot,
+                identityContent,
+                reportContent,
+                arguments.HardwareValidationArtifactRoot,
+                arguments.CandidateOutputPath,
+                new MicrosoftStoreIdentity(
+                    arguments.StoreName,
+                    arguments.StorePublisher,
+                    arguments.StorePublisherDisplayName),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new WindowsStorePackagingValidationCommandResult(
+            validation.IsValidated
+                ? arguments.PayloadIdentityPath
+                : null,
+            validation.Issues);
+    }
+}
+
 internal sealed class WindowsPayloadSealingRunner
     : IWindowsPayloadSealingRunner
 {
@@ -88,7 +170,13 @@ internal static class ReleaseToolApplication
         "--source-root <path> --output-parent <path>" +
         " OR VRRecorder.ReleaseTool seal-windows-payload " +
         "--publish-root <path> --approved-props <path> " +
-        "--identity-output <path>";
+        "--identity-output <path>" +
+        " OR VRRecorder.ReleaseTool validate-store-packaging-input " +
+        "--payload-root <path> --payload-identity <path> " +
+        "--hardware-report <path> --hardware-artifacts-root <path> " +
+        "--candidate-output <path> --store-name <name> " +
+        "--store-publisher <publisher> " +
+        "--store-publisher-display-name <name>";
 
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
@@ -96,6 +184,24 @@ internal static class ReleaseToolApplication
         TextWriter standardError,
         IWindowsRuntimeStagingRunner stagingRunner,
         IWindowsPayloadSealingRunner sealingRunner,
+        CancellationToken cancellationToken) =>
+        await RunAsync(
+                args,
+                standardOutput,
+                standardError,
+                stagingRunner,
+                sealingRunner,
+                new WindowsStorePackagingValidationRunner(),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    internal static async Task<int> RunAsync(
+        IReadOnlyList<string> args,
+        TextWriter standardOutput,
+        TextWriter standardError,
+        IWindowsRuntimeStagingRunner stagingRunner,
+        IWindowsPayloadSealingRunner sealingRunner,
+        IWindowsStorePackagingValidationRunner storeValidationRunner,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -103,6 +209,7 @@ internal static class ReleaseToolApplication
         ArgumentNullException.ThrowIfNull(standardError);
         ArgumentNullException.ThrowIfNull(stagingRunner);
         ArgumentNullException.ThrowIfNull(sealingRunner);
+        ArgumentNullException.ThrowIfNull(storeValidationRunner);
 
         if (TryParseStaging(args, out var stagingArguments))
         {
@@ -125,6 +232,21 @@ internal static class ReleaseToolApplication
             return await CompleteAsync(
                     sealingResult.IdentityPath,
                     sealingResult.Issues,
+                    standardOutput,
+                    standardError)
+                .ConfigureAwait(false);
+        }
+
+        if (TryParseStoreValidation(
+                args,
+                out var storeValidationArguments))
+        {
+            var validationResult = await storeValidationRunner
+                .ExecuteAsync(storeValidationArguments, cancellationToken)
+                .ConfigureAwait(false);
+            return await CompleteAsync(
+                    validationResult.PayloadIdentityPath,
+                    validationResult.Issues,
                     standardOutput,
                     standardError)
                 .ConfigureAwait(false);
@@ -240,6 +362,55 @@ internal static class ReleaseToolApplication
             values["--publish-root"],
             values["--approved-props"],
             values["--identity-output"]);
+        return true;
+    }
+
+    private static bool TryParseStoreValidation(
+        IReadOnlyList<string> args,
+        out WindowsStorePackagingValidationArguments parsed)
+    {
+        parsed = null!;
+        if (args.Count != 17 ||
+            args[0] != "validate-store-packaging-input")
+        {
+            return false;
+        }
+
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var index = 1; index < args.Count; index += 2)
+        {
+            var option = args[index];
+            var value = args[index + 1];
+            if (option is not (
+                    "--payload-root" or
+                    "--payload-identity" or
+                    "--hardware-report" or
+                    "--hardware-artifacts-root" or
+                    "--candidate-output" or
+                    "--store-name" or
+                    "--store-publisher" or
+                    "--store-publisher-display-name") ||
+                string.IsNullOrWhiteSpace(value) ||
+                !values.TryAdd(option, value))
+            {
+                return false;
+            }
+        }
+
+        if (values.Count != 8)
+        {
+            return false;
+        }
+
+        parsed = new WindowsStorePackagingValidationArguments(
+            values["--payload-root"],
+            values["--payload-identity"],
+            values["--hardware-report"],
+            values["--hardware-artifacts-root"],
+            values["--candidate-output"],
+            values["--store-name"],
+            values["--store-publisher"],
+            values["--store-publisher-display-name"]);
         return true;
     }
 }

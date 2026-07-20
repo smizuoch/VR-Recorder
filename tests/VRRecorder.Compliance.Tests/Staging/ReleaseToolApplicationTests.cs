@@ -144,6 +144,60 @@ public sealed class ReleaseToolApplicationTests
         Assert.Equal(string.Empty, error.ToString());
     }
 
+    [Fact]
+    public async Task ExactStoreValidationCommandKeepsAllIdentityInputs()
+    {
+        WindowsStorePackagingValidationArguments? observed = null;
+        var runner = new CallbackStoreValidationRunner(arguments =>
+        {
+            observed = arguments;
+            return new WindowsStorePackagingValidationCommandResult(
+                Path.Combine("evidence", "payload-identity.json"),
+                []);
+        });
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await ReleaseToolApplication.RunAsync(
+            [
+                "validate-store-packaging-input",
+                "--payload-root", "payload",
+                "--payload-identity", "payload-identity.json",
+                "--hardware-report", "hardware-report.json",
+                "--hardware-artifacts-root", "hardware-artifacts",
+                "--candidate-output", "VRRecorder.msix",
+                "--store-name", "VRRecorder.Project",
+                "--store-publisher", "CN=publisher",
+                "--store-publisher-display-name", "VR Recorder Project",
+            ],
+            output,
+            error,
+            new CallbackRunner(_ => throw new InvalidOperationException()),
+            RejectingSealingRunner.Instance,
+            runner,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(observed);
+        Assert.Equal("payload", observed.PayloadRoot);
+        Assert.Equal("payload-identity.json", observed.PayloadIdentityPath);
+        Assert.Equal("hardware-report.json",
+            observed.HardwareValidationReportPath);
+        Assert.Equal("hardware-artifacts",
+            observed.HardwareValidationArtifactRoot);
+        Assert.Equal("VRRecorder.msix", observed.CandidateOutputPath);
+        Assert.Equal("VRRecorder.Project", observed.StoreName);
+        Assert.Equal("CN=publisher", observed.StorePublisher);
+        Assert.Equal("VR Recorder Project",
+            observed.StorePublisherDisplayName);
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(
+                "evidence",
+                "payload-identity.json")) + Environment.NewLine,
+            output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
     private static string[] Arguments() =>
     [
         "stage-windows-runtime",
@@ -184,5 +238,17 @@ public sealed class ReleaseToolApplicationTests
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException(
             "sealing runner must not execute");
+    }
+
+    private sealed class CallbackStoreValidationRunner(
+        Func<WindowsStorePackagingValidationArguments,
+            WindowsStorePackagingValidationCommandResult> callback)
+        : IWindowsStorePackagingValidationRunner
+    {
+        public Task<WindowsStorePackagingValidationCommandResult>
+            ExecuteAsync(
+                WindowsStorePackagingValidationArguments arguments,
+                CancellationToken cancellationToken) =>
+            Task.FromResult(callback(arguments));
     }
 }

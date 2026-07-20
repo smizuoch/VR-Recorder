@@ -41,11 +41,11 @@
 - [x] MSIX候補だけではStore公開可能と判定しない
 - [x] 自己申告の実機合格を外部release APIにせず、promotion policyをinternal境界に限定する
 - [x] placeholder Partner Center identityを拒否する
-- [ ] Windows Application Packaging Projectとmanifestを追加する
-- [ ] packaging-only revisionが合格済みimmutable application artifactを再buildせず参照し、App `ProjectReference`等の再build経路を拒否してouter identityを別追跡する
-- [ ] manifestのidentity／version／x64／Windows.Desktop／entry point／mediumIL／full-trust／runFullTrust宣言を検証する
+- [x] Windows Application Packaging Projectとmanifestを追加する
+- [x] packaging-only revisionが合格済みimmutable application artifactを再buildせず参照し、App `ProjectReference`等の再build経路を拒否してouter identityを別追跡する
+- [x] manifestのidentity／version／x64／Windows.Desktop／entry point／mediumIL／full-trust／runFullTrust宣言を検証する
 - [ ] local sideload certificate subjectとmanifest Publisherの一致を検証する
-- [ ] MSIXを展開し、inner payload inventoryを実機検証済みpayloadと照合する
+- [x] MSIXを展開し、inner payload inventoryを実機検証済みpayloadと照合する
 
 ## Microsoft Store Submission
 

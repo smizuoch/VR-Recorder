@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/repository-compliance.yml
+      - .github/workflows/store-msix.yml
       - README.md
       - '*-template/README.md'
       - legal-template/**
@@ -15,6 +16,7 @@ on:
       - eng/build-ffmpeg-contract-test-sdk.sh
       - eng/build-ffmpeg-contract-oracle-sdk.sh
       - eng/build-ffmpeg-windows-production-sdk.ps1
+      - eng/build-store-msix.ps1
       - eng/ffmpeg-windows-production-build-recipe.md
       - eng/build-ffmpeg-windows-oracle-sdk.ps1
       - eng/ffmpeg-windows-oracle-build-recipe.md
@@ -26,10 +28,13 @@ on:
       - Directory.Packages.props
       - global.json
       - src/VRRecorder.Compliance/**
+      - src/VRRecorder.ReleaseTool/**
+      - src/VRRecorder.StorePackaging/**
       - tests/VRRecorder.Compliance.Tests/**
   push:
     paths:
       - .github/workflows/repository-compliance.yml
+      - .github/workflows/store-msix.yml
       - README.md
       - '*-template/README.md'
       - legal-template/**
@@ -41,6 +46,7 @@ on:
       - eng/build-ffmpeg-contract-test-sdk.sh
       - eng/build-ffmpeg-contract-oracle-sdk.sh
       - eng/build-ffmpeg-windows-production-sdk.ps1
+      - eng/build-store-msix.ps1
       - eng/ffmpeg-windows-production-build-recipe.md
       - eng/build-ffmpeg-windows-oracle-sdk.ps1
       - eng/ffmpeg-windows-oracle-build-recipe.md
@@ -52,6 +58,8 @@ on:
       - Directory.Packages.props
       - global.json
       - src/VRRecorder.Compliance/**
+      - src/VRRecorder.ReleaseTool/**
+      - src/VRRecorder.StorePackaging/**
       - tests/VRRecorder.Compliance.Tests/**
   workflow_dispatch:
 
@@ -75,7 +83,7 @@ jobs:
           git checkout --detach FETCH_HEAD
 
       - name: Restore locked compliance graph
-        run: dotnet restore tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --locked-mode
+        run: dotnet restore tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --runtime win-x64 --locked-mode
 
       - name: Verify repository and README parity
-        run: dotnet test tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --configuration Release --no-restore
+        run: dotnet test tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --configuration Release --runtime win-x64 --no-restore

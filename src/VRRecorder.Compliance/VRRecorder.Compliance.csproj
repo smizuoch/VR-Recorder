@@ -11,5 +11,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="VRRecorder.Compliance.Tests" />
     <InternalsVisibleTo Include="VRRecorder.IntegrationTests" />
+    <InternalsVisibleTo Include="VRRecorder.ReleaseTool" />
   </ItemGroup>
 </Project>
