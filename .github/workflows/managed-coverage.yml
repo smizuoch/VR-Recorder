@@ -10,10 +10,10 @@ on:
       - eng/managed-coverage.runsettings
       - src/**/*.cs
       - src/**/*.csproj
-      - src/**/packages.lock.json
+      - src/**/packages*.lock.json
       - tests/**/*.cs
       - tests/**/*.csproj
-      - tests/**/packages.lock.json
+      - tests/**/packages*.lock.json
   push:
     paths:
       - .github/workflows/managed-coverage.yml
@@ -23,10 +23,10 @@ on:
       - eng/managed-coverage.runsettings
       - src/**/*.cs
       - src/**/*.csproj
-      - src/**/packages.lock.json
+      - src/**/packages*.lock.json
       - tests/**/*.cs
       - tests/**/*.csproj
-      - tests/**/packages.lock.json
+      - tests/**/packages*.lock.json
   workflow_dispatch:
 
 permissions:

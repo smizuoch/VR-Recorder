@@ -5,11 +5,13 @@ on:
     paths:
       - .github/workflows/repository-compliance.yml
       - .github/workflows/store-msix.yml
+      - .github/workflows/store-release-preflight.yml
+      - .github/workflows/store-public-release-gate.yml
       - README.md
       - '*-template/README.md'
       - legal-template/**
       - third-party/**
-      - '**/packages.lock.json'
+      - '**/packages*.lock.json'
       - CMakeLists.txt
       - CMakePresets.json
       - cmake/**
@@ -17,6 +19,13 @@ on:
       - eng/build-ffmpeg-contract-oracle-sdk.sh
       - eng/build-ffmpeg-windows-production-sdk.ps1
       - eng/build-store-msix.ps1
+      - eng/prepare-windows-runtime-input.ps1
+      - eng/test-store-msix.ps1
+      - eng/scan-store-msix.ps1
+      - eng/new-store-packaged-hardware-report.ps1
+      - eng/new-wack-waiver-evidence.ps1
+      - eng/new-partner-center-release-evidence.ps1
+      - docs/schemas/**
       - eng/ffmpeg-windows-production-build-recipe.md
       - eng/build-ffmpeg-windows-oracle-sdk.ps1
       - eng/ffmpeg-windows-oracle-build-recipe.md
@@ -35,11 +44,13 @@ on:
     paths:
       - .github/workflows/repository-compliance.yml
       - .github/workflows/store-msix.yml
+      - .github/workflows/store-release-preflight.yml
+      - .github/workflows/store-public-release-gate.yml
       - README.md
       - '*-template/README.md'
       - legal-template/**
       - third-party/**
-      - '**/packages.lock.json'
+      - '**/packages*.lock.json'
       - CMakeLists.txt
       - CMakePresets.json
       - cmake/**
@@ -47,6 +58,13 @@ on:
       - eng/build-ffmpeg-contract-oracle-sdk.sh
       - eng/build-ffmpeg-windows-production-sdk.ps1
       - eng/build-store-msix.ps1
+      - eng/prepare-windows-runtime-input.ps1
+      - eng/test-store-msix.ps1
+      - eng/scan-store-msix.ps1
+      - eng/new-store-packaged-hardware-report.ps1
+      - eng/new-wack-waiver-evidence.ps1
+      - eng/new-partner-center-release-evidence.ps1
+      - docs/schemas/**
       - eng/ffmpeg-windows-production-build-recipe.md
       - eng/build-ffmpeg-windows-oracle-sdk.ps1
       - eng/ffmpeg-windows-oracle-build-recipe.md
@@ -83,7 +101,7 @@ jobs:
           git checkout --detach FETCH_HEAD
 
       - name: Restore locked compliance graph
-        run: dotnet restore tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --runtime win-x64 --locked-mode
+        run: dotnet restore tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --locked-mode
 
       - name: Verify repository and README parity
-        run: dotnet test tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --configuration Release --runtime win-x64 --no-restore
+        run: dotnet test tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj --configuration Release --no-restore

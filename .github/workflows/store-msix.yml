@@ -90,7 +90,6 @@ jobs:
         run: >-
           dotnet restore
           tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj
-          --runtime win-x64
           --locked-mode
 
       - name: Test Store packaging contracts
@@ -99,7 +98,6 @@ jobs:
           dotnet test
           tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj
           --configuration Release
-          --runtime win-x64
           --no-restore
           --filter
           "FullyQualifiedName~VRRecorder.Compliance.Tests.Distribution|FullyQualifiedName~ReleaseToolApplicationTests"
@@ -127,7 +125,7 @@ jobs:
 
           The uploaded MSIX is unsigned and `publishEligible` remains `false`.
           It is ready for packaged-app regression, WACK, Partner Center flight,
-          and final Legal approval; it is not a public release artifact.
+          and final payload/Legal rescan; it is not a public release artifact.
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       - name: Upload Store packaging candidate

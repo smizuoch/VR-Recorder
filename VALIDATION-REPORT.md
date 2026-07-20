@@ -419,3 +419,53 @@ This table records the historical shortfall under the former 90% gate. Coverage 
 - Approved Material Symbols assets, rights ledger, FFmpeg source offer, and final dependency inventory
 - Windows 10/11, NVIDIA/AMD/Intel, HMD/controller matrix testing, plus required accessibility and localization validation; coverage, mutation, and native coverage remain recorded metrics
 - Independent legal review, unpackaged hardware-validation payload generation, Authenticode/Store code signing and signature verification, Microsoft Store identity, MSIX packaging, sideload/WACK/package-specific regression, and final-payload rescanning
+
+## 2026-07-20 production and release-readiness follow-up
+
+This section supersedes the stale implementation-status statements in the
+preceding historical snapshot; it does not turn unexecuted external evidence
+into a pass.
+
+- Configured and built the full-production Windows x64 native graph with MSVC
+  19.44.35228, Windows SDK 10.0.26100.0, the pinned FFmpeg 8.1.2 hardware SDK,
+  its isolated ffprobe oracle, static Spout2, and pinned OpenVR. CTest passed
+  85/85, including the production C17 header/runtime smoke, exact four-family
+  factory evidence, D3D11 processing, real FFmpeg AAC/H.264/mux paths, Spout,
+  WASAPI composition, OpenVR input/overlay/pose, and the public ABI.
+- Fixed exact-byte native factory marker verification for Windows CRLF inputs,
+  a dangling test capture pointer, Windows absolute ABI paths, production C
+  header expectations, and deployment of the required `libvpl.dll` beside all
+  FFmpeg-linked native test executables.
+- Added a fail-closed Legal Bundle generation command and a deterministic
+  production runtime-input/staging-manifest assembler. They remain blocked by
+  the intentionally pending independent Legal approvals in
+  `third-party/registry.yml`; no approval was fabricated.
+- Added strict Store submission evidence for ephemeral certificate Subject,
+  signature verification, install/launch/uninstall, read-only install root,
+  working-directory independence, settings/diagnostics/Legal UIA, WACK XML,
+  WACK unsupported waiver plus independent flight approval, Defender scan,
+  Legal manifest, SPDX SBOM, and private-key exclusion.
+- Added exact-MSIX packaged hardware evidence for Spout2/WASAPI,
+  NVENC/AMF/QSV/software fallback, VRChat, OpenVR controller/overlay, and Wrist
+  haptics/move/pin/telemetry, including environment and artifact hashes.
+- Added separate GitHub Actions for self-hosted Store release preflight and
+  Partner Center certification/private-flight public-release validation. The
+  unsigned candidate remains `publishEligible=false` until those actual
+  external reports pass.
+- Split portable and `win-x64` NuGet lock graphs so Linux managed coverage,
+  RID-neutral release tools, and the self-contained Windows application can
+  all restore in locked mode without rewriting one another's closure.
+- The new managed release-gate sources and tests build with zero warnings and
+  zero errors. The 30 behavioral/CLI tests passed under WSL from an isolated
+  artifact directory, and the seven repository/Workflow contracts passed on
+  Windows: 37/37 focused tests are Green. A combined Windows run remains
+  blocked by the machine's Enterprise Code Integrity policy, which rejects the
+  rebuilt unsigned managed DLL with event IDs 3033/3077 and error 0x800711C7;
+  the policy was not weakened. The production native graph is separately
+  85/85 Green.
+
+The remaining release inputs are therefore external or hardware-bound:
+independent Legal approval records; frozen payload execution on Windows/GPU/
+VRChat/SteamVR/HMD; packaged hardware evidence; real Partner Center identity;
+and Store certification/private-flight reports. Public release is not claimed
+until all of them are supplied and the corresponding machine gate passes.

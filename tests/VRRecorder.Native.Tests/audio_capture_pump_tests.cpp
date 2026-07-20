@@ -53,6 +53,9 @@ public:
         started_role = config.role;
         endpoint = config.endpoint_id_utf8;
         session_start_qpc_100ns = config.session_start_qpc_100ns;
+        if (shared_start_config != nullptr) {
+            *shared_start_config = config;
+        }
         return start_status;
     }
 
@@ -92,6 +95,7 @@ public:
     int start_calls = 0;
     int abort_calls = 0;
     std::shared_ptr<int> shared_abort_calls;
+    std::shared_ptr<AudioCaptureSourceConfig> shared_start_config;
     AudioCaptureRole started_role = AudioCaptureRole::Microphone;
     std::string endpoint;
     std::int64_t session_start_qpc_100ns = 0;
@@ -920,7 +924,9 @@ void RecoversTheDefaultCaptureEndpointAndClearsRecoveryState()
         0,
     });
     auto recovered = std::make_unique<FakeAudioCaptureSource>();
-    auto *borrowed_recovered = recovered.get();
+    auto recovered_start =
+        std::make_shared<AudioCaptureSourceConfig>();
+    recovered->shared_start_config = recovered_start;
     recovered->reads.push_back({
         AudioCaptureReadResult::Packet,
         0,
@@ -948,8 +954,8 @@ void RecoversTheDefaultCaptureEndpointAndClearsRecoveryState()
     CHECK(runner.Run(config, starts) == AudioCaptureInputResult::Failed);
     CHECK(starts.statuses ==
           std::vector<vrrec_status_t> {VRREC_STATUS_OK});
-    CHECK(borrowed_recovered->started_role == AudioCaptureRole::Microphone);
-    CHECK(borrowed_recovered->endpoint == "default-capture");
+    CHECK(recovered_start->role == AudioCaptureRole::Microphone);
+    CHECK(recovered_start->endpoint_id_utf8 == "default-capture");
     CHECK(waiter.wait_calls == 0);
     CHECK(provider.create_calls == 2);
 }

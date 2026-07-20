@@ -759,7 +759,7 @@ OpenVRの`IVROverlay`はoverlay作成、texture、transform、event、visibility
 
 [`adr/0003-two-stage-windows-distribution.md`](adr/0003-two-stage-windows-distribution.md)を維持する。
 
-現在のrepositoryには`.wapproj`、`Package.appxmanifest`、MakeAppx／SignTool／WACK／Partner Center用script、packaging CIがない。MSIXを生成した証拠は0である。先に`PostPublishPayloadSealerTests`でunpackaged directoryのcanonical root、exact `VRRecorder.App.exe`、PE x64、全inventory、version／revision／RID／Legal anchorをactual bytesから導出し、自由なcaller文字列から`ValidatedPayloadIdentity`を作れない境界をGreenにする。
+2026-07-20時点で、別`VRRecorder.StorePackaging.wapproj`／manifest、凍結済みinner payloadだけをMakeAppx pack／unpackするcandidate workflow、ephemeral SignTool／sideload／packaged UI Automation／WACK／Defender・Legal・SBOM scanを行うself-hosted preflight workflow、packaged hardware report v1、Partner Center certification／flightのexact report hashを検証するpublic-release workflowまで実装済みである。秘密鍵はscratchだけに置き、candidate artifactへ含めない。実行証跡がない段階では`publishEligible=false`を維持する。
 
 ### 8.1 Packaging Candidate
 
@@ -810,7 +810,7 @@ Microsoft公式資料の表現には差がある。Visual Studio packaging手順
 - managed Cobertura metrics workflowは主要8 assemblyのline／branch値を表示する。低い値では失敗せず、report欠落／破損だけを測定系異常として扱う。
 - nativeは2026-07-17のcanonical再採取でline 94.78%（8860/9348）、branch 90.02%（6025/6693）、CTest 75/75だった。Make targetは`coverage-report`とし、最低率を判定しない。
 - mutationは必要な調査時に差分または対象subsystemだけを採取する。scoreはmerge／release条件にしない。
-- Windows UI Automation、HIL、WPF実行は未完了。
+- Windows UI Automation／WPF executionはunpackagedとpackaged用の自動経路まで実装済み。packaged exact candidate上の実行証跡とHILは、同一MSIXを生成した後の最終gateとして未実施。
 
 coverage／mutationを上げるためだけのassertやテストは追加しない。要求、回帰、外部境界に対応するRedだけを追加し、metricsは節目で傾向確認に使う。
 

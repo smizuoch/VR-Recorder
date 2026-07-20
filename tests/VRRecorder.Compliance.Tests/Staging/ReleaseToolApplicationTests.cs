@@ -198,6 +198,108 @@ public sealed class ReleaseToolApplicationTests
         Assert.Equal(string.Empty, error.ToString());
     }
 
+    [Fact]
+    public async Task ExactLegalBundleCommandKeepsReleaseIdentityInputs()
+    {
+        LegalBundleGenerationArguments? observed = null;
+        var runner = new CallbackLegalBundleRunner(arguments =>
+        {
+            observed = arguments;
+            return new LegalBundleGenerationCommandResult(
+                Path.Combine("artifacts", "legal"),
+                []);
+        });
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await ReleaseToolApplication.RunAsync(
+            [
+                "generate-legal-bundle",
+                "--repository-root", "repository",
+                "--output-directory", "artifacts/legal",
+                "--product-name", "VR-Recorder",
+                "--product-version", "0.1.0",
+                "--document-namespace",
+                "https://example.invalid/spdx/vr-recorder/0.1.0/revision",
+                "--created-at-utc", "2026-07-20T00:00:00Z",
+                "--creator", "Organization: VR-Recorder Project",
+            ],
+            output,
+            error,
+            new CallbackRunner(_ => throw new InvalidOperationException()),
+            RejectingSealingRunner.Instance,
+            new CallbackStoreValidationRunner(_ =>
+                throw new InvalidOperationException()),
+            runner,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(observed);
+        Assert.Equal("repository", observed.RepositoryRoot);
+        Assert.Equal("artifacts/legal", observed.OutputDirectory);
+        Assert.Equal("VR-Recorder", observed.ProductName);
+        Assert.Equal("0.1.0", observed.ProductVersion);
+        Assert.Equal("2026-07-20T00:00:00Z", observed.CreatedAtUtc);
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine("artifacts", "legal")) +
+            Environment.NewLine,
+            output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task ExactStoreSubmissionPreflightCommandKeepsEvidencePaths()
+    {
+        WindowsStoreSubmissionPreflightArguments? observed = null;
+        var runner = new CallbackSubmissionPreflightRunner(arguments =>
+        {
+            observed = arguments;
+            return new WindowsStoreSubmissionPreflightCommandResult(
+                "VRRecorder.msix",
+                []);
+        });
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var exitCode = await ReleaseToolApplication.RunAsync(
+            [
+                "validate-store-submission-preflight",
+                "--package", "VRRecorder.msix",
+                "--packaging-identity", "packaging.json",
+                "--sideload-evidence", "sideload.json",
+                "--wack-evidence", "wack.xml",
+                "--final-scan-evidence", "final-scan.json",
+                "--packaged-hardware-report", "packaged-hardware.json",
+                "--packaged-hardware-artifacts-root", "packaged-artifacts",
+            ],
+            output,
+            error,
+            new CallbackRunner(_ => throw new InvalidOperationException()),
+            RejectingSealingRunner.Instance,
+            new CallbackStoreValidationRunner(_ =>
+                throw new InvalidOperationException()),
+            new CallbackLegalBundleRunner(_ =>
+                throw new InvalidOperationException()),
+            runner,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(observed);
+        Assert.Equal("VRRecorder.msix", observed.PackagePath);
+        Assert.Equal("packaging.json", observed.PackagingIdentityPath);
+        Assert.Equal("sideload.json", observed.SideloadEvidencePath);
+        Assert.Equal("wack.xml", observed.WackEvidencePath);
+        Assert.Equal("final-scan.json", observed.FinalScanEvidencePath);
+        Assert.Equal("packaged-hardware.json",
+            observed.PackagedHardwareReportPath);
+        Assert.Equal("packaged-artifacts",
+            observed.PackagedHardwareArtifactRoot);
+        Assert.Equal(
+            Path.GetFullPath("VRRecorder.msix") + Environment.NewLine,
+            output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
     private static string[] Arguments() =>
     [
         "stage-windows-runtime",
@@ -249,6 +351,28 @@ public sealed class ReleaseToolApplicationTests
             ExecuteAsync(
                 WindowsStorePackagingValidationArguments arguments,
                 CancellationToken cancellationToken) =>
+            Task.FromResult(callback(arguments));
+    }
+
+    private sealed class CallbackLegalBundleRunner(
+        Func<LegalBundleGenerationArguments,
+            LegalBundleGenerationCommandResult> callback)
+        : ILegalBundleGenerationRunner
+    {
+        public Task<LegalBundleGenerationCommandResult> ExecuteAsync(
+            LegalBundleGenerationArguments arguments,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(callback(arguments));
+    }
+
+    private sealed class CallbackSubmissionPreflightRunner(
+        Func<WindowsStoreSubmissionPreflightArguments,
+            WindowsStoreSubmissionPreflightCommandResult> callback)
+        : IWindowsStoreSubmissionPreflightRunner
+    {
+        public Task<WindowsStoreSubmissionPreflightCommandResult> ExecuteAsync(
+            WindowsStoreSubmissionPreflightArguments arguments,
+            CancellationToken cancellationToken) =>
             Task.FromResult(callback(arguments));
     }
 }

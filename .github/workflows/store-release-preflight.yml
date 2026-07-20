@@ -1,0 +1,155 @@
+name: Validate Microsoft Store Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      packaging_revision:
+        description: Exact Git revision that created the Store candidate
+        required: true
+        type: string
+      candidate_run_id:
+        description: Run ID that uploaded the exact Store candidate
+        required: true
+        type: string
+      candidate_artifact_id:
+        description: Immutable artifact ID for the exact Store candidate
+        required: true
+        type: string
+      packaged_hardware_run_id:
+        description: Run ID that uploaded packaged hardware evidence
+        required: true
+        type: string
+      packaged_hardware_artifact_id:
+        description: Immutable packaged hardware evidence artifact ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: store-release-preflight-${{ inputs.candidate_artifact_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate-store-release-candidate:
+    name: Sign, sideload, UIA, WACK, and scan
+    runs-on: [self-hosted, Windows, X64, store-release]
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out exact packaging revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.packaging_revision }}
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Download exact Store candidate artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/store-candidate
+
+      - name: Download exact packaged hardware evidence artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.packaged_hardware_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.packaged_hardware_run_id }}
+          path: ${{ runner.temp }}/packaged-hardware
+
+      - name: Resolve and bind immutable inputs
+        shell: pwsh
+        run: |
+          $candidateRoot = Join-Path $env:RUNNER_TEMP 'store-candidate'
+          $hardwareRoot = Join-Path $env:RUNNER_TEMP 'packaged-hardware'
+          $packages = @(Get-ChildItem -LiteralPath $candidateRoot -File -Filter *.msix)
+          $identities = @(Get-ChildItem -LiteralPath $candidateRoot -File -Filter *.store-packaging-identity.v1.json)
+          $reports = @(Get-ChildItem -LiteralPath $hardwareRoot -File -Filter store-packaged-hardware-validation.v1.json)
+          $artifactRoots = @(Get-ChildItem -LiteralPath $hardwareRoot -Directory | Where-Object Name -ceq 'artifacts')
+          if ($packages.Count -ne 1 -or $identities.Count -ne 1 -or
+              $reports.Count -ne 1 -or $artifactRoots.Count -ne 1) {
+            throw 'Every immutable release input must resolve exactly once.'
+          }
+
+          $identity = Get-Content -LiteralPath $identities[0].FullName -Raw |
+            ConvertFrom-Json
+          $checkedOutRevision = @(& git rev-parse --verify HEAD)
+          if ($LASTEXITCODE -ne 0 -or $checkedOutRevision.Count -ne 1 -or
+              $identity.packagingRevision -cne $checkedOutRevision[0]) {
+            throw 'The checked-out revision does not match packaging identity.'
+          }
+
+          "STORE_PACKAGE=$($packages[0].FullName)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "STORE_PACKAGING_IDENTITY=$($identities[0].FullName)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PACKAGED_HARDWARE_REPORT=$($reports[0].FullName)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PACKAGED_HARDWARE_ARTIFACTS=$($artifactRoots[0].FullName)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Restore locked release gate
+        shell: pwsh
+        run: >-
+          dotnet restore
+          tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj
+          --locked-mode
+
+      - name: Test release gate contracts
+        shell: pwsh
+        run: >-
+          dotnet test
+          tests/VRRecorder.Compliance.Tests/VRRecorder.Compliance.Tests.csproj
+          --configuration Release
+          --no-restore
+          --filter
+          "FullyQualifiedName~VRRecorder.Compliance.Tests.Distribution|FullyQualifiedName~ReleaseToolApplicationTests"
+
+      - name: Run exact-package release preflight
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:GITHUB_WORKSPACE 'artifacts/store-preflight'
+          Remove-Item -LiteralPath $output -Recurse -Force -ErrorAction SilentlyContinue
+          .\eng\test-store-msix.ps1 `
+            -Package $env:STORE_PACKAGE `
+            -PackagingIdentity $env:STORE_PACKAGING_IDENTITY `
+            -OutputDirectory $output `
+            -PackagedHardwareReport $env:PACKAGED_HARDWARE_REPORT `
+            -PackagedHardwareArtifactRoot $env:PACKAGED_HARDWARE_ARTIFACTS
+
+      - name: Record submission-ready status
+        shell: pwsh
+        run: |
+          @"
+          ## Microsoft Store submission preflight passed
+
+          The exact unsigned Store candidate passed ephemeral local signing,
+          sideload install/launch/uninstall, packaged UI Automation, WACK,
+          Defender and Legal/SBOM scan, and exact-hash packaged hardware
+          evidence validation. It is ready for Partner Center submission.
+
+          `publishEligible` remains `false` until exact-package certification
+          and private-flight evidence pass the public-release gate.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload preflight evidence only
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRRecorder-Store-Submission-Preflight-${{ inputs.candidate_artifact_id }}
+          path: |
+            artifacts/store-preflight/store-sideload-lifecycle.v1.json
+            artifacts/store-preflight/store-final-scan.v1.json
+            artifacts/store-preflight/wack-*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0

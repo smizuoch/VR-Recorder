@@ -37,6 +37,11 @@ target_link_libraries(
     vrrecorder_native_c_header_smoke
     PRIVATE
         VRRecorder::Native)
+if(VRRECORDER_REQUIRE_FULL_PRODUCTION_FACTORIES)
+    target_compile_definitions(
+        vrrecorder_native_c_header_smoke
+        PRIVATE VRRECORDER_TEST_FULL_PRODUCTION_FACTORIES=1)
+endif()
 set_target_properties(
     vrrecorder_native_c_header_smoke
     PROPERTIES
@@ -1174,6 +1179,7 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
                 "${CMAKE_COMMAND}" -E copy_if_different
                 "$<TARGET_FILE:FFmpeg::avcodec>"
                 "$<TARGET_FILE:FFmpeg::avutil>"
+                "${VRRECORDER_FFMPEG_ROOT}/bin/libvpl.dll"
                 "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_libavcodec_encoder_port>"
             VERBATIM)
     endif()
@@ -1216,6 +1222,7 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
                     "$<TARGET_FILE:FFmpeg::avcodec>"
                     "$<TARGET_FILE:FFmpeg::avutil>"
                     "$<TARGET_FILE:FFmpeg::swresample>"
+                    "${VRRECORDER_FFMPEG_ROOT}/bin/libvpl.dll"
                     "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_aac_packet_encoder>"
                 VERBATIM)
         endif()
@@ -1265,6 +1272,7 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "")
                     "$<TARGET_FILE:FFmpeg::avcodec>"
                     "$<TARGET_FILE:FFmpeg::avutil>"
                     "$<TARGET_FILE:FFmpeg::swresample>"
+                    "${VRRECORDER_FFMPEG_ROOT}/bin/libvpl.dll"
                     "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_aac_audio_pipeline>"
                 VERBATIM)
         endif()
@@ -1313,6 +1321,7 @@ if(NOT ffmpeg_libavformat_test_dependency STREQUAL "")
                 "$<TARGET_FILE:FFmpeg::avformat>"
                 "$<TARGET_FILE:FFmpeg::avcodec>"
                 "$<TARGET_FILE:FFmpeg::avutil>"
+                "${VRRECORDER_FFMPEG_ROOT}/bin/libvpl.dll"
                 "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_libavformat_fragmented_mp4_muxer_port>"
             VERBATIM)
     endif()
@@ -1438,6 +1447,7 @@ if(NOT ffmpeg_libavcodec_test_dependency STREQUAL "" AND
                 "$<TARGET_FILE:FFmpeg::avcodec>"
                 "$<TARGET_FILE:FFmpeg::avutil>"
                 "$<TARGET_FILE:FFmpeg::swresample>"
+                "${VRRECORDER_FFMPEG_ROOT}/bin/libvpl.dll"
                 "$<TARGET_FILE_DIR:vrrecorder_native_ffmpeg_aac_to_fragmented_mp4_integration>"
             VERBATIM)
     endif()
@@ -1841,6 +1851,22 @@ set_tests_properties(
     PROPERTIES TIMEOUT 5)
 add_test(NAME vrrecorder_native_c_header_smoke
     COMMAND vrrecorder_native_c_header_smoke)
+set_property(
+    TEST vrrecorder_native_c_header_smoke
+    APPEND PROPERTY ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:vrrecorder_native>")
+if(TARGET FFmpeg::avcodec)
+    set_property(
+        TEST vrrecorder_native_c_header_smoke
+        APPEND PROPERTY ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:FFmpeg::avcodec>")
+endif()
+if(TARGET OpenVR::openvr_api)
+    set_property(
+        TEST vrrecorder_native_c_header_smoke
+        APPEND PROPERTY ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:OpenVR::openvr_api>")
+endif()
 add_test(NAME vrrecorder_native_audio_mixer
     COMMAND vrrecorder_native_audio_mixer)
 add_test(NAME vrrecorder_native_audio_encoder_config

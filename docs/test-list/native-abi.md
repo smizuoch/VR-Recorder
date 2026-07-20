@@ -37,13 +37,13 @@
 - [x] bool-only probe v1とstructured probe v2を同じverified pipeline backendへ接続し、v1も16-frame packet／decode検証完了後だけtrueを返す
 - [x] 16-frame probe用のdeterministic limited-range NV12 patternをowned planeとして生成し、frame indexだけをcodec time-base PTSへ使い、microsecond scheduleとの混同と不正寸法／indexによるcaller plane置換を防ぐ
 - [x] factory-selection intentは改行を正規化せずexact file bytesをSHA-256化し、CRLF fixtureと実MSVC Release DLLの埋込みmarker／evidenceを同じdigestへ結合する
-- [ ] 4つのactual production factory sourceを実装し、production C ABI／composition smokeがplaceholder sourceへ委譲しないことを検証する
+- [x] 4つのactual production factory sourceを実装し、production C ABI／composition smokeがplaceholder sourceへ委譲しないことを検証する
 - [x] desktop／microphoneのloss／recoveryを48 kHz scheduled frame位置付きの順序化された非terminal eventとして追加し、重複とstop／abort／terminal後のcallbackを抑止する
 - [x] 48-byte event ABIを拡張せずnonterminal kind 14の安定映像geometry eventを追加し、`video_packet_count`の上位32 bitへpixel format、下位32 bitへwidth、`audio_packet_count`へheightをpackしてmanagedで復元し、Stopping以降は抑止する
 - [x] terminal FAULTEDの48-byte ABIを維持したまま`video_packet_count`へfault sourceを格納し、legacy／unknown=0とvideo encoder=1をmanagedでfail-closedに型付けする
 - [x] Create中のterminal fault callbackを非OK status returnより先に完了し、session handleが返らない場合もmanaged callback stateがtyped faultを保持する
 - [x] session Start確定まではruntime操作と非terminal eventを拒否してFIRSTだけを保留し、Abort／Fault／backend戻り値を仲裁する。Start中Stopを拒否し、同時Stopの失敗／Fault／Abort結果を全callerへ共有・cacheして失敗後もgateを閉じる
-- [ ] Windows x64 DLLをMSVC toolchainでbuildしABIを検証する
+- [x] Windows x64 DLLをMSVC 19.44.35228／Windows SDK 10.0.26100.0でbuildし、production C17 header smokeを含む85/85 CTestでABIを検証する
 - [ ] 承認済みSpout／WASAPI／FFmpeg backendで実際のmux lifecycleを検証する
 - [x] canonical Linux gcovでnative line 94.78%（8860/9348）、branch 90.02%（6025/6693）を参考metricsとして採取し、native CTest 75/75を成功させる。coverage値自体はrelease thresholdにしない
 
@@ -84,12 +84,12 @@
 - [x] Route bool-only probe v1 and structured probe v2 through the same verified-pipeline backend so v1 becomes true only after the 16-frame packet/decode proof completes
 - [x] Generate deterministic limited-range NV12 patterns for all 16 probe frames as owned planes, use only the frame index as the codec-time-base PTS, and reject invalid dimensions/indices without replacing caller planes or confusing codec ticks with the microsecond schedule
 - [x] Hash factory-selection intents from exact file bytes without newline normalization, binding the CRLF fixture and the embedded marker/evidence in an actual MSVC Release DLL to the same digest
-- [ ] Implement all four actual production factory sources and verify with production C-ABI/composition smoke tests that none delegates to an unavailable source
+- [x] Implement all four actual production factory sources and verify with production C-ABI/composition smoke tests that none delegates to an unavailable source
 - [x] Emit ordered nonterminal desktop/microphone loss/recovery events with the scheduled 48 kHz frame position, suppressing duplicates and callbacks after stop, abort, or termination without changing the 48-byte event ABI
 - [x] Add nonterminal stable-video-geometry event kind 14 without growing the 48-byte event ABI, pack pixel format into the upper 32 bits and width into the lower 32 bits of `video_packet_count`, carry height in `audio_packet_count`, decode it into a typed managed value, and suppress it once stopping begins
 - [x] Preserve the 48-byte terminal FAULTED ABI while carrying fault source in `video_packet_count`, decoding legacy/unknown=0 and video encoder=1 fail-closed in managed code
 - [x] Complete a terminal-fault callback during Create before returning a non-OK status, retaining the typed fault in managed callback state even when no session handle is returned
 - [x] Keep runtime operations and nonterminal events gated until session Start commits while deferring only FIRST; arbitrate Abort/Fault/backend results; reject Stop during Start; and share/cache concurrent Stop failure, Fault, or Abort results while keeping the gate closed after failure
-- [ ] Build the Windows x64 DLL with the MSVC toolchain and verify its ABI
+- [x] Build the Windows x64 DLL with MSVC 19.44.35228 and Windows SDK 10.0.26100.0, verifying its ABI in the 85/85 production CTest run including the C17 header smoke
 - [ ] Verify the real mux lifecycle with approved Spout, WASAPI, and FFmpeg backends
 - [x] Record native line coverage of 94.78% (8860/9348) and branch coverage of 90.02% (6025/6693) as reference metrics in the canonical Linux gcov run, with 75/75 native CTest passes; coverage values are not release thresholds

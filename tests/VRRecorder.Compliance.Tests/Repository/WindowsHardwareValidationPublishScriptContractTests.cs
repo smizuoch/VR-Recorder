@@ -3,6 +3,50 @@ namespace VRRecorder.Compliance.Tests.Repository;
 public sealed class WindowsHardwareValidationPublishScriptContractTests
 {
     [Fact]
+    public void PreparationScriptPinsTheCompleteFullProductionRuntimeClosure()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "eng",
+            "prepare-windows-runtime-input.ps1"));
+
+        foreach (var required in new[]
+                 {
+                     "vrrecorder_native.dll",
+                     "native-factory-selection.json",
+                     "avcodec-62.dll",
+                     "avformat-62.dll",
+                     "avutil-60.dll",
+                     "swresample-6.dll",
+                     "libvpl.dll",
+                     "ffprobe.exe",
+                     "openvr_api.dll",
+                     "msvcp140.dll",
+                     "msvcp140_atomic_wait.dll",
+                     "vcruntime140.dll",
+                     "vcruntime140_1.dll",
+                     "steamvr.vrmanifest",
+                     "actions.json",
+                     "knuckles.json",
+                     "oculus_touch.json",
+                     "vive_controller.json",
+                 })
+        {
+            Assert.Contains(required, script, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("schemaVersion = 2", script, StringComparison.Ordinal);
+        Assert.Contains("full-production-hardware-validation-v1", script,
+            StringComparison.Ordinal);
+        Assert.Contains("LEGAL-MANIFEST.sha256", script,
+            StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", script, StringComparison.Ordinal);
+        Assert.Contains("ReparsePoint", script, StringComparison.Ordinal);
+        Assert.Contains("OutputDirectory must not already exist", script,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ScriptStagesThenPublishesSelfContainedWinX64WithoutDirectRuntimeInputs()
     {
         var script = File.ReadAllText(Path.Combine(
@@ -26,6 +70,10 @@ public sealed class WindowsHardwareValidationPublishScriptContractTests
         Assert.Contains("win-x64", script, StringComparison.Ordinal);
         Assert.Contains(
             "RestoreLockedMode=true",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "VRRecorderUseWinX64LockGraph=true",
             script,
             StringComparison.Ordinal);
         Assert.Contains(

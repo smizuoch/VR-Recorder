@@ -3,6 +3,11 @@
 
 #include "vrrecorder_native.h"
 
+#if defined(_WIN32) && defined(VRRECORDER_TEST_FULL_PRODUCTION_FACTORIES)
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
+
 int vrrec_c_header_smoke(void);
 
 #if defined(_WIN32)
@@ -77,6 +82,23 @@ int main(void)
         0,
         59.94,
     };
+#if defined(_WIN32) && defined(VRRECORDER_TEST_FULL_PRODUCTION_FACTORIES)
+    char temporary_root[MAX_PATH] = {0};
+    char temporary_output[MAX_PATH] = {0};
+    const DWORD temporary_root_length =
+        GetTempPathA((DWORD)sizeof(temporary_root), temporary_root);
+    CHECK(temporary_root_length > 0);
+    CHECK(temporary_root_length < sizeof(temporary_root));
+    const int output_length = snprintf(
+        temporary_output,
+        sizeof(temporary_output),
+        "%svrrecorder-native-smoke-%lu.recording.mp4",
+        temporary_root,
+        (unsigned long)GetCurrentProcessId());
+    CHECK(output_length > 0);
+    CHECK((size_t)output_length < sizeof(temporary_output));
+    session_config.temporary_output_path_utf8 = temporary_output;
+#endif
     vrrec_callbacks_v1 callbacks = {
         sizeof(vrrec_callbacks_v1),
         VRREC_ABI_V1,
@@ -84,11 +106,20 @@ int main(void)
         NULL,
     };
     vrrec_session_t *session = (vrrec_session_t *)(uintptr_t)UINTPTR_MAX;
-    CHECK(vrrec_session_create_v1(
-              &session_config,
-              &callbacks,
-              &session) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    const vrrec_status_t create_status = vrrec_session_create_v1(
+        &session_config,
+        &callbacks,
+        &session);
+#if defined(VRRECORDER_TEST_FULL_PRODUCTION_FACTORIES)
+    CHECK(create_status == VRREC_STATUS_OK);
+    CHECK(session != NULL);
+    vrrec_session_destroy_v1(session);
+    session = NULL;
+    CHECK(DeleteFileA(temporary_output) || GetLastError() == ERROR_FILE_NOT_FOUND);
+#else
+    CHECK(create_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(session == NULL);
+#endif
     vrrec_video_layout_v1 layout = {
         sizeof(vrrec_video_layout_v1),
         VRREC_ABI_V1,
@@ -216,10 +247,15 @@ int main(void)
     };
     vrrec_spout_source_t *spout_source =
         (vrrec_spout_source_t *)(uintptr_t)UINTPTR_MAX;
-    CHECK(vrrec_spout_source_create_v1(
-              &spout_config,
-              &spout_source) == VRREC_STATUS_BACKEND_UNAVAILABLE);
+    const vrrec_status_t spout_create_status =
+        vrrec_spout_source_create_v1(&spout_config, &spout_source);
+#if defined(VRRECORDER_TEST_FULL_PRODUCTION_FACTORIES)
+    CHECK(spout_create_status == VRREC_STATUS_OK);
+    CHECK(spout_source != NULL);
+#else
+    CHECK(spout_create_status == VRREC_STATUS_BACKEND_UNAVAILABLE);
     CHECK(spout_source == NULL);
+#endif
     vrrec_spout_source_destroy_v1(&spout_source);
     vrrec_spout_source_destroy_v1(&spout_source);
 

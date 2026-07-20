@@ -44,11 +44,16 @@
 - [x] Windows Application Packaging Projectとmanifestを追加する
 - [x] packaging-only revisionが合格済みimmutable application artifactを再buildせず参照し、App `ProjectReference`等の再build経路を拒否してouter identityを別追跡する
 - [x] manifestのidentity／version／x64／Windows.Desktop／entry point／mediumIL／full-trust／runFullTrust宣言を検証する
-- [ ] local sideload certificate subjectとmanifest Publisherの一致を検証する
+- [x] local sideload certificate subjectとmanifest Publisherをordinal完全一致で検証し、package hash／証明書thumbprint／SignTool versionへ結合する
 - [x] MSIXを展開し、inner payload inventoryを実機検証済みpayloadと照合する
 
 ## Microsoft Store Submission
 
+- [x] ephemeral local certificate、SignTool verify、sideload lifecycle、packaged UIA、WACK、Defender／Legal／SBOM scanを一時秘密鍵非公開のself-hosted workflowとして実装する
+- [x] packaged実機再試験reportをexact MSIX hash、必須8 case、OS／GPU／driver／SteamVR／HMD、各artifact SHA-256へ結合し、missing／failed／tamperを拒否する
+- [x] WACK XMLのoverall／nested resultをparseしてfail／not-run／inapplicableを拒否し、tool非対応waiverにはversion／理由／独立承認／合格済みPartner Center flightを必須にする
+- [x] exact MSIX、Legal manifest、SPDX SBOM、private-key混入、Defender package／expanded tree scanを同じpreflight gateへ結合する
+- [x] exact package、certification report、flight reportのSHA-256をPartner Center evidenceへ結合し、全preflight合格後だけpublic-release gateを許可する
 - [ ] local test certificateでsignし、sideload install／launch／uninstallする
 - [ ] package install rootのread-only／working directory差を含む回帰を通す
 - [ ] settings、diagnostics、録画出力、Legal表示、SteamVR登録をpackaged実行で通す

@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0-windows10.0.19041": {
+      "vrrecorder.application": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Domain": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.designsystem": {
+        "type": "Project"
+      },
+      "vrrecorder.domain": {
+        "type": "Project"
+      },
+      "vrrecorder.presentation.wrist": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Application": "[1.0.0, )",
+          "VRRecorder.DesignSystem": "[1.0.0, )",
+          "VRRecorder.Domain": "[1.0.0, )"
+        }
+      }
+    },
+    "net10.0-windows10.0.19041/win-x64": {}
+  }
+}

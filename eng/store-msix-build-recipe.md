@@ -7,9 +7,11 @@ packaging candidate from the exact `win-x64` payload that already passed the
 full hardware validation matrix. It does not publish or rebuild
 `VRRecorder.App`.
 
-The resulting MSIX remains `publishEligible: false`. Packaged-app regression,
-local sideload signing, WACK, Partner Center flight/certification, and final
-Legal approval are later gates.
+The resulting MSIX remains `publishEligible: false`. The repository now also
+contains fail-closed workflows for packaged hardware evidence, ephemeral local
+signing and sideload UI Automation, WACK, final Defender/Legal/SBOM scan, and
+Partner Center certification/flight evidence. Those workflows validate the
+candidate; they never store a private signing key or silently publish it.
 
 ## Repository variables
 
@@ -83,6 +85,76 @@ arm64 application payload; relabeling x64 bytes is forbidden.
 
 The uploaded Actions artifact is named
 `VRRecorder-Store-Candidate-A.B.C.0` and is retained for 30 days.
+
+## Submission preflight after packaged hardware validation
+
+Run the eight packaged hardware cases against the exact candidate and place
+one non-empty evidence JSON per case in an `artifacts/` directory:
+
+- `spout2-wasapi-recording`
+- `nvenc-recording`
+- `amf-recording`
+- `qsv-recording`
+- `software-fallback-recording`
+- `vrchat-recording`
+- `openvr-overlay-controller`
+- `wrist-haptics-move-pin-telemetry`
+
+`eng/new-store-packaged-hardware-report.ps1` hashes those files and the exact
+MSIX into `store-packaged-hardware-validation.v1.json`. Upload the report and
+`artifacts/` together without changing either, then run **Validate Microsoft
+Store Release Candidate** with the candidate and hardware artifact run/ID
+pairs.
+
+The workflow is deliberately assigned to a self-hosted interactive Windows
+x64 runner carrying the `store-release` label. It creates a per-run local test
+certificate whose Subject exactly equals manifest Publisher, signs only a
+scratch copy, installs and launches from a different working directory, runs
+packaged UI Automation, uninstalls, runs WACK, and scans the original unsigned
+candidate plus its expanded payload. Its artifact contains only JSON/XML
+evidence; the PFX, scratch-signed MSIX, and temporary certificates are removed.
+The runner must be interactive, elevated for WACK, isolated from untrusted
+jobs, and configured without a persistent package-signing private key.
+
+If WACK genuinely cannot support the package, replace `wack-report.xml` with a
+strict waiver created by `eng/new-wack-waiver-evidence.ps1`. A waiver is
+accepted only after an independent reviewer and a passed Partner Center flight
+for the same package; it is not a skip switch. The public workflow accepts
+exactly one `wack-*` evidence file, so a report and waiver cannot coexist.
+
+## Partner Center and public release
+
+Microsoft Store performs production signing. After the exact candidate passes
+certification and a private flight, export the certification and flight
+reports, create `partner-center-public-release.v1.json` with
+`eng/new-partner-center-release-evidence.ps1`, and upload all three as one
+immutable artifact. Run **Validate Microsoft Store Public Release** with the
+candidate, preflight, packaged-hardware, and Partner Center run/artifact IDs.
+
+That last workflow is the only repository gate that reports
+`publishEligible=true`. Certification and flight are external Store operations
+and cannot be truthfully completed by source code alone. Configure its
+`store-production` GitHub Environment with required independent reviewers;
+without that repository setting, the source-level reviewer separation is not
+an operational approval boundary.
+
+## Legal approval and frozen unpackaged payload
+
+After an independent reviewer changes every runtime registry entry to
+`approved` with a real ticket, distinct requester, and reviewer, generate the
+Legal Bundle through `VRRecorder.ReleaseTool generate-legal-bundle`. Pending,
+self-approved, incomplete, or candidate-only native entries fail closed.
+
+Use `eng/prepare-windows-runtime-input.ps1` to assemble the exact production
+native DLL, factory evidence, FFmpeg/libvpl, ffprobe oracle, OpenVR assets, and
+app-local VC runtime into a staging manifest. Pass its `source/` directory and
+manifest to `eng/publish-windows-hardware-validation.ps1`; that script requires
+a clean revision, publishes self-contained `win-x64`, and emits the sealed
+application payload identity consumed by the initial hardware run.
+RID-neutral tools/tests use `packages.lock.json`; the `win-x64` application
+publish explicitly selects `packages.win-x64.lock.json` for every project in
+its restore graph. Both paths remain locked without making Linux coverage use
+a Windows RID graph.
 
 ## Local invocation
 

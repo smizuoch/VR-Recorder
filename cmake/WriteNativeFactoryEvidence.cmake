@@ -85,11 +85,14 @@ file(SHA256 "${SELECTION_INTENT}" selection_intent_sha256)
 set(
     expected_binary_marker
     "VRRECORDER_FACTORY_SELECTION_V1:${selection_intent_sha256}")
-file(
-    STRINGS "${NATIVE_BINARY}" binary_markers
-    REGEX "VRRECORDER_FACTORY_SELECTION_V1:[0-9a-f]+")
-list(FILTER binary_markers INCLUDE REGEX "^${expected_binary_marker}$")
-list(LENGTH binary_markers matching_marker_count)
+string(HEX "${expected_binary_marker}" expected_binary_marker_hex)
+file(READ "${NATIVE_BINARY}" native_binary_hex HEX)
+string(
+    REGEX MATCHALL
+    "${expected_binary_marker_hex}"
+    matching_markers
+    "${native_binary_hex}")
+list(LENGTH matching_markers matching_marker_count)
 if(NOT matching_marker_count EQUAL 1)
     message(
         FATAL_ERROR

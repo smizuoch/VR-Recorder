@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "vrrecorder.application": {
+        "type": "Project",
+        "dependencies": {
+          "VRRecorder.Domain": "[1.0.0, )"
+        }
+      },
+      "vrrecorder.designsystem": {
+        "type": "Project"
+      },
+      "vrrecorder.domain": {
+        "type": "Project"
+      }
+    },
+    "net10.0/win-x64": {}
+  }
+}

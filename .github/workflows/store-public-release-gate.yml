@@ -1,0 +1,155 @@
+name: Validate Microsoft Store Public Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      packaging_revision:
+        description: Exact packaging Git revision
+        required: true
+        type: string
+      candidate_run_id:
+        description: Run ID for the Store candidate
+        required: true
+        type: string
+      candidate_artifact_id:
+        description: Immutable Store candidate artifact ID
+        required: true
+        type: string
+      preflight_run_id:
+        description: Run ID for Store submission preflight evidence
+        required: true
+        type: string
+      preflight_artifact_id:
+        description: Immutable preflight evidence artifact ID
+        required: true
+        type: string
+      packaged_hardware_run_id:
+        description: Run ID for packaged hardware evidence
+        required: true
+        type: string
+      packaged_hardware_artifact_id:
+        description: Immutable packaged hardware evidence artifact ID
+        required: true
+        type: string
+      partner_center_run_id:
+        description: Run ID for exported Partner Center evidence
+        required: true
+        type: string
+      partner_center_artifact_id:
+        description: Immutable Partner Center evidence artifact ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: store-public-release-${{ inputs.candidate_artifact_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate-public-release:
+    name: Validate certification and flight evidence
+    runs-on: windows-2025
+    environment: store-production
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out exact packaging revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.packaging_revision }}
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Download exact Store candidate
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/release-inputs/candidate
+
+      - name: Download exact submission preflight evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.preflight_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.preflight_run_id }}
+          path: ${{ runner.temp }}/release-inputs/preflight
+
+      - name: Download exact packaged hardware evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.packaged_hardware_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.packaged_hardware_run_id }}
+          path: ${{ runner.temp }}/release-inputs/packaged-hardware
+
+      - name: Download exact Partner Center evidence
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.partner_center_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.partner_center_run_id }}
+          path: ${{ runner.temp }}/release-inputs/partner-center
+
+      - name: Restore and build locked release gate
+        shell: pwsh
+        run: |
+          dotnet restore src/VRRecorder.ReleaseTool/VRRecorder.ReleaseTool.csproj --locked-mode
+          dotnet build src/VRRecorder.ReleaseTool/VRRecorder.ReleaseTool.csproj --configuration Release --no-self-contained --no-restore
+
+      - name: Validate exact public-release evidence graph
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'release-inputs'
+          function One([string]$filter) {
+            $matches = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter $filter)
+            if ($matches.Count -ne 1) { throw "Expected exactly one $filter." }
+            return $matches[0].FullName
+          }
+          $artifactRoots = @(Get-ChildItem -LiteralPath $root -Recurse -Directory | Where-Object Name -ceq 'artifacts')
+          if ($artifactRoots.Count -ne 1) { throw 'Expected one packaged hardware artifacts root.' }
+          $identityPath = One '*.store-packaging-identity.v1.json'
+          $identity = Get-Content -LiteralPath $identityPath -Raw |
+            ConvertFrom-Json
+          $checkedOutRevision = @(& git rev-parse --verify HEAD)
+          if ($LASTEXITCODE -ne 0 -or $checkedOutRevision.Count -ne 1 -or
+              $identity.packagingRevision -cne $checkedOutRevision[0]) {
+            throw 'The checked-out revision does not match packaging identity.'
+          }
+          $tool = Join-Path $env:GITHUB_WORKSPACE 'src/VRRecorder.ReleaseTool/bin/Release/net10.0/VRRecorder.ReleaseTool.dll'
+          & dotnet $tool validate-store-public-release `
+            --package (One '*.msix') `
+            --packaging-identity $identityPath `
+            --sideload-evidence (One 'store-sideload-lifecycle.v1.json') `
+            --wack-evidence (One 'wack-*') `
+            --final-scan-evidence (One 'store-final-scan.v1.json') `
+            --packaged-hardware-report (One 'store-packaged-hardware-validation.v1.json') `
+            --packaged-hardware-artifacts-root $artifactRoots[0].FullName `
+            --partner-center-evidence (One 'partner-center-public-release.v1.json') `
+            --certification-report (One 'partner-center-certification-report.*') `
+            --flight-report (One 'partner-center-flight-report.*')
+          if ($LASTEXITCODE -ne 0) {
+            throw "Public release validation failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Record publish-eligible status
+        shell: pwsh
+        run: |
+          @"
+          ## Microsoft Store public release gate passed
+
+          The exact MSIX is `publishEligible=true`: payload identity,
+          packaged hardware evidence, local preflight, Partner Center
+          certification report, and private-flight report are hash-bound.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

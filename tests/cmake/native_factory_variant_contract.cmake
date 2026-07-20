@@ -295,11 +295,12 @@ endforeach()
 
 set(writer_binary "${work_root}/writer-native.dll")
 set(writer_evidence "${work_root}/writer-evidence.json")
-string(SHA256 writer_intent_sha256 "${intent_json}")
+file(SHA256 "${intent}" writer_intent_sha256)
 file(
     WRITE "${writer_binary}"
-    "native factory evidence fixture\n"
-    "VRRECORDER_FACTORY_SELECTION_V1:${writer_intent_sha256}\n")
+    "native factory evidence fixture prefix "
+    "VRRECORDER_FACTORY_SELECTION_V1:${writer_intent_sha256}"
+    " suffix")
 
 function(run_evidence_writer expected_success label writer_intent writer_native)
     execute_process(

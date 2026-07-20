@@ -492,7 +492,6 @@ $releaseToolProject = Join-Path `
 & dotnet build `
     $releaseToolProject `
     --configuration Release `
-    --runtime win-x64 `
     --no-self-contained `
     -p:RestoreLockedMode=true
 if ($LASTEXITCODE -ne 0) {
@@ -501,7 +500,7 @@ if ($LASTEXITCODE -ne 0) {
 $releaseTool = Resolve-ExistingFile `
     -Path (Join-Path `
         $repositoryRoot `
-        'src\VRRecorder.ReleaseTool\bin\Release\net10.0\win-x64\VRRecorder.ReleaseTool.dll') `
+        'src\VRRecorder.ReleaseTool\bin\Release\net10.0\VRRecorder.ReleaseTool.dll') `
     -Name 'Release tool'
 
 $temporaryParent = if (

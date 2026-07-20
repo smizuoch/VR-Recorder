@@ -124,6 +124,165 @@ public sealed class WindowsStorePackagingRepositoryContractTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void StorePreflightUsesEphemeralSigningAndMachineCheckedLifecycle()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "eng",
+            "test-store-msix.ps1"));
+
+        Assert.Contains("New-SelfSignedCertificate", script,
+            StringComparison.Ordinal);
+        Assert.Contains("certificate.Subject -cne $publisher", script,
+            StringComparison.Ordinal);
+        Assert.Contains("& $signTool.Path sign", script,
+            StringComparison.Ordinal);
+        Assert.Contains("& $signTool.Path verify", script,
+            StringComparison.Ordinal);
+        Assert.Contains("Add-AppxPackage", script, StringComparison.Ordinal);
+        Assert.Contains("Remove-AppxPackage", script, StringComparison.Ordinal);
+        Assert.Contains("install root was writable", script,
+            StringComparison.Ordinal);
+        Assert.Contains("WorkingDirectory = $workingDirectory", script,
+            StringComparison.Ordinal);
+        Assert.Contains("Open recording settings", script,
+            StringComparison.Ordinal);
+        Assert.Contains("Open diagnostics", script, StringComparison.Ordinal);
+        Assert.Contains("About and third-party licenses", script,
+            StringComparison.Ordinal);
+        Assert.Contains("& $appCert test", script, StringComparison.Ordinal);
+        Assert.Contains("validate-store-submission-preflight", script,
+            StringComparison.Ordinal);
+
+        var scan = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "eng",
+            "scan-store-msix.ps1"));
+        Assert.Contains("& $makeAppx unpack", scan, StringComparison.Ordinal);
+        Assert.Contains("LEGAL-MANIFEST.sha256", scan,
+            StringComparison.Ordinal);
+        Assert.Contains("SBOM/manifest.spdx.json", scan,
+            StringComparison.Ordinal);
+        Assert.Contains("MpCmdRun.exe", scan, StringComparison.Ordinal);
+        Assert.Contains("-DisableRemediation", scan,
+            StringComparison.Ordinal);
+        Assert.Contains("'.pfx', '.p12', '.pvk', '.snk', '.key', '.pem'",
+            scan,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReleaseWorkflowsBindExactArtifactsAndRequireProductionReview()
+    {
+        var root = FindRepositoryRoot();
+        var preflight = File.ReadAllText(Path.Combine(
+            root,
+            ".github",
+            "workflows",
+            "store-release-preflight.yml"));
+        Assert.Contains(
+            "artifact-ids: ${{ inputs.candidate_artifact_id }}",
+            preflight,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "artifact-ids: ${{ inputs.packaged_hardware_artifact_id }}",
+            preflight,
+            StringComparison.Ordinal);
+        Assert.Contains("publishEligible` remains `false`", preflight,
+            StringComparison.Ordinal);
+        Assert.Contains("artifacts/store-preflight/wack-*", preflight,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(".pfx", preflight,
+            StringComparison.OrdinalIgnoreCase);
+
+        var publicGate = File.ReadAllText(Path.Combine(
+            root,
+            ".github",
+            "workflows",
+            "store-public-release-gate.yml"));
+        foreach (var input in new[]
+                 {
+                     "candidate_artifact_id",
+                     "preflight_artifact_id",
+                     "packaged_hardware_artifact_id",
+                     "partner_center_artifact_id",
+                 })
+        {
+            Assert.Contains($"artifact-ids: ${{{{ inputs.{input} }}}}",
+                publicGate,
+                StringComparison.Ordinal);
+        }
+        Assert.Contains("environment: store-production", publicGate,
+            StringComparison.Ordinal);
+        Assert.Contains("validate-store-public-release", publicGate,
+            StringComparison.Ordinal);
+        Assert.Contains("--wack-evidence (One 'wack-*')", publicGate,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("signtool", publicGate,
+            StringComparison.OrdinalIgnoreCase);
+
+        var waiver = File.ReadAllText(Path.Combine(
+            root,
+            "eng",
+            "new-wack-waiver-evidence.ps1"));
+        Assert.Contains("RequestedBy and ApprovedBy must identify different",
+            waiver,
+            StringComparison.Ordinal);
+        Assert.Contains("wack-tool-unavailable-waiver-v1", waiver,
+            StringComparison.Ordinal);
+        Assert.Contains("flightCertificationStatus = 'passed'", waiver,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplicationRestoreGraphHasSeparatePortableAndWinX64Locks()
+    {
+        var root = FindRepositoryRoot();
+        var appDirectory = Path.Combine(root, "src", "VRRecorder.App");
+        var project = XDocument.Load(Path.Combine(
+            appDirectory,
+            "VRRecorder.App.csproj"));
+        var references = project.Descendants("ProjectReference")
+            .Select(element => element.Attribute("Include")?.Value)
+            .OfType<string>()
+            .ToArray();
+        Assert.NotEmpty(references);
+
+        foreach (var reference in references)
+        {
+            var directory = Path.GetDirectoryName(Path.GetFullPath(
+                Path.Combine(appDirectory, reference)))!;
+            var portableLock = File.ReadAllText(Path.Combine(
+                directory,
+                "packages.lock.json"));
+            var runtimeLock = File.ReadAllText(Path.Combine(
+                directory,
+                "packages.win-x64.lock.json"));
+            Assert.DoesNotContain("/win-x64", portableLock,
+                StringComparison.Ordinal);
+            Assert.Contains("/win-x64", runtimeLock,
+                StringComparison.Ordinal);
+        }
+
+        Assert.True(File.Exists(Path.Combine(
+            appDirectory,
+            "packages.win-x64.lock.json")));
+        var publish = File.ReadAllText(Path.Combine(
+            root,
+            "eng",
+            "publish-windows-hardware-validation.ps1"));
+        Assert.Contains("VRRecorderUseWinX64LockGraph=true", publish,
+            StringComparison.Ordinal);
+        var directoryProps = File.ReadAllText(Path.Combine(
+            root,
+            "Directory.Build.props"));
+        Assert.Contains("NuGetLockFilePath", directoryProps,
+            StringComparison.Ordinal);
+        Assert.Contains("packages.win-x64.lock.json", directoryProps,
+            StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);

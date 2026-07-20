@@ -131,6 +131,7 @@ $appProject = Join-Path `
     --self-contained true `
     --output $publishDirectory `
     -p:RestoreLockedMode=true `
+    -p:VRRecorderUseWinX64LockGraph=true `
     "-p:SourceRevisionId=$sourceRevision" `
     "-p:ApprovedWindowsRuntimeProps=$approvedProps" `
     "-p:LegalBundleDirectory=$legalRoot"

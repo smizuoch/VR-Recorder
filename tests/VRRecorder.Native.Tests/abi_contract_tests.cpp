@@ -140,10 +140,17 @@ void VRREC_CALL BlockCallback(
 
 vrrec_session_config_v1 ValidConfig()
 {
+#if defined(_WIN32)
+    constexpr auto output_path =
+        "C:\\VR Recorder\\vr-recorder-native.recording.mp4";
+#else
+    constexpr auto output_path =
+        "/tmp/vr-recorder-native.recording.mp4";
+#endif
     return vrrec_session_config_v1 {
         sizeof(vrrec_session_config_v1),
         VRREC_ABI_V1,
-        "/tmp/vr-recorder-native.recording.mp4",
+        output_path,
         1920,
         1080,
         30,
